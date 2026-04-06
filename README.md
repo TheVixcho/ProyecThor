@@ -28,7 +28,7 @@
 
 ## 🤖 AI Assistance & Development Disclosure
 
-To maintain high standards of code quality and global accessibility, this project utilizes **AI-assisted technology** for:
+To maintain high standards of code quality and global accessibility, this project utilizes **AI-assisted technology** ONLY for:
 * **Multilingual Support:** Translation and localization of interface elements and documentation.
 * **Code Documentation:** Generating clear comments and optimizing readability for other developers.
 * **Styling & UI:** Assisting in parameter definitions, such as color palettes and layout ergonomics.
@@ -44,5 +44,11 @@ ProyecThor is a **non-profit, open-source project**. It is born from the need fo
 * **No Subscriptions:** All features are available for everyone, forever.
 * **Community Driven:** We believe in the power of open-source collaboration to improve professional tools.
 * **Support the Project:** While the app is free, we accept **voluntary donations**. These contributions are used exclusively to cover maintenance costs, hosting for updates, and to support the developers' time in keeping the software secure and up-to-date.
+
+---
+
+## 🔒 Privacy & Data Security
+
+Your privacy is a priority. **ProyecThor does not collect, share, or distribute user data of any kind.** The application operates entirely locally, and any files or information processed within the software remain strictly on your device.
 
 ---
