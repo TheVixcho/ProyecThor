@@ -1,0 +1,43 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/ProyecThor.dir/src/PresentationCore.cpp.obj"
+  "CMakeFiles/ProyecThor.dir/src/PresentationCore.cpp.obj.d"
+  "CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_glfw.cpp.obj"
+  "CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_glfw.cpp.obj.d"
+  "CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_opengl3.cpp.obj"
+  "CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_opengl3.cpp.obj.d"
+  "CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui.cpp.obj"
+  "CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui.cpp.obj.d"
+  "CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_demo.cpp.obj"
+  "CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_demo.cpp.obj.d"
+  "CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_draw.cpp.obj"
+  "CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_draw.cpp.obj.d"
+  "CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_tables.cpp.obj"
+  "CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_tables.cpp.obj.d"
+  "CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_widgets.cpp.obj"
+  "CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_widgets.cpp.obj.d"
+  "CMakeFiles/ProyecThor.dir/src/external/tools/OpenURL.cpp.obj"
+  "CMakeFiles/ProyecThor.dir/src/external/tools/OpenURL.cpp.obj.d"
+  "CMakeFiles/ProyecThor.dir/src/main.cpp.obj"
+  "CMakeFiles/ProyecThor.dir/src/main.cpp.obj.d"
+  "CMakeFiles/ProyecThor.dir/src/sdk/glew/src/glew.c.obj"
+  "CMakeFiles/ProyecThor.dir/src/sdk/glew/src/glew.c.obj.d"
+  "CMakeFiles/ProyecThor.dir/src/ui/UIManager.cpp.obj"
+  "CMakeFiles/ProyecThor.dir/src/ui/UIManager.cpp.obj.d"
+  "CMakeFiles/ProyecThor.dir/src/ui/panels/ControlPanel.cpp.obj"
+  "CMakeFiles/ProyecThor.dir/src/ui/panels/ControlPanel.cpp.obj.d"
+  "CMakeFiles/ProyecThor.dir/src/ui/panels/LayersPanel.cpp.obj"
+  "CMakeFiles/ProyecThor.dir/src/ui/panels/LayersPanel.cpp.obj.d"
+  "CMakeFiles/ProyecThor.dir/src/ui/panels/LibraryPanel.cpp.obj"
+  "CMakeFiles/ProyecThor.dir/src/ui/panels/LibraryPanel.cpp.obj.d"
+  "CMakeFiles/ProyecThor.dir/src/ui/panels/PreviewPanel.cpp.obj"
+  "CMakeFiles/ProyecThor.dir/src/ui/panels/PreviewPanel.cpp.obj.d"
+  "ProyecThor.exe"
+  "ProyecThor.exe.manifest"
+  "ProyecThor.pdb"
+  "libProyecThor.dll.a"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang C CXX)
+  include(CMakeFiles/ProyecThor.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()
