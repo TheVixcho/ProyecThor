@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-
-=======
 # ProyecThor ⚡🎶
 > **Professional multimedia playback software for multi-screen environments.**
 
@@ -55,4 +52,3 @@ ProyecThor is a **non-profit, open-source project**. It is born from the need fo
 Your privacy is a priority. **ProyecThor does not collect, share, or distribute user data of any kind.** The application operates entirely locally, and any files or information processed within the software remain strictly on your device.
 
 ---
->>>>>>> 3dab2b06f72cd12c55c803be4de42410cc629ed5
