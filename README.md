@@ -30,23 +30,3 @@
 * **Build System:** CMake (MinGW/MSYS2 optimized)
 
 ---
-
-📁 Project Structure
-
-ProyecThor/
-├── .vscode/             # Environment configs (launch, tasks, IntelliSense)
-├── src/                 # Main source code
-│   ├── core/            # Business logic and presentation engine
-│   ├── external/        # Third-party libraries
-│   │   ├── imgui-docking/
-│   │   └── tools/       # Internal utility tools (OpenURL, etc.)
-│   ├── sdk/             # Local dependencies
-│   │   ├── glfw/        
-│   │   ├── glew/        
-│   │   └── vlc/         # LibVLC headers and libs
-│   ├── ui/              # User Interface orchestration
-│   │   ├── panels/      # Modular UI components (Library, Control, etc.)
-│   │   └── UIManager.cpp# UI lifecycle and docking management
-│   └── main.cpp         # Application entry point and main loop
-├── CMakeLists.txt       # Global build configuration
-└── README.md            # Project documentation
