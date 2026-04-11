@@ -203,4 +203,5 @@ CMakeFiles/ProyecThor.dir/src/ui/panels/ControlPanel.cpp.obj: \
  D:/Proyectos/ProyecThor/src/sdk/vlc/include/vlc/libvlc_dialog.h \
  C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/stdbool.h \
  D:/Proyectos/ProyecThor/src/sdk/vlc/include/vlc/libvlc_vlm.h \
- D:/Proyectos/ProyecThor/src/sdk/vlc/include/vlc/deprecated.h
+ D:/Proyectos/ProyecThor/src/sdk/vlc/include/vlc/deprecated.h \
+ C:/msys64/ucrt64/include/c++/15.2.0/atomic

@@ -174,6 +174,12 @@ CMakeFiles/ProyecThor.dir/src/main.cpp.obj: \
  C:/msys64/ucrt64/include/c++/15.2.0/ctime \
  C:/msys64/ucrt64/include/c++/15.2.0/bits/parse_numbers.h \
  C:/msys64/ucrt64/include/c++/15.2.0/chrono \
+ C:/msys64/ucrt64/include/c++/15.2.0/algorithm \
+ C:/msys64/ucrt64/include/c++/15.2.0/bits/stl_algo.h \
+ C:/msys64/ucrt64/include/c++/15.2.0/bits/algorithmfwd.h \
+ C:/msys64/ucrt64/include/c++/15.2.0/bits/stl_heap.h \
+ C:/msys64/ucrt64/include/c++/15.2.0/bits/uniform_int_dist.h \
+ C:/msys64/ucrt64/include/c++/15.2.0/pstl/glue_algorithm_defs.h \
  D:/Proyectos/ProyecThor/src/external/imgui-docking/imgui.h \
  D:/Proyectos/ProyecThor/src/external/imgui-docking/imconfig.h \
  C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/float.h \
@@ -208,10 +214,15 @@ CMakeFiles/ProyecThor.dir/src/main.cpp.obj: \
  C:/msys64/ucrt64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/stdbool.h \
  D:/Proyectos/ProyecThor/src/sdk/vlc/include/vlc/libvlc_vlm.h \
  D:/Proyectos/ProyecThor/src/sdk/vlc/include/vlc/deprecated.h \
+ C:/msys64/ucrt64/include/c++/15.2.0/atomic \
  D:\Proyectos\ProyecThor\src\ui/UIManager.h \
  D:/Proyectos/ProyecThor/src/ui/panels/IPanel.h \
  D:/Proyectos/ProyecThor/src/toolbar/ConfigPanel.h \
  D:\Proyectos\ProyecThor\src\ui/panels/LibraryPanel.h \
  D:\Proyectos\ProyecThor\src\ui/panels/PreviewPanel.h \
+ D:\Proyectos\ProyecThor\src\ui/panels/preview/SongView.h \
+ D:\Proyectos\ProyecThor\src\ui/panels/preview/BibleView.h \
+ D:\Proyectos\ProyecThor\src\ui/panels/preview/MonitorView.h \
+ D:\Proyectos\ProyecThor\src\ui/panels/preview/MediaView.h \
  D:\Proyectos\ProyecThor\src\ui/panels/ControlPanel.h \
  D:\Proyectos\ProyecThor\src\ui/panels/LayersPanel.h

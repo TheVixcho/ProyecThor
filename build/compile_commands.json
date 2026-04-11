@@ -43,6 +43,30 @@
 },
 {
   "directory": "D:/Proyectos/ProyecThor/build",
+  "command": "C:\\msys64\\ucrt64\\bin\\g++.exe -DGLEW_STATIC -DGLFW_INCLUDE_NONE @CMakeFiles/ProyecThor.dir/includes_CXX.rsp -g -std=gnu++17 -o CMakeFiles\\ProyecThor.dir\\src\\ui\\panels\\preview\\BibleView.cpp.obj -c D:\\Proyectos\\ProyecThor\\src\\ui\\panels\\preview\\BibleView.cpp",
+  "file": "D:/Proyectos/ProyecThor/src/ui/panels/preview/BibleView.cpp",
+  "output": "CMakeFiles/ProyecThor.dir/src/ui/panels/preview/BibleView.cpp.obj"
+},
+{
+  "directory": "D:/Proyectos/ProyecThor/build",
+  "command": "C:\\msys64\\ucrt64\\bin\\g++.exe -DGLEW_STATIC -DGLFW_INCLUDE_NONE @CMakeFiles/ProyecThor.dir/includes_CXX.rsp -g -std=gnu++17 -o CMakeFiles\\ProyecThor.dir\\src\\ui\\panels\\preview\\MediaView.cpp.obj -c D:\\Proyectos\\ProyecThor\\src\\ui\\panels\\preview\\MediaView.cpp",
+  "file": "D:/Proyectos/ProyecThor/src/ui/panels/preview/MediaView.cpp",
+  "output": "CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MediaView.cpp.obj"
+},
+{
+  "directory": "D:/Proyectos/ProyecThor/build",
+  "command": "C:\\msys64\\ucrt64\\bin\\g++.exe -DGLEW_STATIC -DGLFW_INCLUDE_NONE @CMakeFiles/ProyecThor.dir/includes_CXX.rsp -g -std=gnu++17 -o CMakeFiles\\ProyecThor.dir\\src\\ui\\panels\\preview\\MonitorView.cpp.obj -c D:\\Proyectos\\ProyecThor\\src\\ui\\panels\\preview\\MonitorView.cpp",
+  "file": "D:/Proyectos/ProyecThor/src/ui/panels/preview/MonitorView.cpp",
+  "output": "CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MonitorView.cpp.obj"
+},
+{
+  "directory": "D:/Proyectos/ProyecThor/build",
+  "command": "C:\\msys64\\ucrt64\\bin\\g++.exe -DGLEW_STATIC -DGLFW_INCLUDE_NONE @CMakeFiles/ProyecThor.dir/includes_CXX.rsp -g -std=gnu++17 -o CMakeFiles\\ProyecThor.dir\\src\\ui\\panels\\preview\\SongView.cpp.obj -c D:\\Proyectos\\ProyecThor\\src\\ui\\panels\\preview\\SongView.cpp",
+  "file": "D:/Proyectos/ProyecThor/src/ui/panels/preview/SongView.cpp",
+  "output": "CMakeFiles/ProyecThor.dir/src/ui/panels/preview/SongView.cpp.obj"
+},
+{
+  "directory": "D:/Proyectos/ProyecThor/build",
   "command": "C:\\msys64\\ucrt64\\bin\\g++.exe -DGLEW_STATIC -DGLFW_INCLUDE_NONE @CMakeFiles/ProyecThor.dir/includes_CXX.rsp -g -std=gnu++17 -o CMakeFiles\\ProyecThor.dir\\src\\external\\imgui-docking\\imgui.cpp.obj -c D:\\Proyectos\\ProyecThor\\src\\external\\imgui-docking\\imgui.cpp",
   "file": "D:/Proyectos/ProyecThor/src/external/imgui-docking/imgui.cpp",
   "output": "CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui.cpp.obj"

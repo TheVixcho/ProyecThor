@@ -24,6 +24,10 @@ set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "D:/Proyectos/ProyecThor/src/ui/panels/LayersPanel.cpp" "CMakeFiles/ProyecThor.dir/src/ui/panels/LayersPanel.cpp.obj" "gcc" "CMakeFiles/ProyecThor.dir/src/ui/panels/LayersPanel.cpp.obj.d"
   "D:/Proyectos/ProyecThor/src/ui/panels/LibraryPanel.cpp" "CMakeFiles/ProyecThor.dir/src/ui/panels/LibraryPanel.cpp.obj" "gcc" "CMakeFiles/ProyecThor.dir/src/ui/panels/LibraryPanel.cpp.obj.d"
   "D:/Proyectos/ProyecThor/src/ui/panels/PreviewPanel.cpp" "CMakeFiles/ProyecThor.dir/src/ui/panels/PreviewPanel.cpp.obj" "gcc" "CMakeFiles/ProyecThor.dir/src/ui/panels/PreviewPanel.cpp.obj.d"
+  "D:/Proyectos/ProyecThor/src/ui/panels/preview/BibleView.cpp" "CMakeFiles/ProyecThor.dir/src/ui/panels/preview/BibleView.cpp.obj" "gcc" "CMakeFiles/ProyecThor.dir/src/ui/panels/preview/BibleView.cpp.obj.d"
+  "D:/Proyectos/ProyecThor/src/ui/panels/preview/MediaView.cpp" "CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MediaView.cpp.obj" "gcc" "CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MediaView.cpp.obj.d"
+  "D:/Proyectos/ProyecThor/src/ui/panels/preview/MonitorView.cpp" "CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MonitorView.cpp.obj" "gcc" "CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MonitorView.cpp.obj.d"
+  "D:/Proyectos/ProyecThor/src/ui/panels/preview/SongView.cpp" "CMakeFiles/ProyecThor.dir/src/ui/panels/preview/SongView.cpp.obj" "gcc" "CMakeFiles/ProyecThor.dir/src/ui/panels/preview/SongView.cpp.obj.d"
   )
 
 # Targets to which this target links which contain Fortran sources.

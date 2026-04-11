@@ -306,7 +306,9 @@ namespace ProyecThor::UI {
         
         ofn.lpstrFile = filename;
         ofn.nMaxFile = MAX_PATH;
-        ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
+        
+        // FIX: Agregamos OFN_NOCHANGEDIR para que no cambie el directorio de trabajo del programa
+        ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
 
         if (GetOpenFileNameA(&ofn)) {
             try {
@@ -318,7 +320,11 @@ namespace ProyecThor::UI {
                     case LibraryCategory::Images: destFolder = "assets/images"; break;
                     case LibraryCategory::Bibles: destFolder = "assets/bibles"; break;
                 }
-                fs::copy(src, destFolder + "/" + src.filename().string(), fs::copy_options::overwrite_existing);
+                
+                // FIX: Unimos las rutas usando el operador '/' de std::filesystem::path
+                fs::path destPath = fs::path(destFolder) / src.filename();
+                
+                fs::copy(src, destPath, fs::copy_options::overwrite_existing);
                 RefreshList();
             } catch (const std::exception& e) {
                 std::cerr << "Error al importar: " << e.what() << "\n";

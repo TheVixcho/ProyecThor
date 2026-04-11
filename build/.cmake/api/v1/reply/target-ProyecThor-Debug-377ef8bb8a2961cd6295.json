@@ -31,31 +31,31 @@
 			{
 				"command" : 0,
 				"file" : 0,
-				"line" : 33,
+				"line" : 35,
 				"parent" : 0
 			},
 			{
 				"command" : 1,
 				"file" : 0,
-				"line" : 75,
+				"line" : 79,
 				"parent" : 0
 			},
 			{
 				"command" : 2,
 				"file" : 0,
-				"line" : 64,
+				"line" : 68,
 				"parent" : 0
 			},
 			{
 				"command" : 3,
 				"file" : 0,
-				"line" : 44,
+				"line" : 47,
 				"parent" : 0
 			},
 			{
 				"command" : 4,
 				"file" : 0,
-				"line" : 50,
+				"line" : 53,
 				"parent" : 0
 			}
 		]
@@ -102,6 +102,10 @@
 				{
 					"backtrace" : 5,
 					"path" : "D:/Proyectos/ProyecThor/src/ui/panels"
+				},
+				{
+					"backtrace" : 5,
+					"path" : "D:/Proyectos/ProyecThor/src/ui/panels/preview"
 				},
 				{
 					"backtrace" : 5,
@@ -153,7 +157,11 @@
 				11,
 				12,
 				13,
-				14
+				14,
+				15,
+				16,
+				17,
+				18
 			]
 		},
 		{
@@ -194,6 +202,10 @@
 				},
 				{
 					"backtrace" : 5,
+					"path" : "D:/Proyectos/ProyecThor/src/ui/panels/preview"
+				},
+				{
+					"backtrace" : 5,
 					"path" : "D:/Proyectos/ProyecThor/src/external/tools"
 				},
 				{
@@ -220,7 +232,7 @@
 			"language" : "C",
 			"sourceIndexes" : 
 			[
-				15
+				19
 			]
 		}
 	],
@@ -340,7 +352,11 @@
 				12,
 				13,
 				14,
-				15
+				15,
+				16,
+				17,
+				18,
+				19
 			]
 		}
 	],
@@ -386,6 +402,30 @@
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
 			"path" : "src/ui/panels/PreviewPanel.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "src/ui/panels/preview/BibleView.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "src/ui/panels/preview/MediaView.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "src/ui/panels/preview/MonitorView.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "src/ui/panels/preview/SongView.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{

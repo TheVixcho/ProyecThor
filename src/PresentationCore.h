@@ -6,6 +6,7 @@
 #include <memory>
 #include <cstdint>
 #include <vlc/vlc.h>
+#include <atomic>
 
 namespace ProyecThor::Core {
 
@@ -35,7 +36,8 @@ namespace ProyecThor::Core {
         float margins[4] = { 100.0f, 50.0f, 100.0f, 50.0f }; 
         bool autoScale = true;
 
-        int targetMonitorIndex = 1; 
+        int targetMonitorIndex = 1;
+    std::string overlayPath = "";
     };
 
     class VLCVideoLayer {
@@ -47,7 +49,7 @@ namespace ProyecThor::Core {
             std::mutex mutex;
             uint8_t* pixels = nullptr;
             unsigned int width, height;
-            bool needs_gpu_update = false;
+            std::atomic<bool> needs_gpu_update { false };
             void* gpu_texture_id = nullptr; 
         } m_Context;
 
@@ -63,7 +65,6 @@ namespace ProyecThor::Core {
         void Stop();
         void UpdateTexture();
         void* GetTextureID() const { return m_Context.gpu_texture_id; }
-        void SetTextureID(void* id) { m_Context.gpu_texture_id = id; }
 
         void SetMute(bool mute); 
         void SetPause(bool pause);
@@ -71,6 +72,15 @@ namespace ProyecThor::Core {
         void SetPosition(float pos);
         int64_t GetLength();
         int64_t GetTime();
+        void SetVolume(int volume); 
+        int GetVolume() const;
+        void SetAudioDevice(const std::string& deviceId);
+
+        struct AudioDevice {
+            std::string id;
+            std::string description;
+        };
+        std::vector<AudioDevice> GetAvailableAudioDevices();
     };
 
     class PresentationCore {
@@ -82,37 +92,47 @@ namespace ProyecThor::Core {
 
         PresentationCore(const PresentationCore&) = delete;
         PresentationCore& operator=(const PresentationCore&) = delete;
-
+        void SetProjectorSize(int w, int h);
+        // Métodos de Control General
         void SetProjecting(bool state);
         void SetTargetMonitor(int index);
-        
+        void Update(); 
+        void RenderProjectorWindow(); 
+
+        // Capa 0: Fondo (Background)
         void SetLayer0_Color(float r, float g, float b);
         void SetBackgroundMedia(const std::string& path, bool isVideo);
         void StopBackgroundMedia(); 
+        void* GetBackgroundTexture();
 
+        // Capa 1: Video Independiente (Overlay)
+        void SetOverlayMedia(const std::string& path);
+        void StopOverlayMedia();
+        void* GetOverlayTexture();
+        VLCVideoLayer* GetOverlayPlayer() { return m_OverlayPlayer.get(); }
+
+        // Capa 2: Texto
         void SetLayer2_Text(const std::string& text);
         void UpdateTextStyle(float size, const float color[4], int align, const float margins[4], bool autoScale);
         void ClearLayer2();
 
-        void Update(); 
-        void RenderProjectorWindow(); 
-
+        // Estado y Selección
         PresentationState GetState();
-        
         void SetSelection(const LibrarySelection& selection);
         LibrarySelection GetSelection();
-
-        void* GetBackgroundTexture();
 
     private:
         PresentationCore(); 
         ~PresentationCore() = default;
+int m_ProjectorWidth  = 1920;
+int m_ProjectorHeight = 1080;
 
         PresentationState m_State;
         LibrarySelection m_Selection;
         std::mutex m_Mutex;
 
-        std::unique_ptr<VLCVideoLayer> m_VideoLayer;
+        std::unique_ptr<VLCVideoLayer> m_VideoLayer;    // Para el fondo
+        std::unique_ptr<VLCVideoLayer> m_OverlayPlayer;  // Para el video en vivo
     };
 
 }

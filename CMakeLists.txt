@@ -10,14 +10,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/external/imgui-docking")
 set(GLFW_SDK  "${CMAKE_CURRENT_SOURCE_DIR}/src/sdk/glfw")
 set(GLEW_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/src/sdk/glew")
-set(VLC_SDK   "${CMAKE_CURRENT_SOURCE_DIR}/src/sdk/vlc") # Tu nueva ruta
+set(VLC_SDK   "${CMAKE_CURRENT_SOURCE_DIR}/src/sdk/vlc")
 
 # --- ARCHIVOS FUENTE ---
-file(GLOB SOURCES "src/*.cpp")
-file(GLOB CORE_SOURCES "src/core/*.cpp")
-file(GLOB UI_SOURCES "src/ui/*.cpp")
-file(GLOB PANEL_SOURCES "src/ui/panels/*.cpp")
-file(GLOB EXTERNAL_TOOLS "src/external/tools/*.cpp")
+# NOTA: CONFIGURE_DEPENDS hace que CMake detecte automáticamente si agregas archivos nuevos
+file(GLOB SOURCES CONFIGURE_DEPENDS "src/*.cpp")
+file(GLOB CORE_SOURCES CONFIGURE_DEPENDS "src/core/*.cpp")
+file(GLOB UI_SOURCES CONFIGURE_DEPENDS "src/ui/*.cpp")
+file(GLOB PANEL_SOURCES CONFIGURE_DEPENDS "src/ui/panels/*.cpp")
+file(GLOB PREVIEW_SOURCES CONFIGURE_DEPENDS "src/ui/panels/preview/*.cpp") # <- ¡AQUÍ ESTÁ LA SOLUCIÓN AL ERROR!
+file(GLOB EXTERNAL_TOOLS CONFIGURE_DEPENDS "src/external/tools/*.cpp")
 
 set(IMGUI_SOURCES
     "${IMGUI_DIR}/imgui.cpp"
@@ -35,6 +37,7 @@ add_executable(ProyecThor
     ${CORE_SOURCES}
     ${UI_SOURCES} 
     ${PANEL_SOURCES} 
+    ${PREVIEW_SOURCES} # <- Se añaden al ejecutable
     ${IMGUI_SOURCES}
     ${EXTERNAL_TOOLS}
     "${GLEW_DIR}/src/glew.c"
@@ -52,19 +55,20 @@ target_include_directories(ProyecThor PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/panels"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/panels/preview" # <- Nueva ruta de includes
     "${CMAKE_CURRENT_SOURCE_DIR}/src/external/tools"
     "${IMGUI_DIR}"
     "${IMGUI_DIR}/backends"
     "${GLFW_SDK}/include"
     "${GLEW_DIR}/include"
-    "${VLC_SDK}/include" # Cabeceras de VLC
+    "${VLC_SDK}/include"
 )
 
 # --- LINKEO (Donde se conectan los .a / .lib) ---
 target_link_libraries(ProyecThor PRIVATE 
     "${GLFW_SDK}/lib-mingw-w64/libglfw3.a"
-    "${VLC_SDK}/lib/libvlc.lib"      # Archivo de linkeo de VLC
-    "${VLC_SDK}/lib/libvlccore.lib"  # Archivo de linkeo de VLC Core
+    "${VLC_SDK}/lib/libvlc.lib"      
+    "${VLC_SDK}/lib/libvlccore.lib"  
     opengl32
     gdi32
     shell32

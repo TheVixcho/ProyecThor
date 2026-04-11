@@ -1,4 +1,59 @@
 {
+	"globsDependent" : 
+	[
+		{
+			"expression" : "D:/Proyectos/ProyecThor/src/*.cpp",
+			"listDirectories" : true,
+			"paths" : 
+			[
+				"D:/Proyectos/ProyecThor/src/PresentationCore.cpp",
+				"D:/Proyectos/ProyecThor/src/main.cpp"
+			]
+		},
+		{
+			"expression" : "D:/Proyectos/ProyecThor/src/core/*.cpp",
+			"listDirectories" : true,
+			"paths" : []
+		},
+		{
+			"expression" : "D:/Proyectos/ProyecThor/src/external/tools/*.cpp",
+			"listDirectories" : true,
+			"paths" : 
+			[
+				"D:/Proyectos/ProyecThor/src/external/tools/OpenURL.cpp"
+			]
+		},
+		{
+			"expression" : "D:/Proyectos/ProyecThor/src/ui/*.cpp",
+			"listDirectories" : true,
+			"paths" : 
+			[
+				"D:/Proyectos/ProyecThor/src/ui/UIManager.cpp"
+			]
+		},
+		{
+			"expression" : "D:/Proyectos/ProyecThor/src/ui/panels/*.cpp",
+			"listDirectories" : true,
+			"paths" : 
+			[
+				"D:/Proyectos/ProyecThor/src/ui/panels/ControlPanel.cpp",
+				"D:/Proyectos/ProyecThor/src/ui/panels/LayersPanel.cpp",
+				"D:/Proyectos/ProyecThor/src/ui/panels/LibraryPanel.cpp",
+				"D:/Proyectos/ProyecThor/src/ui/panels/PreviewPanel.cpp"
+			]
+		},
+		{
+			"expression" : "D:/Proyectos/ProyecThor/src/ui/panels/preview/*.cpp",
+			"listDirectories" : true,
+			"paths" : 
+			[
+				"D:/Proyectos/ProyecThor/src/ui/panels/preview/BibleView.cpp",
+				"D:/Proyectos/ProyecThor/src/ui/panels/preview/MediaView.cpp",
+				"D:/Proyectos/ProyecThor/src/ui/panels/preview/MonitorView.cpp",
+				"D:/Proyectos/ProyecThor/src/ui/panels/preview/SongView.cpp"
+			]
+		}
+	],
 	"inputs" : 
 	[
 		{

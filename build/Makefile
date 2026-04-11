@@ -112,6 +112,7 @@ preinstall/fast:
 
 # clear depends
 depend:
+	$(CMAKE_COMMAND) -P D:\Proyectos\ProyecThor\build\CMakeFiles\VerifyGlobs.cmake
 	$(CMAKE_COMMAND) -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR) --check-build-system CMakeFiles\Makefile.cmake 1
 .PHONY : depend
 
@@ -512,6 +513,102 @@ src/ui/panels/PreviewPanel.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/panels/PreviewPanel.cpp.s
 .PHONY : src/ui/panels/PreviewPanel.cpp.s
 
+src/ui/panels/preview/BibleView.obj: src/ui/panels/preview/BibleView.cpp.obj
+.PHONY : src/ui/panels/preview/BibleView.obj
+
+# target to build an object file
+src/ui/panels/preview/BibleView.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/panels/preview/BibleView.cpp.obj
+.PHONY : src/ui/panels/preview/BibleView.cpp.obj
+
+src/ui/panels/preview/BibleView.i: src/ui/panels/preview/BibleView.cpp.i
+.PHONY : src/ui/panels/preview/BibleView.i
+
+# target to preprocess a source file
+src/ui/panels/preview/BibleView.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/panels/preview/BibleView.cpp.i
+.PHONY : src/ui/panels/preview/BibleView.cpp.i
+
+src/ui/panels/preview/BibleView.s: src/ui/panels/preview/BibleView.cpp.s
+.PHONY : src/ui/panels/preview/BibleView.s
+
+# target to generate assembly for a file
+src/ui/panels/preview/BibleView.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/panels/preview/BibleView.cpp.s
+.PHONY : src/ui/panels/preview/BibleView.cpp.s
+
+src/ui/panels/preview/MediaView.obj: src/ui/panels/preview/MediaView.cpp.obj
+.PHONY : src/ui/panels/preview/MediaView.obj
+
+# target to build an object file
+src/ui/panels/preview/MediaView.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MediaView.cpp.obj
+.PHONY : src/ui/panels/preview/MediaView.cpp.obj
+
+src/ui/panels/preview/MediaView.i: src/ui/panels/preview/MediaView.cpp.i
+.PHONY : src/ui/panels/preview/MediaView.i
+
+# target to preprocess a source file
+src/ui/panels/preview/MediaView.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MediaView.cpp.i
+.PHONY : src/ui/panels/preview/MediaView.cpp.i
+
+src/ui/panels/preview/MediaView.s: src/ui/panels/preview/MediaView.cpp.s
+.PHONY : src/ui/panels/preview/MediaView.s
+
+# target to generate assembly for a file
+src/ui/panels/preview/MediaView.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MediaView.cpp.s
+.PHONY : src/ui/panels/preview/MediaView.cpp.s
+
+src/ui/panels/preview/MonitorView.obj: src/ui/panels/preview/MonitorView.cpp.obj
+.PHONY : src/ui/panels/preview/MonitorView.obj
+
+# target to build an object file
+src/ui/panels/preview/MonitorView.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MonitorView.cpp.obj
+.PHONY : src/ui/panels/preview/MonitorView.cpp.obj
+
+src/ui/panels/preview/MonitorView.i: src/ui/panels/preview/MonitorView.cpp.i
+.PHONY : src/ui/panels/preview/MonitorView.i
+
+# target to preprocess a source file
+src/ui/panels/preview/MonitorView.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MonitorView.cpp.i
+.PHONY : src/ui/panels/preview/MonitorView.cpp.i
+
+src/ui/panels/preview/MonitorView.s: src/ui/panels/preview/MonitorView.cpp.s
+.PHONY : src/ui/panels/preview/MonitorView.s
+
+# target to generate assembly for a file
+src/ui/panels/preview/MonitorView.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MonitorView.cpp.s
+.PHONY : src/ui/panels/preview/MonitorView.cpp.s
+
+src/ui/panels/preview/SongView.obj: src/ui/panels/preview/SongView.cpp.obj
+.PHONY : src/ui/panels/preview/SongView.obj
+
+# target to build an object file
+src/ui/panels/preview/SongView.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/panels/preview/SongView.cpp.obj
+.PHONY : src/ui/panels/preview/SongView.cpp.obj
+
+src/ui/panels/preview/SongView.i: src/ui/panels/preview/SongView.cpp.i
+.PHONY : src/ui/panels/preview/SongView.i
+
+# target to preprocess a source file
+src/ui/panels/preview/SongView.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/panels/preview/SongView.cpp.i
+.PHONY : src/ui/panels/preview/SongView.cpp.i
+
+src/ui/panels/preview/SongView.s: src/ui/panels/preview/SongView.cpp.s
+.PHONY : src/ui/panels/preview/SongView.s
+
+# target to generate assembly for a file
+src/ui/panels/preview/SongView.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/panels/preview/SongView.cpp.s
+.PHONY : src/ui/panels/preview/SongView.cpp.s
+
 # Help Target
 help:
 	@echo The following are some of the valid targets for this Makefile:
@@ -569,6 +666,18 @@ help:
 	@echo ... src/ui/panels/PreviewPanel.obj
 	@echo ... src/ui/panels/PreviewPanel.i
 	@echo ... src/ui/panels/PreviewPanel.s
+	@echo ... src/ui/panels/preview/BibleView.obj
+	@echo ... src/ui/panels/preview/BibleView.i
+	@echo ... src/ui/panels/preview/BibleView.s
+	@echo ... src/ui/panels/preview/MediaView.obj
+	@echo ... src/ui/panels/preview/MediaView.i
+	@echo ... src/ui/panels/preview/MediaView.s
+	@echo ... src/ui/panels/preview/MonitorView.obj
+	@echo ... src/ui/panels/preview/MonitorView.i
+	@echo ... src/ui/panels/preview/MonitorView.s
+	@echo ... src/ui/panels/preview/SongView.obj
+	@echo ... src/ui/panels/preview/SongView.i
+	@echo ... src/ui/panels/preview/SongView.s
 .PHONY : help
 
 
@@ -580,6 +689,7 @@ help:
 # No rule that depends on this can have commands that come from listfiles
 # because they might be regenerated.
 cmake_check_build_system:
+	$(CMAKE_COMMAND) -P D:\Proyectos\ProyecThor\build\CMakeFiles\VerifyGlobs.cmake
 	$(CMAKE_COMMAND) -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR) --check-build-system CMakeFiles\Makefile.cmake 0
 .PHONY : cmake_check_build_system
 

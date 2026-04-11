@@ -345,7 +345,7 @@ namespace ProyecThor::UI {
 
                 drawList->AddRect(ImVec2(boxX, boxY), ImVec2(boxX + boxW, boxY + boxH), IM_COL32(255, 255, 0, 150), 0.0f, 0, 2.0f);
 
-                const char* testText = "Porque de tal manera amó Dios al mundo, que ha dado a su Hijo unigénito, para que todo aquel que en él cree, no se pierda, mas tenga vida eterna. (Juan 3:16)";
+                const char* testText = "Esto es un texto de prueba";
                 float targetFontSize = m_TempTextSize * screenScale;
                 
                 if (m_TempAutoScale) {
