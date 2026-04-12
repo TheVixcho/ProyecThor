@@ -1,8 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"D:/Proyectos/ProyecThor/build/cmake_install.cmake",
-		"D:/Proyectos/ProyecThor/build/_deps/json-build/cmake_install.cmake"
-	],
-	"Parallel" : false
-}

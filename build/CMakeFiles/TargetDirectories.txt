@@ -1,5 +1,0 @@
-D:/Proyectos/ProyecThor/build/CMakeFiles/ProyecThor.dir
-D:/Proyectos/ProyecThor/build/CMakeFiles/edit_cache.dir
-D:/Proyectos/ProyecThor/build/CMakeFiles/rebuild_cache.dir
-D:/Proyectos/ProyecThor/build/_deps/json-build/CMakeFiles/edit_cache.dir
-D:/Proyectos/ProyecThor/build/_deps/json-build/CMakeFiles/rebuild_cache.dir
