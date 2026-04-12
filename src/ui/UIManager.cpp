@@ -17,144 +17,6 @@ namespace ProyecThor::UI {
     UIManager::UIManager() : m_Window(nullptr), m_ShowConfig(false) {}
     UIManager::~UIManager() { Shutdown(); }
 
-    void UIManager::ApplyProfessionalTheme() {
-        ImGuiStyle& style = ImGui::GetStyle();
-        ImVec4* c = style.Colors;
-
-        // ── Palette ───────────────────────────────────────────────────────────
-        // Base:    deep navy-charcoal
-        // Surface: layered slates for depth
-        // Accent:  warm gold  (#C9A84C / #E2C068)
-        // Danger:  muted coral for destructive actions
-        // Text:    warm off-white, not stark white
-
-        const ImVec4 base        = ImVec4(0.055f, 0.060f, 0.080f, 1.00f); // #0E0F14
-        const ImVec4 surface0    = ImVec4(0.075f, 0.082f, 0.108f, 1.00f); // #131520
-        const ImVec4 surface1    = ImVec4(0.095f, 0.104f, 0.138f, 1.00f); // #181A23
-        const ImVec4 surface2    = ImVec4(0.120f, 0.130f, 0.170f, 1.00f); // #1F222B
-        const ImVec4 surface3    = ImVec4(0.155f, 0.165f, 0.210f, 1.00f); // #272A35
-        const ImVec4 border      = ImVec4(0.200f, 0.215f, 0.275f, 1.00f); // #333646
-        const ImVec4 borderFaint = ImVec4(0.140f, 0.150f, 0.195f, 1.00f); // #242531
-
-        const ImVec4 gold        = ImVec4(0.788f, 0.659f, 0.298f, 1.00f); // #C9A84C
-        const ImVec4 goldLight   = ImVec4(0.886f, 0.753f, 0.408f, 1.00f); // #E2C068
-        const ImVec4 goldDim     = ImVec4(0.500f, 0.415f, 0.180f, 1.00f); // #7F6A2E
-        const ImVec4 goldFaint   = ImVec4(0.240f, 0.200f, 0.085f, 1.00f); // #3D3316
-
-        const ImVec4 textPrimary = ImVec4(0.920f, 0.910f, 0.880f, 1.00f); // warm off-white
-        const ImVec4 textDim     = ImVec4(0.550f, 0.550f, 0.540f, 1.00f);
-        const ImVec4 textFaint   = ImVec4(0.320f, 0.320f, 0.310f, 1.00f);
-
-        // ── Colors ────────────────────────────────────────────────────────────
-        c[ImGuiCol_Text]                  = textPrimary;
-        c[ImGuiCol_TextDisabled]          = textFaint;
-
-        c[ImGuiCol_WindowBg]              = base;
-        c[ImGuiCol_ChildBg]               = surface0;
-        c[ImGuiCol_PopupBg]               = ImVec4(0.065f, 0.070f, 0.094f, 0.98f);
-
-        c[ImGuiCol_Border]                = border;
-        c[ImGuiCol_BorderShadow]          = ImVec4(0.00f, 0.00f, 0.00f, 0.40f);
-
-        c[ImGuiCol_FrameBg]               = surface1;
-        c[ImGuiCol_FrameBgHovered]        = surface2;
-        c[ImGuiCol_FrameBgActive]         = surface3;
-
-        c[ImGuiCol_TitleBg]               = base;
-        c[ImGuiCol_TitleBgActive]         = surface0;
-        c[ImGuiCol_TitleBgCollapsed]      = base;
-
-        c[ImGuiCol_MenuBarBg]             = ImVec4(0.048f, 0.052f, 0.070f, 1.00f);
-
-        c[ImGuiCol_ScrollbarBg]           = surface0;
-        c[ImGuiCol_ScrollbarGrab]         = ImVec4(0.220f, 0.230f, 0.295f, 1.00f);
-        c[ImGuiCol_ScrollbarGrabHovered]  = ImVec4(0.310f, 0.325f, 0.400f, 1.00f);
-        c[ImGuiCol_ScrollbarGrabActive]   = goldDim;
-
-        c[ImGuiCol_CheckMark]             = gold;
-        c[ImGuiCol_SliderGrab]            = gold;
-        c[ImGuiCol_SliderGrabActive]      = goldLight;
-
-        // Buttons: subtle surface with gold on hover/active
-        c[ImGuiCol_Button]                = surface2;
-        c[ImGuiCol_ButtonHovered]         = ImVec4(goldFaint.x + 0.05f, goldFaint.y + 0.04f, goldFaint.z + 0.01f, 1.00f);
-        c[ImGuiCol_ButtonActive]          = goldFaint;
-
-        // Headers (ListBox selections, TreeNodes, etc.)
-        c[ImGuiCol_Header]                = ImVec4(goldFaint.x, goldFaint.y, goldFaint.z, 0.80f);
-        c[ImGuiCol_HeaderHovered]         = ImVec4(goldDim.x * 0.65f, goldDim.y * 0.65f, goldDim.z * 0.65f, 1.00f);
-        c[ImGuiCol_HeaderActive]          = ImVec4(goldDim.x * 0.80f, goldDim.y * 0.80f, goldDim.z * 0.80f, 1.00f);
-
-        // Separators
-        c[ImGuiCol_Separator]             = borderFaint;
-        c[ImGuiCol_SeparatorHovered]      = goldDim;
-        c[ImGuiCol_SeparatorActive]       = gold;
-
-        // Resize grips
-        c[ImGuiCol_ResizeGrip]            = ImVec4(goldDim.x, goldDim.y, goldDim.z, 0.30f);
-        c[ImGuiCol_ResizeGripHovered]     = ImVec4(gold.x, gold.y, gold.z, 0.60f);
-        c[ImGuiCol_ResizeGripActive]      = gold;
-
-        // Tabs
-        c[ImGuiCol_Tab]                   = surface1;
-        c[ImGuiCol_TabHovered]            = surface3;
-        c[ImGuiCol_TabActive]             = ImVec4(goldFaint.x + 0.04f, goldFaint.y + 0.03f, goldFaint.z, 1.00f);
-        c[ImGuiCol_TabUnfocused]          = surface0;
-        c[ImGuiCol_TabUnfocusedActive]    = surface2;
-
-        // Docking
-        c[ImGuiCol_DockingPreview]        = ImVec4(gold.x, gold.y, gold.z, 0.28f);
-        c[ImGuiCol_DockingEmptyBg]        = base;
-
-        // Table
-        c[ImGuiCol_TableHeaderBg]         = ImVec4(0.072f, 0.078f, 0.106f, 1.00f);
-        c[ImGuiCol_TableBorderStrong]     = border;
-        c[ImGuiCol_TableBorderLight]      = borderFaint;
-        c[ImGuiCol_TableRowBg]            = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-        c[ImGuiCol_TableRowBgAlt]         = ImVec4(1.00f, 1.00f, 1.00f, 0.025f);
-
-        // Nav highlight
-        c[ImGuiCol_NavHighlight]          = gold;
-
-        // Modal overlay
-        c[ImGuiCol_ModalWindowDimBg]      = ImVec4(0.00f, 0.00f, 0.00f, 0.72f);
-
-        // Plot
-        c[ImGuiCol_PlotLines]             = gold;
-        c[ImGuiCol_PlotLinesHovered]      = goldLight;
-        c[ImGuiCol_PlotHistogram]         = gold;
-        c[ImGuiCol_PlotHistogramHovered]  = goldLight;
-
-        // ── Geometry / Spacing ────────────────────────────────────────────────
-        style.WindowPadding        = ImVec2(10.0f, 10.0f);
-        style.FramePadding         = ImVec2(8.0f,  5.0f);
-        style.CellPadding          = ImVec2(7.0f,  5.0f);
-        style.ItemSpacing          = ImVec2(8.0f,  6.0f);
-        style.ItemInnerSpacing     = ImVec2(6.0f,  6.0f);
-        style.TouchExtraPadding    = ImVec2(0.0f,  0.0f);
-        style.IndentSpacing        = 18.0f;
-        style.ScrollbarSize        = 12.0f;
-        style.GrabMinSize          = 10.0f;
-
-        // ── Borders ───────────────────────────────────────────────────────────
-        style.WindowBorderSize     = 1.0f;
-        style.ChildBorderSize      = 1.0f;
-        style.PopupBorderSize      = 1.0f;
-        style.FrameBorderSize      = 0.0f;
-        style.TabBorderSize        = 0.0f;
-
-        // ── Rounding ──────────────────────────────────────────────────────────
-        // Slightly more rounded than before — modern SaaS feel
-        style.WindowRounding       = 6.0f;
-        style.ChildRounding        = 5.0f;
-        style.FrameRounding        = 4.0f;
-        style.PopupRounding        = 6.0f;
-        style.ScrollbarRounding    = 12.0f;
-        style.GrabRounding         = 4.0f;
-        style.TabRounding          = 5.0f;
-        style.LogSliderDeadzone    = 4.0f;
-    }
-
     bool UIManager::Initialize(GLFWwindow* window) {
         m_Window = window;
         if (!m_Window) return false;
@@ -164,7 +26,9 @@ namespace ProyecThor::UI {
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;     
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
-        ApplyProfessionalTheme();
+        // Inicializamos el tema dinámico
+        m_SettingsPanel.InitializeTheme();
+        
         return true;
     }
 
@@ -257,8 +121,7 @@ namespace ProyecThor::UI {
 
         // ── Ventanas flotantes ────────────────────────────────────────────────
         if (m_ShowConfig) {
-            static ConfigPanel configPanel;
-            configPanel.RenderConfig(&m_ShowConfig);
+            m_SettingsPanel.Render(&m_ShowConfig); // Llama al nuevo panel
         }
 
         if (g_ShowAbout)
@@ -368,7 +231,7 @@ namespace ProyecThor::UI {
         if (ImGui::BeginMenuBar()) {
             // App logo / title in gold (acts as a brand mark)
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.788f, 0.659f, 0.298f, 1.0f));
-            ImGui::Text("⚡ ProyecThor");
+            ImGui::Text("ProyecThor");
             ImGui::PopStyleColor();
 
             // Thin vertical separator
@@ -412,7 +275,7 @@ namespace ProyecThor::UI {
                 }
                 // Gold donation item
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.886f, 0.753f, 0.408f, 1.0f));
-                if (ImGui::MenuItem("♥  Donaciones")) {
+                if (ImGui::MenuItem("Donaciones")) {
                     ProyecThor::External::OpenURL("https://ko-fi.com/vixcho");
                 }
                 ImGui::PopStyleColor();

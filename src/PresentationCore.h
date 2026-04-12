@@ -1,87 +1,45 @@
 #pragma once
-
-#include <string>
-#include <mutex>
-#include <vector>
 #include <memory>
-#include <cstdint>
-#include <vlc/vlc.h>
-#include <atomic>
+#include <string>
+#include <vector>
+#include <mutex>
+
+// Forward declaration de GLFW para no incluir el header completo aquí
+struct GLFWwindow;
+struct GLFWmonitor;
 
 namespace ProyecThor::Core {
 
-    enum class ItemType { None, Song, Video, Image, Bible };
+    class VLCBasePlayer;
+
+    enum class ItemType { None = -1, Video = 0, Image = 1, Song = 2, Bible = 3 };
 
     struct LibrarySelection {
+        std::string title;
         ItemType type = ItemType::None;
-        std::string title = "";
-        std::vector<std::string> contentData; 
+        std::vector<std::string> contentData;
     };
 
     struct PresentationState {
-        bool isProjecting = false;
-        
-        enum class BackgroundType { SolidColor, Image, Video, None };
+        enum class BackgroundType { SolidColor, Video };
         BackgroundType bgType = BackgroundType::SolidColor;
-        
+        std::string bgPath;
         float bgColor[3] = { 0.0f, 0.0f, 0.0f };
-        std::string bgPath = "";
-        
+
+        std::string overlayPath;
+        bool isProjecting = false;
+        int targetMonitorIndex = 0;
+
+        std::string currentText;
         bool showText = false;
-        std::string currentText = "";
         float textSize = 60.0f;
         float textColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-        int textAlignment = 1; 
-        
-        float margins[4] = { 100.0f, 50.0f, 100.0f, 50.0f }; 
+        int textAlignment = 1;
+        float margins[4] = { 50.0f, 50.0f, 50.0f, 50.0f };
         bool autoScale = true;
-
-        int targetMonitorIndex = 1;
-    std::string overlayPath = "";
     };
 
-    class VLCVideoLayer {
-    private:
-        libvlc_instance_t* m_VlcInstance = nullptr;
-        libvlc_media_player_t* m_MediaPlayer = nullptr;
-        
-        struct VideoContext {
-            std::mutex mutex;
-            uint8_t* pixels = nullptr;
-            unsigned int width, height;
-            std::atomic<bool> needs_gpu_update { false };
-            void* gpu_texture_id = nullptr; 
-        } m_Context;
-
-        static void* lock_frame(void* data, void** p_pixels);
-        static void unlock_frame(void* data, void* id, void* const* p_pixels);
-        static void display_frame(void* data, void* id);
-
-    public:
-        VLCVideoLayer(uint32_t w, uint32_t h);
-        ~VLCVideoLayer();
-
-        void PlayVideo(const std::string& path);
-        void Stop();
-        void UpdateTexture();
-        void* GetTextureID() const { return m_Context.gpu_texture_id; }
-
-        void SetMute(bool mute); 
-        void SetPause(bool pause);
-        float GetPosition();
-        void SetPosition(float pos);
-        int64_t GetLength();
-        int64_t GetTime();
-        void SetVolume(int volume); 
-        int GetVolume() const;
-        void SetAudioDevice(const std::string& deviceId);
-
-        struct AudioDevice {
-            std::string id;
-            std::string description;
-        };
-        std::vector<AudioDevice> GetAvailableAudioDevices();
-    };
+    class PresentationCoreImpl;
 
     class PresentationCore {
     public:
@@ -90,49 +48,57 @@ namespace ProyecThor::Core {
             return instance;
         }
 
-        PresentationCore(const PresentationCore&) = delete;
-        PresentationCore& operator=(const PresentationCore&) = delete;
-        void SetProjectorSize(int w, int h);
-        // Métodos de Control General
-        void SetProjecting(bool state);
-        void SetTargetMonitor(int index);
-        void Update(); 
-        void RenderProjectorWindow(); 
+        PresentationCore();
+        ~PresentationCore();
 
-        // Capa 0: Fondo (Background)
-        void SetLayer0_Color(float r, float g, float b);
-        void SetBackgroundMedia(const std::string& path, bool isVideo);
-        void StopBackgroundMedia(); 
-        void* GetBackgroundTexture();
+        void Update();
+        void RenderProjectorWindow();
 
-        // Capa 1: Video Independiente (Overlay)
-        void SetOverlayMedia(const std::string& path);
-        void StopOverlayMedia();
-        void* GetOverlayTexture();
-        VLCVideoLayer* GetOverlayPlayer() { return m_OverlayPlayer.get(); }
-
-        // Capa 2: Texto
-        void SetLayer2_Text(const std::string& text);
-        void UpdateTextStyle(float size, const float color[4], int align, const float margins[4], bool autoScale);
-        void ClearLayer2();
-
-        // Estado y Selección
         PresentationState GetState();
+        void* GetBackgroundTexture();
+        void* GetOverlayTexture();
+
+        VLCBasePlayer* GetBackgroundPlayer();
+        VLCBasePlayer* GetOverlayPlayer();
+
+        // SetSelection guarda la selección.
+        // GetSelection la consume (limpia title tras leerla) — usar solo en MediaView.
+        // PeekSelection la lee SIN consumirla — usar en paneles de UI que solo leen.
         void SetSelection(const LibrarySelection& selection);
         LibrarySelection GetSelection();
+        LibrarySelection PeekSelection();
+
+        void SetBackgroundMedia(const std::string& path, bool isVideo);
+        void StopBackgroundMedia();
+        void SetLayer0_Color(float r, float g, float b);
+
+        void SetOverlayMedia(const std::string& path);
+        void StopOverlayMedia();
+
+        void SetLayer2_Text(const std::string& text);
+        void UpdateTextStyle(float size, const float color[4], int align,
+                             const float margins[4], bool autoScale);
+        void ClearLayer2();
+
+        void SetProjecting(bool state);
+        void SetTargetMonitor(int index);
+        void SetProjectorSize(int w, int h);
+
+        // Ventana de proyección en monitor secundario
+        void CreateProjectorWindow();
+        void DestroyProjectorWindow();
+        GLFWwindow* GetProjectorWindow() const;
 
     private:
-        PresentationCore(); 
-        ~PresentationCore() = default;
-int m_ProjectorWidth  = 1920;
-int m_ProjectorHeight = 1080;
-
+        std::unique_ptr<PresentationCoreImpl> m_Impl;
         PresentationState m_State;
-        LibrarySelection m_Selection;
-        std::mutex m_Mutex;
+        LibrarySelection  m_CurrentSelection;
+        std::mutex        m_Mutex;
 
-        std::unique_ptr<VLCVideoLayer> m_VideoLayer;    // Para el fondo
-        std::unique_ptr<VLCVideoLayer> m_OverlayPlayer;  // Para el video en vivo
+        int m_ProjectorWidth  = 1920;
+        int m_ProjectorHeight = 1080;
+
+        GLFWwindow* m_ProjectorWindow = nullptr;
     };
 
-}
+} // namespace ProyecThor::Core

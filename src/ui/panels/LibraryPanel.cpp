@@ -175,7 +175,15 @@ void LibraryPanel::RenderCategoryButtons() {
                     m_SelectedIndex = originalIndex;
                     Core::LibrarySelection sel;
                     sel.title = filteredItems[n]; 
-                    sel.type = (Core::ItemType)m_CurrentCategory;
+
+                    // CORRECCIÓN APLICADA: Mapeo explícito en lugar de casteo directo
+                    switch (m_CurrentCategory) {
+                        case LibraryCategory::Songs:  sel.type = Core::ItemType::Song;  break;
+                        case LibraryCategory::Videos: sel.type = Core::ItemType::Video; break;
+                        case LibraryCategory::Images: sel.type = Core::ItemType::Image; break;
+                        case LibraryCategory::Bibles: sel.type = Core::ItemType::Bible; break;
+                        default:                      sel.type = Core::ItemType::None;  break;
+                    }
 
                     if (m_CurrentCategory == LibraryCategory::Songs) {
                         sel.contentData = LoadSongVerses(filteredItems[n]);

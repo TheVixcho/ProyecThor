@@ -178,8 +178,6 @@ namespace ProyecThor::UI {
         m_BibleLoaded = !m_CurrentBible.books.empty();
     }
 
-    // Saves the edited verse text back into the XML file on disk.
-    // Finds the exact <verse number="N">...</verse> block and replaces its content.
     void BibleView::SaveVerseToXML(int bookIndex, int chapterIndex, int verseNumber, const std::string& newText) {
         if (m_LoadedBiblePath.empty()) return;
 
@@ -190,10 +188,6 @@ namespace ProyecThor::UI {
         buffer << fileIn.rdbuf();
         fileIn.close();
         std::string xml = buffer.str();
-
-        // We need to locate the correct book → chapter → verse in the raw XML.
-        // Strategy: iterate <book> blocks by index, then <chapter> blocks, then find <verse number="N">
-        // This mirrors the parsing logic so we hit the same node.
 
         auto findNthTag = [&](const std::string& tag, size_t startPos, int targetIndex) -> size_t {
             size_t pos = startPos;
@@ -212,7 +206,6 @@ namespace ProyecThor::UI {
         size_t nextBookStart = xml.find("<book", bookStart + 5);
         if (nextBookStart == std::string::npos) nextBookStart = xml.length();
 
-        // Find chapter by index within this book's range
         size_t chapSearch = bookStart;
         int chapCount = 0;
         size_t chapStart = std::string::npos;
@@ -226,11 +219,9 @@ namespace ProyecThor::UI {
         size_t nextChapStart = xml.find("<chapter", chapStart + 8);
         if (nextChapStart == std::string::npos) nextChapStart = nextBookStart;
 
-        // Find <verse number="verseNumber"> within this chapter's range
         size_t versSearch = chapStart;
         size_t verseTagStart = std::string::npos;
         while ((versSearch = xml.find("<verse", versSearch)) != std::string::npos && versSearch < nextChapStart) {
-            // Check the number attribute
             size_t numAttr = xml.find("number=\"", versSearch);
             if (numAttr != std::string::npos && numAttr < versSearch + 50) {
                 numAttr += 8;
@@ -245,12 +236,11 @@ namespace ProyecThor::UI {
 
         size_t textStart = xml.find(">", verseTagStart);
         if (textStart == std::string::npos) return;
-        textStart++; // skip '>'
+        textStart++; 
 
         size_t textEnd = xml.find("</verse>", textStart);
         if (textEnd == std::string::npos) return;
 
-        // Replace old text with new text
         xml.replace(textStart, textEnd - textStart, newText);
 
         std::ofstream fileOut(m_LoadedBiblePath);
@@ -258,9 +248,6 @@ namespace ProyecThor::UI {
         fileOut << xml;
         fileOut.close();
 
-        // Patch in-memory data too so it's immediately reflected
-        m_CurrentBible.books[bookIndex].chapters[chapterIndex].verses[verseNumber - 1].text = newText;
-        // Note: verse index != verse number in general; find by number
         for (auto& v : m_CurrentBible.books[bookIndex].chapters[chapterIndex].verses) {
             if (v.number == verseNumber) { v.text = newText; break; }
         }
@@ -289,8 +276,6 @@ namespace ProyecThor::UI {
         };
 
         size_t colonPos = q.find(':');
-        size_t spacePos = std::string::npos;
-
         if (colonPos != std::string::npos) {
             size_t lastSpaceBefore = q.rfind(' ', colonPos);
             if (lastSpaceBefore != std::string::npos) {
@@ -300,7 +285,7 @@ namespace ProyecThor::UI {
                 bookPart = q;
             }
         } else {
-            spacePos = q.rfind(' ');
+            size_t spacePos = q.rfind(' ');
             if (spacePos != std::string::npos) {
                 std::string afterSpace = q.substr(spacePos + 1);
                 bool allDigits = !afterSpace.empty();
@@ -332,7 +317,8 @@ namespace ProyecThor::UI {
     }
 
     void BibleView::Render() {
-        auto selection = Core::PresentationCore::Get().GetSelection();
+        // CORRECCIÓN: Usar PeekSelection en lugar de GetSelection para que ImGui no borre el estado
+        auto selection = Core::PresentationCore::Get().PeekSelection();
 
         if (selection.title != m_LastSelectedFile) {
             m_LastSelectedFile = selection.title;
@@ -347,7 +333,6 @@ namespace ProyecThor::UI {
         }
 
         ImGuiIO& io = ImGui::GetIO();
-
         bool isTypingChar = io.InputQueueCharacters.Size > 0;
         bool isBackspace   = ImGui::IsKeyPressed(ImGuiKey_Backspace, true);
         bool isEscape      = ImGui::IsKeyPressed(ImGuiKey_Escape);
@@ -356,13 +341,9 @@ namespace ProyecThor::UI {
             m_NeedsFocusSearch = true;
         }
 
-        // ─────────────────────────────────────────────────────────────────────
-        // TOP BAR: Bible name + search + horizontal history
-        // ─────────────────────────────────────────────────────────────────────
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.08f, 0.09f, 0.12f, 1.0f));
         ImGui::BeginChild("TopBar", ImVec2(0, 40), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
-        // Bible label
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.45f, 0.80f, 1.0f, 1.0f));
         ImGui::SetCursorPosY((40.0f - ImGui::GetTextLineHeight()) * 0.5f);
         ImGui::Text("Biblia: %s", m_CurrentBible.name.c_str());
@@ -370,7 +351,6 @@ namespace ProyecThor::UI {
 
         ImGui::SameLine(0, 20);
 
-        // Search box
         ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.12f, 0.14f, 0.18f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.18f, 0.22f, 0.30f, 1.0f));
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
@@ -383,21 +363,13 @@ namespace ProyecThor::UI {
             m_NeedsFocusSearch = false;
         }
 
-        ImGui::InputTextWithHint(
-            "##liveSearch",
-            "Buscar (Libro Abreviado + 1:1)",
-            m_LiveSearch,
-            sizeof(m_LiveSearch)
-        );
-
+        ImGui::InputTextWithHint("##liveSearch", "Buscar (Libro Abreviado + 1:1)", m_LiveSearch, sizeof(m_LiveSearch));
         m_SearchFocused = ImGui::IsItemActive();
 
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor(2);
 
-        if (isEscape && m_SearchFocused) {
-            m_LiveSearch[0] = '\0';
-        }
+        if (isEscape && m_SearchFocused) m_LiveSearch[0] = '\0';
 
         std::string currentSearch(m_LiveSearch);
         if (currentSearch != m_LastLiveSearch) {
@@ -410,47 +382,36 @@ namespace ProyecThor::UI {
         }
 
         ImGui::SameLine(0, 16);
-
-        // Separator line
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.30f, 0.32f, 0.38f, 1.0f));
         ImGui::SetCursorPosY((40.0f - ImGui::GetTextLineHeight()) * 0.5f);
         ImGui::Text("|");
         ImGui::PopStyleColor();
 
         ImGui::SameLine(0, 12);
-
-        // Clear history button
-        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.20f, 0.10f, 0.10f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.10f, 0.10f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.35f, 0.15f, 0.15f, 1.0f));
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
         ImGui::SetCursorPosY((40.0f - ImGui::GetFrameHeight()) * 0.5f);
         if (ImGui::Button("✕##clearHistory", ImVec2(26, 26))) m_VerseHistory.clear();
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Limpiar historial");
         ImGui::PopStyleVar();
         ImGui::PopStyleColor(2);
 
         ImGui::SameLine(0, 8);
-
-        // Horizontal history pills — scroll horizontally inside remaining space
-        float histAreaX = ImGui::GetCursorPosX();
         float histAreaW = ImGui::GetContentRegionAvail().x;
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-        ImGui::BeginChild("HistoryBar", ImVec2(histAreaW, 40), false,
-            ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        ImGui::BeginChild("HistoryBar", ImVec2(histAreaW, 40), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10, 4));
-        ImGui::SetCursorPosY((40.0f - ImGui::GetFrameHeight()) * 0.5f);
-ImGui::Dummy(ImVec2(0.0f, 40.0f)); 
-    ImGui::SameLine(); // Volvemos a la misma línea para empezar a dibujar las pills
-    // -------------------------
-        // Render history items right-to-left (most recent first) horizontally
+        
+        ImGui::Dummy(ImVec2(0.0f, 40.0f)); 
+        ImGui::SameLine(); 
+
         float cursorY = (40.0f - ImGui::GetFrameHeight()) * 0.5f;
         for (int i = (int)m_VerseHistory.size() - 1; i >= 0; i--) {
             ImGui::PushID(i);
             std::string ref = m_VerseHistory[i].substr(0, m_VerseHistory[i].find('\n'));
-
-            ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.12f, 0.18f, 0.28f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.18f, 0.28f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.30f, 0.48f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.28f, 0.44f, 0.68f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.75f, 0.88f, 1.0f, 1.0f));
@@ -464,13 +425,11 @@ ImGui::Dummy(ImVec2(0.0f, 40.0f));
             ImGui::SameLine(0, 6);
             ImGui::PopID();
         }
-
         ImGui::PopStyleVar(2);
         ImGui::EndChild();
-        ImGui::PopStyleColor(); // ChildBg transparent
-
-        ImGui::EndChild();      // TopBar
-        ImGui::PopStyleColor(); // TopBar ChildBg
+        ImGui::PopStyleColor();
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
 
         ImGui::Spacing();
 
@@ -478,296 +437,207 @@ ImGui::Dummy(ImVec2(0.0f, 40.0f));
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
             ImGui::Text("Error: No se pudo cargar el archivo XML de la Biblia.");
             ImGui::PopStyleColor();
-            ImGui::TextWrapped("Asegurate de que el archivo XML este correctamente estructurado.");
             return;
         }
 
-        // ─────────────────────────────────────────────────────────────────────
-        // MAIN TABLE: Nav | Verses  (history column removed)
-        // ─────────────────────────────────────────────────────────────────────
         ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(6, 4));
-        if (!ImGui::BeginTable("BibleTable", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp)) {
-            ImGui::PopStyleVar();
-            return;
-        }
+        if (ImGui::BeginTable("BibleTable", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp)) {
+            ImGui::TableSetupColumn("Navegacion", ImGuiTableColumnFlags_WidthFixed, 210.0f);
+            ImGui::TableSetupColumn("Versiculos", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableHeadersRow();
+            ImGui::TableNextRow();
 
-        ImGui::TableSetupColumn("Navegacion",  ImGuiTableColumnFlags_WidthFixed,   210.0f);
-        ImGui::TableSetupColumn("Versiculos",  ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableHeadersRow();
-        ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.09f, 0.10f, 0.12f, 1.0f));
+            ImGui::BeginChild("NavChild", ImVec2(0, 0), false);
 
-        // COLUMNA 1 — LIBROS Y CAPÍTULOS
-        ImGui::TableSetColumnIndex(0);
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.09f, 0.10f, 0.12f, 1.0f));
-        ImGui::BeginChild("NavChild", ImVec2(0, 0), false);
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.65f, 0.75f, 1.0f));
+            ImGui::Text("Libros");
+            ImGui::PopStyleColor();
 
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.65f, 0.75f, 1.0f));
-        ImGui::Text("Libros");
-        ImGui::PopStyleColor();
-
-        float booksHeight = ImGui::GetContentRegionAvail().y * 0.62f;
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.07f, 0.08f, 0.10f, 1.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-
-        if (ImGui::BeginListBox("##Books", ImVec2(-1, booksHeight))) {
-            for (size_t i = 0; i < m_CurrentBible.books.size(); i++) {
-                const bool is_selected = (m_SelectedBook == (int)i);
-                auto& b = m_CurrentBible.books[i];
-
-                bool isFiltered = (m_FilteredBook < 0) || ((int)i == m_FilteredBook);
-
-                if (!isFiltered) {
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.30f, 0.32f, 0.35f, 1.0f));
-                } else {
-                    BibleSection sec = GetBookSection(b.canonicalNumber);
-                    float r, g, bv;
-                    GetSectionColor(sec, r, g, bv);
-                    if (is_selected)
-                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-                    else
-                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(r, g, bv, 1.0f));
-                }
-
-                if (is_selected) {
-                    ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.18f, 0.28f, 0.45f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.22f, 0.34f, 0.55f, 1.0f));
-                }
-
-                if (ImGui::Selectable(b.name.c_str(), is_selected, 0, ImVec2(0, 0))) {
-                    m_SelectedBook = (int)i;
-                    m_SelectedChapter = 0;
-                    m_FilteredBook = (int)i;
-                    m_FilteredChapter = 0;
-                    m_LiveSearch[0] = '\0';
-                    m_LastLiveSearch = "";
-                }
-
-                if (is_selected) {
-                    ImGui::SetItemDefaultFocus();
-                    ImGui::PopStyleColor(2);
-                }
-                ImGui::PopStyleColor();
-            }
-            ImGui::EndListBox();
-        }
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor();
-
-        ImGui::Spacing();
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.65f, 0.75f, 1.0f));
-        ImGui::Text("Capitulos");
-        ImGui::PopStyleColor();
-
-        if (m_SelectedBook >= 0 && m_SelectedBook < (int)m_CurrentBible.books.size()) {
-            auto& selBook = m_CurrentBible.books[m_SelectedBook];
-            BibleSection sec = GetBookSection(selBook.canonicalNumber);
-            float secR, secG, secB;
-            GetSectionColor(sec, secR, secG, secB);
-
+            float booksHeight = ImGui::GetContentRegionAvail().y * 0.62f;
             ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.07f, 0.08f, 0.10f, 1.0f));
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
 
-            if (ImGui::BeginListBox("##Chapters", ImVec2(-1, -1))) {
-                for (size_t i = 0; i < selBook.chapters.size(); i++) {
-                    const bool is_selected = (m_SelectedChapter == (int)i);
-                    std::string capLabel = "Cap. " + std::to_string(selBook.chapters[i].number);
+            if (ImGui::BeginListBox("##Books", ImVec2(-1, booksHeight))) {
+                for (size_t i = 0; i < m_CurrentBible.books.size(); i++) {
+                    const bool is_selected = (m_SelectedBook == (int)i);
+                    auto& b = m_CurrentBible.books[i];
+                    bool isFiltered = (m_FilteredBook < 0) || ((int)i == m_FilteredBook);
 
-                    if (is_selected) {
-                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-                        ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(secR * 0.35f, secG * 0.35f, secB * 0.35f, 1.0f));
-                        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(secR * 0.45f, secG * 0.45f, secB * 0.45f, 1.0f));
-                    } else {
-                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(secR * 0.85f, secG * 0.85f, secB * 0.85f, 1.0f));
-                    }
-
-                    if (ImGui::Selectable(capLabel.c_str(), is_selected)) {
-                        m_SelectedChapter = (int)i;
-                        m_FilteredChapter = (int)i;
+                    if (!isFiltered) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.30f, 0.32f, 0.35f, 1.0f));
+                    else {
+                        BibleSection sec = GetBookSection(b.canonicalNumber);
+                        float r, g, bv;
+                        GetSectionColor(sec, r, g, bv);
+                        ImGui::PushStyleColor(ImGuiCol_Text, is_selected ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : ImVec4(r, g, bv, 1.0f));
                     }
 
                     if (is_selected) {
-                        ImGui::SetItemDefaultFocus();
-                        ImGui::PopStyleColor(3);
-                    } else {
-                        ImGui::PopStyleColor(1);
+                        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.18f, 0.28f, 0.45f, 1.0f));
+                        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.22f, 0.34f, 0.55f, 1.0f));
                     }
+
+                    if (ImGui::Selectable(b.name.c_str(), is_selected)) {
+                        m_SelectedBook = (int)i;
+                        m_SelectedChapter = 0;
+                        m_FilteredBook = (int)i;
+                        m_FilteredChapter = 0;
+                        m_LiveSearch[0] = '\0';
+                        m_LastLiveSearch = "";
+                    }
+
+                    if (is_selected) ImGui::PopStyleColor(2);
+                    ImGui::PopStyleColor();
                 }
                 ImGui::EndListBox();
             }
             ImGui::PopStyleVar();
             ImGui::PopStyleColor();
-        }
 
-        ImGui::EndChild();
-        ImGui::PopStyleColor();
-
-        // ─────────────────────────────────────────────────────────────────────
-        // COLUMNA 2 — VERSÍCULOS
-        // ─────────────────────────────────────────────────────────────────────
-        ImGui::TableSetColumnIndex(1);
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.07f, 0.08f, 0.10f, 1.0f));
-        ImGui::BeginChild("VersesChild", ImVec2(0, 0), false);
-
-        if (m_SelectedBook >= 0 && m_SelectedBook < (int)m_CurrentBible.books.size() &&
-            m_SelectedChapter >= 0 && m_SelectedChapter < (int)m_CurrentBible.books[m_SelectedBook].chapters.size()) {
-
-            auto& book = m_CurrentBible.books[m_SelectedBook];
-            auto& chap = book.chapters[m_SelectedChapter];
-
-            BibleSection sec = GetBookSection(book.canonicalNumber);
-            float secR, secG, secB;
-            GetSectionColor(sec, secR, secG, secB);
-
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(secR, secG, secB, 1.0f));
-            ImGui::Text("%s  —  Capitulo %d", book.name.c_str(), chap.number);
-            ImGui::PopStyleColor();
-
-            ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(secR * 0.4f, secG * 0.4f, secB * 0.4f, 1.0f));
-            ImGui::Separator();
-            ImGui::PopStyleColor();
             ImGui::Spacing();
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.65f, 0.75f, 1.0f));
+            ImGui::Text("Capitulos");
+            ImGui::PopStyleColor();
 
-            std::string liveQ = StripAccents(ToLowerUTF8(currentSearch));
+            if (m_SelectedBook >= 0 && m_SelectedBook < (int)m_CurrentBible.books.size()) {
+                auto& selBook = m_CurrentBible.books[m_SelectedBook];
+                BibleSection sec = GetBookSection(selBook.canonicalNumber);
+                float secR, secG, secB;
+                GetSectionColor(sec, secR, secG, secB);
 
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 3));
+                ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.07f, 0.08f, 0.10f, 1.0f));
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
 
-            for (auto& verse : chap.verses) {
-                ImGui::PushID(verse.number);
+                if (ImGui::BeginListBox("##Chapters", ImVec2(-1, -1))) {
+                    for (size_t i = 0; i < selBook.chapters.size(); i++) {
+                        const bool is_selected = (m_SelectedChapter == (int)i);
+                        std::string capLabel = "Cap. " + std::to_string(selBook.chapters[i].number);
 
-                bool verseMatch = true;
-                if (!liveQ.empty() && m_FilteredBook >= 0 && m_FilteredChapter >= 0) {
-                    size_t colonPos2 = liveQ.find(':');
-                    if (colonPos2 != std::string::npos) {
-                        std::string afterColon = liveQ.substr(colonPos2 + 1);
-                        std::string verseNumStr;
-                        for (char c : afterColon)
-                            if (std::isdigit(static_cast<unsigned char>(c))) verseNumStr += c;
-                            else break;
-                        if (!verseNumStr.empty()) {
-                            try {
-                                int targetVerse = std::stoi(verseNumStr);
-                                verseMatch = (verse.number == targetVerse);
-                            } catch(...) {}
+                        if (is_selected) {
+                            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+                            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(secR * 0.35f, secG * 0.35f, secB * 0.35f, 1.0f));
+                            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(secR * 0.45f, secG * 0.45f, secB * 0.45f, 1.0f));
+                        } else ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(secR * 0.85f, secG * 0.85f, secB * 0.85f, 1.0f));
+
+                        if (ImGui::Selectable(capLabel.c_str(), is_selected)) {
+                            m_SelectedChapter = (int)i;
+                            m_FilteredChapter = (int)i;
+                        }
+                        ImGui::PopStyleColor(is_selected ? 3 : 1);
+                    }
+                    ImGui::EndListBox();
+                }
+                ImGui::PopStyleVar();
+                ImGui::PopStyleColor();
+            }
+            ImGui::EndChild();
+            ImGui::PopStyleColor();
+
+            ImGui::TableSetColumnIndex(1);
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.07f, 0.08f, 0.10f, 1.0f));
+            ImGui::BeginChild("VersesChild", ImVec2(0, 0), false);
+
+            if (m_SelectedBook >= 0 && m_SelectedBook < (int)m_CurrentBible.books.size() &&
+                m_SelectedChapter >= 0 && m_SelectedChapter < (int)m_CurrentBible.books[m_SelectedBook].chapters.size()) {
+
+                auto& book = m_CurrentBible.books[m_SelectedBook];
+                auto& chap = book.chapters[m_SelectedChapter];
+                BibleSection sec = GetBookSection(book.canonicalNumber);
+                float secR, secG, secB;
+                GetSectionColor(sec, secR, secG, secB);
+
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(secR, secG, secB, 1.0f));
+                ImGui::Text("%s  —  Capitulo %d", book.name.c_str(), chap.number);
+                ImGui::PopStyleColor();
+
+                ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(secR * 0.4f, secG * 0.4f, secB * 0.4f, 1.0f));
+                ImGui::Separator();
+                ImGui::PopStyleColor();
+                ImGui::Spacing();
+
+                std::string liveQ = StripAccents(ToLowerUTF8(currentSearch));
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 3));
+
+                for (auto& verse : chap.verses) {
+                    ImGui::PushID(verse.number);
+                    bool verseMatch = true;
+                    if (!liveQ.empty() && m_FilteredBook >= 0 && m_FilteredChapter >= 0) {
+                        size_t colonPos2 = liveQ.find(':');
+                        if (colonPos2 != std::string::npos) {
+                            std::string afterColon = liveQ.substr(colonPos2 + 1);
+                            std::string verseNumStr;
+                            for (char c : afterColon) if (std::isdigit(c)) verseNumStr += c; else break;
+                            if (!verseNumStr.empty()) try { verseMatch = (verse.number == std::stoi(verseNumStr)); } catch(...) {}
                         }
                     }
-                }
 
-                std::string numStr = std::to_string(verse.number);
-                std::string projText = book.name + " " + std::to_string(chap.number) + ":" + numStr + "\n" + verse.text;
+                    std::string numStr = std::to_string(verse.number);
+                    std::string projText = book.name + " " + std::to_string(chap.number) + ":" + numStr + "\n" + verse.text;
+                    float alpha = verseMatch ? 1.0f : 0.30f;
 
-                float alpha = verseMatch ? 1.0f : 0.30f;
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.11f, 0.13f, 0.17f, alpha));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(secR * 0.20f, secG * 0.20f, secB * 0.20f, alpha));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(secR * 0.35f, secG * 0.35f, secB * 0.35f, 1.0f));
 
-                ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.11f, 0.13f, 0.17f, alpha));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(secR * 0.20f, secG * 0.20f, secB * 0.20f, alpha));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(secR * 0.35f, secG * 0.35f, secB * 0.35f, 1.0f));
-
-                float availW = ImGui::GetContentRegionAvail().x;
-                float numW = 38.0f;
-
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(secR, secG, secB, alpha));
-                ImGui::Text("%s", numStr.c_str());
-                ImGui::PopStyleColor();
-
-                ImGui::SameLine(numW);
-
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.88f, 0.88f, 0.90f, alpha));
-                ImGui::PushTextWrapPos(availW);
-
-                // LEFT CLICK → project
-                if (ImGui::Button(verse.text.c_str(), ImVec2(availW - numW, 0))) {
-                    if (m_VerseHistory.empty() || m_VerseHistory.back() != projText)
-                        m_VerseHistory.push_back(projText);
-                    Core::PresentationCore::Get().SetLayer2_Text(projText);
-                    Core::PresentationCore::Get().SetProjecting(true);
-                }
-
-                ImGui::PopTextWrapPos();
-                ImGui::PopStyleColor();
-                ImGui::PopStyleColor(3);
-
-                // ── RIGHT CLICK → context menu to edit verse in XML ──────────
-                std::string popupId = "##verseCtx" + std::to_string(verse.number);
-                if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Right)) {
-                    ImGui::OpenPopup(popupId.c_str());
-                    // Pre-fill edit buffer with current verse text
-                    strncpy(m_EditVerseBuffer, verse.text.c_str(), sizeof(m_EditVerseBuffer) - 1);
-                    m_EditVerseBuffer[sizeof(m_EditVerseBuffer) - 1] = '\0';
-                    m_EditingVerseNumber = verse.number;
-                    m_EditingBookIndex   = m_SelectedBook;
-                    m_EditingChapIndex   = m_SelectedChapter;
-                    m_EditSaveStatus     = "";
-                }
-
-                if (ImGui::BeginPopup(popupId.c_str())) {
-                    // Header
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(secR, secG, secB, 1.0f));
-                    ImGui::Text("Editar  %s %d:%d", book.name.c_str(), chap.number, verse.number);
-                    ImGui::PopStyleColor();
-                    ImGui::Separator();
-                    ImGui::Spacing();
-
-                    // Multiline text editor
-                    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.10f, 0.12f, 0.16f, 1.0f));
-                    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-                    ImGui::InputTextMultiline(
-                        "##editVerse",
-                        m_EditVerseBuffer,
-                        sizeof(m_EditVerseBuffer),
-                        ImVec2(460, 100),
-                        ImGuiInputTextFlags_AllowTabInput
-                    );
-                    ImGui::PopStyleVar();
+                    float availW = ImGui::GetContentRegionAvail().x;
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(secR, secG, secB, alpha));
+                    ImGui::Text("%s", numStr.c_str());
                     ImGui::PopStyleColor();
 
-                    ImGui::Spacing();
+                    ImGui::SameLine(38.0f);
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.88f, 0.88f, 0.90f, alpha));
+                    ImGui::PushTextWrapPos(availW);
 
-                    // Save button
-                    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.15f, 0.35f, 0.20f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.50f, 0.28f, 1.0f));
-                    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-                    if (ImGui::Button("Guardar en XML", ImVec2(160, 28))) {
-                        std::string newText(m_EditVerseBuffer);
-                        SaveVerseToXML(m_EditingBookIndex, m_EditingChapIndex, m_EditingVerseNumber, newText);
-                        m_EditSaveStatus = "✓ Guardado";
-                        ImGui::CloseCurrentPopup();
+                    if (ImGui::Button(verse.text.c_str(), ImVec2(availW - 38.0f, 0))) {
+                        if (m_VerseHistory.empty() || m_VerseHistory.back() != projText) m_VerseHistory.push_back(projText);
+                        Core::PresentationCore::Get().SetLayer2_Text(projText);
+                        Core::PresentationCore::Get().SetProjecting(true);
                     }
-                    ImGui::PopStyleVar();
-                    ImGui::PopStyleColor(2);
 
-                    ImGui::SameLine();
+                    ImGui::PopTextWrapPos();
+                    ImGui::PopStyleColor();
+                    ImGui::PopStyleColor(3);
 
-                    // Cancel button
-                    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.25f, 0.15f, 0.15f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.40f, 0.20f, 0.20f, 1.0f));
-                    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-                    if (ImGui::Button("Cancelar", ImVec2(100, 28)))
-                        ImGui::CloseCurrentPopup();
-                    ImGui::PopStyleVar();
-                    ImGui::PopStyleColor(2);
+                    std::string popupId = "##verseCtx" + std::to_string(verse.number);
+                    if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Right)) {
+                        ImGui::OpenPopup(popupId.c_str());
+                        strncpy(m_EditVerseBuffer, verse.text.c_str(), sizeof(m_EditVerseBuffer) - 1);
+                        m_EditVerseBuffer[sizeof(m_EditVerseBuffer) - 1] = '\0';
+                        m_EditingVerseNumber = verse.number;
+                        m_EditingBookIndex = m_SelectedBook;
+                        m_EditingChapIndex = m_SelectedChapter;
+                        m_EditSaveStatus = "";
+                    }
 
-                    if (!m_EditSaveStatus.empty()) {
-                        ImGui::SameLine();
-                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.40f, 0.90f, 0.50f, 1.0f));
-                        ImGui::Text("%s", m_EditSaveStatus.c_str());
+                    if (ImGui::BeginPopup(popupId.c_str())) {
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(secR, secG, secB, 1.0f));
+                        ImGui::Text("Editar  %s %d:%d", book.name.c_str(), chap.number, verse.number);
                         ImGui::PopStyleColor();
+                        ImGui::Separator();
+                        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.10f, 0.12f, 0.16f, 1.0f));
+                        ImGui::InputTextMultiline("##editVerse", m_EditVerseBuffer, sizeof(m_EditVerseBuffer), ImVec2(460, 100));
+                        ImGui::PopStyleColor();
+
+                        if (ImGui::Button("Guardar en XML", ImVec2(160, 28))) {
+                            SaveVerseToXML(m_EditingBookIndex, m_EditingChapIndex, m_EditingVerseNumber, m_EditVerseBuffer);
+                            m_EditSaveStatus = "✓ Guardado";
+                            ImGui::CloseCurrentPopup();
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::Button("Cancelar", ImVec2(100, 28))) ImGui::CloseCurrentPopup();
+                        ImGui::EndPopup();
                     }
-
-                    ImGui::EndPopup();
+                    ImGui::Spacing();
+                    ImGui::PopID();
                 }
-                // ── end right-click block ─────────────────────────────────────
-
-                ImGui::Spacing();
-                ImGui::PopID();
+                ImGui::PopStyleVar(2);
             }
-
-            ImGui::PopStyleVar(2);
+            ImGui::EndChild();
+            ImGui::PopStyleColor();
+            ImGui::EndTable();
         }
-
-        ImGui::EndChild();
-        ImGui::PopStyleColor();
-
-        ImGui::EndTable();
         ImGui::PopStyleVar();
     }
 

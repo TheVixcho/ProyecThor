@@ -1,36 +1,34 @@
 #pragma once
 #include <memory>
 #include <string>
-#include "preview/SongView.h"
-#include "IPanel.h" 
-
-#include "preview/BibleView.h"
+#include "IPanel.h"
 #include "preview/MonitorView.h"
 #include "preview/MediaView.h"
+#include "preview/BibleView.h"
+#include "preview/SongView.h"
+#include "../../VLCBasePlayer.h"
 
 namespace ProyecThor::Core {
-    class VLCVideoLayer;
+    class VLCBasePlayer;
 }
 
 namespace ProyecThor::UI {
 
-    class PreviewPanel : public IPanel { 
-    public:
-        PreviewPanel();
-        ~PreviewPanel() override;
+class PreviewPanel : public IPanel {
+public:
+    PreviewPanel();
+    virtual ~PreviewPanel();
 
-        void Render() override; 
-        
-        // AÑADIDO: Implementación de la función virtual pura de IPanel
-        std::string GetName() const override { return "PreviewPanel"; }
+    void Render() override;
+    std::string GetName() const override;
 
-    private:
-        std::unique_ptr<ProyecThor::Core::VLCVideoLayer> m_PreviewPlayer;
+private:
+    std::unique_ptr<Core::VLCBasePlayer> m_PreviewPlayer;
 
-        BibleView m_BibleView;
-        MonitorView m_MonitorView;
-        MediaView m_MediaView;
-        SongView m_SongView;
-    };
+    MonitorView m_MonitorView;
+    MediaView   m_MediaView;
+    BibleView   m_BibleView;
+    SongView    m_SongView;
+};
 
 } // namespace ProyecThor::UI

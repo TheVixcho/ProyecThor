@@ -56,10 +56,10 @@ RM = "C:\Program Files\CMake\bin\cmake.exe" -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = C:\Proyectos\ProyeThor\ProyecThor
+CMAKE_SOURCE_DIR = D:\Proyectos\ProyecThor
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = C:\Proyectos\ProyeThor\proyecthor\build
+CMAKE_BINARY_DIR = D:\Proyectos\ProyecThor\build
 
 #=============================================================================
 # Targets provided globally by CMake.
@@ -86,9 +86,9 @@ rebuild_cache/fast: rebuild_cache
 
 # The main all target
 all: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles C:\Proyectos\ProyeThor\proyecthor\build\\CMakeFiles\progress.marks
+	$(CMAKE_COMMAND) -E cmake_progress_start D:\Proyectos\ProyecThor\build\CMakeFiles D:\Proyectos\ProyecThor\build\\CMakeFiles\progress.marks
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\Makefile2 all
-	$(CMAKE_COMMAND) -E cmake_progress_start C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles 0
+	$(CMAKE_COMMAND) -E cmake_progress_start D:\Proyectos\ProyecThor\build\CMakeFiles 0
 .PHONY : all
 
 # The main clean target
@@ -112,7 +112,7 @@ preinstall/fast:
 
 # clear depends
 depend:
-	$(CMAKE_COMMAND) -P C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles\VerifyGlobs.cmake
+	$(CMAKE_COMMAND) -P D:\Proyectos\ProyecThor\build\CMakeFiles\VerifyGlobs.cmake
 	$(CMAKE_COMMAND) -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR) --check-build-system CMakeFiles\Makefile.cmake 1
 .PHONY : depend
 
@@ -609,6 +609,198 @@ src/ui/panels/preview/SongView.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/panels/preview/SongView.cpp.s
 .PHONY : src/ui/panels/preview/SongView.cpp.s
 
+src/ui/settings/CategoryAudio.obj: src/ui/settings/CategoryAudio.cpp.obj
+.PHONY : src/ui/settings/CategoryAudio.obj
+
+# target to build an object file
+src/ui/settings/CategoryAudio.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/CategoryAudio.cpp.obj
+.PHONY : src/ui/settings/CategoryAudio.cpp.obj
+
+src/ui/settings/CategoryAudio.i: src/ui/settings/CategoryAudio.cpp.i
+.PHONY : src/ui/settings/CategoryAudio.i
+
+# target to preprocess a source file
+src/ui/settings/CategoryAudio.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/CategoryAudio.cpp.i
+.PHONY : src/ui/settings/CategoryAudio.cpp.i
+
+src/ui/settings/CategoryAudio.s: src/ui/settings/CategoryAudio.cpp.s
+.PHONY : src/ui/settings/CategoryAudio.s
+
+# target to generate assembly for a file
+src/ui/settings/CategoryAudio.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/CategoryAudio.cpp.s
+.PHONY : src/ui/settings/CategoryAudio.cpp.s
+
+src/ui/settings/CategoryGeneral.obj: src/ui/settings/CategoryGeneral.cpp.obj
+.PHONY : src/ui/settings/CategoryGeneral.obj
+
+# target to build an object file
+src/ui/settings/CategoryGeneral.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/CategoryGeneral.cpp.obj
+.PHONY : src/ui/settings/CategoryGeneral.cpp.obj
+
+src/ui/settings/CategoryGeneral.i: src/ui/settings/CategoryGeneral.cpp.i
+.PHONY : src/ui/settings/CategoryGeneral.i
+
+# target to preprocess a source file
+src/ui/settings/CategoryGeneral.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/CategoryGeneral.cpp.i
+.PHONY : src/ui/settings/CategoryGeneral.cpp.i
+
+src/ui/settings/CategoryGeneral.s: src/ui/settings/CategoryGeneral.cpp.s
+.PHONY : src/ui/settings/CategoryGeneral.s
+
+# target to generate assembly for a file
+src/ui/settings/CategoryGeneral.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/CategoryGeneral.cpp.s
+.PHONY : src/ui/settings/CategoryGeneral.cpp.s
+
+src/ui/settings/CategoryLanguage.obj: src/ui/settings/CategoryLanguage.cpp.obj
+.PHONY : src/ui/settings/CategoryLanguage.obj
+
+# target to build an object file
+src/ui/settings/CategoryLanguage.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/CategoryLanguage.cpp.obj
+.PHONY : src/ui/settings/CategoryLanguage.cpp.obj
+
+src/ui/settings/CategoryLanguage.i: src/ui/settings/CategoryLanguage.cpp.i
+.PHONY : src/ui/settings/CategoryLanguage.i
+
+# target to preprocess a source file
+src/ui/settings/CategoryLanguage.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/CategoryLanguage.cpp.i
+.PHONY : src/ui/settings/CategoryLanguage.cpp.i
+
+src/ui/settings/CategoryLanguage.s: src/ui/settings/CategoryLanguage.cpp.s
+.PHONY : src/ui/settings/CategoryLanguage.s
+
+# target to generate assembly for a file
+src/ui/settings/CategoryLanguage.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/CategoryLanguage.cpp.s
+.PHONY : src/ui/settings/CategoryLanguage.cpp.s
+
+src/ui/settings/CategoryProjection.obj: src/ui/settings/CategoryProjection.cpp.obj
+.PHONY : src/ui/settings/CategoryProjection.obj
+
+# target to build an object file
+src/ui/settings/CategoryProjection.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/CategoryProjection.cpp.obj
+.PHONY : src/ui/settings/CategoryProjection.cpp.obj
+
+src/ui/settings/CategoryProjection.i: src/ui/settings/CategoryProjection.cpp.i
+.PHONY : src/ui/settings/CategoryProjection.i
+
+# target to preprocess a source file
+src/ui/settings/CategoryProjection.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/CategoryProjection.cpp.i
+.PHONY : src/ui/settings/CategoryProjection.cpp.i
+
+src/ui/settings/CategoryProjection.s: src/ui/settings/CategoryProjection.cpp.s
+.PHONY : src/ui/settings/CategoryProjection.s
+
+# target to generate assembly for a file
+src/ui/settings/CategoryProjection.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/CategoryProjection.cpp.s
+.PHONY : src/ui/settings/CategoryProjection.cpp.s
+
+src/ui/settings/CategoryTheme.obj: src/ui/settings/CategoryTheme.cpp.obj
+.PHONY : src/ui/settings/CategoryTheme.obj
+
+# target to build an object file
+src/ui/settings/CategoryTheme.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/CategoryTheme.cpp.obj
+.PHONY : src/ui/settings/CategoryTheme.cpp.obj
+
+src/ui/settings/CategoryTheme.i: src/ui/settings/CategoryTheme.cpp.i
+.PHONY : src/ui/settings/CategoryTheme.i
+
+# target to preprocess a source file
+src/ui/settings/CategoryTheme.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/CategoryTheme.cpp.i
+.PHONY : src/ui/settings/CategoryTheme.cpp.i
+
+src/ui/settings/CategoryTheme.s: src/ui/settings/CategoryTheme.cpp.s
+.PHONY : src/ui/settings/CategoryTheme.s
+
+# target to generate assembly for a file
+src/ui/settings/CategoryTheme.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/CategoryTheme.cpp.s
+.PHONY : src/ui/settings/CategoryTheme.cpp.s
+
+src/ui/settings/CategoryUpdates.obj: src/ui/settings/CategoryUpdates.cpp.obj
+.PHONY : src/ui/settings/CategoryUpdates.obj
+
+# target to build an object file
+src/ui/settings/CategoryUpdates.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/CategoryUpdates.cpp.obj
+.PHONY : src/ui/settings/CategoryUpdates.cpp.obj
+
+src/ui/settings/CategoryUpdates.i: src/ui/settings/CategoryUpdates.cpp.i
+.PHONY : src/ui/settings/CategoryUpdates.i
+
+# target to preprocess a source file
+src/ui/settings/CategoryUpdates.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/CategoryUpdates.cpp.i
+.PHONY : src/ui/settings/CategoryUpdates.cpp.i
+
+src/ui/settings/CategoryUpdates.s: src/ui/settings/CategoryUpdates.cpp.s
+.PHONY : src/ui/settings/CategoryUpdates.s
+
+# target to generate assembly for a file
+src/ui/settings/CategoryUpdates.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/CategoryUpdates.cpp.s
+.PHONY : src/ui/settings/CategoryUpdates.cpp.s
+
+src/ui/settings/SettingsManager.obj: src/ui/settings/SettingsManager.cpp.obj
+.PHONY : src/ui/settings/SettingsManager.obj
+
+# target to build an object file
+src/ui/settings/SettingsManager.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/SettingsManager.cpp.obj
+.PHONY : src/ui/settings/SettingsManager.cpp.obj
+
+src/ui/settings/SettingsManager.i: src/ui/settings/SettingsManager.cpp.i
+.PHONY : src/ui/settings/SettingsManager.i
+
+# target to preprocess a source file
+src/ui/settings/SettingsManager.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/SettingsManager.cpp.i
+.PHONY : src/ui/settings/SettingsManager.cpp.i
+
+src/ui/settings/SettingsManager.s: src/ui/settings/SettingsManager.cpp.s
+.PHONY : src/ui/settings/SettingsManager.s
+
+# target to generate assembly for a file
+src/ui/settings/SettingsManager.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/SettingsManager.cpp.s
+.PHONY : src/ui/settings/SettingsManager.cpp.s
+
+src/ui/settings/SettingsPanel.obj: src/ui/settings/SettingsPanel.cpp.obj
+.PHONY : src/ui/settings/SettingsPanel.obj
+
+# target to build an object file
+src/ui/settings/SettingsPanel.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/SettingsPanel.cpp.obj
+.PHONY : src/ui/settings/SettingsPanel.cpp.obj
+
+src/ui/settings/SettingsPanel.i: src/ui/settings/SettingsPanel.cpp.i
+.PHONY : src/ui/settings/SettingsPanel.i
+
+# target to preprocess a source file
+src/ui/settings/SettingsPanel.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/SettingsPanel.cpp.i
+.PHONY : src/ui/settings/SettingsPanel.cpp.i
+
+src/ui/settings/SettingsPanel.s: src/ui/settings/SettingsPanel.cpp.s
+.PHONY : src/ui/settings/SettingsPanel.s
+
+# target to generate assembly for a file
+src/ui/settings/SettingsPanel.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\ProyecThor.dir\build.make CMakeFiles/ProyecThor.dir/src/ui/settings/SettingsPanel.cpp.s
+.PHONY : src/ui/settings/SettingsPanel.cpp.s
+
 # Help Target
 help:
 	@echo The following are some of the valid targets for this Makefile:
@@ -678,6 +870,30 @@ help:
 	@echo ... src/ui/panels/preview/SongView.obj
 	@echo ... src/ui/panels/preview/SongView.i
 	@echo ... src/ui/panels/preview/SongView.s
+	@echo ... src/ui/settings/CategoryAudio.obj
+	@echo ... src/ui/settings/CategoryAudio.i
+	@echo ... src/ui/settings/CategoryAudio.s
+	@echo ... src/ui/settings/CategoryGeneral.obj
+	@echo ... src/ui/settings/CategoryGeneral.i
+	@echo ... src/ui/settings/CategoryGeneral.s
+	@echo ... src/ui/settings/CategoryLanguage.obj
+	@echo ... src/ui/settings/CategoryLanguage.i
+	@echo ... src/ui/settings/CategoryLanguage.s
+	@echo ... src/ui/settings/CategoryProjection.obj
+	@echo ... src/ui/settings/CategoryProjection.i
+	@echo ... src/ui/settings/CategoryProjection.s
+	@echo ... src/ui/settings/CategoryTheme.obj
+	@echo ... src/ui/settings/CategoryTheme.i
+	@echo ... src/ui/settings/CategoryTheme.s
+	@echo ... src/ui/settings/CategoryUpdates.obj
+	@echo ... src/ui/settings/CategoryUpdates.i
+	@echo ... src/ui/settings/CategoryUpdates.s
+	@echo ... src/ui/settings/SettingsManager.obj
+	@echo ... src/ui/settings/SettingsManager.i
+	@echo ... src/ui/settings/SettingsManager.s
+	@echo ... src/ui/settings/SettingsPanel.obj
+	@echo ... src/ui/settings/SettingsPanel.i
+	@echo ... src/ui/settings/SettingsPanel.s
 .PHONY : help
 
 
@@ -689,7 +905,7 @@ help:
 # No rule that depends on this can have commands that come from listfiles
 # because they might be regenerated.
 cmake_check_build_system:
-	$(CMAKE_COMMAND) -P C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles\VerifyGlobs.cmake
+	$(CMAKE_COMMAND) -P D:\Proyectos\ProyecThor\build\CMakeFiles\VerifyGlobs.cmake
 	$(CMAKE_COMMAND) -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR) --check-build-system CMakeFiles\Makefile.cmake 0
 .PHONY : cmake_check_build_system
 

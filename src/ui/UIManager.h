@@ -5,6 +5,7 @@
 #include <GLFW/glfw3.h> 
 #include "IPanel.h"
 #include "../toolbar/ConfigPanel.h"
+#include "settings/SettingsPanel.h"
 
 namespace ProyecThor::UI {
 
@@ -28,7 +29,7 @@ namespace ProyecThor::UI {
         std::vector<std::shared_ptr<IPanel>> m_Panels;
         
         bool m_ShowConfig = false;
-        ConfigPanel m_ConfigPanel; 
+        Settings::SettingsPanel m_SettingsPanel;
     };
 
 }

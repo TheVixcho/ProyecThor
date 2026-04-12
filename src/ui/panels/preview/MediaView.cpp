@@ -1,5 +1,6 @@
 #include "MediaView.h"
 #include "../../../PresentationCore.h"
+#include "../../../VLCBasePlayer.h"
 #include <imgui.h>
 #include <iomanip>
 #include <sstream>
@@ -17,17 +18,19 @@ namespace ProyecThor::UI {
         return oss.str();
     }
 
-    void MediaView::Render(Core::VLCVideoLayer* previewPlayer) {
-        auto selection = Core::PresentationCore::Get().GetSelection();
+    void MediaView::Render(Core::VLCBasePlayer* previewPlayer) {
+        // En lugar de GetSelection(), hacemos Peek porque PreviewPanel ya lo consumió
+        auto selection = Core::PresentationCore::Get().PeekSelection();
 
         // 1. Lógica de Autoplay separada correctamente
         if (selection.title != m_LastSelectedFile) {
             m_LastSelectedFile = selection.title;
+            // ... (el resto de tu código se mantiene EXACTAMENTE igual) ...
             
             // SOLO reproducir en VLC si es estrictamente un VIDEO
             if (selection.type == Core::ItemType::Video) {
                 if (previewPlayer) {
-                    previewPlayer->PlayVideo("assets/videos/" + selection.title);
+                    previewPlayer->Play("assets/videos/" + selection.title);
                     m_IsPlayingPreview = true;
                 }
             } 
@@ -68,7 +71,6 @@ namespace ProyecThor::UI {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
             if (ImGui::Button("PROYECTAR IMAGEN (LIVE)", ImVec2(-1, 50))) {
-                // Fíjate que aquí pasamos 'false' en el segundo parámetro (isVideo = false)
                 Core::PresentationCore::Get().SetBackgroundMedia("assets/images/" + selection.title, false);
                 Core::PresentationCore::Get().SetProjecting(true); 
             }
@@ -114,7 +116,6 @@ namespace ProyecThor::UI {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
             if (ImGui::Button("PROYECTAR VIDEO (LIVE)", ImVec2(-1, 50))) {
-                // Para videos, pasamos 'true' (isVideo = true)
                 Core::PresentationCore::Get().SetBackgroundMedia("assets/videos/" + selection.title, true);
                 Core::PresentationCore::Get().SetProjecting(true); 
             }
