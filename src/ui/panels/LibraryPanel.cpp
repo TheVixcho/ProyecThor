@@ -60,13 +60,11 @@ namespace ProyecThor::UI {
             m_Items = { "Cuan_Grande_es_El.txt", "Gracia_Sublime.txt" }; 
         }
 
-        // ¡CLAVE DE LA SOLUCIÓN!
-        // Al escanear el disco duro, le avisamos a la interfaz que regenere su caché visual.
         g_ForceListUpdate = true;
     }
 
     void LibraryPanel::Render() {
-        // NOMBRE EXACTO PARA EL DOCKING (No cambiar)
+
         ImGui::Begin("Biblioteca"); 
 
         RenderCategoryButtons();
@@ -80,31 +78,35 @@ namespace ProyecThor::UI {
         ImGui::End();
     }
 
-    void LibraryPanel::RenderCategoryButtons() {
-        auto ButtonStyle = [this](LibraryCategory cat, const char* label) {
-            bool isCurrent = (m_CurrentCategory == cat);
-            if (isCurrent) {
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.4f, 0.8f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.5f, 0.9f, 1.0f));
-            }
-            
-            if (ImGui::Button(label, ImVec2(ImGui::GetContentRegionAvail().x / 4.1f, 30))) {
-                m_CurrentCategory = cat;
-                m_SelectedIndex = -1;
-                // Al llamar a RefreshList, internamente se cambia g_ForceListUpdate a true
-                RefreshList();
-            }
+void LibraryPanel::RenderCategoryButtons() {
 
-            if (isCurrent) ImGui::PopStyleColor(2);
-            ImGui::SameLine();
-        };
+    auto ButtonStyle = [this](LibraryCategory cat, const char* label, float divisor) {
+        bool isCurrent = (m_CurrentCategory == cat);
+        if (isCurrent) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.4f, 0.8f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.5f, 0.9f, 1.0f));
+        }
+        
+        // Calculamos el ancho restando un pequeño margen para que no toquen el borde derecho
+        float width = (ImGui::GetContentRegionAvail().x / divisor) - ImGui::GetStyle().ItemSpacing.x;
 
-        ButtonStyle(LibraryCategory::Songs, "Canciones");
-        ButtonStyle(LibraryCategory::Videos, "Videos");
-        ButtonStyle(LibraryCategory::Images, "Imagenes");
-        ButtonStyle(LibraryCategory::Bibles, "Biblia");
-        ImGui::NewLine();
-    }
+        if (ImGui::Button(label, ImVec2(width, 30))) {
+            m_CurrentCategory = cat;
+            m_SelectedIndex = -1;
+            RefreshList();
+        }
+
+        if (isCurrent) ImGui::PopStyleColor(2);
+        ImGui::SameLine();
+    };
+
+    ButtonStyle(LibraryCategory::Songs, "Canciones", 3.0f);
+    ButtonStyle(LibraryCategory::Videos, "Videos", 2.5f);
+    ButtonStyle(LibraryCategory::Images, "Imagenes", 1.0f);
+    ImGui::NewLine();
+    ButtonStyle(LibraryCategory::Bibles, "Biblia", 1.0f);
+    ImGui::NewLine(); 
+}
 
     void LibraryPanel::RenderSideList() {
         ImGui::SetNextItemWidth(-1.0f);
@@ -212,8 +214,7 @@ namespace ProyecThor::UI {
             }
         }
         ImGui::PopStyleColor();
-
-        ImGui::SameLine();
+        ImGui::NewLine();
         if (ImGui::Button("Actualizar", ImVec2(-1, 30))) { 
             RefreshList(); 
         }
@@ -321,7 +322,6 @@ namespace ProyecThor::UI {
                     case LibraryCategory::Bibles: destFolder = "assets/bibles"; break;
                 }
                 
-                // FIX: Unimos las rutas usando el operador '/' de std::filesystem::path
                 fs::path destPath = fs::path(destFolder) / src.filename();
                 
                 fs::copy(src, destPath, fs::copy_options::overwrite_existing);
