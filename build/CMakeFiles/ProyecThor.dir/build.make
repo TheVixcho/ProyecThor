@@ -52,10 +52,10 @@ RM = "C:\Program Files\CMake\bin\cmake.exe" -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = D:\Proyectos\ProyecThor
+CMAKE_SOURCE_DIR = C:\Proyectos\ProyeThor\ProyecThor
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = D:\Proyectos\ProyecThor\build
+CMAKE_BINARY_DIR = C:\Proyectos\ProyeThor\proyecthor\build
 
 # Include any dependencies generated for this target.
 include CMakeFiles/ProyecThor.dir/depend.make
@@ -73,303 +73,303 @@ CMakeFiles/ProyecThor.dir/codegen:
 
 CMakeFiles/ProyecThor.dir/src/PresentationCore.cpp.obj: CMakeFiles/ProyecThor.dir/flags.make
 CMakeFiles/ProyecThor.dir/src/PresentationCore.cpp.obj: CMakeFiles/ProyecThor.dir/includes_CXX.rsp
-CMakeFiles/ProyecThor.dir/src/PresentationCore.cpp.obj: D:/Proyectos/ProyecThor/src/PresentationCore.cpp
+CMakeFiles/ProyecThor.dir/src/PresentationCore.cpp.obj: C:/Proyectos/ProyeThor/ProyecThor/src/PresentationCore.cpp
 CMakeFiles/ProyecThor.dir/src/PresentationCore.cpp.obj: CMakeFiles/ProyecThor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=D:\Proyectos\ProyecThor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/ProyecThor.dir/src/PresentationCore.cpp.obj"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/PresentationCore.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\PresentationCore.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\PresentationCore.cpp.obj -c D:\Proyectos\ProyecThor\src\PresentationCore.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/ProyecThor.dir/src/PresentationCore.cpp.obj"
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/PresentationCore.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\PresentationCore.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\PresentationCore.cpp.obj -c C:\Proyectos\ProyeThor\ProyecThor\src\PresentationCore.cpp
 
 CMakeFiles/ProyecThor.dir/src/PresentationCore.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/ProyecThor.dir/src/PresentationCore.cpp.i"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\Proyectos\ProyecThor\src\PresentationCore.cpp > CMakeFiles\ProyecThor.dir\src\PresentationCore.cpp.i
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E C:\Proyectos\ProyeThor\ProyecThor\src\PresentationCore.cpp > CMakeFiles\ProyecThor.dir\src\PresentationCore.cpp.i
 
 CMakeFiles/ProyecThor.dir/src/PresentationCore.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/ProyecThor.dir/src/PresentationCore.cpp.s"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\Proyectos\ProyecThor\src\PresentationCore.cpp -o CMakeFiles\ProyecThor.dir\src\PresentationCore.cpp.s
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S C:\Proyectos\ProyeThor\ProyecThor\src\PresentationCore.cpp -o CMakeFiles\ProyecThor.dir\src\PresentationCore.cpp.s
 
 CMakeFiles/ProyecThor.dir/src/main.cpp.obj: CMakeFiles/ProyecThor.dir/flags.make
 CMakeFiles/ProyecThor.dir/src/main.cpp.obj: CMakeFiles/ProyecThor.dir/includes_CXX.rsp
-CMakeFiles/ProyecThor.dir/src/main.cpp.obj: D:/Proyectos/ProyecThor/src/main.cpp
+CMakeFiles/ProyecThor.dir/src/main.cpp.obj: C:/Proyectos/ProyeThor/ProyecThor/src/main.cpp
 CMakeFiles/ProyecThor.dir/src/main.cpp.obj: CMakeFiles/ProyecThor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=D:\Proyectos\ProyecThor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object CMakeFiles/ProyecThor.dir/src/main.cpp.obj"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/main.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\main.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\main.cpp.obj -c D:\Proyectos\ProyecThor\src\main.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object CMakeFiles/ProyecThor.dir/src/main.cpp.obj"
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/main.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\main.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\main.cpp.obj -c C:\Proyectos\ProyeThor\ProyecThor\src\main.cpp
 
 CMakeFiles/ProyecThor.dir/src/main.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/ProyecThor.dir/src/main.cpp.i"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\Proyectos\ProyecThor\src\main.cpp > CMakeFiles\ProyecThor.dir\src\main.cpp.i
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E C:\Proyectos\ProyeThor\ProyecThor\src\main.cpp > CMakeFiles\ProyecThor.dir\src\main.cpp.i
 
 CMakeFiles/ProyecThor.dir/src/main.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/ProyecThor.dir/src/main.cpp.s"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\Proyectos\ProyecThor\src\main.cpp -o CMakeFiles\ProyecThor.dir\src\main.cpp.s
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S C:\Proyectos\ProyeThor\ProyecThor\src\main.cpp -o CMakeFiles\ProyecThor.dir\src\main.cpp.s
 
 CMakeFiles/ProyecThor.dir/src/ui/UIManager.cpp.obj: CMakeFiles/ProyecThor.dir/flags.make
 CMakeFiles/ProyecThor.dir/src/ui/UIManager.cpp.obj: CMakeFiles/ProyecThor.dir/includes_CXX.rsp
-CMakeFiles/ProyecThor.dir/src/ui/UIManager.cpp.obj: D:/Proyectos/ProyecThor/src/ui/UIManager.cpp
+CMakeFiles/ProyecThor.dir/src/ui/UIManager.cpp.obj: C:/Proyectos/ProyeThor/ProyecThor/src/ui/UIManager.cpp
 CMakeFiles/ProyecThor.dir/src/ui/UIManager.cpp.obj: CMakeFiles/ProyecThor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=D:\Proyectos\ProyecThor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/ProyecThor.dir/src/ui/UIManager.cpp.obj"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/ui/UIManager.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\ui\UIManager.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\ui\UIManager.cpp.obj -c D:\Proyectos\ProyecThor\src\ui\UIManager.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/ProyecThor.dir/src/ui/UIManager.cpp.obj"
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/ui/UIManager.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\ui\UIManager.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\ui\UIManager.cpp.obj -c C:\Proyectos\ProyeThor\ProyecThor\src\ui\UIManager.cpp
 
 CMakeFiles/ProyecThor.dir/src/ui/UIManager.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/ProyecThor.dir/src/ui/UIManager.cpp.i"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\Proyectos\ProyecThor\src\ui\UIManager.cpp > CMakeFiles\ProyecThor.dir\src\ui\UIManager.cpp.i
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E C:\Proyectos\ProyeThor\ProyecThor\src\ui\UIManager.cpp > CMakeFiles\ProyecThor.dir\src\ui\UIManager.cpp.i
 
 CMakeFiles/ProyecThor.dir/src/ui/UIManager.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/ProyecThor.dir/src/ui/UIManager.cpp.s"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\Proyectos\ProyecThor\src\ui\UIManager.cpp -o CMakeFiles\ProyecThor.dir\src\ui\UIManager.cpp.s
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S C:\Proyectos\ProyeThor\ProyecThor\src\ui\UIManager.cpp -o CMakeFiles\ProyecThor.dir\src\ui\UIManager.cpp.s
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/ControlPanel.cpp.obj: CMakeFiles/ProyecThor.dir/flags.make
 CMakeFiles/ProyecThor.dir/src/ui/panels/ControlPanel.cpp.obj: CMakeFiles/ProyecThor.dir/includes_CXX.rsp
-CMakeFiles/ProyecThor.dir/src/ui/panels/ControlPanel.cpp.obj: D:/Proyectos/ProyecThor/src/ui/panels/ControlPanel.cpp
+CMakeFiles/ProyecThor.dir/src/ui/panels/ControlPanel.cpp.obj: C:/Proyectos/ProyeThor/ProyecThor/src/ui/panels/ControlPanel.cpp
 CMakeFiles/ProyecThor.dir/src/ui/panels/ControlPanel.cpp.obj: CMakeFiles/ProyecThor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=D:\Proyectos\ProyecThor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object CMakeFiles/ProyecThor.dir/src/ui/panels/ControlPanel.cpp.obj"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/ui/panels/ControlPanel.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\ui\panels\ControlPanel.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\ui\panels\ControlPanel.cpp.obj -c D:\Proyectos\ProyecThor\src\ui\panels\ControlPanel.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object CMakeFiles/ProyecThor.dir/src/ui/panels/ControlPanel.cpp.obj"
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/ui/panels/ControlPanel.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\ui\panels\ControlPanel.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\ui\panels\ControlPanel.cpp.obj -c C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\ControlPanel.cpp
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/ControlPanel.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/ProyecThor.dir/src/ui/panels/ControlPanel.cpp.i"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\Proyectos\ProyecThor\src\ui\panels\ControlPanel.cpp > CMakeFiles\ProyecThor.dir\src\ui\panels\ControlPanel.cpp.i
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\ControlPanel.cpp > CMakeFiles\ProyecThor.dir\src\ui\panels\ControlPanel.cpp.i
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/ControlPanel.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/ProyecThor.dir/src/ui/panels/ControlPanel.cpp.s"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\Proyectos\ProyecThor\src\ui\panels\ControlPanel.cpp -o CMakeFiles\ProyecThor.dir\src\ui\panels\ControlPanel.cpp.s
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\ControlPanel.cpp -o CMakeFiles\ProyecThor.dir\src\ui\panels\ControlPanel.cpp.s
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/LayersPanel.cpp.obj: CMakeFiles/ProyecThor.dir/flags.make
 CMakeFiles/ProyecThor.dir/src/ui/panels/LayersPanel.cpp.obj: CMakeFiles/ProyecThor.dir/includes_CXX.rsp
-CMakeFiles/ProyecThor.dir/src/ui/panels/LayersPanel.cpp.obj: D:/Proyectos/ProyecThor/src/ui/panels/LayersPanel.cpp
+CMakeFiles/ProyecThor.dir/src/ui/panels/LayersPanel.cpp.obj: C:/Proyectos/ProyeThor/ProyecThor/src/ui/panels/LayersPanel.cpp
 CMakeFiles/ProyecThor.dir/src/ui/panels/LayersPanel.cpp.obj: CMakeFiles/ProyecThor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=D:\Proyectos\ProyecThor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/ProyecThor.dir/src/ui/panels/LayersPanel.cpp.obj"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/ui/panels/LayersPanel.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\ui\panels\LayersPanel.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\ui\panels\LayersPanel.cpp.obj -c D:\Proyectos\ProyecThor\src\ui\panels\LayersPanel.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/ProyecThor.dir/src/ui/panels/LayersPanel.cpp.obj"
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/ui/panels/LayersPanel.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\ui\panels\LayersPanel.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\ui\panels\LayersPanel.cpp.obj -c C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\LayersPanel.cpp
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/LayersPanel.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/ProyecThor.dir/src/ui/panels/LayersPanel.cpp.i"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\Proyectos\ProyecThor\src\ui\panels\LayersPanel.cpp > CMakeFiles\ProyecThor.dir\src\ui\panels\LayersPanel.cpp.i
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\LayersPanel.cpp > CMakeFiles\ProyecThor.dir\src\ui\panels\LayersPanel.cpp.i
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/LayersPanel.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/ProyecThor.dir/src/ui/panels/LayersPanel.cpp.s"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\Proyectos\ProyecThor\src\ui\panels\LayersPanel.cpp -o CMakeFiles\ProyecThor.dir\src\ui\panels\LayersPanel.cpp.s
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\LayersPanel.cpp -o CMakeFiles\ProyecThor.dir\src\ui\panels\LayersPanel.cpp.s
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/LibraryPanel.cpp.obj: CMakeFiles/ProyecThor.dir/flags.make
 CMakeFiles/ProyecThor.dir/src/ui/panels/LibraryPanel.cpp.obj: CMakeFiles/ProyecThor.dir/includes_CXX.rsp
-CMakeFiles/ProyecThor.dir/src/ui/panels/LibraryPanel.cpp.obj: D:/Proyectos/ProyecThor/src/ui/panels/LibraryPanel.cpp
+CMakeFiles/ProyecThor.dir/src/ui/panels/LibraryPanel.cpp.obj: C:/Proyectos/ProyeThor/ProyecThor/src/ui/panels/LibraryPanel.cpp
 CMakeFiles/ProyecThor.dir/src/ui/panels/LibraryPanel.cpp.obj: CMakeFiles/ProyecThor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=D:\Proyectos\ProyecThor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/ProyecThor.dir/src/ui/panels/LibraryPanel.cpp.obj"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/ui/panels/LibraryPanel.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\ui\panels\LibraryPanel.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\ui\panels\LibraryPanel.cpp.obj -c D:\Proyectos\ProyecThor\src\ui\panels\LibraryPanel.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/ProyecThor.dir/src/ui/panels/LibraryPanel.cpp.obj"
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/ui/panels/LibraryPanel.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\ui\panels\LibraryPanel.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\ui\panels\LibraryPanel.cpp.obj -c C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\LibraryPanel.cpp
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/LibraryPanel.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/ProyecThor.dir/src/ui/panels/LibraryPanel.cpp.i"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\Proyectos\ProyecThor\src\ui\panels\LibraryPanel.cpp > CMakeFiles\ProyecThor.dir\src\ui\panels\LibraryPanel.cpp.i
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\LibraryPanel.cpp > CMakeFiles\ProyecThor.dir\src\ui\panels\LibraryPanel.cpp.i
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/LibraryPanel.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/ProyecThor.dir/src/ui/panels/LibraryPanel.cpp.s"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\Proyectos\ProyecThor\src\ui\panels\LibraryPanel.cpp -o CMakeFiles\ProyecThor.dir\src\ui\panels\LibraryPanel.cpp.s
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\LibraryPanel.cpp -o CMakeFiles\ProyecThor.dir\src\ui\panels\LibraryPanel.cpp.s
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/PreviewPanel.cpp.obj: CMakeFiles/ProyecThor.dir/flags.make
 CMakeFiles/ProyecThor.dir/src/ui/panels/PreviewPanel.cpp.obj: CMakeFiles/ProyecThor.dir/includes_CXX.rsp
-CMakeFiles/ProyecThor.dir/src/ui/panels/PreviewPanel.cpp.obj: D:/Proyectos/ProyecThor/src/ui/panels/PreviewPanel.cpp
+CMakeFiles/ProyecThor.dir/src/ui/panels/PreviewPanel.cpp.obj: C:/Proyectos/ProyeThor/ProyecThor/src/ui/panels/PreviewPanel.cpp
 CMakeFiles/ProyecThor.dir/src/ui/panels/PreviewPanel.cpp.obj: CMakeFiles/ProyecThor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=D:\Proyectos\ProyecThor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/ProyecThor.dir/src/ui/panels/PreviewPanel.cpp.obj"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/ui/panels/PreviewPanel.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\ui\panels\PreviewPanel.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\ui\panels\PreviewPanel.cpp.obj -c D:\Proyectos\ProyecThor\src\ui\panels\PreviewPanel.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/ProyecThor.dir/src/ui/panels/PreviewPanel.cpp.obj"
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/ui/panels/PreviewPanel.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\ui\panels\PreviewPanel.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\ui\panels\PreviewPanel.cpp.obj -c C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\PreviewPanel.cpp
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/PreviewPanel.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/ProyecThor.dir/src/ui/panels/PreviewPanel.cpp.i"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\Proyectos\ProyecThor\src\ui\panels\PreviewPanel.cpp > CMakeFiles\ProyecThor.dir\src\ui\panels\PreviewPanel.cpp.i
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\PreviewPanel.cpp > CMakeFiles\ProyecThor.dir\src\ui\panels\PreviewPanel.cpp.i
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/PreviewPanel.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/ProyecThor.dir/src/ui/panels/PreviewPanel.cpp.s"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\Proyectos\ProyecThor\src\ui\panels\PreviewPanel.cpp -o CMakeFiles\ProyecThor.dir\src\ui\panels\PreviewPanel.cpp.s
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\PreviewPanel.cpp -o CMakeFiles\ProyecThor.dir\src\ui\panels\PreviewPanel.cpp.s
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/preview/BibleView.cpp.obj: CMakeFiles/ProyecThor.dir/flags.make
 CMakeFiles/ProyecThor.dir/src/ui/panels/preview/BibleView.cpp.obj: CMakeFiles/ProyecThor.dir/includes_CXX.rsp
-CMakeFiles/ProyecThor.dir/src/ui/panels/preview/BibleView.cpp.obj: D:/Proyectos/ProyecThor/src/ui/panels/preview/BibleView.cpp
+CMakeFiles/ProyecThor.dir/src/ui/panels/preview/BibleView.cpp.obj: C:/Proyectos/ProyeThor/ProyecThor/src/ui/panels/preview/BibleView.cpp
 CMakeFiles/ProyecThor.dir/src/ui/panels/preview/BibleView.cpp.obj: CMakeFiles/ProyecThor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=D:\Proyectos\ProyecThor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/ProyecThor.dir/src/ui/panels/preview/BibleView.cpp.obj"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/ui/panels/preview/BibleView.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\ui\panels\preview\BibleView.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\ui\panels\preview\BibleView.cpp.obj -c D:\Proyectos\ProyecThor\src\ui\panels\preview\BibleView.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/ProyecThor.dir/src/ui/panels/preview/BibleView.cpp.obj"
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/ui/panels/preview/BibleView.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\ui\panels\preview\BibleView.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\ui\panels\preview\BibleView.cpp.obj -c C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\preview\BibleView.cpp
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/preview/BibleView.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/ProyecThor.dir/src/ui/panels/preview/BibleView.cpp.i"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\Proyectos\ProyecThor\src\ui\panels\preview\BibleView.cpp > CMakeFiles\ProyecThor.dir\src\ui\panels\preview\BibleView.cpp.i
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\preview\BibleView.cpp > CMakeFiles\ProyecThor.dir\src\ui\panels\preview\BibleView.cpp.i
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/preview/BibleView.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/ProyecThor.dir/src/ui/panels/preview/BibleView.cpp.s"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\Proyectos\ProyecThor\src\ui\panels\preview\BibleView.cpp -o CMakeFiles\ProyecThor.dir\src\ui\panels\preview\BibleView.cpp.s
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\preview\BibleView.cpp -o CMakeFiles\ProyecThor.dir\src\ui\panels\preview\BibleView.cpp.s
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MediaView.cpp.obj: CMakeFiles/ProyecThor.dir/flags.make
 CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MediaView.cpp.obj: CMakeFiles/ProyecThor.dir/includes_CXX.rsp
-CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MediaView.cpp.obj: D:/Proyectos/ProyecThor/src/ui/panels/preview/MediaView.cpp
+CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MediaView.cpp.obj: C:/Proyectos/ProyeThor/ProyecThor/src/ui/panels/preview/MediaView.cpp
 CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MediaView.cpp.obj: CMakeFiles/ProyecThor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=D:\Proyectos\ProyecThor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_9) "Building CXX object CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MediaView.cpp.obj"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MediaView.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\ui\panels\preview\MediaView.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\ui\panels\preview\MediaView.cpp.obj -c D:\Proyectos\ProyecThor\src\ui\panels\preview\MediaView.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_9) "Building CXX object CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MediaView.cpp.obj"
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MediaView.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\ui\panels\preview\MediaView.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\ui\panels\preview\MediaView.cpp.obj -c C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\preview\MediaView.cpp
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MediaView.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MediaView.cpp.i"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\Proyectos\ProyecThor\src\ui\panels\preview\MediaView.cpp > CMakeFiles\ProyecThor.dir\src\ui\panels\preview\MediaView.cpp.i
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\preview\MediaView.cpp > CMakeFiles\ProyecThor.dir\src\ui\panels\preview\MediaView.cpp.i
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MediaView.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MediaView.cpp.s"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\Proyectos\ProyecThor\src\ui\panels\preview\MediaView.cpp -o CMakeFiles\ProyecThor.dir\src\ui\panels\preview\MediaView.cpp.s
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\preview\MediaView.cpp -o CMakeFiles\ProyecThor.dir\src\ui\panels\preview\MediaView.cpp.s
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MonitorView.cpp.obj: CMakeFiles/ProyecThor.dir/flags.make
 CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MonitorView.cpp.obj: CMakeFiles/ProyecThor.dir/includes_CXX.rsp
-CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MonitorView.cpp.obj: D:/Proyectos/ProyecThor/src/ui/panels/preview/MonitorView.cpp
+CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MonitorView.cpp.obj: C:/Proyectos/ProyeThor/ProyecThor/src/ui/panels/preview/MonitorView.cpp
 CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MonitorView.cpp.obj: CMakeFiles/ProyecThor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=D:\Proyectos\ProyecThor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_10) "Building CXX object CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MonitorView.cpp.obj"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MonitorView.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\ui\panels\preview\MonitorView.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\ui\panels\preview\MonitorView.cpp.obj -c D:\Proyectos\ProyecThor\src\ui\panels\preview\MonitorView.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_10) "Building CXX object CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MonitorView.cpp.obj"
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MonitorView.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\ui\panels\preview\MonitorView.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\ui\panels\preview\MonitorView.cpp.obj -c C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\preview\MonitorView.cpp
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MonitorView.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MonitorView.cpp.i"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\Proyectos\ProyecThor\src\ui\panels\preview\MonitorView.cpp > CMakeFiles\ProyecThor.dir\src\ui\panels\preview\MonitorView.cpp.i
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\preview\MonitorView.cpp > CMakeFiles\ProyecThor.dir\src\ui\panels\preview\MonitorView.cpp.i
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MonitorView.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/ProyecThor.dir/src/ui/panels/preview/MonitorView.cpp.s"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\Proyectos\ProyecThor\src\ui\panels\preview\MonitorView.cpp -o CMakeFiles\ProyecThor.dir\src\ui\panels\preview\MonitorView.cpp.s
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\preview\MonitorView.cpp -o CMakeFiles\ProyecThor.dir\src\ui\panels\preview\MonitorView.cpp.s
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/preview/SongView.cpp.obj: CMakeFiles/ProyecThor.dir/flags.make
 CMakeFiles/ProyecThor.dir/src/ui/panels/preview/SongView.cpp.obj: CMakeFiles/ProyecThor.dir/includes_CXX.rsp
-CMakeFiles/ProyecThor.dir/src/ui/panels/preview/SongView.cpp.obj: D:/Proyectos/ProyecThor/src/ui/panels/preview/SongView.cpp
+CMakeFiles/ProyecThor.dir/src/ui/panels/preview/SongView.cpp.obj: C:/Proyectos/ProyeThor/ProyecThor/src/ui/panels/preview/SongView.cpp
 CMakeFiles/ProyecThor.dir/src/ui/panels/preview/SongView.cpp.obj: CMakeFiles/ProyecThor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=D:\Proyectos\ProyecThor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_11) "Building CXX object CMakeFiles/ProyecThor.dir/src/ui/panels/preview/SongView.cpp.obj"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/ui/panels/preview/SongView.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\ui\panels\preview\SongView.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\ui\panels\preview\SongView.cpp.obj -c D:\Proyectos\ProyecThor\src\ui\panels\preview\SongView.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_11) "Building CXX object CMakeFiles/ProyecThor.dir/src/ui/panels/preview/SongView.cpp.obj"
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/ui/panels/preview/SongView.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\ui\panels\preview\SongView.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\ui\panels\preview\SongView.cpp.obj -c C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\preview\SongView.cpp
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/preview/SongView.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/ProyecThor.dir/src/ui/panels/preview/SongView.cpp.i"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\Proyectos\ProyecThor\src\ui\panels\preview\SongView.cpp > CMakeFiles\ProyecThor.dir\src\ui\panels\preview\SongView.cpp.i
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\preview\SongView.cpp > CMakeFiles\ProyecThor.dir\src\ui\panels\preview\SongView.cpp.i
 
 CMakeFiles/ProyecThor.dir/src/ui/panels/preview/SongView.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/ProyecThor.dir/src/ui/panels/preview/SongView.cpp.s"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\Proyectos\ProyecThor\src\ui\panels\preview\SongView.cpp -o CMakeFiles\ProyecThor.dir\src\ui\panels\preview\SongView.cpp.s
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S C:\Proyectos\ProyeThor\ProyecThor\src\ui\panels\preview\SongView.cpp -o CMakeFiles\ProyecThor.dir\src\ui\panels\preview\SongView.cpp.s
 
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui.cpp.obj: CMakeFiles/ProyecThor.dir/flags.make
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui.cpp.obj: CMakeFiles/ProyecThor.dir/includes_CXX.rsp
-CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui.cpp.obj: D:/Proyectos/ProyecThor/src/external/imgui-docking/imgui.cpp
+CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui.cpp.obj: C:/Proyectos/ProyeThor/ProyecThor/src/external/imgui-docking/imgui.cpp
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui.cpp.obj: CMakeFiles/ProyecThor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=D:\Proyectos\ProyecThor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_12) "Building CXX object CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui.cpp.obj"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui.cpp.obj -c D:\Proyectos\ProyecThor\src\external\imgui-docking\imgui.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_12) "Building CXX object CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui.cpp.obj"
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui.cpp.obj -c C:\Proyectos\ProyeThor\ProyecThor\src\external\imgui-docking\imgui.cpp
 
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui.cpp.i"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\Proyectos\ProyecThor\src\external\imgui-docking\imgui.cpp > CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui.cpp.i
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E C:\Proyectos\ProyeThor\ProyecThor\src\external\imgui-docking\imgui.cpp > CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui.cpp.i
 
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui.cpp.s"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\Proyectos\ProyecThor\src\external\imgui-docking\imgui.cpp -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui.cpp.s
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S C:\Proyectos\ProyeThor\ProyecThor\src\external\imgui-docking\imgui.cpp -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui.cpp.s
 
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_draw.cpp.obj: CMakeFiles/ProyecThor.dir/flags.make
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_draw.cpp.obj: CMakeFiles/ProyecThor.dir/includes_CXX.rsp
-CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_draw.cpp.obj: D:/Proyectos/ProyecThor/src/external/imgui-docking/imgui_draw.cpp
+CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_draw.cpp.obj: C:/Proyectos/ProyeThor/ProyecThor/src/external/imgui-docking/imgui_draw.cpp
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_draw.cpp.obj: CMakeFiles/ProyecThor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=D:\Proyectos\ProyecThor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_13) "Building CXX object CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_draw.cpp.obj"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_draw.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_draw.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_draw.cpp.obj -c D:\Proyectos\ProyecThor\src\external\imgui-docking\imgui_draw.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_13) "Building CXX object CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_draw.cpp.obj"
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_draw.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_draw.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_draw.cpp.obj -c C:\Proyectos\ProyeThor\ProyecThor\src\external\imgui-docking\imgui_draw.cpp
 
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_draw.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_draw.cpp.i"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\Proyectos\ProyecThor\src\external\imgui-docking\imgui_draw.cpp > CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_draw.cpp.i
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E C:\Proyectos\ProyeThor\ProyecThor\src\external\imgui-docking\imgui_draw.cpp > CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_draw.cpp.i
 
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_draw.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_draw.cpp.s"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\Proyectos\ProyecThor\src\external\imgui-docking\imgui_draw.cpp -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_draw.cpp.s
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S C:\Proyectos\ProyeThor\ProyecThor\src\external\imgui-docking\imgui_draw.cpp -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_draw.cpp.s
 
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_tables.cpp.obj: CMakeFiles/ProyecThor.dir/flags.make
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_tables.cpp.obj: CMakeFiles/ProyecThor.dir/includes_CXX.rsp
-CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_tables.cpp.obj: D:/Proyectos/ProyecThor/src/external/imgui-docking/imgui_tables.cpp
+CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_tables.cpp.obj: C:/Proyectos/ProyeThor/ProyecThor/src/external/imgui-docking/imgui_tables.cpp
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_tables.cpp.obj: CMakeFiles/ProyecThor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=D:\Proyectos\ProyecThor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_14) "Building CXX object CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_tables.cpp.obj"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_tables.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_tables.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_tables.cpp.obj -c D:\Proyectos\ProyecThor\src\external\imgui-docking\imgui_tables.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_14) "Building CXX object CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_tables.cpp.obj"
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_tables.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_tables.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_tables.cpp.obj -c C:\Proyectos\ProyeThor\ProyecThor\src\external\imgui-docking\imgui_tables.cpp
 
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_tables.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_tables.cpp.i"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\Proyectos\ProyecThor\src\external\imgui-docking\imgui_tables.cpp > CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_tables.cpp.i
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E C:\Proyectos\ProyeThor\ProyecThor\src\external\imgui-docking\imgui_tables.cpp > CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_tables.cpp.i
 
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_tables.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_tables.cpp.s"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\Proyectos\ProyecThor\src\external\imgui-docking\imgui_tables.cpp -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_tables.cpp.s
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S C:\Proyectos\ProyeThor\ProyecThor\src\external\imgui-docking\imgui_tables.cpp -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_tables.cpp.s
 
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_widgets.cpp.obj: CMakeFiles/ProyecThor.dir/flags.make
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_widgets.cpp.obj: CMakeFiles/ProyecThor.dir/includes_CXX.rsp
-CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_widgets.cpp.obj: D:/Proyectos/ProyecThor/src/external/imgui-docking/imgui_widgets.cpp
+CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_widgets.cpp.obj: C:/Proyectos/ProyeThor/ProyecThor/src/external/imgui-docking/imgui_widgets.cpp
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_widgets.cpp.obj: CMakeFiles/ProyecThor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=D:\Proyectos\ProyecThor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_15) "Building CXX object CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_widgets.cpp.obj"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_widgets.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_widgets.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_widgets.cpp.obj -c D:\Proyectos\ProyecThor\src\external\imgui-docking\imgui_widgets.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_15) "Building CXX object CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_widgets.cpp.obj"
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_widgets.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_widgets.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_widgets.cpp.obj -c C:\Proyectos\ProyeThor\ProyecThor\src\external\imgui-docking\imgui_widgets.cpp
 
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_widgets.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_widgets.cpp.i"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\Proyectos\ProyecThor\src\external\imgui-docking\imgui_widgets.cpp > CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_widgets.cpp.i
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E C:\Proyectos\ProyeThor\ProyecThor\src\external\imgui-docking\imgui_widgets.cpp > CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_widgets.cpp.i
 
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_widgets.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_widgets.cpp.s"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\Proyectos\ProyecThor\src\external\imgui-docking\imgui_widgets.cpp -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_widgets.cpp.s
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S C:\Proyectos\ProyeThor\ProyecThor\src\external\imgui-docking\imgui_widgets.cpp -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_widgets.cpp.s
 
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_demo.cpp.obj: CMakeFiles/ProyecThor.dir/flags.make
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_demo.cpp.obj: CMakeFiles/ProyecThor.dir/includes_CXX.rsp
-CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_demo.cpp.obj: D:/Proyectos/ProyecThor/src/external/imgui-docking/imgui_demo.cpp
+CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_demo.cpp.obj: C:/Proyectos/ProyeThor/ProyecThor/src/external/imgui-docking/imgui_demo.cpp
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_demo.cpp.obj: CMakeFiles/ProyecThor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=D:\Proyectos\ProyecThor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_16) "Building CXX object CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_demo.cpp.obj"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_demo.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_demo.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_demo.cpp.obj -c D:\Proyectos\ProyecThor\src\external\imgui-docking\imgui_demo.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_16) "Building CXX object CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_demo.cpp.obj"
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_demo.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_demo.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_demo.cpp.obj -c C:\Proyectos\ProyeThor\ProyecThor\src\external\imgui-docking\imgui_demo.cpp
 
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_demo.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_demo.cpp.i"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\Proyectos\ProyecThor\src\external\imgui-docking\imgui_demo.cpp > CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_demo.cpp.i
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E C:\Proyectos\ProyeThor\ProyecThor\src\external\imgui-docking\imgui_demo.cpp > CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_demo.cpp.i
 
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_demo.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/ProyecThor.dir/src/external/imgui-docking/imgui_demo.cpp.s"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\Proyectos\ProyecThor\src\external\imgui-docking\imgui_demo.cpp -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_demo.cpp.s
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S C:\Proyectos\ProyeThor\ProyecThor\src\external\imgui-docking\imgui_demo.cpp -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\imgui_demo.cpp.s
 
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_glfw.cpp.obj: CMakeFiles/ProyecThor.dir/flags.make
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_glfw.cpp.obj: CMakeFiles/ProyecThor.dir/includes_CXX.rsp
-CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_glfw.cpp.obj: D:/Proyectos/ProyecThor/src/external/imgui-docking/backends/imgui_impl_glfw.cpp
+CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_glfw.cpp.obj: C:/Proyectos/ProyeThor/ProyecThor/src/external/imgui-docking/backends/imgui_impl_glfw.cpp
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_glfw.cpp.obj: CMakeFiles/ProyecThor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=D:\Proyectos\ProyecThor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_17) "Building CXX object CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_glfw.cpp.obj"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_glfw.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\external\imgui-docking\backends\imgui_impl_glfw.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\backends\imgui_impl_glfw.cpp.obj -c D:\Proyectos\ProyecThor\src\external\imgui-docking\backends\imgui_impl_glfw.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_17) "Building CXX object CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_glfw.cpp.obj"
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_glfw.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\external\imgui-docking\backends\imgui_impl_glfw.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\backends\imgui_impl_glfw.cpp.obj -c C:\Proyectos\ProyeThor\ProyecThor\src\external\imgui-docking\backends\imgui_impl_glfw.cpp
 
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_glfw.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_glfw.cpp.i"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\Proyectos\ProyecThor\src\external\imgui-docking\backends\imgui_impl_glfw.cpp > CMakeFiles\ProyecThor.dir\src\external\imgui-docking\backends\imgui_impl_glfw.cpp.i
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E C:\Proyectos\ProyeThor\ProyecThor\src\external\imgui-docking\backends\imgui_impl_glfw.cpp > CMakeFiles\ProyecThor.dir\src\external\imgui-docking\backends\imgui_impl_glfw.cpp.i
 
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_glfw.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_glfw.cpp.s"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\Proyectos\ProyecThor\src\external\imgui-docking\backends\imgui_impl_glfw.cpp -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\backends\imgui_impl_glfw.cpp.s
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S C:\Proyectos\ProyeThor\ProyecThor\src\external\imgui-docking\backends\imgui_impl_glfw.cpp -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\backends\imgui_impl_glfw.cpp.s
 
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_opengl3.cpp.obj: CMakeFiles/ProyecThor.dir/flags.make
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_opengl3.cpp.obj: CMakeFiles/ProyecThor.dir/includes_CXX.rsp
-CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_opengl3.cpp.obj: D:/Proyectos/ProyecThor/src/external/imgui-docking/backends/imgui_impl_opengl3.cpp
+CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_opengl3.cpp.obj: C:/Proyectos/ProyeThor/ProyecThor/src/external/imgui-docking/backends/imgui_impl_opengl3.cpp
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_opengl3.cpp.obj: CMakeFiles/ProyecThor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=D:\Proyectos\ProyecThor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_18) "Building CXX object CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_opengl3.cpp.obj"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_opengl3.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\external\imgui-docking\backends\imgui_impl_opengl3.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\backends\imgui_impl_opengl3.cpp.obj -c D:\Proyectos\ProyecThor\src\external\imgui-docking\backends\imgui_impl_opengl3.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_18) "Building CXX object CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_opengl3.cpp.obj"
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_opengl3.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\external\imgui-docking\backends\imgui_impl_opengl3.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\backends\imgui_impl_opengl3.cpp.obj -c C:\Proyectos\ProyeThor\ProyecThor\src\external\imgui-docking\backends\imgui_impl_opengl3.cpp
 
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_opengl3.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_opengl3.cpp.i"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\Proyectos\ProyecThor\src\external\imgui-docking\backends\imgui_impl_opengl3.cpp > CMakeFiles\ProyecThor.dir\src\external\imgui-docking\backends\imgui_impl_opengl3.cpp.i
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E C:\Proyectos\ProyeThor\ProyecThor\src\external\imgui-docking\backends\imgui_impl_opengl3.cpp > CMakeFiles\ProyecThor.dir\src\external\imgui-docking\backends\imgui_impl_opengl3.cpp.i
 
 CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_opengl3.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/imgui_impl_opengl3.cpp.s"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\Proyectos\ProyecThor\src\external\imgui-docking\backends\imgui_impl_opengl3.cpp -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\backends\imgui_impl_opengl3.cpp.s
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S C:\Proyectos\ProyeThor\ProyecThor\src\external\imgui-docking\backends\imgui_impl_opengl3.cpp -o CMakeFiles\ProyecThor.dir\src\external\imgui-docking\backends\imgui_impl_opengl3.cpp.s
 
 CMakeFiles/ProyecThor.dir/src/external/tools/OpenURL.cpp.obj: CMakeFiles/ProyecThor.dir/flags.make
 CMakeFiles/ProyecThor.dir/src/external/tools/OpenURL.cpp.obj: CMakeFiles/ProyecThor.dir/includes_CXX.rsp
-CMakeFiles/ProyecThor.dir/src/external/tools/OpenURL.cpp.obj: D:/Proyectos/ProyecThor/src/external/tools/OpenURL.cpp
+CMakeFiles/ProyecThor.dir/src/external/tools/OpenURL.cpp.obj: C:/Proyectos/ProyeThor/ProyecThor/src/external/tools/OpenURL.cpp
 CMakeFiles/ProyecThor.dir/src/external/tools/OpenURL.cpp.obj: CMakeFiles/ProyecThor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=D:\Proyectos\ProyecThor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_19) "Building CXX object CMakeFiles/ProyecThor.dir/src/external/tools/OpenURL.cpp.obj"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/external/tools/OpenURL.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\external\tools\OpenURL.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\external\tools\OpenURL.cpp.obj -c D:\Proyectos\ProyecThor\src\external\tools\OpenURL.cpp
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_19) "Building CXX object CMakeFiles/ProyecThor.dir/src/external/tools/OpenURL.cpp.obj"
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/external/tools/OpenURL.cpp.obj -MF CMakeFiles\ProyecThor.dir\src\external\tools\OpenURL.cpp.obj.d -o CMakeFiles\ProyecThor.dir\src\external\tools\OpenURL.cpp.obj -c C:\Proyectos\ProyeThor\ProyecThor\src\external\tools\OpenURL.cpp
 
 CMakeFiles/ProyecThor.dir/src/external/tools/OpenURL.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/ProyecThor.dir/src/external/tools/OpenURL.cpp.i"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\Proyectos\ProyecThor\src\external\tools\OpenURL.cpp > CMakeFiles\ProyecThor.dir\src\external\tools\OpenURL.cpp.i
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E C:\Proyectos\ProyeThor\ProyecThor\src\external\tools\OpenURL.cpp > CMakeFiles\ProyecThor.dir\src\external\tools\OpenURL.cpp.i
 
 CMakeFiles/ProyecThor.dir/src/external/tools/OpenURL.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/ProyecThor.dir/src/external/tools/OpenURL.cpp.s"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\Proyectos\ProyecThor\src\external\tools\OpenURL.cpp -o CMakeFiles\ProyecThor.dir\src\external\tools\OpenURL.cpp.s
+	C:\msys64\mingw64\bin\c++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S C:\Proyectos\ProyeThor\ProyecThor\src\external\tools\OpenURL.cpp -o CMakeFiles\ProyecThor.dir\src\external\tools\OpenURL.cpp.s
 
 CMakeFiles/ProyecThor.dir/src/sdk/glew/src/glew.c.obj: CMakeFiles/ProyecThor.dir/flags.make
 CMakeFiles/ProyecThor.dir/src/sdk/glew/src/glew.c.obj: CMakeFiles/ProyecThor.dir/includes_C.rsp
-CMakeFiles/ProyecThor.dir/src/sdk/glew/src/glew.c.obj: D:/Proyectos/ProyecThor/src/sdk/glew/src/glew.c
+CMakeFiles/ProyecThor.dir/src/sdk/glew/src/glew.c.obj: C:/Proyectos/ProyeThor/ProyecThor/src/sdk/glew/src/glew.c
 CMakeFiles/ProyecThor.dir/src/sdk/glew/src/glew.c.obj: CMakeFiles/ProyecThor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=D:\Proyectos\ProyecThor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_20) "Building C object CMakeFiles/ProyecThor.dir/src/sdk/glew/src/glew.c.obj"
-	C:\msys64\ucrt64\bin\gcc.exe $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/sdk/glew/src/glew.c.obj -MF CMakeFiles\ProyecThor.dir\src\sdk\glew\src\glew.c.obj.d -o CMakeFiles\ProyecThor.dir\src\sdk\glew\src\glew.c.obj -c D:\Proyectos\ProyecThor\src\sdk\glew\src\glew.c
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_20) "Building C object CMakeFiles/ProyecThor.dir/src/sdk/glew/src/glew.c.obj"
+	C:\msys64\mingw64\bin\cc.exe $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/ProyecThor.dir/src/sdk/glew/src/glew.c.obj -MF CMakeFiles\ProyecThor.dir\src\sdk\glew\src\glew.c.obj.d -o CMakeFiles\ProyecThor.dir\src\sdk\glew\src\glew.c.obj -c C:\Proyectos\ProyeThor\ProyecThor\src\sdk\glew\src\glew.c
 
 CMakeFiles/ProyecThor.dir/src/sdk/glew/src/glew.c.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing C source to CMakeFiles/ProyecThor.dir/src/sdk/glew/src/glew.c.i"
-	C:\msys64\ucrt64\bin\gcc.exe $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E D:\Proyectos\ProyecThor\src\sdk\glew\src\glew.c > CMakeFiles\ProyecThor.dir\src\sdk\glew\src\glew.c.i
+	C:\msys64\mingw64\bin\cc.exe $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E C:\Proyectos\ProyeThor\ProyecThor\src\sdk\glew\src\glew.c > CMakeFiles\ProyecThor.dir\src\sdk\glew\src\glew.c.i
 
 CMakeFiles/ProyecThor.dir/src/sdk/glew/src/glew.c.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling C source to assembly CMakeFiles/ProyecThor.dir/src/sdk/glew/src/glew.c.s"
-	C:\msys64\ucrt64\bin\gcc.exe $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S D:\Proyectos\ProyecThor\src\sdk\glew\src\glew.c -o CMakeFiles\ProyecThor.dir\src\sdk\glew\src\glew.c.s
+	C:\msys64\mingw64\bin\cc.exe $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S C:\Proyectos\ProyeThor\ProyecThor\src\sdk\glew\src\glew.c -o CMakeFiles\ProyecThor.dir\src\sdk\glew\src\glew.c.s
 
 # Object files for target ProyecThor
 ProyecThor_OBJECTS = \
@@ -418,13 +418,13 @@ ProyecThor.exe: CMakeFiles/ProyecThor.dir/src/external/imgui-docking/backends/im
 ProyecThor.exe: CMakeFiles/ProyecThor.dir/src/external/tools/OpenURL.cpp.obj
 ProyecThor.exe: CMakeFiles/ProyecThor.dir/src/sdk/glew/src/glew.c.obj
 ProyecThor.exe: CMakeFiles/ProyecThor.dir/build.make
-ProyecThor.exe: D:/Proyectos/ProyecThor/src/sdk/glfw/lib-mingw-w64/libglfw3.a
-ProyecThor.exe: D:/Proyectos/ProyecThor/src/sdk/vlc/lib/libvlc.lib
-ProyecThor.exe: D:/Proyectos/ProyecThor/src/sdk/vlc/lib/libvlccore.lib
+ProyecThor.exe: C:/Proyectos/ProyeThor/ProyecThor/src/sdk/glfw/lib-mingw-w64/libglfw3.a
+ProyecThor.exe: C:/Proyectos/ProyeThor/ProyecThor/src/sdk/vlc/lib/libvlc.lib
+ProyecThor.exe: C:/Proyectos/ProyeThor/ProyecThor/src/sdk/vlc/lib/libvlccore.lib
 ProyecThor.exe: CMakeFiles/ProyecThor.dir/linkLibs.rsp
 ProyecThor.exe: CMakeFiles/ProyecThor.dir/objects1.rsp
 ProyecThor.exe: CMakeFiles/ProyecThor.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=D:\Proyectos\ProyecThor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_21) "Linking CXX executable ProyecThor.exe"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_21) "Linking CXX executable ProyecThor.exe"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles\ProyecThor.dir\link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.
@@ -436,6 +436,6 @@ CMakeFiles/ProyecThor.dir/clean:
 .PHONY : CMakeFiles/ProyecThor.dir/clean
 
 CMakeFiles/ProyecThor.dir/depend:
-	$(CMAKE_COMMAND) -E cmake_depends "MinGW Makefiles" D:\Proyectos\ProyecThor D:\Proyectos\ProyecThor D:\Proyectos\ProyecThor\build D:\Proyectos\ProyecThor\build D:\Proyectos\ProyecThor\build\CMakeFiles\ProyecThor.dir\DependInfo.cmake "--color=$(COLOR)" ProyecThor
+	$(CMAKE_COMMAND) -E cmake_depends "MinGW Makefiles" C:\Proyectos\ProyeThor\ProyecThor C:\Proyectos\ProyeThor\ProyecThor C:\Proyectos\ProyeThor\proyecthor\build C:\Proyectos\ProyeThor\proyecthor\build C:\Proyectos\ProyeThor\proyecthor\build\CMakeFiles\ProyecThor.dir\DependInfo.cmake "--color=$(COLOR)" ProyecThor
 .PHONY : CMakeFiles/ProyecThor.dir/depend
 

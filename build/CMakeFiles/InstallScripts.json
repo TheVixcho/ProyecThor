@@ -1,7 +1,7 @@
 {
 	"InstallScripts" : 
 	[
-		"D:/Proyectos/ProyecThor/build/cmake_install.cmake"
+		"C:/Proyectos/ProyeThor/proyecthor/build/cmake_install.cmake"
 	],
 	"Parallel" : false
 }
