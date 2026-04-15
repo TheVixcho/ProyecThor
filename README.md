@@ -1,66 +1,57 @@
   # Proyec<span>Thor</span> ⚡🎶
-  ### **Motor de Proyección Profesional**
+  ### **Professional Projection Engine**
   
-  *Software libre diseñado para ser óptimo en el manejo rápido frente a situaciones complicadas. Construido para iglesias, teatros y eventos donde la fluidez y reacción inmediata lo son todo.*
+  *Open-source software designed for optimal speed and reliability in high-pressure environments. Built for churches, theaters, and events where fluidity and instant reaction are everything.*
 
-  [Descargar Release](https://github.com/TheVixcho/ProyecThor/releases) • [Reportar Error](https://github.com/TheVixcho/ProyecThor/issues) • [Wiki](https://github.com/TheVixcho/ProyecThor/wiki)
+  [Download Release](https://github.com/TheVixcho/ProyecThor/releases) • [Report a Bug](https://github.com/TheVixcho/ProyecThor/issues) • [Wiki](https://github.com/TheVixcho/ProyecThor/wiki)
 </div>
 
 ---
 
-## 💎 Filosofía del Proyecto
+## 💎 Project Philosophy
 
-ProyecThor nace de la necesidad de una alternativa gratuita y de alta calidad a los costosos software de proyección propietarios.
+ProyecThor was born from the need for a high-quality, free alternative to expensive proprietary projection software.
 
-* **Sin Suscripciones:** Todas las funciones disponibles para todos, siempre.
-* **Enfocado en el Operador:** Interfaz diseñada para minimizar el error humano bajo presión.
-* **Privacidad Total:** Funciona 100% local. Tus archivos y datos nunca salen de tu dispositivo.
+* **No Subscriptions:** All features are available to everyone, forever.
+* **Operator-Centric:** Interface designed to minimize human error under pressure.
+* **Total Privacy:** Operates 100% locally. Your files and data never leave your device.
 
 ---
 
-## 🚀 Características Principales
+## 🚀 Key Features
 
-| Función | Descripción |
+| Feature | Description |
 | :--- | :--- |
-| **Arquitectura Multi-Capa** | Gestiona fondos (colores, imágenes, videos) y superposiciones de texto de forma independiente. |
-| **Workflow de Doble Pantalla** | Interfaz de operador dedicada con salida limpia y sin bordes para proyectores. |
-| **Aceleración por Hardware** | Motor **LibVLC SDK** para decodificación de baja latencia en casi cualquier formato. |
-| **UI Moderna** | Espacio de trabajo basado en acoplamiento (docking) potenciado por **Dear ImGui**. |
-| **Live Preview** | Monitorización en tiempo real del contenido antes de enviarlo a la pantalla principal. |
+| **Multi-Layer Architecture** | Independently manage backgrounds (colors, images, videos) and text overlays. |
+| **Dual-Screen Workflow** | Dedicated operator interface with a clean, borderless output for projectors. |
+| **Hardware Acceleration** | **LibVLC SDK** powered engine for low-latency decoding of almost any format. |
+| **Modern UI** | Docking-based workspace powered by **Dear ImGui** for high customizability. |
+| **Live Preview** | Real-time monitoring of content before pushing it to the main screen. |
 
 ---
 
-## 🛠️ Stack Técnico
+## 🛠️ Technical Stack
 
-El núcleo de **ProyecThor** está optimizado para el máximo rendimiento gráfico y estabilidad:
+The **ProyecThor** core is optimized for maximum graphical performance and stability:
 
-- **Lenguaje:** C++17 (Core robusto y eficiente)
-- **Gráficos:** OpenGL / GLFW
-- **Interfaz:** Dear ImGui (Docking Branch)
-- **Motor de Video:** LibVLC SDK
+- **Language:** C++17 (Robust and efficient core)
+- **Graphics:** OpenGL / GLFW
+- **UI Framework:** Dear ImGui (Docking Branch)
+- **Video Engine:** LibVLC SDK
 - **Build System:** CMake
 
 ---
 
-## 🤖 Uso de IA en el Desarrollo
+## 🌍 Community and Support
 
-Para mantener estándares de calidad y accesibilidad global, este proyecto utiliza asistencia de IA estrictamente para:
-- **Soporte Multilingüe:** Traducción y localización de la interfaz.
-- **Documentación:** Optimización de la legibilidad del código.
-- **Diseño UI:** Asistencia en la definición de paletas cromáticas y ergonomía de layouts.
-
----
-
-## 🌍 Comunidad y Soporte
-
-ProyecThor es un proyecto **sin fines de lucro**. Creemos en el poder de la colaboración de código abierto para mejorar las herramientas profesionales.
+ProyecThor is a **non-profit** project. We believe in the power of open-source collaboration to improve professional tools.
 
 > [!TIP]
-> **¿Quieres apoyar?** Aunque la aplicación es gratuita, aceptamos donaciones voluntarias para cubrir costos de mantenimiento, hosting de actualizaciones y tiempo de desarrollo para mantener el software seguro y al día.
+> **Want to support us?** While the application is free, we accept voluntary donations to cover maintenance costs, update hosting, and development time to keep the software secure and up to date.
 
 ---
 
 <div align="center">
-  <sub>Desarrollado con ❤️ para la comunidad de producción en vivo.</sub><br>
-  <sub>&copy; 2024 ProyecThor Project.</sub>
+  <sub>Developed with ❤️ for the live production community.</sub><br>
+  <sub>&copy; 2026 ProyecThor Project.</sub>
 </div>
