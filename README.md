@@ -1,8 +1,3 @@
-<div align="center">
-  [![Alpha Stage](https://img.shields.io/badge/Status-ALPHA%20PUBLICA-e8c84a?style=for-the-badge&labelColor=07080f)](https://github.com/TheVixcho/ProyecThor)
-  [![License](https://img.shields.io/badge/License-GNU%20GPLv3-00d4e8?style=for-the-badge&labelColor=07080f)](LICENSE)
-  [![C++](https://img.shields.io/badge/Made%20with-C%2B%2B17-white?style=for-the-badge&logo=c%2B%2B&labelColor=07080f&logoColor=00599C)](https://isocpp.org/)
-
   # Proyec<span>Thor</span> ⚡🎶
   ### **Motor de Proyección Profesional**
   
