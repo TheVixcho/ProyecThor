@@ -1,7 +1,7 @@
   # Proyec<span>Thor</span> ⚡🎶
   ### **Professional Projection Engine**
   
-  *Open-source software designed for optimal speed and reliability in high-pressure environments. Built for churches, theaters, and events where fluidity and instant reaction are everything.*
+  *Software designed for optimal speed and reliability in high-pressure environments. Built for churches, theaters, and events where fluidity and instant reaction are everything.*
 
   [Download Release](https://github.com/TheVixcho/ProyecThor/releases) • [Report a Bug](https://github.com/TheVixcho/ProyecThor/issues) • [Wiki](https://github.com/TheVixcho/ProyecThor/wiki)
 </div>
