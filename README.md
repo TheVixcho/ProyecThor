@@ -42,10 +42,6 @@ The **ProyecThor** core is optimized for maximum graphical performance and stabi
 
 ---
 
-## 🌍 Community and Support
-
-ProyecThor is a **non-profit** project. We believe in the power of open-source collaboration to improve professional tools.
-
 > [!TIP]
 > **Want to support us?** While the application is free, we accept voluntary donations to cover maintenance costs, update hosting, and development time to keep the software secure and up to date.
 
