@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>ProyecThor ⚡🎶</h1>
+  <h1>ProyecThor</h1>
   
   **Motor de Proyección Profesional**
 
@@ -13,7 +13,7 @@
 
 ---
 
-## 💎 Filosofía del Proyecto
+##Filosofía del Proyecto
 
 **ProyecThor** nace de la necesidad de contar con una alternativa de altísima calidad frente a los costosos y complejos softwares de presentación corporativos. 
 
@@ -25,19 +25,19 @@ Aunque el motor de la aplicación es de **código cerrado**, mantenemos un compr
 
 ---
 
-## 📦 Descargas y Versiones
+## Descargas y Versiones
 
 Puedes obtener ProyecThor de dos formas diferentes, dependiendo de lo que busques en tu equipo:
 
-*   **🌟 Versión Estable (Release):** Es la versión recomendada para eventos en vivo y entornos de producción. Ha sido probada exhaustivamente para garantizar la máxima estabilidad y que no haya fallos durante tu presentación. 
+*   **Versión Estable (Release):** Es la versión recomendada para eventos en vivo y entornos de producción. Ha sido probada exhaustivamente para garantizar la máxima estabilidad y que no haya fallos durante tu presentación. 
     **[Descargar la última versión Estable](https://github.com/TheVixcho/ProyecThor/releases/latest)**
 
-*   **🧪 Versión Beta (Pre-release):** ¿Quieres ayudarnos a mejorar? Descarga las versiones preliminares para probar las nuevas funciones y grandes cambios estructurales antes que nadie. Tu apoyo es vital para encontrar y reportar errores antes de que lleguen a la versión oficial.
+*   **Versión Beta (Pre-release):** ¿Quieres ayudarnos a mejorar? Descarga las versiones preliminares para probar las nuevas funciones y grandes cambios estructurales antes que nadie. Tu apoyo es vital para encontrar y reportar errores antes de que lleguen a la versión oficial.
     **[Ver el listado de versiones Beta](https://github.com/TheVixcho/ProyecThor/releases)**
 
 ---
 
-## 🚀 Características Principales
+##Características Principales
 
 | Característica | Descripción |
 | :--- | :--- |
@@ -61,7 +61,7 @@ El núcleo de **ProyecThor** está escrito desde cero y altamente optimizado par
 
 ---
 
-## 🤝 Apoya el Proyecto
+##Apoya el Proyecto
 
 La única razón por la que este programa se mantiene en desarrollo continuo y de acceso gratuito es gracias al apoyo de sus usuarios. Mantener un software de esta escala, costear los servidores web y dedicar tiempo a la innovación tiene un costo.
 
@@ -70,7 +70,7 @@ La única razón por la que este programa se mantiene en desarrollo continuo y d
 
 ---
 
-## 🌐 Enlaces y Comunidad
+##Enlaces y Comunidad
 
 - **Sitio Web Oficial:** [proyecthor.web.app](https://proyecthor.web.app/)
 - **Soporte y Feedback:** Si encuentras algún *bug* (error) o tienes ideas para nuevas funcionalidades, por favor repórtalo en nuestra sección de *Issues*. ¡Tus comentarios son vitales para mejorar!
@@ -78,6 +78,6 @@ La única razón por la que este programa se mantiene en desarrollo continuo y d
 ---
 
 <div align="center">
-  <sub>Desarrollado con ❤️ por Vicente Garcés para la comunidad de producción en vivo.</sub><br>
+  <sub>Desarrollado con ❤️ por TheVixcho para la comunidad de producción en vivo.</sub><br>
   <sub>&copy; 2026 Proyecto ProyecThor. Todos los derechos reservados.</sub>
 </div>
