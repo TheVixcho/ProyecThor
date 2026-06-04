@@ -1,7 +1,7 @@
 <div align="center">
   <h1>ProyecThor</h1>
   
-  **Motor de Proyección Profesional**
+  ** Motor de Proyección Profesional**
 
   ![Descargas Totales](https://img.shields.io/github/downloads/TheVixcho/ProyecThor/total?style=for-the-badge&color=2ea44f)
   ![Última Versión](https://img.shields.io/github/v/release/TheVixcho/ProyecThor?style=for-the-badge&color=blue)
@@ -13,7 +13,7 @@
 
 ---
 
-##Filosofía del Proyecto
+## Filosofía del Proyecto
 
 **ProyecThor** nace de la necesidad de contar con una alternativa de altísima calidad frente a los costosos y complejos softwares de presentación corporativos. 
 
@@ -37,7 +37,7 @@ Puedes obtener ProyecThor de dos formas diferentes, dependiendo de lo que busque
 
 ---
 
-##Características Principales
+## Características Principales
 
 | Característica | Descripción |
 | :--- | :--- |
@@ -49,7 +49,7 @@ Puedes obtener ProyecThor de dos formas diferentes, dependiendo de lo que busque
 
 ---
 
-## 🛠️ Stack Tecnológico
+## Stack Tecnológico
 
 El núcleo de **ProyecThor** está escrito desde cero y altamente optimizado para exprimir al máximo el rendimiento gráfico y garantizar la estabilidad del sistema durante horas de uso continuo en eventos:
 
@@ -61,7 +61,7 @@ El núcleo de **ProyecThor** está escrito desde cero y altamente optimizado par
 
 ---
 
-##Apoya el Proyecto
+## Apoya el Proyecto
 
 La única razón por la que este programa se mantiene en desarrollo continuo y de acceso gratuito es gracias al apoyo de sus usuarios. Mantener un software de esta escala, costear los servidores web y dedicar tiempo a la innovación tiene un costo.
 
@@ -70,7 +70,7 @@ La única razón por la que este programa se mantiene en desarrollo continuo y d
 
 ---
 
-##Enlaces y Comunidad
+## Enlaces y Comunidad
 
 - **Sitio Web Oficial:** [proyecthor.web.app](https://proyecthor.web.app/)
 - **Soporte y Feedback:** Si encuentras algún *bug* (error) o tienes ideas para nuevas funcionalidades, por favor repórtalo en nuestra sección de *Issues*. ¡Tus comentarios son vitales para mejorar!
