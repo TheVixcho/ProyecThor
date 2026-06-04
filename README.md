@@ -1,7 +1,7 @@
 <div align="center">
   <h1>ProyecThor</h1>
   
-  ** Motor de Proyección Profesional**
+  **Motor de Proyección Profesional**
 
   ![Descargas Totales](https://img.shields.io/github/downloads/TheVixcho/ProyecThor/total?style=for-the-badge&color=2ea44f)
   ![Última Versión](https://img.shields.io/github/v/release/TheVixcho/ProyecThor?style=for-the-badge&color=blue)
