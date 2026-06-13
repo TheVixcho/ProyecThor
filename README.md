@@ -63,8 +63,6 @@ El núcleo de **ProyecThor** está escrito desde cero y altamente optimizado par
 
 ## Apoya el Proyecto
 
-La única razón por la que este programa se mantiene en desarrollo continuo y de acceso gratuito es gracias al apoyo de sus usuarios. Mantener un software de esta escala, costear los servidores web y dedicar tiempo a la innovación tiene un costo.
-
 > [!TIP]
 > **¿Quieres ayudarnos a seguir creciendo?** Aceptamos donaciones voluntarias para cubrir los gastos técnicos y el tiempo de desarrollo necesario para mantener ProyecThor seguro y actualizado. Visita nuestra web en [proyecthor.web.app](https://proyecthor.web.app/) para descubrir cómo puedes aportar.
 
