@@ -25,11 +25,6 @@ Aunque el motor de la aplicación es de **código cerrado**, mantenemos un compr
 
 ---
 
-## Futuro
-
-ProyecThor es un programa bastante complejo de crear, aun así, cuando sea el momento (Estable, funcional, cumplir estandares), ProyecThor será una aplicación open source en su totalidad.
-
----
 ## Descargas y Versiones
 
 Puedes obtener ProyecThor de dos formas diferentes, dependiendo de lo que busques en tu equipo:
