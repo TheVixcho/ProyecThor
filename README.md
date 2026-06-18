@@ -1,81 +1,75 @@
-<div align="center">
-  <h1>ProyecThor</h1>
+  # Proyec<span>Thor</span> ⚡🎶
+  ### **Professional Projection Engine**
   
-  **Motor de Proyección Profesional**
+  *Open-source software designed for optimal speed and reliability in high-pressure environments. Built for churches, theaters, and events where fluidity and instant reaction are everything.*
 
-  ![Descargas Totales](https://img.shields.io/github/downloads/TheVixcho/ProyecThor/total?style=for-the-badge&color=2ea44f)
-  ![Última Versión](https://img.shields.io/github/v/release/TheVixcho/ProyecThor?style=for-the-badge&color=blue)
-  
-  *Software diseñado para ofrecer velocidad óptima y máxima fiabilidad en entornos de alta presión. Creado para iglesias, teatros y eventos en vivo donde la fluidez y la capacidad de reacción inmediata lo son todo.*
-
-  [Sitio Web Oficial](https://proyecthor.web.app/) • [Descargar Estable](https://github.com/TheVixcho/ProyecThor/releases/latest) • [Probar Beta](https://github.com/TheVixcho/ProyecThor/releases) • [Reportar un Error](https://github.com/TheVixcho/ProyecThor/issues)
+  [Download Release](https://github.com/TheVixcho/ProyecThor/releases) • [Report a Bug](https://github.com/TheVixcho/ProyecThor/issues) • [Wiki](https://github.com/TheVixcho/ProyecThor/wiki)
 </div>
 
 ---
 
-## Filosofía del Proyecto
+## 💎 Project Philosophy
 
-**ProyecThor** nace de la necesidad de contar con una alternativa de altísima calidad frente a los costosos y complejos softwares de presentación corporativos. 
+ProyecThor was born from the need for a high-quality, free alternative to expensive proprietary projection software.
 
-Aunque el motor de la aplicación es de **código cerrado**, mantenemos un compromiso inquebrantable con la comunidad: **ProyecThor es y siempre será 100% gratuito.** 
-
-* **Sin Suscripciones:** Todas las herramientas y funciones avanzadas están disponibles para todos los usuarios, para siempre. Cero muros de pago.
-* **Centrado en el Operador:** Interfaz diseñada ergonómicamente para minimizar el error humano cuando estás trabajando en vivo y bajo presión.
-* **Privacidad Total:** Opera 100% de manera local. Tus archivos, configuraciones, medios y datos nunca abandonan tu equipo.
+* **No Subscriptions:** All features are available to everyone, forever.
+* **Operator-Centric:** Interface designed to minimize human error under pressure.
+* **Total Privacy:** Operates 100% locally. Your files and data never leave your device.
 
 ---
 
-## Descargas y Versiones
+## 🚀 Key Features
 
-Puedes obtener ProyecThor de dos formas diferentes, dependiendo de lo que busques en tu equipo:
-
-*   **Versión Estable (Release):** Es la versión recomendada para eventos en vivo y entornos de producción. Ha sido probada exhaustivamente para garantizar la máxima estabilidad y que no haya fallos durante tu presentación. 
-    **[Descargar la última versión Estable](https://github.com/TheVixcho/ProyecThor/releases/latest)**
-
-*   **Versión Beta (Pre-release):** ¿Quieres ayudarnos a mejorar? Descarga las versiones preliminares para probar las nuevas funciones y grandes cambios estructurales antes que nadie. Tu apoyo es vital para encontrar y reportar errores antes de que lleguen a la versión oficial.
-    **[Ver el listado de versiones Beta](https://github.com/TheVixcho/ProyecThor/releases)**
-
----
-
-## Características Principales
-
-| Característica | Descripción |
+| Feature | Description |
 | :--- | :--- |
-| **Arquitectura Multicapa** | Gestiona de forma completamente independiente fondos (colores, imágenes, videos) y superposiciones de texto o letras. |
-| **Flujo de Trabajo de Doble Pantalla** | Interfaz dedicada exclusivamente para el operador y una salida limpia, en pantalla completa y sin bordes para los proyectores. |
-| **Aceleración por Hardware** | Motor de video impulsado por **LibVLC SDK** para una decodificación de bajísima latencia en casi cualquier formato multimedia. |
-| **Interfaz de Usuario Moderna** | Espacio de trabajo basado en paneles acoplables (Docking) impulsado por **Dear ImGui**, ofreciendo una personalización extrema del entorno visual. |
-| **Previsualización en Vivo** | Monitoreo en tiempo real de tu contenido y ajustes antes de enviarlos a la pantalla principal de la audiencia. |
+| **Multi-Layer Architecture** | Independently manage backgrounds (colors, images, videos) and text overlays. |
+| **Dual-Screen Workflow** | Dedicated operator interface with a clean, borderless output for projectors. |
+| **Hardware Acceleration** | **LibVLC SDK** powered engine for low-latency decoding of almost any format. |
+| **Modern UI** | Docking-based workspace powered by **Dear ImGui** for high customizability. |
+| **Live Preview** | Real-time monitoring of content before pushing it to the main screen. |
 
 ---
 
-## Stack Tecnológico
+## 🛠️ Technical Stack
 
-El núcleo de **ProyecThor** está escrito desde cero y altamente optimizado para exprimir al máximo el rendimiento gráfico y garantizar la estabilidad del sistema durante horas de uso continuo en eventos:
+The **ProyecThor** core is optimized for maximum graphical performance and stability:
 
-* **Lenguaje:** C++17 (Núcleo robusto y de alto rendimiento)
-* **Gráficos:** OpenGL / GLFW
-* **Framework UI:** Dear ImGui (Docking Branch)
-* **Motor de Video:** LibVLC SDK
-* **Sistema de Construcción:** CMake
+- **Language:** C++17 (Robust and efficient core)
+- **Graphics:** OpenGL / GLFW
+- **UI Framework:** Dear ImGui (Docking Branch)
+- **Video Engine:** LibVLC SDK
+- **Build System:** CMake
 
 ---
 
-## Apoya el Proyecto
+## 🌍 Community and Support
+
+ProyecThor is a **non-profit** project. We believe in the power of open-source collaboration to improve professional tools.
 
 > [!TIP]
-> **¿Quieres ayudarnos a seguir creciendo?** Aceptamos donaciones voluntarias para cubrir los gastos técnicos y el tiempo de desarrollo necesario para mantener ProyecThor seguro y actualizado. Visita nuestra web en [proyecthor.web.app](https://proyecthor.web.app/) para descubrir cómo puedes aportar.
+> **Want to support us?** While the application is free, we accept voluntary donations to cover maintenance costs, update hosting, and development time to keep the software secure and up to date.
 
 ---
 
-## Enlaces y Comunidad
 
-- **Sitio Web Oficial:** [proyecthor.web.app](https://proyecthor.web.app/)
-- **Soporte y Feedback:** Si encuentras algún *bug* (error) o tienes ideas para nuevas funcionalidades, por favor repórtalo en nuestra sección de *Issues*. ¡Tus comentarios son vitales para mejorar!
+## 📄 Open Source Licenses
 
----
+ProyecThor is built on the shoulders of excellent open-source libraries:
 
+| Library | License | Link |
+| :--- | :--- | :--- |
+| **Dear ImGui** | MIT | [github.com/ocornut/imgui](https://github.com/ocornut/imgui) |
+| **GLFW** | zlib/libpng | [glfw.org](https://www.glfw.org) |
+| **GLEW** | MIT / BSD | [glew.sourceforge.net](http://glew.sourceforge.net) |
+| **GLM** | MIT | [github.com/g-truc/glm](https://github.com/g-truc/glm) |
+| **LibVLC SDK** | LGPL 2.1 | [videolan.org](https://www.videolan.org) |
+| **TagLib** | LGPL 2.1 / MPL 1.1 | [taglib.github.io](https://taglib.github.io) |
+| **PDFium** | BSD 3-Clause | [chromium.googlesource.com/chromium/src/+/main/third_party/pdfium](https://chromium.googlesource.com/chromium/src/+/main/third_party/pdfium) |
+| **nlohmann/json** | MIT | [github.com/nlohmann/json](https://github.com/nlohmann/json) |
+| **stb_image** | Public Domain / MIT | [github.com/nothings/stb](https://github.com/nothings/stb) |
+
+> TagLib and LibVLC are used under the **LGPL 2.1**. Their source code is available at the links above. ProyecThor links to TagLib statically; the TagLib source used is version 1.13.1, available at [github.com/taglib/taglib/releases/tag/v1.13.1](https://github.com/taglib/taglib/releases/tag/v1.13.1).
 <div align="center">
-  <sub>Desarrollado con ❤️ por TheVixcho para la comunidad de producción en vivo.</sub><br>
-  <sub>&copy; 2026 Proyecto ProyecThor. Todos los derechos reservados.</sub>
+  <sub>Developed with ❤️ for the live production community.</sub><br>
+  <sub>&copy; 2026 ProyecThor Project.</sub>
 </div>
