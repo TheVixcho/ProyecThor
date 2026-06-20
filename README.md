@@ -63,13 +63,6 @@ ProyecThor is built on the shoulders of excellent open-source libraries:
 | **GLEW** | MIT / BSD | [glew.sourceforge.net](http://glew.sourceforge.net) |
 | **GLM** | MIT | [github.com/g-truc/glm](https://github.com/g-truc/glm) |
 | **LibVLC SDK** | LGPL 2.1 | [videolan.org](https://www.videolan.org) |
-| **TagLib** | LGPL 2.1 / MPL 1.1 | [taglib.github.io](https://taglib.github.io) |
 | **PDFium** | BSD 3-Clause | [chromium.googlesource.com/chromium/src/+/main/third_party/pdfium](https://chromium.googlesource.com/chromium/src/+/main/third_party/pdfium) |
 | **nlohmann/json** | MIT | [github.com/nlohmann/json](https://github.com/nlohmann/json) |
 | **stb_image** | Public Domain / MIT | [github.com/nothings/stb](https://github.com/nothings/stb) |
-
-> TagLib and LibVLC are used under the **LGPL 2.1**. Their source code is available at the links above. ProyecThor links to TagLib statically; the TagLib source used is version 1.13.1, available at [github.com/taglib/taglib/releases/tag/v1.13.1](https://github.com/taglib/taglib/releases/tag/v1.13.1).
-<div align="center">
-  <sub>Developed with ❤️ for the live production community.</sub><br>
-  <sub>&copy; 2026 ProyecThor Project.</sub>
-</div>
