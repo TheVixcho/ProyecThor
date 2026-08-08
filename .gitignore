@@ -34,7 +34,8 @@ iss/installer_output/
 *.wixobj
 
 # ── Carpetas de distribución alternativa (si no van en el repo principal) ───
-web/
+# web/ ahora SI va al repo (rama beta, pedido explicito) -- su propio
+# .gitignore (web/.gitignore) ya excluye node_modules/dist/logs/etc.
 lite/
 /shaders/
 
