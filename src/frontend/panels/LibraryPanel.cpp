@@ -260,6 +260,13 @@ void LibraryPanel::SetMediaOnlyMode(bool v)
     }
 }
 
+void LibraryPanel::SetRenderOnlyMode(bool v)
+{
+    m_RenderOnlyMode = v;
+    if (v)
+        m_SideMode = LibrarySideMode::Render;
+}
+
 // =============================================================================
 //  IO — URLs de streaming
 // =============================================================================
@@ -531,10 +538,10 @@ void LibraryPanel::Render()
     }
     
     ImGuiIO& io = ImGui::GetIO();
-    // "Media y Preview" bloquea la categoria -- sin este guard, Shift+1..6
-    // seguiria dejando saltar a Canciones/Video/etc. en ese workspace
-    // reducido (ver SetMediaOnlyMode).
-    if (io.KeyShift && !m_MediaOnlyMode) // Solo si Shift está presionado
+    // Los presets "Biblioteca"/"Render" bloquean la categoria/side-mode --
+    // sin este guard, Shift+1..6 seguiria dejando saltar a Canciones/Video/
+    // etc. en esos workspaces reducidos (ver SetMediaOnlyMode/SetRenderOnlyMode).
+    if (io.KeyShift && !m_MediaOnlyMode && !m_RenderOnlyMode) // Solo si Shift está presionado
     {
         // Revisamos teclas del 1 al 6 (código ASCII '1' a '6')
         for (int i = 0; i < 6; ++i)
@@ -582,12 +589,12 @@ void LibraryPanel::Render()
     const float k_SidebarW = IconRailThickness(true);
     const float     totalH     = ImGui::GetContentRegionAvail().y;
 
-    // "Media y Preview" (ver SetMediaOnlyMode): sin sidebar de categorias --
-    // solo hay una, no tiene sentido un selector para elegir entre "solo
-    // Medios" y nada mas. El contenido de abajo (ancho 0 = todo lo
+    // Presets "Biblioteca"/"Render" (ver SetMediaOnlyMode/SetRenderOnlyMode):
+    // sin sidebar de categorias -- solo hay una opcion posible, no tiene
+    // sentido un selector. El contenido de abajo (ancho 0 = todo lo
     // disponible) ocupa automaticamente el espacio que el sidebar+divisor
     // hubieran usado.
-    if (!m_MediaOnlyMode)
+    if (!m_MediaOnlyMode && !m_RenderOnlyMode)
     {
     // ── Sidebar izquierdo ──────────────────────────────────────────────────
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));

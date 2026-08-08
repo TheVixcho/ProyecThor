@@ -48,6 +48,7 @@
 #include "frontend/ui/Hub.h"
 #include "frontend/panels/ViewPanel.h"
 #include "frontend/panels/StylesHubPanel.h"
+#include "frontend/panels/StreamingWorkspacePanel.h"
 #include "frontend/panels/biblio/LibraryHelpers.h"
 #include "backend/core/AppPaths.h"
 #include "SplashScreen.h"
@@ -1010,6 +1011,15 @@ int main(int argc, char** argv)
     auto stylesHub = std::make_shared<ProyecThor::UI::StylesHubPanel>(&uiManager);
     stylesHub->SetTransitionPanel(uiManager.GetTransitionPanelOwned().get());
     uiManager.AddPanel(stylesHub);
+
+    // Preset "Transmisión" (ver UIManager::BuildWorkspaceLayoutBroadcast):
+    // misma instancia de BroadcastPanel que ya usa Ajustes > Conexiones, asi
+    // que activar/mirar el streaming desde cualquiera de los dos lados
+    // queda sincronizado solo.
+    auto streamingWs = std::make_shared<ProyecThor::UI::StreamingWorkspacePanel>(&uiManager.GetBroadcastPanel());
+    streamingWs->SetUIManager(&uiManager);
+    uiManager.AddPanel(streamingWs);
+
     std::cerr << "[DIAG] Todos los paneles agregados OK\n";
 
     // "Abrir con ProyecThor" / doble click sobre un archivo asociado -- recien

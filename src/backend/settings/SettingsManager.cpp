@@ -199,6 +199,7 @@ const char* WorkspaceLayoutPresetName(WorkspaceLayoutPreset preset) {
         case WorkspaceLayoutPreset::Simple:    return "Simple";
         case WorkspaceLayoutPreset::Broadcast: return "Transmisión";
         case WorkspaceLayoutPreset::Library:   return "Biblioteca";
+        case WorkspaceLayoutPreset::Render:    return "Render";
         default:                               return "Clásico";
     }
 }
@@ -207,6 +208,7 @@ WorkspaceLayoutPreset WorkspaceLayoutPresetFromString(const std::string& s) {
     if (s == "simple")    return WorkspaceLayoutPreset::Simple;
     if (s == "broadcast") return WorkspaceLayoutPreset::Broadcast;
     if (s == "library")   return WorkspaceLayoutPreset::Library;
+    if (s == "render")    return WorkspaceLayoutPreset::Render;
     return WorkspaceLayoutPreset::Classic;
 }
 
@@ -215,6 +217,7 @@ static std::string WorkspaceLayoutPresetToKey(WorkspaceLayoutPreset preset) {
         case WorkspaceLayoutPreset::Simple:    return "simple";
         case WorkspaceLayoutPreset::Broadcast: return "broadcast";
         case WorkspaceLayoutPreset::Library:   return "library";
+        case WorkspaceLayoutPreset::Render:    return "render";
         default:                               return "classic";
     }
 }

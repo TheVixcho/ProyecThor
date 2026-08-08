@@ -185,6 +185,11 @@ static void DrawWorkspaceDiagramLibrary(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU3
     dl->AddRectFilled({a.x + leftW + g, a.y}, {a.x + leftW + g + mainW, b.y}, accentCol, 2.0f); // Home
 }
 
+static void DrawWorkspaceDiagramRender(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 /*panelCol*/, ImU32 accentCol) {
+    // Biblioteca sola, a pantalla completa (ver UIManager::BuildWorkspaceLayoutRender).
+    dl->AddRectFilled(a, b, accentCol, 2.0f);
+}
+
 using WorkspaceDiagramFn = void (*)(ImDrawList*, ImVec2, ImVec2, ImU32, ImU32);
 
 // Tarjeta con el diagrama de arriba en vez de un swatch de color -- lo que
@@ -276,6 +281,7 @@ void SettingsPanel::RenderCategoryTheme() {
             { "Simple",      WorkspaceLayoutPreset::Simple,    DrawWorkspaceDiagramSimple    },
             { "Transmisión", WorkspaceLayoutPreset::Broadcast, DrawWorkspaceDiagramBroadcast },
             { "Biblioteca",  WorkspaceLayoutPreset::Library,   DrawWorkspaceDiagramLibrary   },
+            { "Render",      WorkspaceLayoutPreset::Render,    DrawWorkspaceDiagramRender    },
         };
 
         for (int i = 0; i < (int)(sizeof(entries) / sizeof(entries[0])); i++) {

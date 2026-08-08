@@ -163,6 +163,7 @@ private:
     void BuildWorkspaceLayoutSimple(ImGuiID dockspace_id);
     void BuildWorkspaceLayoutBroadcast(ImGuiID dockspace_id);
     void BuildWorkspaceLayoutLibrary(ImGuiID dockspace_id);
+    void BuildWorkspaceLayoutRender(ImGuiID dockspace_id);
 
     // Ventanas nativas de salida real ("ProjectorLive"/"StageLive") -- se
     // llama SIEMPRE, una vez por frame, sin importar si el operador esta

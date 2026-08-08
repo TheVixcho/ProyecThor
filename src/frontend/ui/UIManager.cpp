@@ -900,23 +900,42 @@ if (m_Mode == WorkspaceMode::Hub)
 
     const auto& str = ProyecThor::UI::GetUIStrings();
 
-    // Preset "Biblioteca" (ver Settings::WorkspaceLayoutPreset::Library):
-    // solo Biblioteca+Home se someten este frame (Vista en Vivo/Diseño ni
-    // se dibujan, ver mas abajo) y Biblioteca se restringe a la categoria
-    // Medios -- recalculado cada frame (barato, mismo criterio que
-    // ApplyTheme() arriba) asi que nunca queda desincronizado del preset
-    // real, sin importar por donde haya cambiado (Ajustes, menu Espacio de
-    // trabajo, o "Abrir con ProyecThor").
-    const bool isLibraryWorkspace =
-        ProyecThor::Settings::SettingsManager::Get().GetSettings().workspace.layoutPreset ==
-        ProyecThor::Settings::WorkspaceLayoutPreset::Library;
-    if (m_LibraryPanelRef) m_LibraryPanelRef->SetMediaOnlyMode(isLibraryWorkspace);
+    // Presets reducidos (ver Settings::WorkspaceLayoutPreset): cada uno
+    // somete solo un subconjunto de m_Panels este frame y, si corresponde,
+    // bloquea a Biblioteca en una sola vista -- recalculado cada frame
+    // (barato, mismo criterio que ApplyTheme() arriba) asi que nunca queda
+    // desincronizado del preset real, sin importar por donde haya cambiado
+    // (Ajustes, menu Espacio de trabajo, o "Abrir con ProyecThor").
+    using ProyecThor::Settings::WorkspaceLayoutPreset;
+    const WorkspaceLayoutPreset activePreset =
+        ProyecThor::Settings::SettingsManager::Get().GetSettings().workspace.layoutPreset;
+    const bool isLibraryWorkspace   = (activePreset == WorkspaceLayoutPreset::Library);
+    const bool isRenderWorkspace    = (activePreset == WorkspaceLayoutPreset::Render);
+    const bool isBroadcastWorkspace = (activePreset == WorkspaceLayoutPreset::Broadcast);
+    if (m_LibraryPanelRef) {
+        m_LibraryPanelRef->SetMediaOnlyMode(isLibraryWorkspace);
+        m_LibraryPanelRef->SetRenderOnlyMode(isRenderWorkspace);
+    }
 
     for (auto& panel : m_Panels)
     {
         // "Library" es el GetName() interno de LibraryPanel (no el titulo
         // localizado de su ventana, ese es str.library).
-        if (isLibraryWorkspace && panel->GetName() != "Library" && panel->GetName() != "Home")
+        const std::string& panelName = panel->GetName();
+        if (isLibraryWorkspace && panelName != "Library" && panelName != "Home")
+            continue;
+        // "Render": Biblioteca sola, a pantalla completa (bloqueada en el
+        // conversor, ver SetRenderOnlyMode).
+        if (isRenderWorkspace && panelName != "Library")
+            continue;
+        // "Transmisión": Streaming (ver StreamingWorkspacePanel) ocupa el
+        // lugar de Vista en Vivo -- esta NUNCA se dockea en ese preset (ver
+        // BuildWorkspaceLayoutBroadcast), asi que no puede someterse o
+        // queda flotando sin nodo. El panel de Streaming, al reves, solo
+        // tiene sentido EN este preset.
+        if (isBroadcastWorkspace && panelName == "Vista en Vivo")
+            continue;
+        if (!isBroadcastWorkspace && panelName == "Transmisión")
             continue;
         // El colapso de contenido (Alt Gr + 1..4) NO se filtra aca: cada
         // panel lo consulta el mismo dentro de su Render(), despues de
@@ -1743,6 +1762,10 @@ void UIManager::RenderMainMenuBar()
                 // preset MAS aca (y en Ajustes > Apariencia, ver
                 // CategoryTheme.cpp), no un modo aparte que no se guarda.
                 { "Biblioteca",  ProyecThor::Settings::WorkspaceLayoutPreset::Library   },
+                // Biblioteca sola, bloqueada en el conversor de formato --
+                // pedido explicito, para codificar/decodificar video sin
+                // nada mas alrededor.
+                { "Render",      ProyecThor::Settings::WorkspaceLayoutPreset::Render    },
             };
             for (const auto& e : kWorkspaceEntries)
             {
@@ -1978,6 +2001,9 @@ void UIManager::BeginDockspace()
             case WorkspaceLayoutPreset::Library:
                 BuildWorkspaceLayoutLibrary(dockspace_id);
                 break;
+            case WorkspaceLayoutPreset::Render:
+                BuildWorkspaceLayoutRender(dockspace_id);
+                break;
             default:
                 BuildWorkspaceLayoutClassic(dockspace_id);
                 break;
@@ -2086,10 +2112,11 @@ void UIManager::BuildWorkspaceLayoutSimple(ImGuiID dockspace_id)
 }
 
 // ── Entorno de trabajo: "Transmisión" ───────────────────────────────────────
-// Vista en Vivo como franja superior completa -- el monitor que el operador
-// mas necesita vigilar de un vistazo queda siempre arriba de todo, en vez de
-// compartir un costado con otra cosa. Biblioteca/Home/Diseño en tres
-// columnas abajo, estilo sala de control de transmision.
+// Streaming (Captura/Capa/Iniciar, ver StreamingWorkspacePanel) como franja
+// superior completa EN VEZ de Vista en Vivo -- pedido explicito: este
+// workspace es para manejar la transmision RTMP en si, no el monitor de
+// proyeccion. Biblioteca/Home/Diseño siguen en tres columnas abajo, estilo
+// sala de control de transmision.
 void UIManager::BuildWorkspaceLayoutBroadcast(ImGuiID dockspace_id)
 {
     const auto& str = ProyecThor::UI::GetUIStrings();
@@ -2107,10 +2134,10 @@ void UIManager::BuildWorkspaceLayoutBroadcast(ImGuiID dockspace_id)
     ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.34f, &dock_right, &dock_main);
     // dock_main (columna central de la fila de abajo) es Home.
 
-    ImGui::DockBuilderDockWindow(str.library,     dock_left_top);
-    ImGui::DockBuilderDockWindow("Vista en Vivo", dock_top);
-    ImGui::DockBuilderDockWindow("Home",          dock_main);
-    ImGui::DockBuilderDockWindow("Diseño",        dock_right);
+    ImGui::DockBuilderDockWindow(str.library,   dock_left_top);
+    ImGui::DockBuilderDockWindow("Transmisión", dock_top);
+    ImGui::DockBuilderDockWindow("Home",        dock_main);
+    ImGui::DockBuilderDockWindow("Diseño",      dock_right);
 
     ImGuiID leafNodes[] = { dock_left_top, dock_left_bottom, dock_top, dock_main, dock_right };
     for (ImGuiID nodeId : leafNodes)
@@ -2119,10 +2146,12 @@ void UIManager::BuildWorkspaceLayoutBroadcast(ImGuiID dockspace_id)
 
     ImGui::DockBuilderFinish(dockspace_id);
 
-    m_PanelCollapse[0] = { dock_left,  ImVec2(0, 0), true,  false, 0.0f }; // 1: Biblioteca
-    m_PanelCollapse[1] = { dock_right, ImVec2(0, 0), true,  false, 0.0f }; // 2: Diseño
-    m_PanelCollapse[2] = { dock_top,   ImVec2(0, 0), false, false, 0.0f }; // 3: Vista en Vivo
-    m_PanelCollapse[3] = { dock_main,  ImVec2(0, 0), true,  false, 0.0f }; // 4: Home
+    // Vista en Vivo no existe en este layout -- nodeId=0 para el indice 3
+    // (era el suyo), no-op seguro para Alt Gr+3.
+    m_PanelCollapse[0] = { dock_left,  ImVec2(0, 0), true, false, 0.0f }; // 1: Biblioteca
+    m_PanelCollapse[1] = { dock_right, ImVec2(0, 0), true, false, 0.0f }; // 2: Diseño
+    m_PanelCollapse[2] = { 0,          ImVec2(0, 0), false, false, 0.0f }; // 3: Vista en Vivo (no existe aca)
+    m_PanelCollapse[3] = { dock_main,  ImVec2(0, 0), true, false, 0.0f }; // 4: Home
 }
 
 // ── Entorno de trabajo: "Biblioteca" ────────────────────────────────────────
@@ -2159,6 +2188,22 @@ void UIManager::BuildWorkspaceLayoutLibrary(ImGuiID dockspace_id)
     m_PanelCollapse[1] = { 0,         ImVec2(0, 0), false, false, 0.0f }; // 2: Diseño
     m_PanelCollapse[2] = { 0,         ImVec2(0, 0), false, false, 0.0f }; // 3: Vista en Vivo
     m_PanelCollapse[3] = { dock_main, ImVec2(0, 0), true, false, 0.0f }; // 4: Home
+}
+
+// ── Entorno de trabajo: "Render" ────────────────────────────────────────────
+// Biblioteca sola, a pantalla completa, bloqueada en el conversor de formato
+// (LibrarySideMode::Render -- ver LibraryPanel::SetRenderOnlyMode) -- pedido
+// explicito para codificar/decodificar video sin nada mas alrededor.
+void UIManager::BuildWorkspaceLayoutRender(ImGuiID dockspace_id)
+{
+    const auto& str = ProyecThor::UI::GetUIStrings();
+
+    ImGui::DockBuilderDockWindow(str.library, dockspace_id);
+    ImGui::DockBuilderFinish(dockspace_id);
+
+    // Sin Home/Vista en Vivo/Diseño en este layout -- Alt Gr+1..4 no tiene
+    // nada que colapsar (nodeId=0 es un no-op seguro, ver TogglePanelCollapse).
+    for (auto& p : m_PanelCollapse) { p.nodeId = 0; p.collapsed = false; p.animT = 0.0f; }
 }
 
 bool UIManager::IsPanelCollapsedForRender(const std::string& name) const

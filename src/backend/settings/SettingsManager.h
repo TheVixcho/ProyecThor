@@ -246,12 +246,16 @@ namespace ProyecThor::Settings {
         Classic = 0,   // el de siempre: Biblioteca | Home/Diseño (arriba/abajo) | Vista en Vivo
         Simple,        // estilo Holyrics: Diseño se apila con Vista en Vivo a la derecha,
                        // Home ocupa todo el alto disponible en el centro
-        Broadcast,     // Vista en Vivo como franja superior completa; Biblioteca/Home/Diseño
-                       // en tres columnas abajo
+        Broadcast,     // Streaming (Captura/Capa/Iniciar, ver StreamingWorkspacePanel) como
+                       // franja superior completa en vez de Vista en Vivo; Biblioteca/Home/
+                       // Diseño en tres columnas abajo
         Library,       // Biblioteca (bloqueada en Medios) | Home (Preview) -- sin Vista en
                        // Vivo/Diseño, para operar solo reproduciendo contenido de la
                        // biblioteca. Tambien lo usa "Abrir con ProyecThor" para esa sesion
                        // (ver UIManager::EnterLibraryWorkspaceMode), sin pisar este setting.
+        Render,        // Biblioteca a pantalla completa, bloqueada en el conversor de
+                       // formato (LibrarySideMode::Render) -- para codificar/decodificar
+                       // video sin nada mas alrededor.
     };
 
     const char*            WorkspaceLayoutPresetName(WorkspaceLayoutPreset preset);

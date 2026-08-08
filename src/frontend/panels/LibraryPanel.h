@@ -74,6 +74,16 @@ public:
     // frame segun el preset activo, no hace falta llamarla a mano.
     void SetMediaOnlyMode(bool v);
 
+    // Preset de workspace "Render" (ver Settings::WorkspaceLayoutPreset::
+    // Render / UIManager::BuildWorkspaceLayoutRender): bloquea Biblioteca en
+    // el conversor de formato (LibrarySideMode::Render) y oculta el
+    // sidebar -- pantalla completa dedicada solo a codificar/decodificar
+    // video, sin nada mas para navegar a otro lado por accidente. UIManager
+    // la llama cada frame segun el preset activo, no hace falta llamarla a
+    // mano. Mutuamente excluyente con SetMediaOnlyMode (UIManager nunca
+    // activa las dos a la vez, son presets distintos).
+    void SetRenderOnlyMode(bool v);
+
 private:
     Library::LibraryContext BuildContext();
 
@@ -99,6 +109,7 @@ private:
     LibraryCategory          m_CurrentCategory     = LibraryCategory::Songs;
     LibraryCategory          m_PrevCategory        = LibraryCategory::Songs;
     bool                     m_MediaOnlyMode       = false;
+    bool                     m_RenderOnlyMode      = false;
     Library::MultimediaFilter m_MultimediaFilter   = Library::MultimediaFilter::All;
     // Flag: evita llamar SetSelection cada frame cuando estamos en Audio.
     // Solo se llama una vez al entrar a la categoria.
