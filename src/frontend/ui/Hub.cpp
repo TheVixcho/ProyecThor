@@ -1185,7 +1185,20 @@ void Hub::RenderDownloadSubtitlesPanel() {
 
     if (!m_DownloadSubsOpen) return;
 
-    const ImVec2 baseSize(480.0f, 260.0f);
+    // FIX (Wayland): esta ventana usaba AlwaysAutoResize + un ancho de
+    // contenido derivado de GetContentRegionAvail() (ver el InputText de la
+    // carpeta fija mas abajo, "SetNextItemWidth(GetContentRegionAvail().x -
+    // 96.0f)"). En Wayland el tamaño real de ventana que devuelve GLFW llega
+    // con un frame de latencia (el compositor negocia el resize, no es
+    // inmediato como en X11) -- eso arma un circulo: el contenido pide un
+    // ancho basado en el tamaño de la ventana, la ventana se autoajusta a
+    // ese contenido, y el proximo frame el tamaño "real" que reporta GLFW ya
+    // cambio, asi que el contenido vuelve a pedir un ancho distinto. Crece
+    // sin limite. Pasaba justo al tocar "Carpeta fija" (la opcion de abajo)
+    // porque ese es el radio button que agrega el InputText problematico.
+    // Con tamaño FIJO (sin AlwaysAutoResize) no hay nada que reajustar en
+    // base al contenido, asi que el circulo no puede arrancar.
+    const ImVec2 baseSize(480.0f, 320.0f);
     ImGuiViewport* vp = ImGui::GetMainViewport();
     ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f);
     ImGui::SetNextWindowPos(workCenter, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
@@ -1198,7 +1211,7 @@ void Hub::RenderDownloadSubtitlesPanel() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 16.0f));
     bool open = ImGui::Begin("Descargar subtitulos", &m_DownloadSubsOpen,
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking |
-        ImGuiWindowFlags_AlwaysAutoResize);
+        ImGuiWindowFlags_NoResize);
 
     if (open) {
         ImGui::TextWrapped("Pega el link de un video. Se buscan sus subtitulos (español primero, si "
