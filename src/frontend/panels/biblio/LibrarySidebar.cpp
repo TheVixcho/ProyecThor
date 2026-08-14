@@ -212,21 +212,19 @@ void RenderCategoryButtons(LibraryContext& ctx)
         }
     }
 
-    // ── Divisor + grupo aparte "Render"/"Overlay" ───────────────────────────
+    // ── Grupo aparte "Render"/"Overlay" ─────────────────────────────────────
     // Mudados desde ViewToolsPanel/LibraryManagerPanel — el operador los
     // pedia junto a la biblioteca de contenido, no mezclados con las
-    // categorias de arriba, de ahi la linea separadora. No tocan
-    // ctx.currentCategoryInt/LibraryCategory: usan su propio modo
-    // (ctx.sideModeInt, ver UI::LibrarySideMode en LibraryPanel.h). Red y
-    // Mobile vivian aca tambien; se mudaron a Ajustes > Conexiones (ver
-    // CategoryConnections.cpp), junto con Streaming (RTMP) y OSC. Reloj
-    // tambien vivia aca; se saco por quedar duplicado con el toolbar inline
-    // de ViewPanel (ver InlineTool::Clock).
-    {
-        ImVec2 p = ImGui::GetCursorScreenPos();
-        dl->AddRectFilled(p, { p.x + sidebarW, p.y + 1.0f }, IM_COL32(255, 255, 255, 28));
-        ImGui::Dummy({ sidebarW, 1.0f + btnGapY });
-    }
+    // categorias de arriba. Antes llevaban una linea separadora de 1px acá
+    // -- pedido explicito de sacarla (se veia como un corte feo en el
+    // rail); el espacio extra de por si ya lee como "grupo aparte" sin
+    // necesidad de la linea. No tocan ctx.currentCategoryInt/LibraryCategory:
+    // usan su propio modo (ctx.sideModeInt, ver UI::LibrarySideMode en
+    // LibraryPanel.h). Red y Mobile vivian aca tambien; se mudaron a
+    // Ajustes > Conexiones (ver CategoryConnections.cpp), junto con
+    // Streaming (RTMP) y OSC. Reloj tambien vivia aca; se saco por quedar
+    // duplicado con el toolbar inline de ViewPanel (ver InlineTool::Clock).
+    ImGui::Dummy({ sidebarW, 8.0f });
 
     struct SideDef { const char* label; DrawFn drawIcon; int mode; };
     static const SideDef k_SideItems[] = {

@@ -10,20 +10,36 @@ namespace ProyecThor::UI::Settings {
 
 using namespace ProyecThor::Settings;
 
-// Categoria propia (antes vivian como subcategorias fusionadas dentro de
-// Proyeccion, y antes de eso como categorias de nivel superior sueltas --
-// pedido explicito de volver a subirlas a su propia categoria, esta vez
-// con las 4 como subcategorias propias, no fusionadas entre si) -- las 4
-// son "como se conecta la app hacia afuera": la sala (LAN), celulares
-// (Mobile), transmision en vivo (Streaming RTMP) y luces/controladores
-// (OSC).
+static void SubDivider(const char* label) {
+    const auto& theme = SettingsManager::Get().GetSettings().theme;
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImVec2      pos = ImGui::GetCursorScreenPos();
+    float       w   = ImGui::GetContentRegionAvail().x;
+    ImVec2      ts  = ImGui::CalcTextSize(label);
+    float       cy  = pos.y + ts.y * 0.5f;
+
+    ImVec4 accent(theme.accent[0], theme.accent[1], theme.accent[2], 1.0f);
+    ImU32  colSolid = ImGui::ColorConvertFloat4ToU32(ImVec4(accent.x, accent.y, accent.z, 0.65f));
+    ImU32  colFade  = ImGui::ColorConvertFloat4ToU32(ImVec4(accent.x, accent.y, accent.z, 0.0f));
+    ImU32  textCol  = ImGui::ColorConvertFloat4ToU32(
+        ImVec4(theme.textDim[0], theme.textDim[1], theme.textDim[2], theme.textDim[3]));
+
+    const float leadW = 18.0f, gap = 10.0f;
+    dl->AddRectFilledMultiColor(ImVec2(pos.x, cy), ImVec2(pos.x + leadW, cy + 1.5f),
+        colFade, colSolid, colSolid, colFade);
+    dl->AddText(ImVec2(pos.x + leadW + gap, pos.y), textCol, label);
+    float tailX = pos.x + leadW + gap + ts.x + gap;
+    dl->AddRectFilledMultiColor(ImVec2(tailX, cy), ImVec2(pos.x + w, cy + 1.5f),
+        colSolid, colFade, colFade, colFade);
+
+    ImGui::Dummy(ImVec2(w, ts.y + 10.0f));
+}
+
 void SettingsPanel::RenderCategoryConnections() {
-    ImGui::TextDisabled("Como se conecta la app hacia afuera: sala, celulares y transmision.");
-    ImGui::Spacing();
 
     if (SectionTitle("Red (LAN)")) {
-        ImGui::TextDisabled("Conexion LAN con Stage y otros equipos de la sala.");
-        ImGui::Spacing();
         if (m_StreamingPanelRef)
             m_StreamingPanelRef->RenderContent();
         else
@@ -33,8 +49,6 @@ void SettingsPanel::RenderCategoryConnections() {
     ImGui::Spacing();
 
     if (SectionTitle("Mobile")) {
-        ImGui::TextDisabled("App movil complementaria: control remoto y sincronizacion.");
-        ImGui::Spacing();
         if (m_SyncPanelRef)
             m_SyncPanelRef->RenderContent();
         else
@@ -43,12 +57,7 @@ void SettingsPanel::RenderCategoryConnections() {
 
     ImGui::Spacing();
 
-    // Los 3 bloques comparten navGroup="Streaming": una sola entrada en el
-    // sidebar en vez de 3 sueltas, mismo criterio que CategoryTheme.cpp usa
-    // para Temas/Colores/Fuentes/Diseño.
     if (SectionTitle("Captura", "Streaming")) {
-        ImGui::TextDisabled("Transmision RTMP: que se captura, como se compone y cuando arranca.");
-        ImGui::Spacing();
         if (m_BroadcastPanelRef)
             m_BroadcastPanelRef->RenderCaptureSection();
         else
@@ -57,12 +66,12 @@ void SettingsPanel::RenderCategoryConnections() {
         ImGui::Spacing();
 
         if (m_BroadcastPanelRef) {
-            ImGui::SeparatorText("Capa (Layer)");
+            SubDivider("CAPA (LAYER)");
             m_BroadcastPanelRef->RenderLayerSection();
 
             ImGui::Spacing();
 
-            ImGui::SeparatorText("Iniciar");
+            SubDivider("INICIAR");
             m_BroadcastPanelRef->RenderStartSection();
         }
     }
@@ -70,8 +79,6 @@ void SettingsPanel::RenderCategoryConnections() {
     ImGui::Spacing();
 
     if (SectionTitle("OSC")) {
-        ImGui::TextDisabled("Luces y controladores externos via OSC.");
-        ImGui::Spacing();
         if (m_OSCPanelRef)
             m_OSCPanelRef->RenderContent();
         else

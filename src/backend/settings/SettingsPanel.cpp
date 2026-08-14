@@ -214,7 +214,12 @@ void SettingsPanel::Render(bool* isOpen) {
     const bool justOpened = !m_WasOpenLastFrame;
     m_WasOpenLastFrame = true;
 
-    const ImVec2 baseSize(900.0f, 650.0f);
+    // Ancho base subido de 900 a 1040: algunas subcategorias (Conexiones >
+    // Red/Mobile/Streaming) embeben tarjetas en grilla (selector de modo a
+    // 3 columnas, contenedor de resolucion, QR) pensadas para un panel
+    // ancho -- con 900px + sidebar de 240 + padding quedaban aplastadas
+    // contra el borde. 1040 les da un ancho de contenido util de ~670px.
+    const ImVec2 baseSize(1040.0f, 700.0f);
 
     ImGuiViewport* vp = ImGui::GetMainViewport();
     ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f,
@@ -232,7 +237,7 @@ void SettingsPanel::Render(bool* isOpen) {
         ImGui::SetNextWindowSize(baseSize, ImGuiCond_Always);
     }
 
-    ImGui::SetNextWindowSizeConstraints(ImVec2(720, 500), ImVec2(FLT_MAX, FLT_MAX));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(820, 560), ImVec2(FLT_MAX, FLT_MAX));
 
     // Este panel es una utilidad flotante independiente: nunca debe poder
     // acoplarse (dock) a otras ventanas ni aceptar que otras se acoplen a
@@ -667,21 +672,17 @@ void SettingsPanel::RenderContent() {
         ImGui::SetScrollY(0.0f);
     }
 
-    // Título de la sección
+    // Título de la sección. Sin subtítulo/descripción debajo -- pedido
+    // explícito de sacarlo (sobraba: cada categoría ya explica lo suyo en
+    // el cuerpo, y el nombre de la categoría + la subcategoría activa en el
+    // sidebar ya dicen dónde está parado el usuario).
     ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textPrimary));
     ImGui::SetWindowFontScale(1.6f);
     ImGui::TextUnformatted(k_Categories[m_SelectedCategory].label);
     ImGui::SetWindowFontScale(1.0f);
     ImGui::PopStyleColor();
 
-    ImGui::Dummy(ImVec2(0.0f, 2.0f));
-
-    // Subtítulo
-    ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textDim));
-    ImGui::TextUnformatted(k_Categories[m_SelectedCategory].description);
-    ImGui::PopStyleColor();
-
-    ImGui::Dummy(ImVec2(0.0f, 20.0f));
+    ImGui::Dummy(ImVec2(0.0f, 16.0f));
 
     // Separador líquido (degradado que se desvanece), color = acento del tema
     ImVec2 p = ImGui::GetCursorScreenPos();

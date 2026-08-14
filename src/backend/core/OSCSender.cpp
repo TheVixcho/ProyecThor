@@ -133,10 +133,26 @@ bool ParseOSCPacket(const char* data, size_t len, std::string& outAddress, std::
             std::string v;
             if (!ReadOSCString(data, len, pos, v)) return false;
             outArgs.push_back(OSCArg::MakeString(v));
+        } else if (tag == 'T') {
+            // Bool "true" -- OSC 1.0 estandar: el tipo va SOLO en el type
+            // tag, sin bytes de dato en el cuerpo del mensaje (a
+            // diferencia de i/f/s). TouchOSC y la mayoria de controladores
+            // de luces mandan sus botones/toggles asi -- sin esto, cada
+            // apriete de un toggle llegaba con args vacios y se ignoraba
+            // en silencio (ver OSCPanel::ApplyReceivedMessages).
+            outArgs.push_back(OSCArg::MakeInt(1));
+        } else if (tag == 'F') {
+            outArgs.push_back(OSCArg::MakeInt(0));
+        } else if (tag == 'N' || tag == 'I') {
+            // Nil / Infinitum -- tampoco llevan bytes de dato, y no hay un
+            // valor util que darles acá: se saltean sin agregar arg (no
+            // hace falta "break", el resto del mensaje sigue siendo
+            // parseable normalmente).
         } else {
-            // Tipo no soportado (blob, timetag, etc.) -- se descarta el
-            // resto del mensaje en vez de fallar todo el parseo: el
-            // address y los args ya leidos siguen siendo utiles.
+            // Tipo no soportado (blob, timetag, array, etc.) -- se
+            // descarta el resto del mensaje en vez de fallar todo el
+            // parseo: el address y los args ya leidos siguen siendo
+            // utiles.
             break;
         }
     }

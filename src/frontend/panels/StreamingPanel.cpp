@@ -177,6 +177,56 @@ static void SectionDivider(const char* label)
     dl->AddText(ImVec2(tx, pos.y), Col(kAccent), label);
     ImGui::Dummy(ImVec2(w, ts.y + 12.0f));
 }
+
+// Progreso animado (0..1), mismo patron de ImGuiStorage+lerp que el resto
+// de la pasada de modernizacion (ver CategoryTheme::AnimT / BroadcastPanel::
+// BroadcastAnimT) -- cada archivo tiene su propia copia chica por vivir en
+// unidades de traduccion separadas.
+static float StreamAnimT(ImGuiID id, ImU32 salt, bool target, float speed = 12.0f) {
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    float* t = storage->GetFloatRef(id ^ salt, target ? 1.0f : 0.0f);
+    float dst = target ? 1.0f : 0.0f;
+    *t += (dst - *t) * std::min(1.0f, ImGui::GetIO().DeltaTime * speed);
+    return *t;
+}
+
+// Interruptor tipo "toggle" (pastilla + circulo animado) en vez del
+// checkbox cuadrado por defecto de ImGui -- pedido explicito de "mejores
+// botones", mismo lenguaje visual que un toggle moderno.
+static bool DrawToggleSwitch(const char* id, bool value) {
+    ImGui::PushID(id);
+    ImVec2 size(38.0f, 20.0f);
+    ImGui::InvisibleButton("##t", size);
+    bool clicked = ImGui::IsItemClicked();
+    bool hovered = ImGui::IsItemHovered();
+
+    ImGuiID gid = ImGui::GetID("##t");
+    float   onT = StreamAnimT(gid, 0xA1u, value, 10.0f);
+
+    ImVec2 p0 = ImGui::GetItemRectMin();
+    ImVec2 p1 = ImGui::GetItemRectMax();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    ImVec4 trackCol(
+        kSurface3.x + (kAccent.x - kSurface3.x) * onT,
+        kSurface3.y + (kAccent.y - kSurface3.y) * onT,
+        kSurface3.z + (kAccent.z - kSurface3.z) * onT,
+        hovered ? 1.0f : 0.9f);
+    dl->AddRectFilled(p0, p1, ImGui::ColorConvertFloat4ToU32(trackCol), size.y * 0.5f);
+    // Borde siempre visible -- sin esto, en estado "apagado" la pastilla
+    // (kSurface3) se confundia con el fondo de la tarjeta que la contiene
+    // (kSurface2, un tono muy parecido) y quedaba leyendose como un
+    // circulo suelto en vez de un interruptor.
+    dl->AddRect(p0, p1, IM_COL32(255, 255, 255, onT > 0.5f ? 0 : 35), size.y * 0.5f, 0, 1.2f);
+
+    float knobR = size.y * 0.5f - 2.0f;
+    float knobX = p0.x + size.y * 0.5f + (size.x - size.y) * onT;
+    float knobY = (p0.y + p1.y) * 0.5f;
+    dl->AddCircleFilled(ImVec2(knobX, knobY), knobR, IM_COL32(255, 255, 255, 255));
+
+    ImGui::PopID();
+    return clicked;
+}
 // Frecuencia de CAPTURA deseada segun el modo activo. Debe calzar con el
 // ritmo al que realmente se va a enviar, para no gastar CPU comprimiendo
 // frames que nunca se transmiten a tiempo (o que quedan obsoletos antes
@@ -225,16 +275,12 @@ void StreamingPanel::RenderContent()
     auto& core  = Core::PresentationCore::Get();
     auto  state = core.GetState();
 
-    // Activamos la región del Child permitiendo scroll automático
-    ImGui::PushStyleColor(ImGuiCol_ScrollbarBg, ImVec4(0,0,0,0));
-    ImGui::PushStyleColor(ImGuiCol_ScrollbarGrab, ColA(kGrayText, 0.2f));
-    ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabHovered, ColA(kAccent, 0.5f));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,   ImVec2(10.0f, 10.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize, 6.0f);
-
-    ImGui::BeginChild("##scroll_area", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_None);
-    ImGui::PopStyleVar(2);
-    ImGui::PopStyleColor(3);
+    // Sin BeginChild propio a proposito: RenderContent() solo se llama desde
+    // dentro del area ya scrolleable de Ajustes > Conexiones (ver
+    // CategoryConnections.cpp) -- un child scrolleable anidado aca adentro
+    // producia un doble scrollbar (uno de este child, otro del contenedor
+    // de Ajustes) y le recortaba altura disponible a las tarjetas de abajo.
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10.0f, 10.0f));
 
     RenderServerControl();
     RenderLayerSelector();
@@ -245,7 +291,7 @@ void StreamingPanel::RenderContent()
     }
 
     ImGui::Dummy(ImVec2(0.0f, 20.0f)); // Espacio final respiratorio
-    ImGui::EndChild();
+    ImGui::PopStyleVar();
 }
 
 // ── RenderServerControl ───────────────────────────────────────────────────────
@@ -317,37 +363,38 @@ void StreamingPanel::RenderServerControl()
     ImGui::Spacing();
 
     // ── Botón ON/OFF ─────────────────────────────────────────────────────
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(0.0f, 12.0f));
+    // InvisibleButton + hover animado en vez de ImGui::Button con un solo
+    // color plano -- mismo criterio ya aplicado en BroadcastPanel/OSCPanel,
+    // para que el boton principal de esta pagina se sienta tan "vivo" como
+    // el resto de Conexiones ya modernizado.
+    {
+        ImVec4 mainCol = on ? kRed : kGreen;
+        const char* mainLabel = on ? "DETENER TRANSMISIÓN" : "INICIAR TRANSMISIÓN";
 
-    if (!on) {
-        ImGui::PushStyleColor(ImGuiCol_Button, ColA(kGreen, 0.15f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ColA(kGreen, 0.25f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ColA(kGreen, 0.35f));
-        ImGui::PushStyleColor(ImGuiCol_Text, kGreen);
-        ImGui::PushStyleColor(ImGuiCol_Border, ColA(kGreen, 0.5f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
-        
-        if (ImGui::Button("INICIAR TRANSMISIÓN", ImVec2(w, 0.0f)))
-            core.ToggleNetworkStream(true, m_Port);
-            
-        ImGui::PopStyleVar(1);
-        ImGui::PopStyleColor(5);
-    } else {
-        ImGui::PushStyleColor(ImGuiCol_Button, ColA(kRed, 0.15f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ColA(kRed, 0.25f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ColA(kRed, 0.35f));
-        ImGui::PushStyleColor(ImGuiCol_Text, kRed);
-        ImGui::PushStyleColor(ImGuiCol_Border, ColA(kRed, 0.5f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
-        
-        if (ImGui::Button("DETENER TRANSMISIÓN", ImVec2(w, 0.0f)))
-            core.ToggleNetworkStream(false);
-            
-        ImGui::PopStyleVar(1);
-        ImGui::PopStyleColor(5);
+        ImGui::PushID("##serverToggleBtn");
+        ImVec2 btnSize(w, 40.0f);
+        ImGui::InvisibleButton("##b", btnSize);
+        bool hoveredBtn = ImGui::IsItemHovered();
+        bool clickedBtn = ImGui::IsItemClicked();
+
+        ImGuiID bid    = ImGui::GetID("##b");
+        float   hoverT = StreamAnimT(bid, 0xB3u, hoveredBtn, 14.0f);
+
+        ImVec2 bp0 = ImGui::GetItemRectMin();
+        ImVec2 bp1 = ImGui::GetItemRectMax();
+        dl->AddRectFilled(bp0, bp1, ColA(mainCol, 0.15f + hoverT * 0.10f), 10.0f);
+        dl->AddRect(bp0, bp1, ColA(mainCol, 0.5f + hoverT * 0.25f), 10.0f, 0, 1.5f);
+
+        ImVec2 lts = ImGui::CalcTextSize(mainLabel);
+        dl->AddText({ (bp0.x + bp1.x - lts.x) * 0.5f, (bp0.y + bp1.y - lts.y) * 0.5f },
+            Col(mainCol), mainLabel);
+        ImGui::PopID();
+
+        if (clickedBtn) {
+            if (!on) core.ToggleNetworkStream(true, m_Port);
+            else     core.ToggleNetworkStream(false);
+        }
     }
-    ImGui::PopStyleVar(2);
     ImGui::Dummy(ImVec2(0.0f, 10.0f));
 }
 
@@ -378,6 +425,18 @@ void StreamingPanel::RenderLayerSelector()
     // Guardamos la base del eje Y local de las filas
     float startRowsLocalY = ImGui::GetCursorPosY();
 
+    // Columna de nombre a ancho FIJO (antes la descripcion arrancaba justo
+    // despues del nombre via SameLine, asi que "Fondo"/"Textos"/"Overlay"
+    // -- todos de largo distinto -- dejaban la columna de descripciones
+    // despareja entre filas. Ahora el nombre vive en una columna de ancho
+    // constante y la descripcion siempre arranca en la misma X, y el
+    // control pasa al toggle switch a la derecha (mismo layout "etiqueta
+    // izquierda / control derecha" del resto de la app).
+    const float nameColX = 16.0f;
+    const float nameColW = 90.0f;
+    const float descColX = nameColX + nameColW + 8.0f;
+    const float toggleX  = w - 38.0f - 16.0f;
+
     for (int i = 0; i < 3; ++i) {
         auto& row   = rows[i];
         float currentLocalY = startRowsLocalY + (i * rowH);
@@ -386,36 +445,27 @@ void StreamingPanel::RenderLayerSelector()
         ImVec2 p1 = ImVec2(p0.x + w, p0.y + rowH);
 
         ImDrawFlags corners = (i == 0) ? ImDrawFlags_RoundCornersTop :
-                              (i == 2) ? ImDrawFlags_RoundCornersBottom : 
+                              (i == 2) ? ImDrawFlags_RoundCornersBottom :
                                          ImDrawFlags_RoundCornersNone;
 
         dl->AddRectFilled(p0, p1, Col(kSurface2), 12.0f, corners);
-        
-        if (i < 2) 
+
+        if (i < 2)
             dl->AddLine(ImVec2(p0.x + 16.0f, p1.y), ImVec2(p1.x - 16.0f, p1.y), IM_COL32(255, 255, 255, 10), 1.0f);
 
-        ImGui::PushStyleColor(ImGuiCol_CheckMark, kAccent);
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, Col(kSurface));
-        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ColA(kAccent, 0.2f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 4.0f));
-
-        // Alineación perfecta basada en coordenadas locales relativas a la fila
-        float localCbY = currentLocalY + (rowH - ImGui::GetFrameHeight()) * 0.5f;
-        ImGui::SetCursorPos(ImVec2(16.0f, localCbY));
-
-        bool v = *row.val;
-        if (ImGui::Checkbox(row.id, &v)) { *row.val = v; dirty = true; }
-
-        ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor(3);
-
-        ImGui::SameLine(0.0f, 12.0f);
-        ImGui::SetCursorPosY(currentLocalY + (rowH - ImGui::GetTextLineHeight()) * 0.5f);
+        float textY = currentLocalY + (rowH - ImGui::GetTextLineHeight()) * 0.5f;
+        ImGui::SetCursorPos(ImVec2(nameColX, textY));
         ImGui::TextUnformatted(row.name);
-        
-        ImGui::SameLine(0.0f, 8.0f);
-        ImGui::TextColored(kGrayDim, "- %s", row.desc);
+
+        ImGui::SetCursorPos(ImVec2(descColX, textY));
+        ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + (toggleX - descColX - 16.0f));
+        ImGui::TextColored(kGrayDim, "%s", row.desc);
+        ImGui::PopTextWrapPos();
+
+        ImGui::SetCursorPos(ImVec2(toggleX, currentLocalY + (rowH - 20.0f) * 0.5f));
+        char toggleId[16];
+        snprintf(toggleId, sizeof(toggleId), "##tg%d", i);
+        if (DrawToggleSwitch(toggleId, *row.val)) { *row.val = !*row.val; dirty = true; }
     }
 
     // Avanzamos el cursor de forma segura saltándonos las 3 filas
@@ -427,62 +477,138 @@ void StreamingPanel::RenderLayerSelector()
     SectionDivider("RESOLUCIÓN Y CALIDAD");
 
     // ── Contenedor de resolución ─────────────────────────────────────────
+    // Reformulado de raiz: las dos versiones anteriores calculaban la
+    // altura de la tarjeta A MANO (sumando alturas/gaps estimados) y
+    // posicionaban cada fila con SetCursorPos absoluto -- cualquier
+    // numerito que no calzara exacto con lo que ImGui realmente dibujaba
+    // dejaba huecos o textos pegados/flotando. Ahora el contenido fluye
+    // solo dentro de un BeginChild con AutoResizeY: el alto lo calcula
+    // ImGui a partir de lo que efectivamente se dibuja, no una estimacion
+    // nuestra. Definicion visual via borde + fondo propio del child (en
+    // vez de la sombra externa que usan las otras tarjetas de esta pagina)
+    // -- un child anidado es OTRA ventana de ImGui con su propia
+    // ImDrawList, así que el truco de ChannelsSplit para meter una sombra
+    // "detrás" (que sí funciona con dibujado plano, ver la pildora de
+    // seleccion del sidebar de Ajustes) no aplica de forma confiable acá.
+    static bool s_ShowCustomRes = false;
     {
-        float containerH = 120.0f;
-        ImVec2 p0 = ImGui::GetCursorScreenPos();
-        ImVec2 p1 = ImVec2(p0.x + w, p0.y + containerH);
-        DrawSoftShadow(dl, p0, p1, 12.0f);
-        dl->AddRectFilled(p0, p1, Col(kSurface2), 12.0f);
-        
-        float startContainerLocalY = ImGui::GetCursorPosY();
-        
-        // Fila Inputs
-        ImGui::SetCursorPos(ImVec2(16.0f, startContainerLocalY + 16.0f));
-        float half = (w - 32.0f - 16.0f) * 0.5f;
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, Col(kSurface2));
+        ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32(255, 255, 255, 14));
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 12.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 14.0f));
+        ImGui::BeginChild("##resCard", ImVec2(w, 0.0f),
+            ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_Borders,
+            ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, Col(kSurface));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 6.0f));
+        float innerW = ImGui::GetContentRegionAvail().x;
 
-        ImGui::TextColored(kGrayText, "Ancho");
-        ImGui::SameLine(0.0f, 8.0f);
-        ImGui::SetNextItemWidth(half - 45.0f);
-        ImGui::InputInt("##rw", &m_Config.frameWidth, 0, 0);
+        ImGui::TextColored(kGrayText, "Tamaño");
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
-        ImGui::SameLine(0.0f, 16.0f);
-        ImGui::TextColored(kGrayText, "Alto");
-        ImGui::SameLine(0.0f, 8.0f);
-        ImGui::SetNextItemWidth(half - 45.0f);
-        ImGui::InputInt("##rh", &m_Config.frameHeight, 0, 0);
+        struct Preset { const char* label; int w; int h; };
+        static const Preset presets[] = {
+            { "Básica",   640,  360  },
+            { "Estándar", 1280, 720  },
+            { "Alta",     1920, 1080 },
+        };
+        float presetGap = 8.0f;
+        float presetW   = (innerW - presetGap * 2.0f) / 3.0f;
 
-        ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor(1);
+        for (int i = 0; i < 3; i++) {
+            const auto& pr = presets[i];
+            bool active = (m_Config.frameWidth == pr.w && m_Config.frameHeight == pr.h);
 
-        m_Config.frameWidth  = std::max(320,  std::min(1920, m_Config.frameWidth));
-        m_Config.frameHeight = std::max(180,  std::min(1080, m_Config.frameHeight));
-        
-        // Fila Texto Slider
-        ImGui::SetCursorPos(ImVec2(16.0f, startContainerLocalY + 58.0f));
-        ImGui::TextColored(kGrayText, "Compresión JPEG:");
+            ImGui::PushID(i);
+            ImGui::PushStyleColor(ImGuiCol_Button, active ? ColA(kAccent, 0.30f) : Col(kSurface));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ColA(kAccent, 0.40f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ColA(kAccent, 0.50f));
+            ImGui::PushStyleColor(ImGuiCol_Text, active ? kAccent : kGrayText);
+            ImGui::PushStyleColor(ImGuiCol_Border, active ? ColA(kAccent, 0.6f) : IM_COL32(255, 255, 255, 20));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+            if (ImGui::Button(pr.label, ImVec2(presetW, 30.0f))) {
+                m_Config.frameWidth  = pr.w;
+                m_Config.frameHeight = pr.h;
+                m_ConfigDirty = true;
+                s_ShowCustomRes = false;
+            }
+            ImGui::PopStyleVar(2);
+            ImGui::PopStyleColor(5);
+            ImGui::PopID();
+            if (i < 2) ImGui::SameLine(0.0f, presetGap);
+        }
+
+        ImGui::Dummy(ImVec2(0.0f, 14.0f));
+
+        // Fila "Personalizado": texto a la izquierda, toggle pegado al
+        // borde derecho -- ambos sobre la MISMA linea logica (SameLine con
+        // X absoluto), altura de fila = la mas alta de las dos (el toggle,
+        // 20px), asi ninguno queda flotando respecto del otro.
+        {
+            float rowH = std::max(ImGui::GetTextLineHeight(), 20.0f);
+            float rowY = ImGui::GetCursorPosY();
+            ImGui::SetCursorPosY(rowY + (rowH - ImGui::GetTextLineHeight()) * 0.5f);
+            ImGui::TextColored(kGrayDim, "Personalizado (ancho/alto exactos)");
+            ImGui::SameLine(innerW - 38.0f);
+            ImGui::SetCursorPosY(rowY + (rowH - 20.0f) * 0.5f);
+            if (DrawToggleSwitch("##customRes", s_ShowCustomRes)) s_ShowCustomRes = !s_ShowCustomRes;
+            ImGui::SetCursorPosY(rowY + rowH);
+        }
+
+        if (s_ShowCustomRes) {
+            ImGui::Dummy(ImVec2(0.0f, 10.0f));
+            float half = (innerW - 16.0f) * 0.5f;
+
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, Col(kSurface));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 5.0f));
+
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(kGrayDim, "Ancho");
+            ImGui::SameLine(0.0f, 8.0f);
+            ImGui::SetNextItemWidth(half - 45.0f);
+            ImGui::InputInt("##rw", &m_Config.frameWidth, 0, 0);
+
+            ImGui::SameLine(0.0f, 16.0f);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(kGrayDim, "Alto");
+            ImGui::SameLine(0.0f, 8.0f);
+            ImGui::SetNextItemWidth(half - 45.0f);
+            ImGui::InputInt("##rh", &m_Config.frameHeight, 0, 0);
+
+            ImGui::PopStyleVar(2);
+            ImGui::PopStyleColor(1);
+
+            m_Config.frameWidth  = std::max(320,  std::min(1920, m_Config.frameWidth));
+            m_Config.frameHeight = std::max(180,  std::min(1080, m_Config.frameHeight));
+        }
+
+        ImGui::Dummy(ImVec2(0.0f, 14.0f));
+
+        // Calidad de imagen (antes "Compresión JPEG" -- termino tecnico
+        // que no dice nada a alguien que no sabe de video).
+        ImGui::TextColored(kGrayText, "Calidad de imagen:");
         ImGui::SameLine();
         ImGui::TextColored(kAccent, "%d%%", m_Config.jpegQuality);
+        ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
-        // Fila Renderizado del Slider
-        ImGui::SetCursorPos(ImVec2(16.0f, startContainerLocalY + 84.0f));
         ImGui::PushStyleColor(ImGuiCol_SliderGrab, kAccent);
         ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ColA(kAccent, 0.8f));
         ImGui::PushStyleColor(ImGuiCol_FrameBg, Col(kSurface));
         ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, 6.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
-        ImGui::SetNextItemWidth(w - 32.0f);
-        
+        ImGui::SetNextItemWidth(innerW);
+
         if (ImGui::SliderInt("##q", &m_Config.jpegQuality, 20, 100, ""))
             m_ConfigDirty = true;
-            
+
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor(3);
-        
-        ImGui::SetCursorPosY(startContainerLocalY + containerH);
+
+        ImGui::EndChild();
+        ImGui::PopStyleVar(3);
+        ImGui::PopStyleColor(2);
     }
 
     if (m_ConfigDirty && on) {
@@ -506,14 +632,14 @@ void StreamingPanel::RenderQualitySelector()
         const char* id; const char* title; const char* sub1; const char* sub2;
         bool active; VM mode;
     } cards[3] = {
-        { "##ll", "Bajo Consumo", "~150 ms latencia",
-          "Polling (dispositivos lentos)",
+        { "##ll", "Bajo Consumo", "~150 ms de retraso",
+          "Para redes o celulares lentos",
           m_Config.videoMode == VM::LowLatency,  VM::LowLatency  },
-        { "##hq", "Alta Calidad", "< 33 ms latencia",
-          "MJPEG fluido (recomendado)",
+        { "##hq", "Alta Calidad", "< 33 ms de retraso",
+          "Fluido -- recomendado",
           m_Config.videoMode == VM::HighQuality, VM::HighQuality },
-        { "##us", "Ultra Estable", "Mas delay, cero cortes",
-          "MJPEG a FPS fijo + nitidez maxima",
+        { "##us", "Ultra Estable", "Mas retraso, cero cortes",
+          "Ideal para pantallas grandes",
           m_Config.videoMode == VM::UltraStable, VM::UltraStable },
     };
 

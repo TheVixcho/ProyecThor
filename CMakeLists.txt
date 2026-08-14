@@ -114,6 +114,7 @@ file(GLOB FRONTEND_STYLES_SOURCES   CONFIGURE_DEPENDS "src/frontend/panels/style
 file(GLOB FRONTEND_VIEWS_SOURCES    CONFIGURE_DEPENDS "src/frontend/views/*.cpp")
 file(GLOB FRONTEND_VIEWS_BIBLIA_SOURCES CONFIGURE_DEPENDS "src/frontend/views/biblia/*.cpp")
 file(GLOB FRONTEND_UI_SOURCES       CONFIGURE_DEPENDS "src/frontend/ui/*.cpp")
+file(GLOB FRONTEND_UI_LANG_SOURCES  CONFIGURE_DEPENDS "src/frontend/ui/lenguaje/*.cpp")
 file(GLOB PREVIEW_DOC_SOURCES       CONFIGURE_DEPENDS "src/frontend/views/documents/*.cpp")
 file(GLOB PREVIEW_MON_SOURCES       CONFIGURE_DEPENDS "src/frontend/panels/preview/monitors/*.cpp")
 file(GLOB PREVIEW_MON_SOURCES       CONFIGURE_DEPENDS "src/frontend/panels/stb_image_write_impl.cpp")
@@ -178,6 +179,7 @@ if(WIN32)
         ${FRONTEND_VIEWS_SOURCES}
         ${FRONTEND_VIEWS_BIBLIA_SOURCES}
         ${FRONTEND_UI_SOURCES}
+        ${FRONTEND_UI_LANG_SOURCES}
         ${FRONTEND_WINDOWING_SOURCES}
         ${PREVIEW_DOC_SOURCES}
         ${PREVIEW_MON_SOURCES}
@@ -209,6 +211,7 @@ else()
         ${FRONTEND_VIEWS_SOURCES}
         ${FRONTEND_VIEWS_BIBLIA_SOURCES}
         ${FRONTEND_UI_SOURCES}
+        ${FRONTEND_UI_LANG_SOURCES}
         ${FRONTEND_WINDOWING_SOURCES}
         ${PREVIEW_DOC_SOURCES}
         ${PREVIEW_MON_SOURCES}

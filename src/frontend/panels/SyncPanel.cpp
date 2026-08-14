@@ -107,21 +107,17 @@ void SyncPanel::Update() {
 void SyncPanel::RenderContent() {
     SyncPalette();
 
-    ImGui::PushStyleColor(ImGuiCol_ScrollbarBg, ImVec4(0,0,0,0));
-    ImGui::PushStyleColor(ImGuiCol_ScrollbarGrab, ColA(kGrayText, 0.2f));
-    ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabHovered, ColA(kAccent, 0.5f));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,   ImVec2(10.0f, 10.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize, 6.0f);
-
-    ImGui::BeginChild("##sync_scroll_area", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_None);
-    ImGui::PopStyleVar(2);
-    ImGui::PopStyleColor(3);
+    // Sin BeginChild propio: ver comentario equivalente en
+    // StreamingPanel::RenderContent() -- este metodo solo vive embebido
+    // dentro del area ya scrolleable de Ajustes > Conexiones, un child
+    // scrolleable anidado aca adentro causaba doble scrollbar.
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10.0f, 10.0f));
 
     RenderServerControl();
     if (m_Server.IsRunning()) RenderPairingSection();
 
     ImGui::Dummy(ImVec2(0.0f, 20.0f));
-    ImGui::EndChild();
+    ImGui::PopStyleVar();
 }
 
 void SyncPanel::RenderServerControl() {
