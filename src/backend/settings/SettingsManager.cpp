@@ -826,6 +826,10 @@ void SettingsManager::SaveSettings() {
     j["sync"]["port"]       = m_Settings.sync.port;
     j["sync"]["pairingPin"] = m_Settings.sync.pairingPin;
 
+    j["ai"]["enabled"] = m_Settings.ai.enabled;
+    j["ai"]["apiKey"]  = m_Settings.ai.apiKey;
+    j["ai"]["model"]   = m_Settings.ai.model;
+
     std::string langStr = "es";
     if      (m_Settings.general.language == Language::English)    langStr = "en";
     else if (m_Settings.general.language == Language::Portuguese) langStr = "pt";
@@ -1058,6 +1062,13 @@ void SettingsManager::LoadSettings() {
             m_Settings.sync.enabled    = jsy.value("enabled", false);
             m_Settings.sync.port       = jsy.value("port", 8090);
             m_Settings.sync.pairingPin = jsy.value("pairingPin", "");
+        }
+
+        if (j.contains("ai")) {
+            const auto& jai = j["ai"];
+            m_Settings.ai.enabled = jai.value("enabled", false);
+            m_Settings.ai.apiKey  = jai.value("apiKey", "");
+            m_Settings.ai.model   = jai.value("model", "claude-sonnet-5");
         }
 
         if (j.contains("yggdrasil")) {

@@ -514,6 +514,19 @@ namespace ProyecThor::Settings {
         std::string pairingPin = "";
     };
 
+    // ── Asistente de IA (chat + edicion de canciones con confirmacion) ───
+    // Por ahora solo Anthropic Claude (Messages API) -- pedido explicito de
+    // arrancar con un solo proveedor; Gemini/ChatGPT quedan para una pasada
+    // futura si hace falta (por eso no hay un enum de "proveedor" todavia,
+    // seria una UI de elegir entre una sola opcion). apiKey vive en
+    // settings.json igual que streamKey (ver StreamingSettings) -- ese
+    // archivo ya esta en .gitignore por guardar credenciales de usuario.
+    struct AISettings {
+        bool        enabled = false;
+        std::string apiKey  = "";
+        std::string model   = "claude-sonnet-5";
+    };
+
     struct AppSettings {
         ProjectionSettings     projection;
         AudioSettings          audio;
@@ -533,6 +546,7 @@ namespace ProyecThor::Settings {
         StreamingSettings      streaming;
         SyncSettings           sync;
         TransitionSettings     transitions;
+        AISettings             ai;
     };
 
     class SettingsManager {

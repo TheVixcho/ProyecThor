@@ -158,20 +158,25 @@ void BroadcastPanel::RenderStartSection() {
 
     bool streaming = m_Encoder.IsStreaming();
 
-    // Tarjeta con sombra suave alrededor de los campos de conexion --
-    // mismo criterio visual que RenderLayerSection, para que las 3
-    // subsecciones de Captura se sientan parte de un mismo panel.
+    // BeginChild de alto automatico -- antes esta tarjeta calculaba su
+    // propio ancho/alto a mano (cardW/cardH=132 fijo) igual que las
+    // tarjetas de Ajustes > Conexiones > Red (LAN) tenian antes de
+    // reescribirse; mismo mecanismo, mismo bug potencial de margen
+    // desalineado entre tarjetas vecinas si alguna difiere en como
+    // interpreta el ancho disponible. Con BeginChild, el ancho es
+    // simplemente el que ImGui reporta para ESTA ventana, sin intermediarios.
     {
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        ImVec2 cardP0 = ImGui::GetCursorScreenPos();
-        float  cardW  = ImGui::GetContentRegionAvail().x;
-        float  cardH  = 132.0f;
-        BroadcastSoftShadow(dl, cardP0, { cardP0.x + cardW, cardP0.y + cardH }, 10.0f);
-        dl->AddRectFilled(cardP0, { cardP0.x + cardW, cardP0.y + cardH },
-            ImGui::ColorConvertFloat4ToU32(surf1), 10.0f);
+        float cardW = ImGui::GetContentRegionAvail().x;
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::ColorConvertFloat4ToU32(surf1));
+        ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32(255, 255, 255, 14));
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 10.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 14.0f));
+        ImGui::BeginChild("##startCard", ImVec2(cardW, 0.0f),
+            ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_Borders,
+            ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
-        ImGui::SetCursorScreenPos({ cardP0.x + 16.0f, cardP0.y + 14.0f });
-        ImGui::BeginGroup();
+        float innerW = ImGui::GetContentRegionAvail().x;
 
         if (streaming) ImGui::BeginDisabled();
 
@@ -184,11 +189,11 @@ void BroadcastPanel::RenderStartSection() {
             buffersInit = true;
         }
 
-        ImGui::SetNextItemWidth(cardW - 32.0f);
+        ImGui::SetNextItemWidth(innerW);
         if (ImGui::InputText("Servidor (rtmp://...)", serverBuf, sizeof(serverBuf)))
             s.serverUrl = serverBuf;
 
-        ImGui::SetNextItemWidth(cardW - 32.0f);
+        ImGui::SetNextItemWidth(innerW);
         if (ImGui::InputText("Clave de stream", keyBuf, sizeof(keyBuf), ImGuiInputTextFlags_Password))
             s.streamKey = keyBuf;
 
@@ -203,8 +208,10 @@ void BroadcastPanel::RenderStartSection() {
 
         if (streaming) ImGui::EndDisabled();
 
-        ImGui::EndGroup();
-        ImGui::SetCursorScreenPos({ cardP0.x, cardP0.y + cardH + 10.0f });
+        ImGui::EndChild();
+        ImGui::PopStyleVar(3);
+        ImGui::PopStyleColor(2);
+        ImGui::Dummy(ImVec2(0.0f, 10.0f));
     }
 
     ImGui::TextDisabled("La resolución de salida sigue a la fuente de Capture activa (no hay escalado).");

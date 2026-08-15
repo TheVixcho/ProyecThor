@@ -87,6 +87,12 @@ set(VLC_SDK    "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/vlc")
 set(VLC_SDK_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/vlc-linux")
 set(PDFIUM_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/pdfium")
 set(PDFIUM_SDK_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/pdfium-linux")
+# WebView2 (Asistente de IA, panel embebido -- ver AIWebViewPanel): headers +
+# import lib (.dll.lib) vendorizados desde el paquete NuGet oficial de
+# Microsoft (Microsoft.Web.WebView2). Solo Windows -- no existe equivalente
+# de WebView2 en Linux, ahi el panel del Asistente cae a abrir el navegador
+# externo del sistema (ver OpenURL.cpp).
+set(WEBVIEW2_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/webview2")
 set(HTTPLIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk")
 
 # ── 3. ARCHIVOS FUENTE ───────────────────────────────────────────────────────
@@ -229,6 +235,30 @@ target_compile_definitions(ProyecThor PRIVATE
     CPPHTTPLIB_NO_EXCEPTIONS
 )
 
+# OpenSSL para httplib::Client saliente por HTTPS (api.anthropic.com, ver
+# AIAssistant/ClaudeClient) -- todo lo que ya usaba httplib en este proyecto
+# (SyncServer, NetworkStreamServer, single-instance de main.cpp) era HTTP
+# plano contra localhost, asi que nunca hizo falta SSL hasta ahora. En
+# Windows es obligatorio (el toolchain de este proyecto es MSYS2/ucrt64,
+# que ya trae libssl/libcrypto); en Linux es opcional con fallback
+# silencioso (mismo criterio que OpenCV mas abajo) -- sin libssl-dev
+# instalado, el asistente de IA simplemente no puede conectarse (se avisa
+# en tiempo de ejecucion, no en compilacion).
+if(WIN32)
+    target_compile_definitions(ProyecThor PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
+    set(PROYECTHOR_HAS_OPENSSL TRUE)
+else()
+    find_package(OpenSSL QUIET)
+    if(OpenSSL_FOUND)
+        message(STATUS "OpenSSL encontrado (${OPENSSL_VERSION}): Asistente de IA (HTTPS saliente) habilitado")
+        target_compile_definitions(ProyecThor PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
+        set(PROYECTHOR_HAS_OPENSSL TRUE)
+    else()
+        message(STATUS "OpenSSL NO encontrado: el Asistente de IA no podra conectarse (instala libssl-dev y recompila)")
+        set(PROYECTHOR_HAS_OPENSSL FALSE)
+    endif()
+endif()
+
 if(WIN32)
     target_compile_definitions(ProyecThor PRIVATE
         NOMINMAX
@@ -287,7 +317,7 @@ target_include_directories(ProyecThor PRIVATE
 
 # El include de PDFium y VLC cambia segun la plataforma
 if(WIN32)
-    target_include_directories(ProyecThor PRIVATE "${PDFIUM_SDK}/include")
+    target_include_directories(ProyecThor PRIVATE "${PDFIUM_SDK}/include" "${WEBVIEW2_SDK}/include")
 else()
     target_include_directories(ProyecThor PRIVATE
         "${PDFIUM_SDK_LINUX}/include"
@@ -320,6 +350,7 @@ if(WIN32)
         "${VLC_SDK}/lib/libvlc.lib"
         "${VLC_SDK}/lib/libvlccore.lib"
         "${PDFIUM_LIB}"
+        "${WEBVIEW2_SDK}/x64/WebView2Loader.dll.lib"
         opengl32
         gdi32
         shell32
@@ -331,6 +362,17 @@ if(WIN32)
         winhttp
         d3d11
         dxgi
+        # OpenSSL (ver CPPHTTPLIB_OPENSSL_SUPPORT mas arriba) -- .a estaticos
+        # a proposito, no .dll.a: el ejecutable ya se linkea entero con
+        # -static (ver target_link_options mas abajo), asi que usar los
+        # estaticos evita que haga falta redistribuir libssl-3-x64.dll/
+        # libcrypto-3-x64.dll junto al .exe. crypt32/bcrypt son las
+        # dependencias del sistema que OpenSSL en Windows necesita para el
+        # almacen de certificados y el generador de numeros aleatorios.
+        ssl
+        crypto
+        crypt32
+        bcrypt
     )
 
     target_link_options(ProyecThor PRIVATE
@@ -427,6 +469,10 @@ else()
         pthread
         dl
     )
+
+    if(PROYECTHOR_HAS_OPENSSL)
+        target_link_libraries(ProyecThor PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+    endif()
 endif()
 
 # ── 7. COPIA DE ARCHIVOS EN RUNTIME (solo Windows) ───────────────────────────
@@ -452,6 +498,19 @@ if(WIN32)
                 "${VLC_SDK}/plugins"
                 "$<TARGET_FILE_DIR:ProyecThor>/plugins"
             COMMENT "Copiando plugins de VLC"
+        )
+    endif()
+
+    # WebView2Loader.dll: trampolin liviano que en runtime busca el Runtime
+    # de WebView2 real instalado en el sistema (viene con Windows 10/11 via
+    # Edge) -- sin esta DLL al lado del .exe, CreateCoreWebView2EnvironmentWithOptions
+    # falla siempre con HRESULT de "modulo no encontrado".
+    if(EXISTS "${WEBVIEW2_SDK}/x64/WebView2Loader.dll")
+        add_custom_command(TARGET ProyecThor POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${WEBVIEW2_SDK}/x64/WebView2Loader.dll"
+                "$<TARGET_FILE_DIR:ProyecThor>"
+            COMMENT "Copiando WebView2Loader.dll al directorio de salida"
         )
     endif()
 endif()
