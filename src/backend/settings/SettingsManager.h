@@ -256,6 +256,12 @@ namespace ProyecThor::Settings {
         Render,        // Biblioteca a pantalla completa, bloqueada en el conversor de
                        // formato (LibrarySideMode::Render) -- para codificar/decodificar
                        // video sin nada mas alrededor.
+        Audio,         // Editor de Audio a pantalla completa (ver AudioEditorPanel) --
+                       // placeholder por ahora, sin funcionalidad real todavia.
+        Video,         // Editor de Video a pantalla completa (ver VideoEditorPanel) --
+                       // idem Audio, placeholder por ahora.
+        Image,         // Editor de Imagen a pantalla completa (ver ImageEditorPanel) --
+                       // idem Audio, placeholder por ahora.
     };
 
     const char*            WorkspaceLayoutPresetName(WorkspaceLayoutPreset preset);

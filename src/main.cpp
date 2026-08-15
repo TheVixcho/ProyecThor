@@ -49,6 +49,9 @@
 #include "frontend/panels/ViewPanel.h"
 #include "frontend/panels/StylesHubPanel.h"
 #include "frontend/panels/StreamingWorkspacePanel.h"
+#include "frontend/panels/AudioEditorPanel.h"
+#include "frontend/panels/VideoEditorPanel.h"
+#include "frontend/panels/ImageEditorPanel.h"
 #include "frontend/panels/biblio/LibraryHelpers.h"
 #include "backend/core/AppPaths.h"
 #include "SplashScreen.h"
@@ -1019,6 +1022,20 @@ int main(int argc, char** argv)
     auto streamingWs = std::make_shared<ProyecThor::UI::StreamingWorkspacePanel>(&uiManager.GetBroadcastPanel());
     streamingWs->SetUIManager(&uiManager);
     uiManager.AddPanel(streamingWs);
+
+    // Presets "Audio"/"Video"/"Imagen" (ver Settings::WorkspaceLayoutPreset) --
+    // placeholders por ahora, reservados para futuros editores multimedia.
+    auto audioEditor = std::make_shared<ProyecThor::UI::AudioEditorPanel>();
+    audioEditor->SetUIManager(&uiManager);
+    uiManager.AddPanel(audioEditor);
+
+    auto videoEditor = std::make_shared<ProyecThor::UI::VideoEditorPanel>();
+    videoEditor->SetUIManager(&uiManager);
+    uiManager.AddPanel(videoEditor);
+
+    auto imageEditor = std::make_shared<ProyecThor::UI::ImageEditorPanel>();
+    imageEditor->SetUIManager(&uiManager);
+    uiManager.AddPanel(imageEditor);
 
     std::cerr << "[DIAG] Todos los paneles agregados OK\n";
 

@@ -200,6 +200,9 @@ const char* WorkspaceLayoutPresetName(WorkspaceLayoutPreset preset) {
         case WorkspaceLayoutPreset::Broadcast: return "Transmisión";
         case WorkspaceLayoutPreset::Library:   return "Biblioteca";
         case WorkspaceLayoutPreset::Render:    return "Render";
+        case WorkspaceLayoutPreset::Audio:     return "Audio";
+        case WorkspaceLayoutPreset::Video:     return "Video";
+        case WorkspaceLayoutPreset::Image:     return "Imagen";
         default:                               return "Clásico";
     }
 }
@@ -209,6 +212,9 @@ WorkspaceLayoutPreset WorkspaceLayoutPresetFromString(const std::string& s) {
     if (s == "broadcast") return WorkspaceLayoutPreset::Broadcast;
     if (s == "library")   return WorkspaceLayoutPreset::Library;
     if (s == "render")    return WorkspaceLayoutPreset::Render;
+    if (s == "audio")     return WorkspaceLayoutPreset::Audio;
+    if (s == "video")     return WorkspaceLayoutPreset::Video;
+    if (s == "image")     return WorkspaceLayoutPreset::Image;
     return WorkspaceLayoutPreset::Classic;
 }
 
@@ -218,6 +224,9 @@ static std::string WorkspaceLayoutPresetToKey(WorkspaceLayoutPreset preset) {
         case WorkspaceLayoutPreset::Broadcast: return "broadcast";
         case WorkspaceLayoutPreset::Library:   return "library";
         case WorkspaceLayoutPreset::Render:    return "render";
+        case WorkspaceLayoutPreset::Audio:     return "audio";
+        case WorkspaceLayoutPreset::Video:     return "video";
+        case WorkspaceLayoutPreset::Image:     return "image";
         default:                               return "classic";
     }
 }

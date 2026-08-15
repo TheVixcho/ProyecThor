@@ -849,6 +849,12 @@ void UIManager::RenderAll()
     if (m_ShowNotes)
         RenderNotesWindow();
 
+    // Se somete siempre (no solo cuando m_ShowAIAssistant es true): el
+    // WebView2 embebido necesita que se le avise UpdateBounds(...,
+    // visible=false) todos los frames mientras esta oculto, si no la ventana
+    // nativa hija se queda flotando encima de lo que sea que este debajo.
+    RenderAIAssistantWindow();
+
     // Editor a pantalla completa (Overlay/Estilos) activo -- ver
     // EnterFullscreenEditor. Reemplaza TODO lo de abajo (Hub/Proyector/
     // Ajustes/etc) por el contenido del editor, sin tocar la toolbar de
@@ -912,6 +918,9 @@ if (m_Mode == WorkspaceMode::Hub)
     const bool isLibraryWorkspace   = (activePreset == WorkspaceLayoutPreset::Library);
     const bool isRenderWorkspace    = (activePreset == WorkspaceLayoutPreset::Render);
     const bool isBroadcastWorkspace = (activePreset == WorkspaceLayoutPreset::Broadcast);
+    const bool isAudioWorkspace     = (activePreset == WorkspaceLayoutPreset::Audio);
+    const bool isVideoWorkspace     = (activePreset == WorkspaceLayoutPreset::Video);
+    const bool isImageWorkspace     = (activePreset == WorkspaceLayoutPreset::Image);
     if (m_LibraryPanelRef) {
         m_LibraryPanelRef->SetMediaOnlyMode(isLibraryWorkspace);
         m_LibraryPanelRef->SetRenderOnlyMode(isRenderWorkspace);
@@ -937,6 +946,15 @@ if (m_Mode == WorkspaceMode::Hub)
             continue;
         if (!isBroadcastWorkspace && panelName == "Transmisión")
             continue;
+        // "Audio"/"Video"/"Imagen": placeholder a pantalla completa (ver
+        // Build*/Audio/Video/ImageEditorPanel) -- cada uno solo se somete en
+        // su propio preset, si no quedaria flotando sin nodo en el resto.
+        if (panelName == "AudioEditor" && !isAudioWorkspace) continue;
+        if (panelName == "VideoEditor" && !isVideoWorkspace) continue;
+        if (panelName == "ImageEditor" && !isImageWorkspace) continue;
+        if (isAudioWorkspace && panelName != "AudioEditor") continue;
+        if (isVideoWorkspace && panelName != "VideoEditor") continue;
+        if (isImageWorkspace && panelName != "ImageEditor") continue;
         // El colapso de contenido (Alt Gr + 1..4) NO se filtra aca: cada
         // panel lo consulta el mismo dentro de su Render(), despues de
         // correr su "pump incondicional" propio si tiene uno (ver
@@ -1274,6 +1292,10 @@ void UIManager::RenderModeToolbar()
             if (clicked) ToggleNotesWindow();
         }
         {
+            bool clicked = RenderPill("Asistente IA", HomeIcons::DrawIcon_Sparkle, m_ShowAIAssistant, true, gap);
+            if (clicked) ToggleAIAssistant();
+        }
+        {
             bool clicked = RenderPill("Estilos", AppIcons::DrawIcon_Layers, false, true, gap);
             if (clicked) ImGui::OpenPopup("##modeTbStylesPopup");
         }
@@ -1473,6 +1495,11 @@ void UIManager::RenderNotesWindow()
         m_NotesPanel.PersistNow();
         s_WasOpenLastFrame = false;
     }
+}
+
+void UIManager::RenderAIAssistantWindow()
+{
+    m_AIAssistant.Render(&m_ShowAIAssistant, m_GlassRenderer);
 }
 
 void UIManager::RenderUrlImportModal()
@@ -1766,6 +1793,12 @@ void UIManager::RenderMainMenuBar()
                 // pedido explicito, para codificar/decodificar video sin
                 // nada mas alrededor.
                 { "Render",      ProyecThor::Settings::WorkspaceLayoutPreset::Render    },
+                // Audio/Video/Imagen: placeholder a pantalla completa (ver
+                // Audio/Video/ImageEditorPanel) -- todavia no hacen nada,
+                // reservados para futuros editores multimedia dedicados.
+                { "Audio",       ProyecThor::Settings::WorkspaceLayoutPreset::Audio     },
+                { "Video",       ProyecThor::Settings::WorkspaceLayoutPreset::Video     },
+                { "Imagen",      ProyecThor::Settings::WorkspaceLayoutPreset::Image     },
             };
             for (const auto& e : kWorkspaceEntries)
             {
@@ -2004,6 +2037,15 @@ void UIManager::BeginDockspace()
             case WorkspaceLayoutPreset::Render:
                 BuildWorkspaceLayoutRender(dockspace_id);
                 break;
+            case WorkspaceLayoutPreset::Audio:
+                BuildWorkspaceLayoutAudio(dockspace_id);
+                break;
+            case WorkspaceLayoutPreset::Video:
+                BuildWorkspaceLayoutVideo(dockspace_id);
+                break;
+            case WorkspaceLayoutPreset::Image:
+                BuildWorkspaceLayoutImage(dockspace_id);
+                break;
             default:
                 BuildWorkspaceLayoutClassic(dockspace_id);
                 break;
@@ -2203,6 +2245,32 @@ void UIManager::BuildWorkspaceLayoutRender(ImGuiID dockspace_id)
 
     // Sin Home/Vista en Vivo/Diseño en este layout -- Alt Gr+1..4 no tiene
     // nada que colapsar (nodeId=0 es un no-op seguro, ver TogglePanelCollapse).
+    for (auto& p : m_PanelCollapse) { p.nodeId = 0; p.collapsed = false; p.animT = 0.0f; }
+}
+
+// ── Entorno de trabajo: "Audio"/"Video"/"Imagen" ────────────────────────────
+// Placeholder a pantalla completa (ver Audio/Video/ImageEditorPanel) --
+// mismo mecanismo de "una sola ventana ocupa todo el dockspace" que Render,
+// pero sin bloquear Biblioteca en nada: aca todavia no hay funcionalidad
+// real, solo el hueco reservado para el futuro editor.
+void UIManager::BuildWorkspaceLayoutAudio(ImGuiID dockspace_id)
+{
+    ImGui::DockBuilderDockWindow("Editor de Audio", dockspace_id);
+    ImGui::DockBuilderFinish(dockspace_id);
+    for (auto& p : m_PanelCollapse) { p.nodeId = 0; p.collapsed = false; p.animT = 0.0f; }
+}
+
+void UIManager::BuildWorkspaceLayoutVideo(ImGuiID dockspace_id)
+{
+    ImGui::DockBuilderDockWindow("Editor de Video", dockspace_id);
+    ImGui::DockBuilderFinish(dockspace_id);
+    for (auto& p : m_PanelCollapse) { p.nodeId = 0; p.collapsed = false; p.animT = 0.0f; }
+}
+
+void UIManager::BuildWorkspaceLayoutImage(ImGuiID dockspace_id)
+{
+    ImGui::DockBuilderDockWindow("Editor de Imagen", dockspace_id);
+    ImGui::DockBuilderFinish(dockspace_id);
     for (auto& p : m_PanelCollapse) { p.nodeId = 0; p.collapsed = false; p.animT = 0.0f; }
 }
 

@@ -121,6 +121,28 @@ inline void DrawIcon_Chat(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
         dl->AddCircleFilled(IcPt(o, sz, x, 0.41f), sz * 0.045f, col, 8);
 }
 
+// Estrella de 4 puntas ("sparkle") -- simbolo estandar de facto para "IA" en
+// el resto de la industria (Copilot/Gemini/etc), usado para el boton
+// "Asistente IA" de la toolbar (ver UIManager::RenderModeToolbar). Se dibuja
+// como dos triangulos superpuestos (rombo alargado en cada eje) en vez de un
+// poligono de 8 puntos para que los picos queden bien afilados a cualquier
+// tamano de icono.
+inline void DrawIcon_Sparkle(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    auto star4 = [&](float cx, float cy, float r) {
+        // Rombo alargado eje vertical
+        dl->AddQuadFilled(
+            IcPt(o, sz, cx, cy - r), IcPt(o, sz, cx + r * 0.30f, cy),
+            IcPt(o, sz, cx, cy + r), IcPt(o, sz, cx - r * 0.30f, cy), col);
+        // Rombo alargado eje horizontal
+        dl->AddQuadFilled(
+            IcPt(o, sz, cx - r, cy), IcPt(o, sz, cx, cy - r * 0.30f),
+            IcPt(o, sz, cx + r, cy), IcPt(o, sz, cx, cy + r * 0.30f), col);
+    };
+    star4(0.56f, 0.46f, 0.34f);
+    star4(0.22f, 0.78f, 0.14f);
+}
+
 inline void DrawIcon_Sync(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 {
     float thick = sz * 0.09f;

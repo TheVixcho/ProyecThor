@@ -21,6 +21,7 @@
 #include "panels/BroadcastPanel.h"
 #include "panels/SyncPanel.h"
 #include "panels/OSCPanel.h"
+#include "panels/AIAssistantPanel.h"
 #include "frontend/views/QuickNotes.h"
 #include "backend/core/SubtitleImporter.h"
 #include "backend/core/PresentationCore.h"
@@ -164,6 +165,9 @@ private:
     void BuildWorkspaceLayoutBroadcast(ImGuiID dockspace_id);
     void BuildWorkspaceLayoutLibrary(ImGuiID dockspace_id);
     void BuildWorkspaceLayoutRender(ImGuiID dockspace_id);
+    void BuildWorkspaceLayoutAudio(ImGuiID dockspace_id);
+    void BuildWorkspaceLayoutVideo(ImGuiID dockspace_id);
+    void BuildWorkspaceLayoutImage(ImGuiID dockspace_id);
 
     // Ventanas nativas de salida real ("ProjectorLive"/"StageLive") -- se
     // llama SIEMPRE, una vez por frame, sin importar si el operador esta
@@ -221,6 +225,15 @@ private:
     void         ToggleNotesWindow();
     bool         m_ShowNotes = false;
     QuickNotes   m_NotesPanel;
+
+    // Ventana flotante "Asistente IA" -- mismo patron que Notas arriba
+    // (boton propio en RenderModeToolbar, se somete siempre desde el bloque
+    // "siempre" de RenderAll() sin importar el modo, para que el navegador
+    // embebido reciba UpdateBounds(...) todos los frames incluso oculto).
+    void            RenderAIAssistantWindow();
+    void            ToggleAIAssistant() { m_ShowAIAssistant = !m_ShowAIAssistant; }
+    bool            m_ShowAIAssistant = false;
+    AIAssistantPanel m_AIAssistant;
 
     // "Importar desde URL" (Archivo > Importar) -- descarga subtitulos via
     // yt-dlp (ver SubtitleImporter.h) en un hilo de fondo, ya que la

@@ -373,6 +373,13 @@ if(WIN32)
         crypto
         crypt32
         bcrypt
+        # ws2_32 de nuevo aca: OpenSSL (arriba) trae sus propias referencias a
+        # simbolos de Winsock (WSAIoctl, WSASocketA, accept, gethostbyname,
+        # etc.) que solo aparecen como pendientes DESPUES de que el linker ya
+        # proceso el ws2_32 de mas arriba -- ld resuelve en una sola pasada de
+        # izquierda a derecha, asi que sin este segundo ws2_32 esos simbolos
+        # quedan "undefined reference" al final.
+        ws2_32
     )
 
     target_link_options(ProyecThor PRIVATE

@@ -2,6 +2,7 @@
 #include "SettingsManager.h"
 #include "backend/core/PresentationCore.h"
 #include "backend/core/AppPaths.h"
+#include "frontend/panels/biblio/LibraryIcons.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <string>
@@ -295,6 +296,28 @@ static void DrawWorkspaceDiagramRender(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32
     dl->AddRectFilled(a, b, accentCol, 2.0f);
 }
 
+// Audio/Video/Imagen: mismo "una sola ventana a pantalla completa" que
+// Render, pero todavia sin funcionalidad real (ver Audio/Video/
+// ImageEditorPanel) -- se dibuja el icono del tipo de contenido centrado
+// adentro para diferenciarlas de un vistazo, ya que si no las tres tarjetas
+// serian un rectangulo solido identico.
+static void DrawWorkspaceDiagramMediaStub(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 accentCol,
+                                          void (*drawIcon)(ImDrawList*, ImVec2, float, ImU32)) {
+    dl->AddRectFilled(a, b, accentCol, 2.0f);
+    float sz = std::min(b.x - a.x, b.y - a.y) * 0.36f;
+    ImVec2 o = { (a.x + b.x) * 0.5f - sz * 0.5f, (a.y + b.y) * 0.5f - sz * 0.5f };
+    drawIcon(dl, o, sz, IM_COL32(18, 18, 22, 220));
+}
+static void DrawWorkspaceDiagramAudio(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 /*panelCol*/, ImU32 accentCol) {
+    DrawWorkspaceDiagramMediaStub(dl, a, b, accentCol, ProyecThor::Library::DrawIcon_Audio);
+}
+static void DrawWorkspaceDiagramVideo(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 /*panelCol*/, ImU32 accentCol) {
+    DrawWorkspaceDiagramMediaStub(dl, a, b, accentCol, ProyecThor::Library::DrawIcon_Video);
+}
+static void DrawWorkspaceDiagramImage(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 /*panelCol*/, ImU32 accentCol) {
+    DrawWorkspaceDiagramMediaStub(dl, a, b, accentCol, ProyecThor::Library::DrawIcon_Image);
+}
+
 using WorkspaceDiagramFn = void (*)(ImDrawList*, ImVec2, ImVec2, ImU32, ImU32);
 
 // Tarjeta con el diagrama de arriba en vez de un swatch de color -- lo que
@@ -501,14 +524,29 @@ void SettingsPanel::RenderCategoryTheme() {
             { "Transmisión", WorkspaceLayoutPreset::Broadcast, DrawWorkspaceDiagramBroadcast },
             { "Biblioteca",  WorkspaceLayoutPreset::Library,   DrawWorkspaceDiagramLibrary   },
             { "Render",      WorkspaceLayoutPreset::Render,    DrawWorkspaceDiagramRender    },
+            // Placeholders sin funcionalidad real todavia (ver Audio/Video/
+            // ImageEditorPanel) -- reservados para futuros editores
+            // multimedia dedicados.
+            { "Audio",       WorkspaceLayoutPreset::Audio,     DrawWorkspaceDiagramAudio     },
+            { "Video",       WorkspaceLayoutPreset::Video,     DrawWorkspaceDiagramVideo     },
+            { "Imagen",      WorkspaceLayoutPreset::Image,     DrawWorkspaceDiagramImage     },
         };
+        const int entryCount = (int)(sizeof(entries) / sizeof(entries[0]));
 
-        for (int i = 0; i < (int)(sizeof(entries) / sizeof(entries[0])); i++) {
+        // Se ajusta solo (en vez de SameLine() sin condicion) porque ya son
+        // 8 tarjetas -- sin esto, en una ventana angosta las ultimas
+        // quedarian literalmente afuera de la pantalla en vez de bajar de
+        // renglon (mismo criterio que el wrapping del demo de ImGui).
+        const float wsCardW = 150.0f;
+        const float wsVisibleX2 = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+        for (int i = 0; i < entryCount; i++) {
             if (WorkspacePresetCard(entries[i].label, entries[i].preset, workspace.layoutPreset, entries[i].diagram)) {
                 workspace.layoutPreset = entries[i].preset;
                 ProyecThor::Settings::SettingsManager::Get().Save();
             }
-            if (i < (int)(sizeof(entries) / sizeof(entries[0])) - 1) ImGui::SameLine();
+            float nextX2 = ImGui::GetItemRectMax().x + ImGui::GetStyle().ItemSpacing.x + wsCardW;
+            if (i + 1 < entryCount && nextX2 < wsVisibleX2)
+                ImGui::SameLine();
         }
 
         ImGui::Dummy(ImVec2(0.0f, 10.0f));

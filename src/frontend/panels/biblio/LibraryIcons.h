@@ -112,6 +112,21 @@ inline void DrawIcon_Audio(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
     }
 }
 
+inline void DrawIcon_Video(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = sz * 0.07f;
+    // Claqueta (tapa superior con rayas diagonales) + cuerpo (pantalla)
+    dl->AddRectFilled(IcPt(o, sz, 0.10f, 0.12f), IcPt(o, sz, 0.90f, 0.30f), col, sz * 0.03f);
+    for (int i = 0; i < 5; i++) {
+        float x = 0.15f + i * 0.155f;
+        dl->AddLine(IcPt(o, sz, x, 0.30f), IcPt(o, sz, x + 0.08f, 0.12f), IM_COL32(0, 0, 0, 120), thick * 0.9f);
+    }
+    dl->AddRect(IcPt(o, sz, 0.10f, 0.30f), IcPt(o, sz, 0.90f, 0.90f),
+                col, sz * 0.06f, ImDrawFlags_RoundCornersAll, thick);
+    dl->AddTriangleFilled(
+        IcPt(o, sz, 0.40f, 0.44f), IcPt(o, sz, 0.40f, 0.76f), IcPt(o, sz, 0.66f, 0.60f), col);
+}
+
 // =============================================================================
 //  PillButton
 // =============================================================================

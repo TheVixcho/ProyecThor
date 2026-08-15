@@ -73,7 +73,7 @@ public:
         return r;
     }
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
-        if (riid == __uuidof(ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler) || riid == IID_IUnknown) {
+        if (riid == IID_ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler || riid == IID_IUnknown) {
             *ppv = static_cast<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler*>(this);
             AddRef();
             return S_OK;
@@ -102,7 +102,7 @@ public:
         return r;
     }
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
-        if (riid == __uuidof(ICoreWebView2CreateCoreWebView2ControllerCompletedHandler) || riid == IID_IUnknown) {
+        if (riid == IID_ICoreWebView2CreateCoreWebView2ControllerCompletedHandler || riid == IID_IUnknown) {
             *ppv = static_cast<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler*>(this);
             AddRef();
             return S_OK;
