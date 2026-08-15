@@ -29,6 +29,7 @@ static constexpr int kCat_Multimedia = 6;
 static constexpr int kSideMode_Categories = 0;
 static constexpr int kSideMode_Render     = 3;
 static constexpr int kSideMode_Overlay    = 4;
+static constexpr int kSideMode_Web        = 5;
 
 namespace ProyecThor::Library {
 
@@ -230,13 +231,17 @@ void RenderCategoryButtons(LibraryContext& ctx)
     static const SideDef k_SideItems[] = {
         { "Render",   ProyecThor::UI::AppIcons::DrawIcon_Swap,       kSideMode_Render    },
         { "Overlay",  ProyecThor::UI::AppIcons::DrawIcon_Overlay,    kSideMode_Overlay   },
+        { "Web",      ProyecThor::UI::AppIcons::DrawIcon_Globe,      kSideMode_Web       },
     };
 
     for (const auto& sd : k_SideItems)
     {
         const bool active = (ctx.sideModeInt == sd.mode);
         // Colores en los indices 8/9 de librarySidebar.categoryColor — ver
-        // SettingsManager.h (7, Reloj, quedo sin uso aca).
+        // SettingsManager.h (7, Reloj, quedo sin uso aca). "Web" reusa el 9
+        // (mismo que Overlay, categoryColor es un array fijo de 10 -- no
+        // hay slot 10 propio sin agrandarlo, y esto ya es "grupo utilitario
+        // de abajo", no hace falta un color unico por item).
         int colorIdx = (sd.mode == kSideMode_Render) ? 8 : 9;
 
         bool clicked = RenderSidebarButton(dl, storage, sidebarW, btnH, iconSz, lt,

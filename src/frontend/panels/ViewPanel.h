@@ -86,9 +86,15 @@ private:
     // los puntos de estado "Público"/"Stage" (ahora en la toolbar superior,
     // ver UIManager::RenderModeToolbarStatusActions), que prenden/apagan las
     // salidas reales. Esto solo cambia que ve el OPERADOR aca, para poder
-    // llevar constancia de Publico y Stage sin pararse frente al segundo
-    // monitor (ver botón "vaPreviewSource" en RenderQuickActions).
-    enum class PreviewSource { Publico, Stage };
+    // llevar constancia de las 4 salidas sin pararse frente a cada pantalla
+    // (ver botón "vaPreviewSource" en RenderQuickActions, ciclа entre las 4).
+    // Publico/Stage siempre reflejan lo que este en vivo (sin cambios acá).
+    // Transmision no tiene contenido propio para previsualizar aca (RTMP usa
+    // Captura, ver BroadcastPanel) -- ese modo solo ofrece un atajo al
+    // espacio de trabajo "Transmisión". Lan SI puede divergir de Publico
+    // (ver Core::OutputContentMode / PresentationCore::SetLanContentMode):
+    // el operador puede clavarla en "Solo reloj"/"En blanco" desde aca.
+    enum class PreviewSource { Publico, Stage, Transmision, Lan };
     PreviewSource m_PreviewSource = PreviewSource::Publico;
 
     AudioMeters m_AudioMeters;

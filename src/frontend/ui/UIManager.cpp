@@ -916,14 +916,10 @@ if (m_Mode == WorkspaceMode::Hub)
     const WorkspaceLayoutPreset activePreset =
         ProyecThor::Settings::SettingsManager::Get().GetSettings().workspace.layoutPreset;
     const bool isLibraryWorkspace   = (activePreset == WorkspaceLayoutPreset::Library);
-    const bool isRenderWorkspace    = (activePreset == WorkspaceLayoutPreset::Render);
     const bool isBroadcastWorkspace = (activePreset == WorkspaceLayoutPreset::Broadcast);
-    const bool isAudioWorkspace     = (activePreset == WorkspaceLayoutPreset::Audio);
     const bool isVideoWorkspace     = (activePreset == WorkspaceLayoutPreset::Video);
-    const bool isImageWorkspace     = (activePreset == WorkspaceLayoutPreset::Image);
     if (m_LibraryPanelRef) {
         m_LibraryPanelRef->SetMediaOnlyMode(isLibraryWorkspace);
-        m_LibraryPanelRef->SetRenderOnlyMode(isRenderWorkspace);
     }
 
     for (auto& panel : m_Panels)
@@ -932,10 +928,6 @@ if (m_Mode == WorkspaceMode::Hub)
         // localizado de su ventana, ese es str.library).
         const std::string& panelName = panel->GetName();
         if (isLibraryWorkspace && panelName != "Library" && panelName != "Home")
-            continue;
-        // "Render": Biblioteca sola, a pantalla completa (bloqueada en el
-        // conversor, ver SetRenderOnlyMode).
-        if (isRenderWorkspace && panelName != "Library")
             continue;
         // "Transmisión": Streaming (ver StreamingWorkspacePanel) ocupa el
         // lugar de Vista en Vivo -- esta NUNCA se dockea en ese preset (ver
@@ -946,15 +938,18 @@ if (m_Mode == WorkspaceMode::Hub)
             continue;
         if (!isBroadcastWorkspace && panelName == "Transmisión")
             continue;
-        // "Audio"/"Video"/"Imagen": placeholder a pantalla completa (ver
-        // Build*/Audio/Video/ImageEditorPanel) -- cada uno solo se somete en
-        // su propio preset, si no quedaria flotando sin nodo en el resto.
-        if (panelName == "AudioEditor" && !isAudioWorkspace) continue;
+        // "Transmisión" ahora es un preset exclusivo (ver
+        // BuildWorkspaceLayoutBroadcast) -- "es solo para ver la
+        // transmision, nada de proyeccion", asi que Biblioteca/Home/Diseño
+        // tampoco se someten aca (mismo criterio que "Producción"/
+        // "Biblioteca" arriba).
+        if (isBroadcastWorkspace && (panelName == "Library" || panelName == "Home" || panelName == "Diseño"))
+            continue;
+        // "Producción" (VideoEditorPanel, GetName()=="VideoEditor"): a
+        // pantalla completa, solo se somete en su propio preset -- si no
+        // quedaria flotando sin nodo en el resto.
         if (panelName == "VideoEditor" && !isVideoWorkspace) continue;
-        if (panelName == "ImageEditor" && !isImageWorkspace) continue;
-        if (isAudioWorkspace && panelName != "AudioEditor") continue;
         if (isVideoWorkspace && panelName != "VideoEditor") continue;
-        if (isImageWorkspace && panelName != "ImageEditor") continue;
         // El colapso de contenido (Alt Gr + 1..4) NO se filtra aca: cada
         // panel lo consulta el mismo dentro de su Render(), despues de
         // correr su "pump incondicional" propio si tiene uno (ver
@@ -1789,16 +1784,12 @@ void UIManager::RenderMainMenuBar()
                 // preset MAS aca (y en Ajustes > Apariencia, ver
                 // CategoryTheme.cpp), no un modo aparte que no se guarda.
                 { "Biblioteca",  ProyecThor::Settings::WorkspaceLayoutPreset::Library   },
-                // Biblioteca sola, bloqueada en el conversor de formato --
-                // pedido explicito, para codificar/decodificar video sin
-                // nada mas alrededor.
-                { "Render",      ProyecThor::Settings::WorkspaceLayoutPreset::Render    },
-                // Audio/Video/Imagen: placeholder a pantalla completa (ver
-                // Audio/Video/ImageEditorPanel) -- todavia no hacen nada,
-                // reservados para futuros editores multimedia dedicados.
-                { "Audio",       ProyecThor::Settings::WorkspaceLayoutPreset::Audio     },
-                { "Video",       ProyecThor::Settings::WorkspaceLayoutPreset::Video     },
-                { "Imagen",      ProyecThor::Settings::WorkspaceLayoutPreset::Image     },
+                // "Producción": Render (conversor de formato)/Colorimetria/
+                // Canales de trabajo/Audio(DAW real)/Overlays, todo como
+                // pestañas internas de VideoEditorPanel -- absorbe a los
+                // ex-presets "Render"/"Audio"/"Imagen", que ya no existen
+                // por separado.
+                { "Producción",  ProyecThor::Settings::WorkspaceLayoutPreset::Video     },
             };
             for (const auto& e : kWorkspaceEntries)
             {
@@ -2034,17 +2025,8 @@ void UIManager::BeginDockspace()
             case WorkspaceLayoutPreset::Library:
                 BuildWorkspaceLayoutLibrary(dockspace_id);
                 break;
-            case WorkspaceLayoutPreset::Render:
-                BuildWorkspaceLayoutRender(dockspace_id);
-                break;
-            case WorkspaceLayoutPreset::Audio:
-                BuildWorkspaceLayoutAudio(dockspace_id);
-                break;
             case WorkspaceLayoutPreset::Video:
                 BuildWorkspaceLayoutVideo(dockspace_id);
-                break;
-            case WorkspaceLayoutPreset::Image:
-                BuildWorkspaceLayoutImage(dockspace_id);
                 break;
             default:
                 BuildWorkspaceLayoutClassic(dockspace_id);
@@ -2154,46 +2136,20 @@ void UIManager::BuildWorkspaceLayoutSimple(ImGuiID dockspace_id)
 }
 
 // ── Entorno de trabajo: "Transmisión" ───────────────────────────────────────
-// Streaming (Captura/Capa/Iniciar, ver StreamingWorkspacePanel) como franja
-// superior completa EN VEZ de Vista en Vivo -- pedido explicito: este
-// workspace es para manejar la transmision RTMP en si, no el monitor de
-// proyeccion. Biblioteca/Home/Diseño siguen en tres columnas abajo, estilo
-// sala de control de transmision.
+// Streaming (Captura/Capas/Iniciar, ver StreamingWorkspacePanel) a pantalla
+// completa, SOLO -- pedido explicito: "elimina todo lo relacionado a
+// proyeccion, es solo para ver la transmision a un servidor... en su lugar
+// paneles para manejar las capas". Antes tambien mostraba Biblioteca/Home/
+// Diseño en tres columnas abajo (todo eso es "proyeccion") -- se saco del
+// todo; el manejo de fuentes ahora vive DENTRO de la propia franja de
+// Transmisión, ver BroadcastPanel::RenderLayerSection (lista de capas:
+// Captura/Overlay/Vista en vivo).
 void UIManager::BuildWorkspaceLayoutBroadcast(ImGuiID dockspace_id)
 {
-    const auto& str = ProyecThor::UI::GetUIStrings();
-    ImGuiID     dock_main = dockspace_id;
-
-    ImGuiID dock_top;
-    ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Up, 0.42f, &dock_top, &dock_main);
-
-    ImGuiID dock_left;
-    ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Left, 0.22f, &dock_left, &dock_main);
-    ImGuiID dock_left_top, dock_left_bottom;
-    ImGui::DockBuilderSplitNode(dock_left, ImGuiDir_Down, 0.40f, &dock_left_bottom, &dock_left_top);
-
-    ImGuiID dock_right;
-    ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.34f, &dock_right, &dock_main);
-    // dock_main (columna central de la fila de abajo) es Home.
-
-    ImGui::DockBuilderDockWindow(str.library,   dock_left_top);
-    ImGui::DockBuilderDockWindow("Transmisión", dock_top);
-    ImGui::DockBuilderDockWindow("Home",        dock_main);
-    ImGui::DockBuilderDockWindow("Diseño",      dock_right);
-
-    ImGuiID leafNodes[] = { dock_left_top, dock_left_bottom, dock_top, dock_main, dock_right };
-    for (ImGuiID nodeId : leafNodes)
-        if (ImGuiDockNode* node = ImGui::DockBuilderGetNode(nodeId))
-            node->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
-
+    ImGui::DockBuilderDockWindow("Transmisión", dockspace_id);
     ImGui::DockBuilderFinish(dockspace_id);
 
-    // Vista en Vivo no existe en este layout -- nodeId=0 para el indice 3
-    // (era el suyo), no-op seguro para Alt Gr+3.
-    m_PanelCollapse[0] = { dock_left,  ImVec2(0, 0), true, false, 0.0f }; // 1: Biblioteca
-    m_PanelCollapse[1] = { dock_right, ImVec2(0, 0), true, false, 0.0f }; // 2: Diseño
-    m_PanelCollapse[2] = { 0,          ImVec2(0, 0), false, false, 0.0f }; // 3: Vista en Vivo (no existe aca)
-    m_PanelCollapse[3] = { dock_main,  ImVec2(0, 0), true, false, 0.0f }; // 4: Home
+    for (auto& p : m_PanelCollapse) { p.nodeId = 0; p.collapsed = false; p.animT = 0.0f; }
 }
 
 // ── Entorno de trabajo: "Biblioteca" ────────────────────────────────────────
@@ -2232,44 +2188,14 @@ void UIManager::BuildWorkspaceLayoutLibrary(ImGuiID dockspace_id)
     m_PanelCollapse[3] = { dock_main, ImVec2(0, 0), true, false, 0.0f }; // 4: Home
 }
 
-// ── Entorno de trabajo: "Render" ────────────────────────────────────────────
-// Biblioteca sola, a pantalla completa, bloqueada en el conversor de formato
-// (LibrarySideMode::Render -- ver LibraryPanel::SetRenderOnlyMode) -- pedido
-// explicito para codificar/decodificar video sin nada mas alrededor.
-void UIManager::BuildWorkspaceLayoutRender(ImGuiID dockspace_id)
-{
-    const auto& str = ProyecThor::UI::GetUIStrings();
-
-    ImGui::DockBuilderDockWindow(str.library, dockspace_id);
-    ImGui::DockBuilderFinish(dockspace_id);
-
-    // Sin Home/Vista en Vivo/Diseño en este layout -- Alt Gr+1..4 no tiene
-    // nada que colapsar (nodeId=0 es un no-op seguro, ver TogglePanelCollapse).
-    for (auto& p : m_PanelCollapse) { p.nodeId = 0; p.collapsed = false; p.animT = 0.0f; }
-}
-
-// ── Entorno de trabajo: "Audio"/"Video"/"Imagen" ────────────────────────────
-// Placeholder a pantalla completa (ver Audio/Video/ImageEditorPanel) --
-// mismo mecanismo de "una sola ventana ocupa todo el dockspace" que Render,
-// pero sin bloquear Biblioteca en nada: aca todavia no hay funcionalidad
-// real, solo el hueco reservado para el futuro editor.
-void UIManager::BuildWorkspaceLayoutAudio(ImGuiID dockspace_id)
-{
-    ImGui::DockBuilderDockWindow("Editor de Audio", dockspace_id);
-    ImGui::DockBuilderFinish(dockspace_id);
-    for (auto& p : m_PanelCollapse) { p.nodeId = 0; p.collapsed = false; p.animT = 0.0f; }
-}
-
+// ── Entorno de trabajo: "Producción" ────────────────────────────────────────
+// Una sola ventana ocupa todo el dockspace, sin Biblioteca/Home/Vista en
+// Vivo/Diseño alrededor -- VideoEditorPanel (titulo real de ventana
+// "Producción") absorbe Render/Colorimetria/Canales de trabajo/Audio(DAW)/
+// Overlays como pestañas internas.
 void UIManager::BuildWorkspaceLayoutVideo(ImGuiID dockspace_id)
 {
-    ImGui::DockBuilderDockWindow("Editor de Video", dockspace_id);
-    ImGui::DockBuilderFinish(dockspace_id);
-    for (auto& p : m_PanelCollapse) { p.nodeId = 0; p.collapsed = false; p.animT = 0.0f; }
-}
-
-void UIManager::BuildWorkspaceLayoutImage(ImGuiID dockspace_id)
-{
-    ImGui::DockBuilderDockWindow("Editor de Imagen", dockspace_id);
+    ImGui::DockBuilderDockWindow("Producción", dockspace_id);
     ImGui::DockBuilderFinish(dockspace_id);
     for (auto& p : m_PanelCollapse) { p.nodeId = 0; p.collapsed = false; p.animT = 0.0f; }
 }

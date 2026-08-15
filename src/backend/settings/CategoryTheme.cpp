@@ -267,17 +267,11 @@ static void DrawWorkspaceDiagramSimple(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32
     dl->AddRectFilled({x, a.y}, {b.x, b.y}, panelCol, 2.0f); // Diseño
 }
 
-static void DrawWorkspaceDiagramBroadcast(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 panelCol, ImU32 accentCol) {
-    float w = b.x - a.x, h = b.y - a.y, g = 3.0f;
-    float topH  = h * 0.42f;
-    float botY  = a.y + topH + g;
-    float leftW = w * 0.24f, rightW = w * 0.32f;
-    float midW  = w - leftW - rightW - g * 2.0f;
-
-    dl->AddRectFilled({a.x, a.y}, {b.x, a.y + topH}, accentCol, 2.0f); // Vista en Vivo (franja superior)
-    dl->AddRectFilled({a.x, botY}, {a.x + leftW, b.y}, panelCol, 2.0f); // Biblioteca
-    dl->AddRectFilled({a.x + leftW + g, botY}, {a.x + leftW + g + midW, b.y}, panelCol, 2.0f); // Home
-    dl->AddRectFilled({b.x - rightW, botY}, {b.x, b.y}, panelCol, 2.0f); // Diseño
+static void DrawWorkspaceDiagramBroadcast(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 /*panelCol*/, ImU32 accentCol) {
+    // Transmisión a pantalla completa, sola -- ver UIManager::
+    // BuildWorkspaceLayoutBroadcast ("elimina todo lo relacionado a
+    // proyeccion", ya no reparte Biblioteca/Home/Diseño abajo).
+    dl->AddRectFilled(a, b, accentCol, 2.0f);
 }
 
 static void DrawWorkspaceDiagramLibrary(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 panelCol, ImU32 accentCol) {
@@ -291,16 +285,11 @@ static void DrawWorkspaceDiagramLibrary(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU3
     dl->AddRectFilled({a.x + leftW + g, a.y}, {a.x + leftW + g + mainW, b.y}, accentCol, 2.0f); // Home
 }
 
-static void DrawWorkspaceDiagramRender(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 /*panelCol*/, ImU32 accentCol) {
-    // Biblioteca sola, a pantalla completa (ver UIManager::BuildWorkspaceLayoutRender).
-    dl->AddRectFilled(a, b, accentCol, 2.0f);
-}
-
-// Audio/Video/Imagen: mismo "una sola ventana a pantalla completa" que
-// Render, pero todavia sin funcionalidad real (ver Audio/Video/
-// ImageEditorPanel) -- se dibuja el icono del tipo de contenido centrado
-// adentro para diferenciarlas de un vistazo, ya que si no las tres tarjetas
-// serian un rectangulo solido identico.
+// "Producción" (enum WorkspaceLayoutPreset::Video): una sola ventana a
+// pantalla completa (ver VideoEditorPanel, que ahora absorbe Render/
+// Colorimetria/Canales/Audio(DAW)/Overlays por pestañas internas) -- se
+// dibuja un icono generico de "produccion" (camara/claqueta) centrado
+// adentro para que no sea un rectangulo solido pelado.
 static void DrawWorkspaceDiagramMediaStub(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 accentCol,
                                           void (*drawIcon)(ImDrawList*, ImVec2, float, ImU32)) {
     dl->AddRectFilled(a, b, accentCol, 2.0f);
@@ -308,14 +297,8 @@ static void DrawWorkspaceDiagramMediaStub(ImDrawList* dl, ImVec2 a, ImVec2 b, Im
     ImVec2 o = { (a.x + b.x) * 0.5f - sz * 0.5f, (a.y + b.y) * 0.5f - sz * 0.5f };
     drawIcon(dl, o, sz, IM_COL32(18, 18, 22, 220));
 }
-static void DrawWorkspaceDiagramAudio(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 /*panelCol*/, ImU32 accentCol) {
-    DrawWorkspaceDiagramMediaStub(dl, a, b, accentCol, ProyecThor::Library::DrawIcon_Audio);
-}
 static void DrawWorkspaceDiagramVideo(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 /*panelCol*/, ImU32 accentCol) {
     DrawWorkspaceDiagramMediaStub(dl, a, b, accentCol, ProyecThor::Library::DrawIcon_Video);
-}
-static void DrawWorkspaceDiagramImage(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 /*panelCol*/, ImU32 accentCol) {
-    DrawWorkspaceDiagramMediaStub(dl, a, b, accentCol, ProyecThor::Library::DrawIcon_Image);
 }
 
 using WorkspaceDiagramFn = void (*)(ImDrawList*, ImVec2, ImVec2, ImU32, ImU32);
@@ -523,13 +506,10 @@ void SettingsPanel::RenderCategoryTheme() {
             { "Simple",      WorkspaceLayoutPreset::Simple,    DrawWorkspaceDiagramSimple    },
             { "Transmisión", WorkspaceLayoutPreset::Broadcast, DrawWorkspaceDiagramBroadcast },
             { "Biblioteca",  WorkspaceLayoutPreset::Library,   DrawWorkspaceDiagramLibrary   },
-            { "Render",      WorkspaceLayoutPreset::Render,    DrawWorkspaceDiagramRender    },
-            // Placeholders sin funcionalidad real todavia (ver Audio/Video/
-            // ImageEditorPanel) -- reservados para futuros editores
-            // multimedia dedicados.
-            { "Audio",       WorkspaceLayoutPreset::Audio,     DrawWorkspaceDiagramAudio     },
-            { "Video",       WorkspaceLayoutPreset::Video,     DrawWorkspaceDiagramVideo     },
-            { "Imagen",      WorkspaceLayoutPreset::Image,     DrawWorkspaceDiagramImage     },
+            // "Render"/"Audio"/"Imagen" ya no son espacios de trabajo propios
+            // -- todos absorbidos como pestañas dentro de "Producción" (ver
+            // VideoEditorPanel: Render/Colorimetria/Canales/Audio/Overlays).
+            { "Producción",  WorkspaceLayoutPreset::Video,     DrawWorkspaceDiagramVideo     },
         };
         const int entryCount = (int)(sizeof(entries) / sizeof(entries[0]));
 

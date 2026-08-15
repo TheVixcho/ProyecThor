@@ -270,6 +270,20 @@ void MonitorQueueEngine::Update()
         }
     } else {
         m_ConsecutiveErrors = 0;
+
+        // Boton "Loop" de Monitor (ver MonitorCenterColumn.cpp / PresentationCore::
+        // GetLiveLoop) -- estaba desconectado del todo: BackgroundLayer::SetVideo
+        // fuerza loop=false SIEMPRE para videos reales (allowAudio=true, ver
+        // comentario ahi) porque esta cola depende de que ConsumeEndReached()
+        // dispare de verdad para avanzar. En vez de loopear a nivel VLC, el loop
+        // se logra aca: si esta prendido, se vuelve a reproducir el MISMO indice
+        // en vez de avanzar -- un clip real que termino sin error se repite en
+        // loop; un clip que dio error nunca se repite (cae al avance normal de
+        // abajo, que lo saltea).
+        if (Core::PresentationCore::Get().GetLiveLoop()) {
+            PlayIndex(m_CurrentIndex);
+            return;
+        }
     }
 
     PlayIndex(m_CurrentIndex + 1);

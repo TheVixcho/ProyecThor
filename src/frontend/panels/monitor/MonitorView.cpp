@@ -20,6 +20,39 @@ using namespace MonitorTheme;
 void MonitorView::Update()
 {
     m_QueueEngine.Update();
+
+    // Boton "Loop" (ver MonitorCenterColumn::RenderCenterColumn /
+    // PresentationCore::GetLiveLoop) para un video enviado DIRECTO a
+    // publico via "TRANSMITIR" (SetBackgroundMedia -- no pasa por la cola,
+    // ver el handler de "btn_transmit" en MonitorCenterColumn.cpp). Sin
+    // esto el flag liveLoop no lo leia nadie: el clip terminaba y quedaba
+    // congelado, nada volvia a dispararlo.
+    //
+    // ConsumeEndReached() es "se consume una sola vez por clip" -- por eso
+    // esto SOLO corre si la cola NO esta activa (ella ya lo consume arriba
+    // en m_QueueEngine.Update(), con su propio criterio de loop). Los dos
+    // consumidores nunca deben pisarse sobre el mismo reproductor.
+    if (!m_QueueEngine.IsActive())
+    {
+        auto& core  = Core::PresentationCore::Get();
+        auto  state = core.GetState();
+        if (state.bgType == Core::PresentationState::BackgroundType::Video)
+        {
+            if (Core::VLCBasePlayer* bg = core.GetBackgroundPlayer())
+            {
+                if (bg->ConsumeEndReached())
+                {
+                    bool hadError = bg->ConsumeHadError();
+                    if (!hadError && core.GetLiveLoop())
+                    {
+                        std::string path = bg->GetCurrentPath();
+                        if (!path.empty())
+                            core.SetBackgroundMedia(path, /*isVideo=*/true, /*allowAudio=*/true);
+                    }
+                }
+            }
+        }
+    }
 }
 
 void MonitorView::Render(Core::VLCBasePlayer* player)

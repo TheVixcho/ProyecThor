@@ -247,6 +247,8 @@ void LibraryPanel::SetUIManager(UIManager* manager)
     m_UIManagerRef = manager;
     if (!m_OverlayTab && m_UIManagerRef)
         m_OverlayTab = std::make_unique<OverlayLibraryTab>(m_UIManagerRef);
+    if (!m_WebBrowserPanel)
+        m_WebBrowserPanel = std::make_unique<WebBrowserPanel>();
 }
 
 void LibraryPanel::SetMediaOnlyMode(bool v)
@@ -653,6 +655,10 @@ void LibraryPanel::Render()
         else if (m_SideMode == LibrarySideMode::Overlay)
         {
             if (m_OverlayTab) m_OverlayTab->Render();
+        }
+        else if (m_SideMode == LibrarySideMode::Web)
+        {
+            if (m_WebBrowserPanel) m_WebBrowserPanel->Render();
         }
         else if (m_CurrentCategory == LibraryCategory::Audio)
         {

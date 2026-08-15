@@ -13,6 +13,7 @@
 #include "biblio/LibraryMultimedia.h"
 #include "backend/core/MediaConverter.h"
 #include "overlay/OverlayLibraryTab.h"
+#include "WebBrowserPanel.h"
 #include <memory>
 
 namespace ProyecThor::UI { class UIManager; class MonitorView; }
@@ -52,6 +53,9 @@ enum class LibrarySideMode {
     Overlay    = 4, // "Overlay" — galeria + editor de overlays PNG (ver
                      // OverlayLibraryTab), se abre a pantalla completa
                      // (UIManager::EnterFullscreenEditor) al crear/editar uno.
+    Web        = 5, // "Web" — navegador embebido generico (ver WebBrowserPanel),
+                     // con "Enviar a Público" para mostrar cualquier pagina en
+                     // la salida real, no solo contenido de la Biblioteca.
 };
 
 class LibraryPanel : public IPanel {
@@ -84,6 +88,15 @@ public:
     // activa las dos a la vez, son presets distintos).
     void SetRenderOnlyMode(bool v);
 
+    // Migrado tal cual desde LibraryManagerPanel (seccion "Biblioteca" del
+    // workspace, retirada del todo) -- convierte Video/Audio ya importados a
+    // otro formato aprovechando ffmpeg (ver MediaConverter.h). Publico
+    // porque VideoEditorPanel lo llama directo como una de sus pestañas
+    // (ver Settings::WorkspaceLayoutPreset::Video) -- el ex-preset "Render"
+    // ya no bloquea toda la ventana de Biblioteca, ahora esto se embebe
+    // inline en otro panel, misma instancia de LibraryPanel de siempre.
+    void RenderConverterSection();
+
 private:
     Library::LibraryContext BuildContext();
 
@@ -100,10 +113,7 @@ private:
     void RenderFileInUseToast();
 
     // ── Render (conversor de formato, ver LibrarySideMode::Render) ───────
-    // Migrado tal cual desde LibraryManagerPanel (sección "Biblioteca" del
-    // workspace, retirada del todo) — convierte Video/Audio ya importados a
-    // otro formato aprovechando ffmpeg (ver MediaConverter.h).
-    void RenderConverterSection();
+    // RenderConverterSection() ahora es publico, ver mas arriba.
     void RefreshConvertibleItems();
 
     LibraryCategory          m_CurrentCategory     = LibraryCategory::Songs;
@@ -133,6 +143,9 @@ private:
 
     // ── Grupo "Overlay" del sidebar (ver LibrarySideMode) ─────────────────
     std::unique_ptr<OverlayLibraryTab> m_OverlayTab;
+
+    // ── Grupo "Web" del sidebar (ver LibrarySideMode) ─────────────────────
+    std::unique_ptr<WebBrowserPanel> m_WebBrowserPanel;
 
     // ── Render (conversor de formato) ─────────────────────────────────────
     struct ConvertibleItem { std::string filename; bool isVideo; };

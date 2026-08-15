@@ -4,15 +4,17 @@
 namespace ProyecThor::UI {
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  AIWebViewPanel — navegador real embebido (WebView2, Windows-only) para
-//  que el usuario chatee con la IA que elija (Claude/ChatGPT/Gemini/etc.)
-//  iniciando sesion normal en el sitio de esa IA. ProyecThor no ve ni
-//  guarda esas credenciales -- es un navegador real con su propio perfil
-//  (cookies/sesion) en AppData, ProyecThor solo lo posiciona/muestra.
+//  AIWebViewPanel — navegador real embebido (WebView2, Windows-only). Pese
+//  al nombre (nacio para el Asistente de IA, ver AIAssistantPanel), es
+//  generico: tambien la usa WebBrowserPanel para mostrar cualquier URL
+//  (incluido "Enviar a Público", ver Reparent). El usuario inicia sesion
+//  normal en lo que sea que este mostrando -- ProyecThor no ve ni guarda
+//  esas credenciales, es un navegador real con su propio perfil (cookies/
+//  sesion) en AppData, ProyecThor solo lo posiciona/muestra.
 //
 //  En Linux (sin WebView2 disponible) esta clase existe igual pero
-//  IsAvailable() siempre devuelve false -- el llamador (ver AIAssistantPanel)
-//  cae a abrir el navegador externo del sistema en cambio (ver OpenURL.cpp).
+//  IsAvailable() siempre devuelve false -- el llamador cae a abrir el
+//  navegador externo del sistema en cambio (ver OpenURL.cpp).
 // ─────────────────────────────────────────────────────────────────────────────
 class AIWebViewPanel {
 public:
@@ -42,6 +44,22 @@ public:
     bool IsAvailable() const;
     bool HasError() const;
     std::string GetLastError() const;
+
+    // true una vez que el controller+webview de verdad terminaron de
+    // crearse (ver NavigateTo) y ya se le mando la URL -- mientras esto sea
+    // false y HasError() tambien sea false, el navegador esta en proceso de
+    // arrancar (puede tardar); el llamador puede usarlo para mostrar
+    // "Cargando..." en vez de un rectangulo vacio sin explicacion.
+    bool IsReady() const;
+
+    // Reparenta la ventana nativa del WebView2 a <newParentHwnd> (ej. la
+    // ventana real de "ProjectorLive", ver PresentationCore::
+    // GetProjectorNativeWindow) -- para "Enviar a Público" (WebBrowserPanel):
+    // los siguientes UpdateBounds() posicionan el navegador relativo a ESE
+    // padre en vez del principal. Pasar nullptr no hace nada (evita
+    // reparentar a una ventana que todavia no existe este frame). No-op si
+    // el navegador ni siquiera se creo todavia (ver NavigateTo).
+    void Reparent(void* newParentHwnd);
 
 private:
     struct Impl;

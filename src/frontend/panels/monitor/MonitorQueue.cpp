@@ -35,7 +35,7 @@ struct RowColors {
     bool  drawLeftBar;
 };
 
-static RowColors GetRowColors(bool isPlaying, bool isSelected, int rowIndex)
+static RowColors GetRowColors(bool isPlaying, bool isSelected, int rowIndex, float hoverT)
 {
     RowColors c{};
     c.text        = ImGui::ColorConvertFloat4ToU32(k_TextPrimary);
@@ -43,43 +43,25 @@ static RowColors GetRowColors(bool isPlaying, bool isSelected, int rowIndex)
     c.accent      = 0;
 
     if (isPlaying) {
-        c.bg          = ImGui::ColorConvertFloat4ToU32(ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, 0.33f));
+        float a = 0.33f + hoverT * 0.08f;
+        c.bg          = ImGui::ColorConvertFloat4ToU32(ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, a));
         c.accent      = ImGui::ColorConvertFloat4ToU32(k_QueueAccent);
         c.text        = ImGui::ColorConvertFloat4ToU32(k_QueueAccent);
         c.drawLeftBar = true;
     } else if (isSelected) {
-        c.bg = ImGui::ColorConvertFloat4ToU32(ImVec4(k_PrevAccent.x, k_PrevAccent.y, k_PrevAccent.z, 0.35f));
-    } else if (rowIndex % 2 == 0) {
-        c.bg = ImGui::ColorConvertFloat4ToU32(ImVec4(k_TextPrimary.x, k_TextPrimary.y, k_TextPrimary.z, 0.02f));
+        float a = 0.35f + hoverT * 0.08f;
+        c.bg = ImGui::ColorConvertFloat4ToU32(ImVec4(k_PrevAccent.x, k_PrevAccent.y, k_PrevAccent.z, a));
     } else {
-        c.bg = 0;
+        // Filas pares llevan un tinte base apenas visible (zebra), mas el
+        // hover encima de cualquiera de las dos -- antes esto era estatico
+        // (sin feedback alguno al pasar el mouse, parte de "la UI se siente
+        // plana" del pedido). k_TextPrimary funciona como blanco neutro
+        // tanto en temas oscuros como claros.
+        float base = (rowIndex % 2 == 0) ? 0.02f : 0.0f;
+        float a    = base + hoverT * 0.05f;
+        c.bg = (a > 0.0f) ? ImGui::ColorConvertFloat4ToU32(ImVec4(k_TextPrimary.x, k_TextPrimary.y, k_TextPrimary.z, a)) : 0;
     }
     return c;
-}
-// tint: pedido explicito -- antes siempre blanco (el default de AddImage),
-// invisible contra botones con fondo claro (temas claros/Cola ya no fuerza
-// verde). Cada call site pasa el MISMO color que ya usa de texto para ese
-// boton (QueueColorBtn textCol), que ya esta elegido para contrastar contra
-// su propio fondo.
-static void DrawBtnIcon(const char* iconName, float leftPad = 12.0f, float size = 18.0f,
-                        ImVec4 tint = { 1.0f, 1.0f, 1.0f, 1.0f })
-{
-    if (StyleGeneralApp::Icons.count(iconName) == 0) return;
-    void* icon = StyleGeneralApp::Icons[iconName].textureID;
-    if (!icon) return;
-
-    ImVec2 bMin = ImGui::GetItemRectMin();
-    ImVec2 bMax = ImGui::GetItemRectMax();
-    float  bH   = bMax.y - bMin.y;
-    float  sz   = std::min(size, bH - 10.0f);
-    float  y    = bMin.y + (bH - sz) * 0.5f;
-
-    ImGui::GetWindowDrawList()->AddImage(
-        icon,
-        { bMin.x + leftPad, y },
-        { bMin.x + leftPad + sz, y + sz },
-        ImVec2(0, 0), ImVec2(1, 1),
-        ImGui::ColorConvertFloat4ToU32(tint));
 }
 void MonitorView::RenderQueue(float w)
 {
@@ -201,8 +183,17 @@ void MonitorView::RenderQueue(float w)
 
         ImGui::PushID(i);
 
-        ImVec2    rowMin = ImGui::GetCursorScreenPos();
-        RowColors rc     = GetRowColors(isPlaying, isSel, i);
+        ImVec2 rowMin = ImGui::GetCursorScreenPos();
+
+        // Hover geometrico (no depende de que el Selectable ya se haya
+        // sometido -- el fondo se dibuja ANTES de eso mas abajo) + animacion
+        // lerp, mismo criterio que el resto de los botones de este panel
+        // (ver QueueAnimT) -- antes las filas no daban ningun feedback al
+        // pasar el mouse, parte de "la UI se siente plana" del pedido.
+        bool  rowHovered = ImGui::IsMouseHoveringRect(rowMin, { rowMin.x + availW, rowMin.y + k_RowH });
+        float rowHoverT  = QueueAnimT(ImGui::GetID("##rowHover"), 0xB2u, rowHovered, 16.0f);
+
+        RowColors rc = GetRowColors(isPlaying, isSel, i, rowHoverT);
 
         if (rc.bg)
             dl->AddRectFilled(rowMin, { rowMin.x + availW, rowMin.y + k_RowH }, rc.bg, 4.0f);
@@ -427,21 +418,32 @@ void MonitorView::RenderQueue(float w)
             ImVec4 apHov = isActive
                 ? ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, 0.64f)
                 : ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, 0.46f);
-            ImVec4 apAct = ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, 0.27f);
-            const char* apLabel = isActive
-                ? "        Detener reproducción"
-                : "        Reproducir cola";
+            const char* apLabel = isActive ? "Detener reproducción" : "Reproducir cola";
+
+            ImVec2 apP0 = ImGui::GetCursorScreenPos();
 
             if (isEmpty) ImGui::BeginDisabled();
-            bool apClicked = QueueColorBtn(apLabel, { innerW, apBtnH }, apBase, apHov, apAct,
-                              k_QueueAccent, k_R * 0.7f);
-            DrawBtnIcon(isActive ? "stop" : "play", 14.0f, 20.0f, k_QueueAccent);
+            bool apClicked = QueueActionButton("apBtn", apLabel, isActive ? "stop" : "play",
+                              { innerW, apBtnH }, apBase, apHov, k_QueueAccent, k_R * 0.7f);
             if (apClicked)
             {
                 m_QueueEngine.TogglePlayStop();
                 m_LivePlaying = m_QueueEngine.IsActive();
             }
             if (isEmpty) ImGui::EndDisabled();
+
+            // Anillo con pulso mientras la cola esta reproduciendo -- mismo
+            // criterio que el resto de la app para "esto esta en vivo ahora"
+            // (ver LIVE badge de BroadcastPanel::RenderLayerSection/
+            // WorkspacePresetCard en CategoryTheme.cpp), la cola no tenia
+            // ningun indicador asi en el boton principal.
+            if (isActive)
+            {
+                float pulse = 0.35f + 0.35f * std::abs(std::sin((float)ImGui::GetTime() * 2.4f));
+                dl->AddRect(apP0, { apP0.x + innerW, apP0.y + apBtnH },
+                    ImGui::ColorConvertFloat4ToU32(ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, pulse)),
+                    k_R * 0.7f, 0, 1.5f);
+            }
         }
 
         ImGui::Spacing();
@@ -451,9 +453,8 @@ void MonitorView::RenderQueue(float w)
             bool hasNext = isActive && (currentIdx < static_cast<int>(items.size()) - 1);
 
             if (!hasPrev) ImGui::BeginDisabled();
-            bool prevClicked = QueueColorBtn("      Anterior", { bw2, btnH },
-                              k_BtnGreen, k_BtnGreenH, k_BtnGreenA, k_QueueAccent, k_R * 0.7f);
-            DrawBtnIcon("skip_prev", 10.0f, 16.0f, k_QueueAccent);
+            bool prevClicked = QueueActionButton("prevBtn", "Anterior", "skip_prev",
+                              { bw2, btnH }, k_BtnGreen, k_BtnGreenH, k_QueueAccent, k_R * 0.7f);
             if (prevClicked)
                 PlayQueueItem(currentIdx - 1);
             if (!hasPrev) ImGui::EndDisabled();
@@ -461,9 +462,8 @@ void MonitorView::RenderQueue(float w)
             ImGui::SameLine();
 
             if (!hasNext) ImGui::BeginDisabled();
-            bool nextClicked = QueueColorBtn("      Siguiente", { bw2, btnH },
-                              k_BtnGreen, k_BtnGreenH, k_BtnGreenA, k_QueueAccent, k_R * 0.7f);
-            DrawBtnIcon("skip_next", 10.0f, 16.0f, k_QueueAccent);
+            bool nextClicked = QueueActionButton("nextBtn", "Siguiente", "skip_next",
+                              { bw2, btnH }, k_BtnGreen, k_BtnGreenH, k_QueueAccent, k_R * 0.7f);
             if (nextClicked)
                 PlayQueueItem(currentIdx + 1);
             if (!hasNext) ImGui::EndDisabled();
@@ -472,10 +472,8 @@ void MonitorView::RenderQueue(float w)
         ImGui::Spacing();
 
         {
-            bool addClicked = QueueColorBtn("      Agregar", { bw2, btnH },
-                              k_BtnNeutral, k_BtnNeutralH, k_BtnNeutralA,
-                              k_BtnNeutralT, k_R * 0.7f);
-            DrawBtnIcon("add_to_queue", 10.0f, 16.0f, k_BtnNeutralT);
+            bool addClicked = QueueActionButton("addBtn", "Agregar", "add_to_queue",
+                              { bw2, btnH }, k_BtnNeutral, k_BtnNeutralH, k_BtnNeutralT, k_R * 0.7f);
             if (addClicked)
             {
                 auto sel = Core::PresentationCore::Get().PeekSelection();
@@ -492,9 +490,8 @@ void MonitorView::RenderQueue(float w)
             ImGui::SameLine();
 
             if (isEmpty) ImGui::BeginDisabled();
-            bool clearClicked = QueueColorBtn("      Limpiar", { bw2, btnH },
-                              k_BtnDel, k_BtnDelH, k_BtnDelA, k_BtnDelT, k_R * 0.7f);
-            DrawBtnIcon("cleaning_services", 10.0f, 16.0f, k_BtnDelT);
+            bool clearClicked = QueueActionButton("clearBtn", "Limpiar", "cleaning_services",
+                              { bw2, btnH }, k_BtnDel, k_BtnDelH, k_BtnDelT, k_R * 0.7f);
             if (clearClicked)
             {
                 m_QueueEngine.Clear();

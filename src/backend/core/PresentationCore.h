@@ -28,6 +28,14 @@ namespace ProyecThor::Core {
 
     enum class ItemType { None = -1, Video = 0, Image = 1, Song = 2, Bible = 3, Documents = 4, Audio = 5 };
 
+    // Contenido que manda la salida Inalambrica (LAN, ver NetworkStreamServer/
+    // WireNetworkServerProviders) -- a diferencia de Publico/Stage, que hoy
+    // siempre reflejan lo mismo que esta en vivo, LAN puede quedar "clavada"
+    // en otra cosa (ej. solo el reloj) mientras Publico/Stage siguen
+    // mostrando lo que este en vivo normalmente. Ver ViewPanel::RenderContent
+    // (toolbar "vaPreviewSource") para el selector.
+    enum class OutputContentMode { Live = 0, ClockOnly = 1, Blank = 2 };
+
     struct LibrarySelection {
         std::string title;
         ItemType type = ItemType::None;
@@ -290,6 +298,12 @@ void SetGlobalMute(bool mute);
         void  SetStretchToFill(bool stretch);
         bool  GetStretchToFill() const;
 
+        // Ver comentario de OutputContentMode arriba. Leido desde el hilo de
+        // NetworkStreamServer (SnapshotProvider) Y desde RenderProjectorToFBO
+        // (hilo de render), por eso atomic en vez de sumarlo a m_Mutex.
+        void               SetLanContentMode(OutputContentMode mode) { m_LanContentMode = mode; }
+        OutputContentMode  GetLanContentMode() const { return m_LanContentMode.load(); }
+
         // "Bucle falso" de Fondos (ver Ajustes > Proyeccion > Fondos y el
         // comentario largo en BackgroundLayer.h): reproduce hacia adelante
         // y despues "hacia atras" en vez de siempre cortar al mismo frame
@@ -453,6 +467,15 @@ void SetGlobalMute(bool mute);
         // RenderProjectorViewportPostFX.
         void   SetProjectorPostFXViewportID(ImGuiID id);
         bool   IsProjectorPostFXViewport(ImGuiID id) const;
+
+        // HWND (como void*) de la ventana nativa real de "ProjectorLive" --
+        // resuelto a partir de m_ProjectorPostFXViewportID (ver arriba).
+        // Para consumidores que necesitan mostrar contenido nativo (ej. un
+        // navegador embebido, ver WebBrowserPanel::SendToPublic) DIRECTO
+        // sobre la salida real al publico, reparentando su propia ventana
+        // nativa a esta. nullptr si no se esta proyectando o la ventana
+        // todavia no existe este frame.
+        void* GetProjectorNativeWindow() const;
         void   RenderProjectorViewportPostFX(ImGuiViewport* viewport,
                                               void (*defaultRenderFn)(ImGuiViewport*, void*));
 
@@ -637,6 +660,17 @@ void SetGlobalMute(bool mute);
         void ToggleNetworkStream(bool enable, int port = 8080);
         bool IsStreamingNet() const;
         bool RenderProjectorToFBO(int w, int h, std::vector<uint8_t>& outRGB);
+
+        // Renderiza el FONDO actualmente en vivo (Publico -- video/imagen/
+        // color, ver BackgroundLayer::Render) a una textura GL reusable
+        // (mismo FBO que RenderProjectorToFBO, ver EnsureFBO) y devuelve su
+        // ID directamente, sin el paso de lectura a CPU/PBO -- para
+        // consumidores que solo necesitan mostrarlo como una textura mas
+        // (ej. BroadcastPanel, capa "Vista en vivo"). Alcance igual que
+        // RenderProjectorToFBO: solo el fondo, sin texto/overlay encima.
+        // 0 si no hay contexto o el tamaño pedido es invalido.
+        unsigned int RenderPublicCompositeToTexture(int w, int h);
+
         NetworkStreamServer* GetNetworkServer() { return m_NetworkServer.get(); }
 
         // Chat y Streaming comparten el MISMO NetworkStreamServer/puerto (ver
@@ -903,6 +937,8 @@ bool m_GlobalMuted = false;
         mutable std::mutex    m_FrameMutex;
         std::vector<uint8_t>  m_LatestFrame;
         std::atomic<bool>     m_FrameProviderActive { false };
+
+        std::atomic<OutputContentMode> m_LanContentMode { OutputContentMode::Live };
     };
 
 } // namespace ProyecThor::Core

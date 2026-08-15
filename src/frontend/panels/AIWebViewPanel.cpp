@@ -132,6 +132,12 @@ static void EnsureHostClassRegistered() {
     // resuelve a la variante ANSI (MAKEINTRESOURCEA) y no compila contra
     // LoadCursorW, que pide LPCWSTR.
     wc.hCursor       = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));
+    // Pincel de fondo explicito (antes NULL): sin esto, WM_ERASEBKGND no
+    // pinta nada definido y cualquier frame donde WebView2 todavia no puso
+    // su propio contenido adentro (arranque, o mientras carga una pagina)
+    // podia mostrar basura/negro sin explicacion en vez de un negro solido
+    // intencional.
+    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
     RegisterClassW(&wc);
     s_registered = true;
 }
@@ -150,6 +156,12 @@ struct AIWebViewPanel::Impl {
     bool failed         = false;
     std::string pendingUrl;
     std::string lastError;
+
+    // ver comentario en UpdateBounds: si la creacion async nunca termina
+    // (ni exito ni error real -- ej. algo se cuelga en el lado de WebView2),
+    // sin esto el operador se queda mirando un rectangulo negro para
+    // siempre, sin ningun mensaje.
+    double creatingStartTime = 0.0;
 };
 
 AIWebViewPanel::AIWebViewPanel() : m_Impl(new Impl()) {}
@@ -179,6 +191,7 @@ void AIWebViewPanel::NavigateTo(const std::string& url) {
     m_Impl->pendingUrl = url;
     if (m_Impl->creating) return; // ya se esta creando, cuando termine navega solo (ver lambda de abajo)
     m_Impl->creating = true;
+    m_Impl->creatingStartTime = glfwGetTime();
 
     if (!m_Impl->comInitialized) {
         HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
@@ -245,22 +258,44 @@ void AIWebViewPanel::NavigateTo(const std::string& url) {
 }
 
 void AIWebViewPanel::UpdateBounds(int screenX, int screenY, int width, int height, bool visible) {
+    // Si la creacion async (ver NavigateTo) nunca resuelve -- ni exito
+    // (ready=true) ni error real (failed=true) -- antes esto se quedaba
+    // mostrando un rectangulo negro para siempre sin ningun mensaje ("el
+    // panel de IA no muestra nada"/"queda una ventana en negro"). Un
+    // timeout generoso (WebView2 normalmente arranca en menos de 1-2s, pero
+    // un perfil nuevo o un disco lento pueden tardar mas) lo convierte en un
+    // error real y visible en vez de un cuelgue silencioso.
+    if (m_Impl->creating && !m_Impl->ready && !m_Impl->failed) {
+        if (glfwGetTime() - m_Impl->creatingStartTime > 15.0) {
+            m_Impl->failed = true;
+            m_Impl->lastError = "El navegador embebido tardo demasiado en arrancar (WebView2). "
+                                 "Probá cerrar y volver a abrir el Asistente de IA.";
+        }
+    }
+
     if (!m_Impl->hostHwnd) return;
 
     // Coordenadas de pantalla -> coordenadas de cliente del HWND padre
-    // (SetWindowPos con SWP_NOZORDER espera coordenadas relativas al padre
-    // cuando la ventana es WS_CHILD).
+    // (SetWindowPos espera coordenadas relativas al padre cuando la
+    // ventana es WS_CHILD).
     POINT topLeft{ screenX, screenY };
     ScreenToClient(m_Impl->parentHwnd, &topLeft);
 
-    if (!visible || width <= 0 || height <= 0) {
+    if (!visible || width <= 0 || height <= 0 || m_Impl->failed) {
         ShowWindow(m_Impl->hostHwnd, SW_HIDE);
         if (m_Impl->controller) m_Impl->controller->put_IsVisible(FALSE);
         return;
     }
 
-    SetWindowPos(m_Impl->hostHwnd, nullptr, topLeft.x, topLeft.y, width, height,
-                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    // FIX ("queda una ventana en negro"): antes esto pasaba SWP_NOZORDER
+    // (deja el Z-order tal cual estaba). Si por lo que sea otra ventana
+    // nativa hija del mismo padre (ej. un video en vivo de la Biblioteca,
+    // ver BackgroundLayer::NativePlayback) se crea DESPUES de esta, esa
+    // otra queda arriba y tapa al WebView2 aunque este bien posicionado y
+    // realmente esté mostrando la pagina por debajo. HWND_TOP fuerza a que
+    // este siempre quede arriba de sus hermanos mientras esta visible.
+    SetWindowPos(m_Impl->hostHwnd, HWND_TOP, topLeft.x, topLeft.y, width, height,
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
 
     if (m_Impl->controller) {
         RECT bounds{ 0, 0, width, height };
@@ -272,6 +307,21 @@ void AIWebViewPanel::UpdateBounds(int screenX, int screenY, int width, int heigh
 bool AIWebViewPanel::IsAvailable() const { return !m_Impl->failed; }
 bool AIWebViewPanel::HasError() const { return m_Impl->failed; }
 std::string AIWebViewPanel::GetLastError() const { return m_Impl->lastError; }
+
+void AIWebViewPanel::Reparent(void* newParentHwnd) {
+    if (!newParentHwnd || !m_Impl->hostHwnd) return;
+    HWND newParent = static_cast<HWND>(newParentHwnd);
+    if (newParent == m_Impl->parentHwnd) return;
+
+    SetParent(m_Impl->hostHwnd, newParent);
+    m_Impl->parentHwnd = newParent;
+    // El proximo UpdateBounds() recalcula posicion/tamaño relativos al
+    // padre nuevo -- no hace falta tocar el controller de WebView2 aca, el
+    // control sigue siendo el mismo hijo de hostHwnd, solo cambio DONDE
+    // vive hostHwnd.
+}
+
+bool AIWebViewPanel::IsReady() const { return m_Impl->ready && m_Impl->webview.Get() != nullptr; }
 
 } // namespace ProyecThor::UI
 
@@ -287,6 +337,8 @@ void AIWebViewPanel::UpdateBounds(int, int, int, int, bool) {}
 bool AIWebViewPanel::IsAvailable() const { return false; }
 bool AIWebViewPanel::HasError() const { return true; }
 std::string AIWebViewPanel::GetLastError() const { return "WebView2 solo esta disponible en Windows."; }
+bool AIWebViewPanel::IsReady() const { return false; }
+void AIWebViewPanel::Reparent(void*) {}
 
 } // namespace ProyecThor::UI
 

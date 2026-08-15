@@ -1554,6 +1554,24 @@ void CreateNewSongFromClipboard(const std::string& clipboardText)
     CreateNewSongFromText("Canción pegada", clipboardText);
 }
 
+bool SetSongText(const std::string& filename, const std::string& text)
+{
+    std::string fullPath = GetAssetsPath() + "/songs/" + filename;
+    if (!fs::exists(U8Path(fullPath)))
+        return false;
+
+    std::ofstream f(U8Path(fullPath));
+    if (!f.is_open())
+        return false;
+
+    f << "\xEF\xBB\xBF";
+    f << text;
+    f.close();
+
+    ForceListUpdate() = true;
+    return true;
+}
+
 // =============================================================================
 //  RenderSideList
 //  Todo el contenido vive dentro de un contenedor con padding parejo en

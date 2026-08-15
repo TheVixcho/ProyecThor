@@ -253,15 +253,15 @@ namespace ProyecThor::Settings {
                        // Vivo/Diseño, para operar solo reproduciendo contenido de la
                        // biblioteca. Tambien lo usa "Abrir con ProyecThor" para esa sesion
                        // (ver UIManager::EnterLibraryWorkspaceMode), sin pisar este setting.
-        Render,        // Biblioteca a pantalla completa, bloqueada en el conversor de
-                       // formato (LibrarySideMode::Render) -- para codificar/decodificar
-                       // video sin nada mas alrededor.
-        Audio,         // Editor de Audio a pantalla completa (ver AudioEditorPanel) --
-                       // placeholder por ahora, sin funcionalidad real todavia.
-        Video,         // Editor de Video a pantalla completa (ver VideoEditorPanel) --
-                       // idem Audio, placeholder por ahora.
-        Image,         // Editor de Imagen a pantalla completa (ver ImageEditorPanel) --
-                       // idem Audio, placeholder por ahora.
+        Video,         // "Producción" (nombre visible, ver WorkspaceLayoutPresetName) a
+                       // pantalla completa (ver VideoEditorPanel): toolbar interna con
+                       // Render (conversor de formato, LibraryPanel::RenderConverterSection) /
+                       // Colorimetria / Canales de trabajo (placeholders todavia) / Audio
+                       // (DAW real, ver AudioDawPanel) / Overlays (galeria+editor, ver
+                       // OverlayLibraryTab) -- ABSORBE a los ex-presets "Render", "Audio" e
+                       // "Imagen", que ya no existen como espacios de trabajo propios. El
+                       // nombre del enum se deja "Video" para no romper el ToKey/FromString
+                       // de settings.json ya guardados en disco.
     };
 
     const char*            WorkspaceLayoutPresetName(WorkspaceLayoutPreset preset);

@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 #include <string>
 #include <iostream>
 #include <filesystem>
@@ -842,7 +843,13 @@ void ViewPanel::RenderQuickActionsConfig(float stripH)
     // (riel derecho) a pedido explicito, para no mezclar accion destructiva
     // con ajuste de vista. Mute/Desmute se saco de aca (pedido explicito,
     // sobraba: el mismo control ya esta en RenderLiveTransport).
-    const bool previewingStage = (m_PreviewSource == PreviewSource::Stage);
+    const bool previewingAlt = (m_PreviewSource != PreviewSource::Publico);
+    const char* previewSourceLabel[4] = { "Público", "Stage", "Transmisión", "Inalámbrica" };
+    int previewSourceIdx = static_cast<int>(m_PreviewSource);
+    int nextPreviewSourceIdx = (previewSourceIdx + 1) % 4;
+    char previewSourceTooltip[96];
+    snprintf(previewSourceTooltip, sizeof(previewSourceTooltip), "Viendo: %s (click para ver %s)",
+             previewSourceLabel[previewSourceIdx], previewSourceLabel[nextPreviewSourceIdx]);
 
     // Overlays/Chat/Pads ya no abren un popup flotante: alternan que se
     // muestra en la herramienta inline de abajo (ver m_ActiveTool /
@@ -864,9 +871,9 @@ void ViewPanel::RenderQuickActionsConfig(float stripH)
           "Alternar proporción", hoverClear, activeStretch, stretchOn, textPrimary },
         { "vaClock",     "", HomeIcons::DrawIcon_Clock, "Rlj", "Reloj",
           hoverClear, activeStretch, clockOn, textPrimary },
-        { "vaPreviewSource", "", AppIcons::DrawIcon_Swap, "S/P",
-          previewingStage ? "Viendo: Stage (click para ver Público)" : "Viendo: Público (click para ver Stage)",
-          hoverClear, activeStretch, previewingStage, textPrimary },
+        { "vaPreviewSource", "", AppIcons::DrawIcon_Swap, "Vis",
+          previewSourceTooltip,
+          hoverClear, activeStretch, previewingAlt, textPrimary },
         { "vaOverlays",  "", AppIcons::DrawIcon_Overlay, "Ovl", "Overlays",
           hoverClear, activeStretch, overlaysOn, textPrimary },
         { "vaChat",      "", HomeIcons::DrawIcon_Chat, "Cht", "Chat",
@@ -902,7 +909,7 @@ void ViewPanel::RenderQuickActionsConfig(float stripH)
         {
             if (i == 0)      core.SetStretchToFill(!stretchOn);
             else if (i == 1) m_ActiveTool = clockOn    ? InlineTool::None : InlineTool::Clock;
-            else if (i == 2) m_PreviewSource = previewingStage ? PreviewSource::Publico : PreviewSource::Stage;
+            else if (i == 2) m_PreviewSource = static_cast<PreviewSource>(nextPreviewSourceIdx);
             else if (i == 3) m_ActiveTool = overlaysOn ? InlineTool::None : InlineTool::Overlays;
             else if (i == 4) m_ActiveTool = chatOn     ? InlineTool::None : InlineTool::Chat;
             else if (i == 5) m_ActiveTool = padsOn     ? InlineTool::None : InlineTool::Pads;
@@ -1405,9 +1412,105 @@ void ViewPanel::RenderContent(float panelW, float panelH)
     // desde el Monitor de Control (ver LiveContentRenderer.h) — el operador
     // elige la fuente con el botón "vaPreviewSource" del riel derecho.
     if (m_PreviewSource == PreviewSource::Publico)
+    {
         UI::DrawPublicContent(dl, p0, p1, drawW, drawH);
-    else
+    }
+    else if (m_PreviewSource == PreviewSource::Stage)
+    {
         UI::DrawStageContent(dl, p0, p1);
+    }
+    else if (m_PreviewSource == PreviewSource::Lan)
+    {
+        // Refleja EXACTAMENTE lo que hoy manda NetworkStreamServer (ver
+        // PresentationCore::WireNetworkServerProviders/RenderProjectorToFBO):
+        // "En vivo" es un espejo real de Publico, "Solo reloj"/"En blanco"
+        // son la misma logica de OutputContentMode que ya aplica del lado
+        // del servidor, asi el operador ve exactamente lo que sale por LAN.
+        auto lanMode = core.GetLanContentMode();
+        if (lanMode == Core::OutputContentMode::Live)
+        {
+            UI::DrawPublicContent(dl, p0, p1, drawW, drawH);
+        }
+        else
+        {
+            dl->AddRectFilled(p0, p1, IM_COL32(10, 10, 12, 255));
+            if (lanMode == Core::OutputContentMode::ClockOnly)
+            {
+                std::time_t now = std::time(nullptr);
+                std::tm lt{};
+#ifdef _WIN32
+                localtime_s(&lt, &now);
+#else
+                localtime_r(&now, &lt);
+#endif
+                char buf[16];
+                std::strftime(buf, sizeof(buf), "%H:%M:%S", &lt);
+                float fontSize = std::clamp(drawH * 0.20f, 24.0f, 160.0f);
+                ImFont* f  = ImGui::GetFont();
+                ImVec2  ts = f->CalcTextSizeA(fontSize, FLT_MAX, FLT_MAX, buf);
+                dl->AddText(f, fontSize, { p0.x + (drawW - ts.x) * 0.5f, p0.y + (drawH - ts.y) * 0.5f },
+                            IM_COL32(235, 235, 240, 255), buf);
+            }
+            else // Blank
+            {
+                const char* msg = "En blanco";
+                ImVec2 ts = ImGui::CalcTextSize(msg);
+                dl->AddText({ p0.x + (drawW - ts.x) * 0.5f, p0.y + (drawH - ts.y) * 0.5f },
+                            IM_COL32(110, 110, 118, 255), msg);
+            }
+            dl->AddRect(p0, p1, IM_COL32(50, 55, 80, 180), 0.0f, 0, 1.0f);
+        }
+
+        // Selector de "Contenido" de LAN -- 3 pastillas chicas pegadas al
+        // borde inferior del video, solo visibles en esta pestaña (mismo
+        // criterio que el resto del riel: la accion vive donde tiene efecto).
+        {
+            const char* pillLabel[3] = { "En vivo", "Solo reloj", "En blanco" };
+            const float pillH = 24.0f, pillGap = 4.0f, pillPad = 8.0f;
+            float pillY = p1.y - pillH - pillPad;
+            float pillTotalW = drawW - pillPad * 2.0f;
+            float pillW = (pillTotalW - pillGap * 2.0f) / 3.0f;
+            for (int pi = 0; pi < 3; pi++)
+            {
+                bool active = (static_cast<int>(lanMode) == pi);
+                ImVec2 pillPos = { p0.x + pillPad + pi * (pillW + pillGap), pillY };
+                ImGui::SetCursorScreenPos(pillPos);
+                ImGui::PushStyleColor(ImGuiCol_Button, active
+                    ? ImVec4(0.35f, 0.55f, 0.95f, 0.85f) : ImVec4(0.0f, 0.0f, 0.0f, 0.55f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, active
+                    ? ImVec4(0.40f, 0.60f, 1.00f, 0.90f) : ImVec4(0.0f, 0.0f, 0.0f, 0.70f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.30f, 0.50f, 0.90f, 0.95f));
+                ImGui::PushStyleColor(ImGuiCol_Text, active
+                    ? ImVec4(1, 1, 1, 1) : ImVec4(0.75f, 0.76f, 0.80f, 1.0f));
+                ImGui::PushID(pi);
+                if (ImGui::Button(pillLabel[pi], { pillW, pillH }))
+                    core.SetLanContentMode(static_cast<Core::OutputContentMode>(pi));
+                ImGui::PopID();
+                ImGui::PopStyleColor(4);
+            }
+        }
+    }
+    else // Transmision -- RTMP no tiene contenido propio que previsualizar
+         // aca (usa Captura, ver BroadcastPanel), asi que esta pestaña solo
+         // ofrece un atajo directo al espacio de trabajo dedicado.
+    {
+        dl->AddRectFilled(p0, p1, IM_COL32(10, 10, 12, 255));
+        const char* msg = "La Transmisión (RTMP) se controla desde su espacio de trabajo";
+        ImVec2 ts = ImGui::CalcTextSize(msg);
+        ImVec2 msgPos = { p0.x + (drawW - ts.x) * 0.5f, p0.y + drawH * 0.44f - ts.y * 0.5f };
+        dl->AddText(msgPos, IM_COL32(160, 160, 170, 255), msg);
+        dl->AddRect(p0, p1, IM_COL32(50, 55, 80, 180), 0.0f, 0, 1.0f);
+
+        const char* btnLabel = "Ir a Transmisión";
+        ImVec2 btnSize = { 180.0f, 30.0f };
+        ImGui::SetCursorScreenPos({ p0.x + (drawW - btnSize.x) * 0.5f, msgPos.y + ts.y + 14.0f });
+        if (ImGui::Button(btnLabel, btnSize))
+        {
+            auto& workspace = ProyecThor::Settings::SettingsManager::Get().GetSettings().workspace;
+            workspace.layoutPreset = ProyecThor::Settings::WorkspaceLayoutPreset::Broadcast;
+            ProyecThor::Settings::SettingsManager::Get().Save();
+        }
+    }
 
     // ── 5b. Medidor VU chico, pegado al borde izquierdo del video ─────────
     // Antes vivia en RenderLiveTransport como una barra horizontal fija de

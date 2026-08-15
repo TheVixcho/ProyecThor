@@ -97,6 +97,7 @@ uint64_t m_LastTransitionTrigger = 0;
     // RenderAll() pueda avisarle a Biblioteca que se restrinja a Medios
     // mientras ese preset este activo.
     void SetLibraryPanelRef(LibraryPanel* p) { m_LibraryPanelRef = p; }
+    LibraryPanel* GetLibraryPanelRef() const { return m_LibraryPanelRef; }
 
     // ── Pantalla completa del SISTEMA OPERATIVO (F11) ─────────────────────
     // Publicos (antes privados) para que el Preview a pantalla completa
@@ -164,10 +165,7 @@ private:
     void BuildWorkspaceLayoutSimple(ImGuiID dockspace_id);
     void BuildWorkspaceLayoutBroadcast(ImGuiID dockspace_id);
     void BuildWorkspaceLayoutLibrary(ImGuiID dockspace_id);
-    void BuildWorkspaceLayoutRender(ImGuiID dockspace_id);
-    void BuildWorkspaceLayoutAudio(ImGuiID dockspace_id);
     void BuildWorkspaceLayoutVideo(ImGuiID dockspace_id);
-    void BuildWorkspaceLayoutImage(ImGuiID dockspace_id);
 
     // Ventanas nativas de salida real ("ProjectorLive"/"StageLive") -- se
     // llama SIEMPRE, una vez por frame, sin importar si el operador esta

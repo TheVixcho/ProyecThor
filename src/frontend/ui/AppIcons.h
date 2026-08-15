@@ -143,6 +143,17 @@ inline void DrawIcon_Overlay(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
     dl->AddRectFilled(IcPt(o, sz, 0.20f, 0.80f), IcPt(o, sz, 0.80f, 0.88f), col, sz * 0.02f);
 }
 
+// Web — globo (circulo + meridiano + paralelo), navegador embebido generico
+inline void DrawIcon_Globe(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = sz * 0.065f;
+    ImVec2 center = IcPt(o, sz, 0.5f, 0.5f);
+    float  r = sz * 0.36f;
+    dl->AddCircle(center, r, col, 24, thick);
+    dl->AddEllipse(center, ImVec2(r * 0.42f, r), col, 0.0f, 24, thick);
+    dl->AddLine(IcPt(o, sz, 0.14f, 0.5f), IcPt(o, sz, 0.86f, 0.5f), col, thick);
+}
+
 // Estilos — "Aa" (icono tipico de formato de texto/tipografia)
 inline void DrawIcon_TextAa(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 {

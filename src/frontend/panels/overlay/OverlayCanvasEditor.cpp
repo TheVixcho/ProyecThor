@@ -1150,6 +1150,15 @@ void OverlayCanvasEditor::RenderLayersPanel(float w, float h) {
             break; // los indices cambiaron: no seguir iterando este frame
         }
     }
+    // FIX (warning de Dear ImGui "Code uses SetCursorPos()/SetCursorScreenPos()
+    // to extend window/parent boundaries. Please submit an item... afterwards"):
+    // el SetCursorScreenPos() de arriba, en la ULTIMA fila, empuja el cursor
+    // kRowGap por debajo de esa fila para "cerrar" la lista, pero nunca se
+    // somete ningun item ahi -- todo lo demas de la fila (fondo/texto) se
+    // dibuja directo con ImDrawList, no cuenta como item real para que este
+    // child sepa que ese espacio es contenido de verdad. Un Dummy() invisible
+    // en la posicion final confirma el limite inferior real.
+    ImGui::Dummy(ImVec2(w, 0.0f));
     ImGui::EndChild();
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();

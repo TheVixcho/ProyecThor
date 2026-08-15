@@ -1,10 +1,14 @@
 #include <GL/glew.h>
 #include "BroadcastPanel.h"
 #include "backend/settings/SettingsManager.h"
+#include "backend/core/PresentationCore.h"
+#include "backend/core/AppPaths.h"
+#include "stb_image.h"
 #include <imgui.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 
 namespace ProyecThor::UI {
 
@@ -91,6 +95,78 @@ void BroadcastPanel::RenderCaptureSection() {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  ResolveOverlayTexture — carga (con cache) la textura de un PNG de overlay
+//  para usarlo como capa. Mismo patron que LoadImageThumb (ver
+//  OverlayLibraryTab.cpp/LayersBgTab.cpp/LibraryVideos.cpp), reescrito local
+//  a proposito -- mismo criterio de "helper chico duplicado" ya establecido
+//  en el resto de la app antes que agregar una dependencia cruzada.
+// ─────────────────────────────────────────────────────────────────────────────
+void BroadcastPanel::ResolveOverlayTexture(const std::string& path, unsigned int& outTex, int& outW, int& outH) {
+    auto it = m_OverlayTexCache.find(path);
+    if (it != m_OverlayTexCache.end()) {
+        outTex = it->second.tex; outW = it->second.w; outH = it->second.h;
+        return;
+    }
+
+    int w = 0, h = 0, n = 0;
+    unsigned char* d = stbi_load(path.c_str(), &w, &h, &n, 4);
+    if (!d) { outTex = 0; outW = 0; outH = 0; return; }
+
+    GLuint tex;
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, d);
+    stbi_image_free(d);
+
+    m_OverlayTexCache[path] = { (unsigned int)tex, w, h };
+    outTex = tex; outW = w; outH = h;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  ResolveActiveSource — UNICO punto de verdad de "que se esta mostrando/
+//  transmitiendo ahora mismo", consultado tanto por el preview (RenderLayerSection)
+//  como por el encode real (Update()/RenderStartSection) para que nunca
+//  puedan desincronizarse (ver comentario en el header).
+// ─────────────────────────────────────────────────────────────────────────────
+void BroadcastPanel::ResolveActiveSource(void*& outTex, int& outW, int& outH) {
+    outTex = nullptr; outW = 0; outH = 0;
+
+    const StreamLayerEntry* layer = (m_ActiveLayer >= 0 && m_ActiveLayer < (int)m_Layers.size())
+        ? &m_Layers[m_ActiveLayer] : nullptr;
+    StreamLayerKind kind = layer ? layer->kind : StreamLayerKind::Capture;
+
+    if (kind == StreamLayerKind::Capture) {
+        if (!m_Capture.IsLive()) return;
+        outTex = m_Capture.GetPreviewTexture();
+        outW   = m_Capture.GetFrameWidth();
+        outH   = m_Capture.GetFrameHeight();
+        return;
+    }
+
+    if (kind == StreamLayerKind::Overlay && layer) {
+        unsigned int tex = 0; int w = 0, h = 0;
+        ResolveOverlayTexture(layer->overlayPngPath, tex, w, h);
+        if (tex) { outTex = (void*)(intptr_t)tex; outW = w; outH = h; }
+        return;
+    }
+
+    if (kind == StreamLayerKind::LiveOutput) {
+        // Solo el FONDO de Público (video/imagen/color), sin texto/overlay
+        // encima -- ver comentario de alcance en PresentationCore::
+        // RenderPublicCompositeToTexture. Tamaño fijo: esta capa no tiene
+        // una fuente de captura de la que heredar resolucion.
+        constexpr int kLiveW = 1280, kLiveH = 720;
+        unsigned int tex = Core::PresentationCore::Get().RenderPublicCompositeToTexture(kLiveW, kLiveH);
+        if (tex) { outTex = (void*)(intptr_t)tex; outW = kLiveW; outH = kLiveH; }
+        return;
+    }
+}
+
 void BroadcastPanel::RenderLayerSection() {
     const auto& theme = SettingsManager::Get().GetSettings().theme;
     ImVec4 success(theme.success[0], theme.success[1], theme.success[2], 1.0f);
@@ -105,7 +181,9 @@ void BroadcastPanel::RenderLayerSection() {
     ImVec2 pos  = ImGui::GetCursorScreenPos();
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    bool live = m_ShowInLayer && m_Capture.IsLive();
+    void* srcTex = nullptr; int srcW = 0, srcH = 0;
+    ResolveActiveSource(srcTex, srcW, srcH);
+    bool live = m_ShowInLayer && srcTex != nullptr;
 
     BroadcastSoftShadow(dl, pos, { pos.x + avail, pos.y + h }, 10.0f);
     dl->AddRectFilled(pos, { pos.x + avail, pos.y + h }, IM_COL32(10, 11, 16, 255), 10.0f);
@@ -114,17 +192,12 @@ void BroadcastPanel::RenderLayerSection() {
         10.0f, 0, live ? 1.5f : 1.0f);
 
     if (live) {
-        void* tex = m_Capture.GetPreviewTexture();
-        int   fw  = m_Capture.GetFrameWidth();
-        int   fh  = m_Capture.GetFrameHeight();
-        if (tex && fw > 0 && fh > 0) {
-            float srcR = (float)fw / (float)fh;
-            float dstR = avail / h;
-            float dw = avail, dh = h, ox = pos.x, oy = pos.y;
-            if (srcR > dstR) { dh = avail / srcR; oy += (h - dh) * 0.5f; }
-            else             { dw = h * srcR;     ox += (avail - dw) * 0.5f; }
-            dl->AddImage(tex, { ox, oy }, { ox + dw, oy + dh });
-        }
+        float srcR = (float)srcW / (float)srcH;
+        float dstR = avail / h;
+        float dw = avail, dh = h, ox = pos.x, oy = pos.y;
+        if (srcR > dstR) { dh = avail / srcR; oy += (h - dh) * 0.5f; }
+        else             { dw = h * srcR;     ox += (avail - dw) * 0.5f; }
+        dl->AddImage(srcTex, { ox, oy }, { ox + dw, oy + dh });
 
         // Insignia "LIVE" con pulso, esquina superior izquierda del frame.
         float pulse = 0.55f + 0.45f * std::sin((float)ImGui::GetTime() * 3.0f);
@@ -136,7 +209,9 @@ void BroadcastPanel::RenderLayerSection() {
             ImGui::ColorConvertFloat4ToU32(ImVec4(1, 1, 1, pulse)));
         dl->AddText({ badgeP0.x + 20.0f, badgeP0.y + 4.0f }, IM_COL32(255, 255, 255, 255), "LIVE");
     } else {
-        const char* hint = "Sin fuente todavia -- anda a Capture y activa \"Mostrar en Layer\".";
+        const char* hint = m_ShowInLayer
+            ? "Sin señal en la fuente elegida todavia."
+            : "Sin fuente todavia -- anda a Capture y activa \"Mostrar en Layer\".";
         ImVec2 ts = ImGui::CalcTextSize(hint);
         ImVec4 textFaint(theme.textFaint[0], theme.textFaint[1], theme.textFaint[2], theme.textFaint[3]);
         dl->AddText({ pos.x + (avail - ts.x) * 0.5f, pos.y + (h - ts.y) * 0.5f },
@@ -144,6 +219,93 @@ void BroadcastPanel::RenderLayerSection() {
     }
 
     ImGui::Dummy({ avail, h });
+
+    // ── Lista de capas ───────────────────────────────────────────────────
+    // Pedido explicito: "manejar las capas de la transmision... poner
+    // cosas como overlays, capture, etc." + "esto incluye poner la ventana
+    // de vista a publico... por la transmision". Solo UNA capa activa a la
+    // vez (ver m_ActiveLayer) -- no hay composicion simultanea con varias
+    // capas encimadas todavia, es una lista de fuentes preparadas entre las
+    // que el operador cambia rapido, no una mezcla real como en OBS.
+    ImGui::Dummy(ImVec2(0.0f, 10.0f));
+    ImGui::TextUnformatted("Capas");
+    ImGui::SameLine();
+    ImGui::TextDisabled("(elegi cual esta activa)");
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+
+    {
+        bool isCaptureActive = (m_ActiveLayer < 0);
+        ImVec4 rowBg = isCaptureActive ? ImVec4(success.x, success.y, success.z, 0.18f)
+                                        : ImVec4(1, 1, 1, 0.03f);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, rowBg);
+        ImGui::BeginChild("##layerRowCapture", ImVec2(avail, 30.0f), true, ImGuiWindowFlags_NoScrollbar);
+        ImGui::TextUnformatted("Captura (cámara/ventana/monitor)");
+        ImGui::SameLine(avail - 90.0f);
+        if (isCaptureActive) ImGui::TextColored(success, "Activa");
+        else if (ImGui::SmallButton("Usar")) m_ActiveLayer = -1;
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+        if (ImGui::IsItemClicked()) m_ActiveLayer = -1;
+    }
+
+    int removeIdx = -1;
+    for (int i = 0; i < (int)m_Layers.size(); i++) {
+        ImGui::PushID(i);
+        auto& layer = m_Layers[i];
+        bool isActive = (m_ActiveLayer == i);
+        ImVec4 rowBg = isActive ? ImVec4(success.x, success.y, success.z, 0.18f) : ImVec4(1, 1, 1, 0.03f);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, rowBg);
+        ImGui::BeginChild("##layerRow", ImVec2(avail, 30.0f), true, ImGuiWindowFlags_NoScrollbar);
+        const char* kindLabel = layer.kind == StreamLayerKind::Overlay ? "[Overlay] " : "[Vista en vivo] ";
+        ImGui::TextUnformatted((std::string(kindLabel) + layer.name).c_str());
+        ImGui::SameLine(avail - 150.0f);
+        if (isActive) ImGui::TextColored(success, "Activa");
+        else if (ImGui::SmallButton("Usar")) m_ActiveLayer = i;
+        ImGui::SameLine(avail - 40.0f);
+        if (ImGui::SmallButton("x")) removeIdx = i;
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+        ImGui::PopID();
+    }
+    if (removeIdx >= 0) {
+        m_Layers.erase(m_Layers.begin() + removeIdx);
+        if (m_ActiveLayer == removeIdx)      m_ActiveLayer = -1;
+        else if (m_ActiveLayer > removeIdx)  m_ActiveLayer--;
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+    if (ImGui::SmallButton("+ Agregar overlay")) ImGui::OpenPopup("##addOverlayLayer");
+    ImGui::SameLine();
+    if (ImGui::SmallButton("+ Agregar vista en vivo (Público)")) {
+        StreamLayerEntry e;
+        e.kind = StreamLayerKind::LiveOutput;
+        e.name = "Público";
+        m_Layers.push_back(e);
+    }
+
+    if (ImGui::BeginPopup("##addOverlayLayer")) {
+        ImGui::TextDisabled("Overlays guardados (Producción > Overlays)");
+        ImGui::Separator();
+        std::string overlaysDir = ProyecThor::GetAssetsPath() + "/overlays";
+        std::error_code ec;
+        bool any = false;
+        for (const auto& entry : std::filesystem::directory_iterator(overlaysDir, ec)) {
+            if (ec || !entry.is_regular_file()) continue;
+            if (entry.path().extension() != ".png") continue;
+            any = true;
+            std::string name = entry.path().stem().string();
+            if (ImGui::MenuItem(name.c_str())) {
+                StreamLayerEntry e;
+                e.kind           = StreamLayerKind::Overlay;
+                e.name           = name;
+                e.overlayPngPath = entry.path().string();
+                m_Layers.push_back(e);
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        if (!any) ImGui::TextDisabled("Sin overlays guardados todavia.");
+        ImGui::EndPopup();
+    }
 }
 
 void BroadcastPanel::RenderStartSection() {
@@ -214,7 +376,7 @@ void BroadcastPanel::RenderStartSection() {
         ImGui::Dummy(ImVec2(0.0f, 10.0f));
     }
 
-    ImGui::TextDisabled("La resolución de salida sigue a la fuente de Capture activa (no hay escalado).");
+    ImGui::TextDisabled("La resolución de salida sigue a la capa activa (Layer, ver arriba).");
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
     if (!m_StatusMessage.empty()) {
@@ -253,17 +415,19 @@ void BroadcastPanel::RenderStartSection() {
         if (!streaming) {
             ProyecThor::Settings::SettingsManager::Get().Save();
 
-            if (!m_ShowInLayer || !m_Capture.IsLive()) {
+            void* srcTex = nullptr; int srcW = 0, srcH = 0;
+            ResolveActiveSource(srcTex, srcW, srcH);
+
+            if (!m_ShowInLayer || !srcTex) {
                 m_StatusIsError = true;
-                m_StatusMessage = "Anda a Capture, prende una fuente y activa \"Mostrar en Layer\" antes de iniciar.";
+                m_StatusMessage = "Elegi una fuente valida en Layer (Capture activo, un Overlay, o Vista en vivo) antes de iniciar.";
             } else {
                 std::string url = s.serverUrl;
                 if (!url.empty() && url.back() != '/') url += "/";
                 url += s.streamKey;
 
                 std::string err;
-                bool ok = m_Encoder.Start(url, m_Capture.GetFrameWidth(), m_Capture.GetFrameHeight(),
-                                           s.fps, s.videoBitrateKbps, &err);
+                bool ok = m_Encoder.Start(url, srcW, srcH, s.fps, s.videoBitrateKbps, &err);
                 m_StatusIsError = !ok;
                 m_StatusMessage = ok ? "Transmitiendo." : err;
             }
@@ -289,14 +453,11 @@ void BroadcastPanel::RenderStartSection() {
 
 void BroadcastPanel::Update() {
     if (!m_Encoder.IsStreaming()) return;
-    if (!m_ShowInLayer || !m_Capture.IsLive()) return;
+    if (!m_ShowInLayer) return;
 
-    void* texVoid = m_Capture.GetPreviewTexture();
-    if (!texVoid) return;
-
-    int w = m_Capture.GetFrameWidth();
-    int h = m_Capture.GetFrameHeight();
-    if (w <= 0 || h <= 0) return;
+    void* texVoid = nullptr; int w = 0, h = 0;
+    ResolveActiveSource(texVoid, w, h);
+    if (!texVoid || w <= 0 || h <= 0) return;
 
     size_t need = (size_t)w * (size_t)h * 4;
     if (m_ReadbackBuffer.size() != need) m_ReadbackBuffer.resize(need);

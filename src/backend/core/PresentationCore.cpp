@@ -7,6 +7,7 @@
 #include <iostream>
 #include <cstring>
 #include <cstdlib>
+#include <ctime>
 #include "backend/settings/SettingsManager.h"
 #include <filesystem>
 #include <algorithm>
@@ -17,6 +18,8 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <shlobj.h>
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
 #endif
 #include "NetworkStreamServer.h"
 #include "PreviewLoadWorker.h"
@@ -510,6 +513,27 @@ bool PresentationCore::GetGlobalMute() const {
     }
     bool PresentationCore::IsProjectorPostFXViewport(ImGuiID id) const {
         return id != 0 && id == m_ProjectorPostFXViewportID;
+    }
+
+    void* PresentationCore::GetProjectorNativeWindow() const {
+#ifdef _WIN32
+        if (m_ProjectorPostFXViewportID == 0) return nullptr;
+        ImGuiViewport* vp = ImGui::FindViewportByID(m_ProjectorPostFXViewportID);
+        if (!vp) return nullptr;
+
+        // El backend multi-viewport de esta app es GLFW (ver imgui_impl_glfw),
+        // no el backend nativo Win32 -- PlatformHandleRaw puede quedar en
+        // null segun la version; PlatformHandle SI es siempre el GLFWwindow*
+        // real (eso es lo que crea/gestiona el backend GLFW), asi que se
+        // resuelve el HWND desde ahi, mismo mecanismo que AIWebViewPanel::
+        // NavigateTo usa para la ventana principal.
+        if (vp->PlatformHandleRaw) return vp->PlatformHandleRaw;
+        if (vp->PlatformHandle)
+            return (void*)glfwGetWin32Window(static_cast<GLFWwindow*>(vp->PlatformHandle));
+        return nullptr;
+#else
+        return nullptr;
+#endif
     }
     void PresentationCore::RenderProjectorViewportPostFX(ImGuiViewport* viewport,
                                                          void (*defaultRenderFn)(ImGuiViewport*, void*))
@@ -1861,6 +1885,36 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
                 snap.showText    = st.showText;
             }
 
+            // OutputContentMode de LAN (ver ViewPanel::RenderContent, pestaña
+            // "Inalambrica") -- pisa lo de arriba SI el operador clavo esta
+            // salida en "Solo reloj"/"En blanco", independiente de que este
+            // en vivo Publico/Stage en este momento.
+            switch (GetLanContentMode()) {
+                case OutputContentMode::ClockOnly: {
+                    std::time_t now = std::time(nullptr);
+                    std::tm lt{};
+#ifdef _WIN32
+                    localtime_s(&lt, &now);
+#else
+                    localtime_r(&now, &lt);
+#endif
+                    char buf[16];
+                    std::strftime(buf, sizeof(buf), "%H:%M:%S", &lt);
+                    snap.currentText  = buf;
+                    snap.showText     = true;
+                    snap.isProjecting = true;
+                    break;
+                }
+                case OutputContentMode::Blank:
+                    snap.currentText  = "";
+                    snap.showText     = false;
+                    snap.isProjecting = false;
+                    break;
+                case OutputContentMode::Live:
+                default:
+                    break;
+            }
+
             snap.textSize      = st.textSize;
             snap.textAlignment = st.textAlignment;
             snap.transitionTrigger  = st.transitionTrigger;
@@ -2106,14 +2160,22 @@ outRGB.resize(static_cast<size_t>(w) * h * 3);
         }
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Mismo criterio que RenderProjectorWindow(): el stream de red
-        // tampoco debe mostrar un frame entrecortado mientras algo carga.
-        if (ShouldShowLoadingScreen()) {
-            m_Impl->background.RenderLogo(
-                static_cast<unsigned int>(reinterpret_cast<uintptr_t>(GetLoadingLogoTexture())),
-                m_LoadingLogoW, m_LoadingLogoH, w, h);
-        } else {
-            m_Impl->background.Render(w, h);
+        // OutputContentMode de LAN (ver SetLanContentMode): "Solo reloj"/"En
+        // blanco" no deben dejar pasar el fondo real (video/imagen en vivo)
+        // -- ya se limpio a negro arriba, alcanza con NO pintar nada mas; el
+        // texto del reloj lo agrega el cliente web (ver snap.currentText en
+        // WireNetworkServerProviders), este FBO solo aporta los pixeles de fondo.
+        if (GetLanContentMode() == OutputContentMode::Live)
+        {
+            // Mismo criterio que RenderProjectorWindow(): el stream de red
+            // tampoco debe mostrar un frame entrecortado mientras algo carga.
+            if (ShouldShowLoadingScreen()) {
+                m_Impl->background.RenderLogo(
+                    static_cast<unsigned int>(reinterpret_cast<uintptr_t>(GetLoadingLogoTexture())),
+                    m_LoadingLogoW, m_LoadingLogoH, w, h);
+            } else {
+                m_Impl->background.Render(w, h);
+            }
         }
 
         outRGB.resize(static_cast<size_t>(w) * h * 3);
@@ -2149,6 +2211,40 @@ if (ptr)
                    prevViewport[2], prevViewport[3]);
 
         return true;
+    }
+
+    unsigned int PresentationCore::RenderPublicCompositeToTexture(int w, int h)
+    {
+        if (w <= 0 || h <= 0 || !m_Impl) return 0;
+
+        EnsureFBO(w, h);
+        if (m_FBO == 0) return 0;
+
+        GLint prevFBO         = 0;
+        GLint prevViewport[4] = {};
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFBO);
+        glGetIntegerv(GL_VIEWPORT,            prevViewport);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
+        glViewport(0, 0, w, h);
+        {
+            std::lock_guard<std::mutex> lk(m_Mutex);
+            glClearColor(m_State.bgColor[0], m_State.bgColor[1], m_State.bgColor[2], 1.0f);
+        }
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        if (ShouldShowLoadingScreen()) {
+            m_Impl->background.RenderLogo(
+                static_cast<unsigned int>(reinterpret_cast<uintptr_t>(GetLoadingLogoTexture())),
+                m_LoadingLogoW, m_LoadingLogoH, w, h);
+        } else {
+            m_Impl->background.Render(w, h);
+        }
+
+        glBindFramebuffer(GL_FRAMEBUFFER, prevFBO);
+        glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
+
+        return m_FBOTex;
     }
 
 } // namespace ProyecThor::Core

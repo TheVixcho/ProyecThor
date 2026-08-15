@@ -199,10 +199,7 @@ const char* WorkspaceLayoutPresetName(WorkspaceLayoutPreset preset) {
         case WorkspaceLayoutPreset::Simple:    return "Simple";
         case WorkspaceLayoutPreset::Broadcast: return "Transmisión";
         case WorkspaceLayoutPreset::Library:   return "Biblioteca";
-        case WorkspaceLayoutPreset::Render:    return "Render";
-        case WorkspaceLayoutPreset::Audio:     return "Audio";
-        case WorkspaceLayoutPreset::Video:     return "Video";
-        case WorkspaceLayoutPreset::Image:     return "Imagen";
+        case WorkspaceLayoutPreset::Video:     return "Producción";
         default:                               return "Clásico";
     }
 }
@@ -211,10 +208,11 @@ WorkspaceLayoutPreset WorkspaceLayoutPresetFromString(const std::string& s) {
     if (s == "simple")    return WorkspaceLayoutPreset::Simple;
     if (s == "broadcast") return WorkspaceLayoutPreset::Broadcast;
     if (s == "library")   return WorkspaceLayoutPreset::Library;
-    if (s == "render")    return WorkspaceLayoutPreset::Render;
-    if (s == "audio")     return WorkspaceLayoutPreset::Audio;
-    if (s == "video")     return WorkspaceLayoutPreset::Video;
-    if (s == "image")     return WorkspaceLayoutPreset::Image;
+    // "audio"/"image" (ex-presets, absorbidos por "video"/Producción, ver
+    // SettingsManager.h) siguen mapeando aca por si quedo guardado en un
+    // settings.json viejo -- mejor caer en Producción (lo mas parecido a
+    // lo que el usuario tenia elegido) que en Clasico.
+    if (s == "video" || s == "audio" || s == "image") return WorkspaceLayoutPreset::Video;
     return WorkspaceLayoutPreset::Classic;
 }
 
@@ -223,10 +221,7 @@ static std::string WorkspaceLayoutPresetToKey(WorkspaceLayoutPreset preset) {
         case WorkspaceLayoutPreset::Simple:    return "simple";
         case WorkspaceLayoutPreset::Broadcast: return "broadcast";
         case WorkspaceLayoutPreset::Library:   return "library";
-        case WorkspaceLayoutPreset::Render:    return "render";
-        case WorkspaceLayoutPreset::Audio:     return "audio";
         case WorkspaceLayoutPreset::Video:     return "video";
-        case WorkspaceLayoutPreset::Image:     return "image";
         default:                               return "classic";
     }
 }

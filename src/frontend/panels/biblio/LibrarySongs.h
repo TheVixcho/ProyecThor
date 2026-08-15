@@ -46,6 +46,13 @@ void CreateNewSongFromClipboard(const std::string& clipboardText);
 // RenderUrlImportModal en UIManager.cpp.
 void CreateNewSongFromText(const std::string& suggestedTitle, const std::string& text);
 
+// Sobreescribe el contenido de una cancion YA EXISTENTE (a diferencia de
+// CreateNewSongFromText, que siempre crea un archivo nuevo con dedup de
+// nombre) -- usado por el Asistente de IA en modo Avanzada (ver AITools.cpp)
+// para editar letras con confirmacion previa del operador. Devuelve false
+// sin tocar nada si <filename> no existe.
+bool SetSongText(const std::string& filename, const std::string& text);
+
 std::string GetSongAuthor(const std::string& filename);
 void SetSongAuthor(const std::string& filename, const std::string& author);
 

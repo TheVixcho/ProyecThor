@@ -56,6 +56,30 @@ struct UpdateVersionInfo {
 
 static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
+        15, "0.7.0-beta.1",
+        "BETA", "BETA",
+        "splash_bg6.jpg",
+        "Asistente de IA en la toolbar de abajo: modo Básica (Claude/ChatGPT/Gemini "
+        "en un navegador embebido de verdad, inicia sesion normal, ProyecThor no ve "
+        "tu clave) y modo Avanzada (tu propia API key de Claude, puede listar/crear/"
+        "editar canciones de la Biblioteca, siempre pide confirmacion antes de "
+        "guardar algo). Espacio de trabajo \"Video\" renombrado a \"Producción\": "
+        "ahora un rail izquierdo estilo Biblioteca con Render (conversor de formato), "
+        "Audio (DAW real: grabar microfono, cortar/mover clips en la linea de tiempo, "
+        "reproducir todas las pistas juntas, exportar a WAV/MP3/AAC/OGG) y Overlays "
+        "(galeria+editor). Espacio de trabajo \"Transmisión\" simplificado a solo eso "
+        "(sin Biblioteca/Home/Diseño de por medio) con una lista de capas real -- "
+        "Captura, un Overlay guardado, o la salida en vivo al Público -- para elegir "
+        "que se transmite. Nuevo panel \"Web\" en la Biblioteca (junto a Render/"
+        "Overlay): navegador embebido con \"Enviar a Público\" para mostrar cualquier "
+        "pagina directo en la salida real. La Inalámbrica (LAN) ahora se puede clavar "
+        "en \"Solo reloj\" o \"En blanco\" mientras Público/Stage siguen con lo que "
+        "este en vivo, elegible desde el selector de vista de Vista en Vivo. Cola del "
+        "Monitor con botones animados de verdad (antes planos) y el boton Loop "
+        "arreglado (no volvia a repetir el video). Overlay editor: arreglado un "
+        "warning de Dear ImGui en la lista de capas."
+    },
+    {
         14, "0.6.0",
         "ACTUALIZACION ESTABLE", "ACTUALIZACION ESTABLE",
         "splash_bg6.jpg",
