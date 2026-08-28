@@ -1,9 +1,14 @@
 #include "Announcements.h"
 #include "backend/core/PresentationCore.h"
+#include "backend/core/AppPaths.h"
 #include "frontend/ui/UIStrings.h"
 #include "frontend/ui/DesignSystem.h"
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <nlohmann/json.hpp>
+#include <fstream>
+#include <filesystem>
+#include <ctime>
 #include <algorithm>
 #include <cstring>
 #include <cmath>
@@ -48,6 +53,14 @@ static ImVec4 Brighten(const ImVec4& c, float amount) {
         c.w);
 }
 
+static ImU32 AnnCategoryColor(const std::string& cat) {
+    if (cat == "Anuncios" || cat == "Anuncio") return IM_COL32(50, 180, 240, 255);   // Azul / Cian
+    if (cat == "Avisos"   || cat == "Aviso")   return IM_COL32(82, 224, 160, 255);   // Verde menta
+    if (cat == "Urgente")                      return IM_COL32(240, 80, 90, 255);    // Rojo
+    if (cat == "Culto")                        return IM_COL32(245, 180, 50, 255);   // Ámbar
+    return IM_COL32(160, 165, 180, 255);                                            // Gris / General
+}
+
 static bool SmallIconButton(const char* label, ImVec2 size,
                             ImVec4 col, ImVec4 colHov, ImVec4 colAct) {
     ImGui::PushStyleColor(ImGuiCol_Button,        col);
@@ -58,6 +71,86 @@ static bool SmallIconButton(const char* label, ImVec2 size,
     return pressed;
 }
 
+struct LoadedQuickNote {
+    std::string id;
+    std::string title;
+    std::string content;
+    std::string category;
+    bool isFavorite = false;
+    std::string updatedAt;
+};
+
+static std::vector<LoadedQuickNote> LoadAllQuickNotesFromDisk() {
+    std::vector<LoadedQuickNote> list;
+    try {
+        std::filesystem::path p = std::filesystem::path(ProyecThor::GetAppDataRoot()) / "quick_notes.json";
+        if (std::filesystem::exists(p)) {
+            std::ifstream in(p);
+            if (in.is_open()) {
+                nlohmann::json j;
+                in >> j;
+                if (j.contains("notes") && j["notes"].is_array()) {
+                    for (const auto& item : j["notes"]) {
+                        LoadedQuickNote n;
+                        n.id = item.value("id", "");
+                        n.title = item.value("title", "");
+                        n.content = item.value("content", "");
+                        n.category = item.value("category", "General");
+                        n.isFavorite = item.value("isFavorite", false);
+                        n.updatedAt = item.value("updatedAt", "");
+                        if (!n.content.empty()) list.push_back(n);
+                    }
+                }
+            }
+        }
+    } catch (...) {}
+    return list;
+}
+
+static void SaveNoteToQuickNotesLibrary(const std::string& title, const std::string& text, const std::string& category) {
+    if (text.empty()) return;
+    try {
+        std::filesystem::path p = std::filesystem::path(ProyecThor::GetAppDataRoot()) / "quick_notes.json";
+        nlohmann::json j;
+        if (std::filesystem::exists(p)) {
+            std::ifstream in(p);
+            if (in.is_open()) {
+                in >> j;
+            }
+        }
+        if (!j.is_object()) j = nlohmann::json::object();
+        if (!j.contains("notes") || !j["notes"].is_array()) j["notes"] = nlohmann::json::array();
+
+        auto now = std::chrono::system_clock::now();
+        std::time_t nowTime = std::chrono::system_clock::to_time_t(now);
+        std::tm tmBuf{};
+#if defined(_WIN32)
+        localtime_s(&tmBuf, &nowTime);
+#else
+        localtime_r(&nowTime, &tmBuf);
+#endif
+        char dateStr[64];
+        std::strftime(dateStr, sizeof(dateStr), "%d/%m/%Y %H:%M", &tmBuf);
+
+        std::string id = std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count());
+
+        nlohmann::json item;
+        item["id"] = id;
+        item["title"] = title.empty() ? text.substr(0, std::min<size_t>(text.size(), 24)) : title;
+        item["content"] = text;
+        item["category"] = category.empty() ? "Anuncios" : category;
+        item["isFavorite"] = false;
+        item["updatedAt"] = dateStr;
+
+        j["notes"].insert(j["notes"].begin(), item);
+
+        std::ofstream out(p);
+        if (out.is_open()) {
+            out << j.dump(2);
+        }
+    } catch (...) {}
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Constructor
 // ─────────────────────────────────────────────────────────────────────────────
@@ -65,10 +158,22 @@ static bool SmallIconButton(const char* label, ImVec2 size,
 Announcements::Announcements() {
     Message first;
     std::strncpy(first.text, "Bienvenidos al servicio", sizeof(first.text) - 1);
+    std::strncpy(first.tag, "Anuncios", sizeof(first.tag) - 1);
     m_Messages.push_back(first);
 
     // Cargar lista de fuentes al iniciar
     SyncFontList();
+}
+
+void Announcements::AddMessage(const std::string& text, const std::string& tag, bool enabled) {
+    if (text.empty()) return;
+    Message msg;
+    std::strncpy(msg.text, text.c_str(), sizeof(msg.text) - 1);
+    msg.text[sizeof(msg.text) - 1] = '\0';
+    std::strncpy(msg.tag, tag.empty() ? "Anuncios" : tag.c_str(), sizeof(msg.tag) - 1);
+    msg.tag[sizeof(msg.tag) - 1] = '\0';
+    msg.enabled = enabled;
+    m_Messages.push_back(msg);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -272,7 +377,7 @@ void Announcements::Render(GlassRenderer& glass) {
 
     (void)glass;
     ImGui::PushStyleColor(ImGuiCol_Text, accent);
-    ImGui::TextUnformatted("Anuncios");
+    ImGui::TextUnformatted("Anuncios y Avisos");
     ImGui::PopStyleColor();
     ImGui::Separator();
     ImGui::Spacing();
@@ -362,16 +467,46 @@ void Announcements::Render(GlassRenderer& glass) {
     ImGui::Spacing();
 
     // ─────────────────────────────────────────────────────────────────────
-    //  SECCIÓN: Lista de mensajes
+    //  SECCIÓN: Lista de mensajes y Filtros
     // ─────────────────────────────────────────────────────────────────────
 
     ImGui::PushStyleColor(ImGuiCol_Text, textSection);
-    ImGui::TextUnformatted("Mensajes");
+    ImGui::TextUnformatted("Mensajes de Anuncios y Avisos");
     ImGui::PopStyleColor();
     ImGui::Spacing();
 
-    float listH = std::min(160.0f, (float)m_Messages.size() * 36.0f + 8.0f);
-    listH       = std::max(listH, 44.0f);
+    // Filtros de categoría para anuncios
+    {
+        const std::vector<std::string> categories = { "Todos", "Anuncios", "Avisos", "Urgente", "Culto", "General" };
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 4.0f));
+
+        for (const auto& cat : categories) {
+            bool selected = (m_CategoryFilter == cat);
+
+            ImVec4 bg = selected
+                ? ImGui::ColorConvertU32ToFloat4(DS::AccentColor)
+                : ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill);
+
+            ImGui::PushStyleColor(ImGuiCol_Button, bg);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill));
+            ImGui::PushStyleColor(ImGuiCol_Text, selected ? ImVec4(1,1,1,1) : ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
+
+            if (ImGui::Button(cat.c_str()))
+                m_CategoryFilter = cat;
+
+            ImGui::PopStyleColor(3);
+            ImGui::SameLine();
+        }
+        ImGui::NewLine();
+        ImGui::PopStyleVar(2);
+    }
+
+    ImGui::Spacing();
+
+    float listH = std::min(180.0f, (float)m_Messages.size() * 38.0f + 12.0f);
+    listH       = std::max(listH, 48.0f);
 
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ToVec4(DS::GlassFillBot));
     ImGui::BeginChild("##ann_list", ImVec2(0, listH), true, ImGuiWindowFlags_None);
@@ -379,7 +514,12 @@ void Announcements::Render(GlassRenderer& glass) {
     int toDelete = -1;
     int toMoveUp = -1;
 
+    const char* cycleTags[] = { "Anuncios", "Avisos", "Urgente", "Culto", "General" };
+
     for (int i = 0; i < (int)m_Messages.size(); ++i) {
+        if (m_CategoryFilter != "Todos" && m_Messages[i].tag != m_CategoryFilter)
+            continue;
+
         ImGui::PushID(i);
 
         bool isActive = (i == m_ActiveIndex);
@@ -392,12 +532,49 @@ void Announcements::Render(GlassRenderer& glass) {
         ImGui::Checkbox("##en", &m_Messages[i].enabled);
         ImGui::SameLine(0, 6);
 
-        float fieldW = ImGui::GetContentRegionAvail().x - 60.0f;
+        // Pill interactiva de Categoría
+        ImU32 catCol = AnnCategoryColor(m_Messages[i].tag);
+        ImGui::PushStyleColor(ImGuiCol_Button, (catCol & 0x00FFFFFF) | 0x35000000);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, (catCol & 0x00FFFFFF) | 0x55000000);
+        ImGui::PushStyleColor(ImGuiCol_Text, catCol);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
+
+        char tagBtnId[64];
+        std::snprintf(tagBtnId, sizeof(tagBtnId), "%s##tagBtn", m_Messages[i].tag);
+        if (ImGui::Button(tagBtnId, ImVec2(68.0f, 22.0f))) {
+            // Ciclar etiqueta
+            int curIdx = 0;
+            for (int k = 0; k < 5; ++k) {
+                if (std::strcmp(m_Messages[i].tag, cycleTags[k]) == 0) {
+                    curIdx = k;
+                    break;
+                }
+            }
+            int nextIdx = (curIdx + 1) % 5;
+            std::strncpy(m_Messages[i].tag, cycleTags[nextIdx], sizeof(m_Messages[i].tag) - 1);
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clic para cambiar categoría / etiqueta");
+
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(3);
+
+        ImGui::SameLine(0, 6);
+
+        float fieldW = ImGui::GetContentRegionAvail().x - 88.0f;
         ImGui::SetNextItemWidth(fieldW);
         ImGui::InputText("##msg", m_Messages[i].text, sizeof(m_Messages[i].text));
 
         ImGui::PopStyleColor();
         ImGui::SameLine(0, 6);
+
+        // Guardar este mensaje como Nota en la Biblioteca
+        if (SmallIconButton("G", ImVec2(22, 22),
+            fillBase, fillHover, Brighten(fillHover, 0.08f))) {
+            SaveNoteToQuickNotesLibrary(m_Messages[i].text, m_Messages[i].text, m_Messages[i].tag);
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Guardar este mensaje en la Biblioteca de Notas");
+
+        ImGui::SameLine(0, 4);
 
         if (i > 0) {
             if (SmallIconButton("^", ImVec2(22, 22),
@@ -435,19 +612,53 @@ void Announcements::Render(GlassRenderer& glass) {
 
     ImGui::Spacing();
 
-    ImGui::PushStyleColor(ImGuiCol_Button,        accentDim);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Brighten(accentDim, 0.08f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Brighten(accentDim, -0.08f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
+    // Botones rápidos para agregar Anuncio / Aviso / Importar de Notas
+    {
+        float availW = ImGui::GetContentRegionAvail().x;
+        float addBtnW = (availW - 12.0f) / 3.0f;
 
-    if (ImGui::Button("+ Agregar mensaje", ImVec2(ImGui::GetContentRegionAvail().x, 28.0f))) {
-        Message nm;
-        std::strncpy(nm.text, "Nuevo anuncio", sizeof(nm.text) - 1);
-        m_Messages.push_back(nm);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
+
+        // + Agregar Anuncio (Cian)
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.35f, 0.55f, 0.85f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.45f, 0.70f, 0.95f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.12f, 0.30f, 0.48f, 1.0f));
+        if (ImGui::Button("+ Anuncio", ImVec2(addBtnW, 28.0f))) {
+            Message nm;
+            std::strncpy(nm.text, "Nuevo anuncio", sizeof(nm.text) - 1);
+            std::strncpy(nm.tag, "Anuncios", sizeof(nm.tag) - 1);
+            m_Messages.push_back(nm);
+        }
+        ImGui::PopStyleColor(3);
+
+        ImGui::SameLine(0, 6);
+
+        // + Agregar Aviso (Verde menta)
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.45f, 0.32f, 0.85f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.55f, 0.40f, 0.95f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.14f, 0.38f, 0.28f, 1.0f));
+        if (ImGui::Button("+ Aviso", ImVec2(addBtnW, 28.0f))) {
+            Message nm;
+            std::strncpy(nm.text, "Nuevo aviso", sizeof(nm.text) - 1);
+            std::strncpy(nm.tag, "Avisos", sizeof(nm.tag) - 1);
+            m_Messages.push_back(nm);
+        }
+        ImGui::PopStyleColor(3);
+
+        ImGui::SameLine(0, 6);
+
+        // Importar de Notas (Ámbar)
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.40f, 0.32f, 0.15f, 0.85f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.50f, 0.40f, 0.18f, 0.95f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.35f, 0.28f, 0.12f, 1.0f));
+        if (ImGui::Button("Desde Notas", ImVec2(addBtnW, 28.0f))) {
+            m_ShowNotesImportModal = true;
+            m_ImportSearchFilter[0] = '\0';
+        }
+        ImGui::PopStyleColor(3);
+
+        ImGui::PopStyleVar();
     }
-
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor(3);
 
     ImGui::Spacing();
     ImGui::Separator();
@@ -930,6 +1141,150 @@ void Announcements::Render(GlassRenderer& glass) {
     }
 
     ImGui::PopStyleVar();
+
+    if (m_ShowNotesImportModal) {
+        RenderNotesImportModal();
+    }
+}
+
+void Announcements::RenderNotesImportModal() {
+    ImGui::OpenPopup("Importar desde Biblioteca de Notas");
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(520.0f, 430.0f), ImGuiCond_Appearing);
+
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImGui::ColorConvertU32ToFloat4(DS::GlassFillTop));
+    ImGui::PushStyleColor(ImGuiCol_Border,   ImGui::ColorConvertU32ToFloat4(DS::GlassBorder));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, DS::RadiusLarge);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(18.0f, 16.0f));
+
+    if (ImGui::BeginPopupModal("Importar desde Biblioteca de Notas", &m_ShowNotesImportModal, ImGuiWindowFlags_NoResize)) {
+        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextPrimary), "Selecciona notas guardadas para añadir al banner de anuncios:");
+        ImGui::Spacing();
+
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
+        ImGui::SetNextItemWidth(-1.0f);
+        ImGui::InputTextWithHint("##importFilter", "Buscar notas por título o texto...", m_ImportSearchFilter, sizeof(m_ImportSearchFilter));
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+
+        ImGui::Spacing();
+
+        auto notes = LoadAllQuickNotesFromDisk();
+
+        std::string filterLower = m_ImportSearchFilter;
+        std::transform(filterLower.begin(), filterLower.end(), filterLower.begin(), ::tolower);
+
+        std::vector<LoadedQuickNote> filtered;
+        for (const auto& n : notes) {
+            if (!filterLower.empty()) {
+                std::string tLower = n.title;
+                std::string cLower = n.content;
+                std::transform(tLower.begin(), tLower.end(), tLower.begin(), ::tolower);
+                std::transform(cLower.begin(), cLower.end(), cLower.begin(), ::tolower);
+                if (tLower.find(filterLower) == std::string::npos && cLower.find(filterLower) == std::string::npos)
+                    continue;
+            }
+            filtered.push_back(n);
+        }
+
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::ColorConvertU32ToFloat4(DS::GlassFillBot));
+        ImGui::BeginChild("##importNotesList", ImVec2(0.0f, 260.0f), true);
+
+        if (filtered.empty()) {
+            ImGui::Dummy(ImVec2(0.0f, 40.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextHint));
+            const char* noNotesMsg = notes.empty()
+                ? "No hay notas guardadas en la biblioteca todavía."
+                : "No se encontraron notas con el término buscado.";
+            ImVec2 nsz = ImGui::CalcTextSize(noNotesMsg);
+            ImGui::SetCursorPosX((ImGui::GetWindowWidth() - nsz.x) * 0.5f);
+            ImGui::TextUnformatted(noNotesMsg);
+            ImGui::PopStyleColor();
+        } else {
+            for (size_t i = 0; i < filtered.size(); ++i) {
+                const auto& note = filtered[i];
+                ImGui::PushID((int)i);
+
+                ImU32 catCol = AnnCategoryColor(note.category);
+
+                // Badge de categoría
+                ImVec2 catSz = ImGui::CalcTextSize(note.category.c_str());
+                ImVec2 catPos = ImGui::GetCursorScreenPos();
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                dl->AddRectFilled(catPos, ImVec2(catPos.x + catSz.x + 8.0f, catPos.y + catSz.y + 2.0f),
+                    (catCol & 0x00FFFFFF) | 0x35000000, DS::RadiusSmall);
+
+                ImGui::SetCursorScreenPos(ImVec2(catPos.x + 4.0f, catPos.y));
+                ImGui::PushStyleColor(ImGuiCol_Text, catCol);
+                ImGui::SetWindowFontScale(0.85f);
+                ImGui::TextUnformatted(note.category.c_str());
+                ImGui::SetWindowFontScale(1.0f);
+                ImGui::PopStyleColor();
+
+                ImGui::SameLine(0.0f, 10.0f);
+
+                // Título
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextPrimary));
+                ImGui::TextUnformatted(note.title.c_str());
+                ImGui::PopStyleColor();
+
+                ImGui::SameLine(ImGui::GetContentRegionAvail().x - 70.0f);
+
+                // Botón Añadir
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.45f, 0.65f, 0.85f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.55f, 0.75f, 0.95f));
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
+                if (ImGui::Button("+ Añadir", ImVec2(68.0f, 22.0f))) {
+                    AddMessage(note.content, note.category, true);
+                }
+                ImGui::PopStyleVar();
+                ImGui::PopStyleColor(2);
+
+                // Snippet de contenido
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
+                std::string snip = note.content;
+                if (snip.size() > 80) snip = snip.substr(0, 75) + "...";
+                ImGui::TextWrapped("  %s", snip.c_str());
+                ImGui::PopStyleColor();
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                ImGui::PopID();
+            }
+        }
+
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+
+        ImGui::Spacing();
+
+        float btnW = (ImGui::GetContentRegionAvail().x - 10.0f) * 0.5f;
+
+        if (DS::GlassButton("Añadir Todas", ImVec2(btnW, 32.0f), DS::AccentColor)) {
+            for (const auto& note : filtered) {
+                AddMessage(note.content, note.category, true);
+            }
+            m_ShowNotesImportModal = false;
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::SameLine(0.0f, 10.0f);
+
+        if (DS::GlassButton("Cerrar", ImVec2(btnW, 32.0f), DS::TextHint)) {
+            m_ShowNotesImportModal = false;
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(2);
 }
 
 } // namespace ProyecThor::UI

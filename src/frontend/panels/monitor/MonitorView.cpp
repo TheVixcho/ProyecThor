@@ -12,6 +12,7 @@
 #include "backend/core/AppPaths.h"
 #include "frontend/views/audio/AudioHelpers.h"
 #include "frontend/views/audio/AudioAlbumArt.h"
+#include <filesystem>
 
 namespace ProyecThor::UI {
 
@@ -98,7 +99,7 @@ void MonitorView::Render(Core::VLCBasePlayer* player)
            if (currentSel.type == Core::ItemType::Video && !currentSel.title.empty())
 {
     std::string path = currentSel.title;
-    if (path.rfind("http", 0) != 0)
+    if (path.rfind("http", 0) != 0 && !std::filesystem::path(path).is_absolute())
         path = GetAssetsPath() + "/videos/" + path;
 
     // Carga en un hilo aparte (ver PresentationCore::RequestPreviewLoad):
@@ -113,7 +114,9 @@ void MonitorView::Render(Core::VLCBasePlayer* player)
 }
             else if (currentSel.type == Core::ItemType::Audio && !currentSel.title.empty())
             {
-                std::string path = Audio::GetAudioPath() + "/" + currentSel.title;
+                std::string path = currentSel.title;
+                if (!std::filesystem::path(path).is_absolute())
+                    path = Audio::GetAudioPath() + "/" + path;
                 // Reproduce igual que un video (el preview sigue mudo por
                 // forceSilent salvo que el operador lo active, ver arriba)
                 // para que el tiempo/seek funcionen; el disco animado se

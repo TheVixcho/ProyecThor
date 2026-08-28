@@ -803,7 +803,7 @@ void LibraryPanel::SelectPlaylistSong(const std::string& playlistName, int index
 void LibraryPanel::ImportFile()
 {
 #ifdef _WIN32
-    wchar_t filename[MAX_PATH] = {};
+    std::vector<wchar_t> buffer(65536, 0);
     OPENFILENAMEW ofn;
     ZeroMemory(&ofn, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
@@ -822,13 +822,30 @@ void LibraryPanel::ImportFile()
     else
         ofn.lpstrFilter = L"Todos los archivos\0*.*\0";
 
-    ofn.lpstrFile = filename;
-    ofn.nMaxFile  = MAX_PATH;
-    ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+    ofn.lpstrFile = buffer.data();
+    ofn.nMaxFile  = static_cast<DWORD>(buffer.size());
+    ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR | OFN_ALLOWMULTISELECT;
 
     if (!GetOpenFileNameW(&ofn)) return;
 
-    fs::path src(filename);
+    const wchar_t* p = buffer.data();
+    std::wstring first(p);
+    p += first.length() + 1;
+
+    if (*p == 0) {
+        // Solo un archivo seleccionado
+        fs::path src(first);
+        ImportSelectedFileToLibrary(src, m_CurrentCategory, GetAssetsPath());
+    } else {
+        // Multiples archivos: 'first' es el directorio base
+        fs::path dir(first);
+        while (*p != 0) {
+            std::wstring filename(p);
+            fs::path src = dir / filename;
+            ImportSelectedFileToLibrary(src, m_CurrentCategory, GetAssetsPath());
+            p += filename.length() + 1;
+        }
+    }
 #else
     std::string filter;
     switch (m_CurrentCategory) {
@@ -853,11 +870,11 @@ void LibraryPanel::ImportFile()
             break;
     }
 
-    std::string command = "zenity --file-selection --title=\"Importar archivo\" \"" +
+    std::string command = "zenity --file-selection --multiple --separator=\"|\" --title=\"Importar archivos\" \"" +
                           filter + "\" 2>/dev/null";
 
     std::string result;
-    char buffer[1024];
+    char buffer[4096];
     FILE* pipe = popen(command.c_str(), "r");
     if (!pipe) {
         std::cerr << "[LibraryPanel] No se pudo abrir el selector de archivos (zenity).\n";
@@ -872,10 +889,24 @@ void LibraryPanel::ImportFile()
         result.pop_back();
     if (result.empty()) return;
 
-    fs::path src(result);
+    size_t start = 0, end = 0;
+    while ((end = result.find('|', start)) != std::string::npos) {
+        std::string pathStr = result.substr(start, end - start);
+        if (!pathStr.empty()) {
+            fs::path src(pathStr);
+            ImportSelectedFileToLibrary(src, m_CurrentCategory, GetAssetsPath());
+        }
+        start = end + 1;
+    }
+    if (start < result.size()) {
+        std::string pathStr = result.substr(start);
+        if (!pathStr.empty()) {
+            fs::path src(pathStr);
+            ImportSelectedFileToLibrary(src, m_CurrentCategory, GetAssetsPath());
+        }
+    }
 #endif
 
-    ImportSelectedFileToLibrary(src, m_CurrentCategory, GetAssetsPath());
     RefreshList();
 }
 

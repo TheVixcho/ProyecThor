@@ -6,6 +6,7 @@
 #include <imgui.h>
 #include <iomanip>
 #include <sstream>
+#include <filesystem>
 
 namespace ProyecThor::UI {
 
@@ -51,8 +52,8 @@ namespace ProyecThor::UI {
                 if (previewPlayer) {
                     std::string previewPath = selection.title;
 
-                    // Si NO es un enlace de internet, armamos la ruta local
-                    if (previewPath.rfind("http", 0) != 0) {
+                    // Si NO es un enlace de internet ni ruta absoluta, armamos la ruta local
+                    if (previewPath.rfind("http", 0) != 0 && !std::filesystem::path(previewPath).is_absolute()) {
                         previewPath = VideosPath() + previewPath;
                     }
 
@@ -68,7 +69,11 @@ namespace ProyecThor::UI {
                     Core::PresentationCore::Get().RequestPreviewStop();
                     m_IsPlayingPreview = false;
                 }
-                m_ImageView.LoadImageFromFile(ImagesPath() + selection.title);
+                std::string imgPath = selection.title;
+                if (!std::filesystem::path(imgPath).is_absolute()) {
+                    imgPath = ImagesPath() + imgPath;
+                }
+                m_ImageView.LoadImageFromFile(imgPath);
                 m_ImageView.ResetAdjustments();
             } else {
                 if (previewPlayer) {
@@ -95,13 +100,18 @@ namespace ProyecThor::UI {
             ImGui::EndChild();
         } else if (selection.type == Core::ItemType::Image) {
             // (Mantenemos la lógica de la imagen como la tienes)
-            ImGui::TextDisabled("%s", selection.title.c_str());
+            std::string dispTitle = std::filesystem::path(selection.title).filename().string();
+            ImGui::TextDisabled("%s", dispTitle.c_str());
             ImGui::Spacing();
 
             ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.8f, 0.3f, 1.0f));
             if (ImGui::Button(str.mediaProjectImage, ImVec2(-1, 40))) {
-                Core::PresentationCore::Get().SetBackgroundMedia(ImagesPath() + selection.title, true);
+                std::string imgPath = selection.title;
+                if (!std::filesystem::path(imgPath).is_absolute()) {
+                    imgPath = ImagesPath() + imgPath;
+                }
+                Core::PresentationCore::Get().SetBackgroundMedia(imgPath, true);
             }
             ImGui::PopStyleColor(2);
 

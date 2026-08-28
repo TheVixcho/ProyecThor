@@ -1458,7 +1458,7 @@ void UIManager::RenderNotesWindow()
     const bool  justOpened = !s_WasOpenLastFrame;
     s_WasOpenLastFrame = true;
 
-    const ImVec2 baseSize(520.0f, 560.0f);
+    const ImVec2 baseSize(580.0f, 620.0f);
 
     ImGuiViewport* vp = ImGui::GetMainViewport();
     ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f,
@@ -1468,7 +1468,7 @@ void UIManager::RenderNotesWindow()
         ImGui::SetNextWindowPos(workCenter, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
         ImGui::SetNextWindowSize(baseSize, ImGuiCond_Always);
     }
-    ImGui::SetNextWindowSizeConstraints(ImVec2(420.0f, 420.0f), ImVec2(10000.0f, 10000.0f));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(480.0f, 480.0f), ImVec2(10000.0f, 10000.0f));
 
     ImGuiWindowClass floatingClass;
     floatingClass.DockingAllowUnclassed = false;
@@ -1778,17 +1778,7 @@ void UIManager::RenderMainMenuBar()
             static const WsEntry kWorkspaceEntries[] = {
                 { "Clásico",     ProyecThor::Settings::WorkspaceLayoutPreset::Classic   },
                 { "Simple",      ProyecThor::Settings::WorkspaceLayoutPreset::Simple    },
-                { "Transmisión", ProyecThor::Settings::WorkspaceLayoutPreset::Broadcast },
-                // Biblioteca (bloqueada en Medios) + Home (Preview), sin
-                // Vista en Vivo/Diseño -- pedido explicito de que sea un
-                // preset MAS aca (y en Ajustes > Apariencia, ver
-                // CategoryTheme.cpp), no un modo aparte que no se guarda.
                 { "Biblioteca",  ProyecThor::Settings::WorkspaceLayoutPreset::Library   },
-                // "Producción": Render (conversor de formato)/Colorimetria/
-                // Canales de trabajo/Audio(DAW real)/Overlays, todo como
-                // pestañas internas de VideoEditorPanel -- absorbe a los
-                // ex-presets "Render"/"Audio"/"Imagen", que ya no existen
-                // por separado.
                 { "Producción",  ProyecThor::Settings::WorkspaceLayoutPreset::Video     },
             };
             for (const auto& e : kWorkspaceEntries)
@@ -1884,16 +1874,6 @@ void UIManager::RenderMainMenuBar()
             {
                 const char* whatsappUrl = "https://whatsapp.com/channel/0029Vb7e9tj3WHTdNivIxR19";
                 RenderSocialQrMenu(whatsappUrl);
-                ImGui::EndMenu();
-            }
-
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.898f, 0.224f, 0.208f, 1.0f));
-            bool youtubeOpen = ImGui::BeginMenu("Canal de YouTube");
-            ImGui::PopStyleColor();
-            if (youtubeOpen)
-            {
-                const char* youtubeUrl = "https://www.youtube.com/@thevixcho";
-                RenderSocialQrMenu(youtubeUrl);
                 ImGui::EndMenu();
             }
 

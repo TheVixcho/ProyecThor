@@ -129,18 +129,21 @@ inline void DrawIcon_Palette(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
         dl->AddCircleFilled(IcPt(o, sz, x, 0.30f), sz * 0.06f, col, 10);
 }
 
-// Overlays — marco de imagen (sol + montaña) con una linea de texto debajo
+// Overlays — capas superpuestas (layout/overlay multi-nivel)
 inline void DrawIcon_Overlay(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 {
-    float thick = sz * 0.065f;
-    dl->AddRect(IcPt(o, sz, 0.14f, 0.14f), IcPt(o, sz, 0.86f, 0.68f),
-                col, sz * 0.04f, ImDrawFlags_RoundCornersAll, thick);
-    dl->AddCircleFilled(IcPt(o, sz, 0.32f, 0.32f), sz * 0.06f, col, 10);
-    dl->AddTriangleFilled(
-        IcPt(o, sz, 0.20f, 0.60f), IcPt(o, sz, 0.42f, 0.36f), IcPt(o, sz, 0.62f, 0.60f), col);
-    dl->AddTriangleFilled(
-        IcPt(o, sz, 0.44f, 0.60f), IcPt(o, sz, 0.66f, 0.40f), IcPt(o, sz, 0.80f, 0.60f), col);
-    dl->AddRectFilled(IcPt(o, sz, 0.20f, 0.80f), IcPt(o, sz, 0.80f, 0.88f), col, sz * 0.02f);
+    float thick = sz * 0.075f;
+    // Capa trasera
+    dl->AddRect(IcPt(o, sz, 0.28f, 0.16f), IcPt(o, sz, 0.86f, 0.68f),
+                col, sz * 0.07f, ImDrawFlags_RoundCornersAll, thick * 0.85f);
+    // Capa frontal superpuesta con fondo opaco para dar profundidad
+    dl->AddRectFilled(IcPt(o, sz, 0.14f, 0.32f), IcPt(o, sz, 0.72f, 0.84f),
+                      IM_COL32(20, 20, 30, 230), sz * 0.07f);
+    dl->AddRect(IcPt(o, sz, 0.14f, 0.32f), IcPt(o, sz, 0.72f, 0.84f),
+                col, sz * 0.07f, ImDrawFlags_RoundCornersAll, thick);
+    // Detalles internos en la capa frontal (texto / barra simulada)
+    dl->AddLine(IcPt(o, sz, 0.24f, 0.48f), IcPt(o, sz, 0.62f, 0.48f), col, sz * 0.06f);
+    dl->AddLine(IcPt(o, sz, 0.24f, 0.64f), IcPt(o, sz, 0.50f, 0.64f), col, sz * 0.06f);
 }
 
 // Web — globo (circulo + meridiano + paralelo), navegador embebido generico

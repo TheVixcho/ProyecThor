@@ -323,7 +323,7 @@ void SetGlobalMute(bool mute);
         void SetBackgroundBlendDuration(float seconds);
 
         void SetLiveQuickNote(const std::string& text, const float* colorOverride = nullptr);
-        void SetLiveQuickNoteLAN(const std::string& text, const float* colorOverride = nullptr);
+        void SetLiveQuickNoteLAN(const std::string& text, const float* colorOverride = nullptr, const std::string& styleName = "");
         void ClearQuickNoteLAN();
 
         // ── Reloj y Contadores: títulos/mensajes pedidos desde el celular ──
@@ -849,6 +849,12 @@ bool m_GlobalMuted = false;
         std::string m_LiveOverlayClockText;
         bool        m_HasLiveOverlayClockColorOverride = false;
         float       m_LiveOverlayClockColorOverride[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+        // Ver SetLiveQuickNoteLAN / ClearQuickNoteLAN -- estilo y color override
+        // exclusivos para la salida LAN (reloj/contadores/notas LAN).
+        std::string m_LiveQuickNoteLANStyleName;
+        bool        m_HasLiveQuickNoteLANColorOverride = false;
+        float       m_LiveQuickNoteLANColorOverride[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
         mutable std::mutex m_Mutex;
 

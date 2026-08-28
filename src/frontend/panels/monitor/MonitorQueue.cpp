@@ -9,8 +9,8 @@
 #include <cmath>
 #include <cinttypes>
 #include "backend/core/AppPaths.h"
-#include "backend/core/AppPaths.h"
-#include "frontend/ui/bin/StyleGeneralApp.h" 
+#include "frontend/ui/bin/StyleGeneralApp.h"
+#include <filesystem>
 
 namespace ProyecThor::UI {
 
@@ -482,6 +482,8 @@ void MonitorView::RenderQueue(float w)
                     std::string path = sel.title;
                     if (path.rfind("http", 0) == 0)
                         m_QueueEngine.AddURL(path);
+                    else if (std::filesystem::path(path).is_absolute())
+                        m_QueueEngine.Add(path);
                     else
                         m_QueueEngine.Add(VideosPath() + path);
                 }

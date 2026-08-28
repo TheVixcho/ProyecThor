@@ -60,6 +60,7 @@ namespace ProyecThor::Core {
         glfwMakeContextCurrent(backup);
 
         glfwShowWindow(m_Window);
+        glfwSetInputMode(m_Window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
         m_MonitorIndex = monitorIndex;
 
         glfwDefaultWindowHints();

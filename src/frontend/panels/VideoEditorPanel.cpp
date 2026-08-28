@@ -142,9 +142,8 @@ void VideoEditorPanel::RenderRail()
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 2.0f));
 
     struct Entry { const char* label; DrawIconFn icon; Tab tab; };
-    static const Entry kEntries[3] = {
+    static const Entry kEntries[] = {
         { "Render",   ProyecThor::UI::AppIcons::DrawIcon_Swap,    Tab::Render },
-        { "Audio",    ProyecThor::Library::DrawIcon_Audio,        Tab::Audio },
         { "Overlays", ProyecThor::UI::AppIcons::DrawIcon_Overlay, Tab::Overlays },
     };
     for (const auto& e : kEntries) {

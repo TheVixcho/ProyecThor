@@ -543,49 +543,7 @@ static void DoCleanupOldInstalls(std::string currentVersion) {
 //  toma efecto de verdad reiniciando la app.
 // ─────────────────────────────────────────────────────────────────────────────
 
-enum class DataMoveStatus { Idle, Running, Done };
-static std::atomic<DataMoveStatus> s_DataMoveStatus{ DataMoveStatus::Idle };
-static std::string                 s_DataMoveSummary;
-static bool                        s_DataMoveHadError = false;
-static std::thread                 s_DataMoveThread;
-static std::string                 s_PendingNewDataDir; // elegido por el picker, pendiente de confirmar
-static bool                        s_ShowMoveConfirm    = false;
 
-static void DoMoveDataFolder(std::string oldRoot, std::string newParentDir) {
-    s_DataMoveStatus = DataMoveStatus::Running;
-
-    try {
-        std::filesystem::path src(oldRoot);
-        std::filesystem::path dst = std::filesystem::path(newParentDir) / "ProyecThor";
-
-        std::error_code ec;
-        std::filesystem::create_directories(dst, ec);
-        if (ec) throw std::runtime_error("No se pudo crear la carpeta destino: " + ec.message());
-
-        std::filesystem::copy(src, dst,
-            std::filesystem::copy_options::recursive |
-            std::filesystem::copy_options::overwrite_existing, ec);
-        if (ec) throw std::runtime_error("No se pudo copiar los archivos: " + ec.message());
-
-        std::string redirectFile = ProyecThor::GetDataDirRedirectFilePath();
-        if (redirectFile.empty()) throw std::runtime_error("No se pudo ubicar el archivo de redireccion.");
-
-        std::ofstream f(redirectFile, std::ios::trunc);
-        if (!f.is_open()) throw std::runtime_error("No se pudo escribir el archivo de redireccion.");
-        f << dst.string();
-        f.close();
-
-        s_DataMoveSummary  = "Listo. La carpeta original NO se borro -- podes borrarla vos cuando "
-                             "confirmes que todo anda bien. Reinicia ProyecThor para terminar de usar "
-                             "la nueva ubicacion.";
-        s_DataMoveHadError = false;
-    } catch (const std::exception& e) {
-        s_DataMoveSummary  = std::string("No se pudo cambiar la carpeta de datos: ") + e.what();
-        s_DataMoveHadError = true;
-    }
-
-    s_DataMoveStatus = DataMoveStatus::Done;
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  API pública: arranque y modal global
@@ -1051,98 +1009,6 @@ void SettingsPanel::RenderCategoryUpdates() {
         ImGui::PopStyleVar(2);
     }
 
-    ImGui::Spacing();
-    ImGui::SeparatorText("Carpeta de datos");
-    ImGui::Spacing();
-
-    {
-        // Consumir el resultado del hilo de fondo apenas este listo -- ver
-        // mismo criterio en DoCleanupOldInstalls/RenderLyricsPopup de otros
-        // archivos (evita pisar un std::thread no unido en un intento nuevo).
-        if (s_DataMoveStatus.load() == DataMoveStatus::Done && s_DataMoveThread.joinable())
-            s_DataMoveThread.join();
-
-        std::string currentRoot = ProyecThor::GetAppDataRoot();
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.60f, 0.62f, 0.76f, 1.0f));
-        ImGui::TextWrapped("Ubicacion actual: %s", currentRoot.c_str());
-        ImGui::PopStyleColor();
-        HelpTooltip("Aca vive tu biblioteca (audio, video, imagenes, canciones, overlays, etc). "
-                    "Podes cambiarla a otro disco si preferis no llenar el disco principal.");
-
-        ImGui::Spacing();
-
-        bool moveBusy = (s_DataMoveStatus.load() == DataMoveStatus::Running);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(14.0f, 6.0f));
-        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.10f, 0.112f, 0.160f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.14f, 0.155f, 0.220f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.18f, 0.200f, 0.280f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.70f, 0.72f, 0.86f, 1.0f));
-
-        if (moveBusy) ImGui::BeginDisabled();
-        if (ImGui::Button(moveBusy ? "Copiando..." : "Cambiar carpeta...", ImVec2(180.0f, 30.0f))) {
-            std::string picked = ProyecThor::UI::PickFolder("Elegir nueva carpeta de datos");
-            if (!picked.empty()) {
-                s_PendingNewDataDir = picked;
-                s_ShowMoveConfirm   = true;
-                ImGui::OpenPopup("Cambiar carpeta de datos?##dataMove");
-            }
-        }
-        if (moveBusy) ImGui::EndDisabled();
-        ImGui::PopStyleColor(4);
-        ImGui::PopStyleVar(2);
-
-        ImVec2 mcenter = ImGui::GetMainViewport()->GetCenter();
-        ImGui::SetNextWindowPos(mcenter, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        if (ImGui::BeginPopupModal("Cambiar carpeta de datos?##dataMove", nullptr,
-                                    ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::TextWrapped(
-                "Se copiara TODA tu carpeta de datos actual a:\n\"%s\\ProyecThor\"\n\n"
-                "La carpeta original NO se borra -- queda intacta por si algo sale mal. "
-                "Tenes que REINICIAR ProyecThor para que el cambio tome efecto.",
-                s_PendingNewDataDir.c_str());
-            ImGui::Spacing();
-            if (ImGui::Button("Copiar y usar esta carpeta", ImVec2(220, 0))) {
-                if (s_DataMoveThread.joinable()) s_DataMoveThread.join();
-                s_DataMoveStatus = DataMoveStatus::Running;
-                s_DataMoveThread = std::thread(DoMoveDataFolder,
-                    ProyecThor::GetAppDataRoot(), s_PendingNewDataDir);
-                s_DataMoveThread.detach();
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Cancelar", ImVec2(120, 0)))
-                ImGui::CloseCurrentPopup();
-            ImGui::EndPopup();
-        }
-
-        if (s_DataMoveStatus.load() == DataMoveStatus::Done && !s_DataMoveSummary.empty()) {
-            ImGui::Spacing();
-            ImGui::PushStyleColor(ImGuiCol_Text, s_DataMoveHadError
-                ? ImVec4(0.90f, 0.45f, 0.45f, 1.0f)
-                : ImVec4(0.50f, 0.80f, 0.55f, 1.0f));
-            ImGui::TextWrapped("%s", s_DataMoveSummary.c_str());
-            ImGui::PopStyleColor();
-
-#ifdef _WIN32
-            if (!s_DataMoveHadError) {
-                ImGui::Spacing();
-                ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.10f, 0.28f, 0.14f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.14f, 0.36f, 0.18f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.18f, 0.44f, 0.22f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.30f, 0.86f, 0.48f, 1.0f));
-                if (ImGui::Button("Reiniciar ahora", ImVec2(160.0f, 30.0f))) {
-                    wchar_t exePath[MAX_PATH] = {};
-                    if (GetModuleFileNameW(nullptr, exePath, MAX_PATH) > 0) {
-                        ShellExecuteW(nullptr, L"open", exePath, nullptr, nullptr, SW_SHOWNORMAL);
-                        exit(0);
-                    }
-                }
-                ImGui::PopStyleColor(4);
-            }
-#endif
-        }
-    }
     } // if (SectionTitle("Versión instalada", "Actualizaciones"))
 }
 

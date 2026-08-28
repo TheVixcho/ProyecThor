@@ -22,7 +22,7 @@ namespace ProyecThor::UI::Settings {
 
 // Icono mínimo por categoría, dibujado a mano con primitivas de ImDrawList
 // (sin depender de ningún PNG/asset externo) -- ver DrawCategoryIcon.
-enum class CatIcon { Palette, Sliders, Monitor, Cast, Speaker, MusicNote, Keyboard, Globe, Download };
+enum class CatIcon { Palette, Sliders, Monitor, Cast, Speaker, MusicNote, Keyboard, Globe, Download, Storage };
 
 struct Category {
     const char* tag;
@@ -42,18 +42,9 @@ static const Category k_Categories[] = {
     { "KEY", "Teclas rápidas",  "Atajos de teclado disponibles",           CatIcon::Keyboard,  IM_COL32(230, 190,  70, 255) }, // 6
     { "LNG", "Idioma",          "Idioma de la interfaz",                   CatIcon::Globe,     IM_COL32(100, 205, 110, 255) }, // 7
     { "UPD", "Actualizaciones", "Versión instalada y canales",             CatIcon::Download,  IM_COL32(230, 100,  95, 255) }, // 8
-    // "General" (Inicio/Guardado automatico/Carpetas por defecto) se quito
-    // del todo -- pedido explicito, no se usaba. Los campos siguen viviendo
-    // en SettingsManager.h (GeneralSettings) con sus valores actuales, solo
-    // que ya no hay UI para editarlos.
-    //
-    // Red/Mobile/Streaming/OSC vivieron un tiempo como subcategorias DENTRO
-    // de "Proyeccion" (ver historial de CategoryProjection.cpp) -- pedido
-    // explicito de volver a subirlas a su propia categoria de nivel
-    // superior ("Conexiones", ver CategoryConnections.cpp), esta vez como 4
-    // subcategorias propias (no fusionadas entre si).
+    { "DAT", "Datos",           "Ubicación de archivos y carpetas vinculadas", CatIcon::Storage, IM_COL32(245, 185,  65, 255) }, // 9
 };
-static constexpr int k_CategoryCount = 9;
+static constexpr int k_CategoryCount = 10;
 
 // Dibuja un glifo simple y reconocible para 'icon', centrado en 'c', con
 // radio aproximado 'r' -- pensado para verse bien a ~8-9px de radio (18px
@@ -148,18 +139,28 @@ static void DrawCategoryIcon(ImDrawList* dl, CatIcon icon, ImVec2 c, float r, Im
             dl->AddLine(ImVec2(c.x - r * 0.6f, c.y + r * 0.65f), ImVec2(c.x + r * 0.6f, c.y + r * 0.65f), color, 1.5f);
             break;
         }
+        case CatIcon::Storage: {
+            float w = r * 1.30f, h = r * 0.40f;
+            float ys[3] = { c.y - r * 0.50f, c.y, c.y + r * 0.50f };
+            for (int i = 0; i < 3; i++) {
+                dl->AddRectFilled(ImVec2(c.x - w * 0.5f, ys[i] - h * 0.5f),
+                                  ImVec2(c.x + w * 0.5f, ys[i] + h * 0.5f), color, 2.0f);
+                dl->AddCircleFilled(ImVec2(c.x + w * 0.30f, ys[i]), r * 0.12f, IM_COL32(20, 20, 25, 255));
+            }
+            break;
+        }
     }
 }
 
 // Orden y agrupación visual del sidebar (por índice real de k_Categories).
 // Reagrupa temas relacionados (p.ej. Stage/Canciones junto a Proyección)
 // sin tocar los índices reales, así ningún QuickBtn/m_ActiveTab se rompe.
-struct NavGroup { const char* label; const int items[3]; int count; };
+struct NavGroup { const char* label; const int items[4]; int count; };
 static const NavGroup k_NavGroups[] = {
-    { "APARIENCIA", { 0,       }, 1 },
-    { "PANTALLAS",  { 1, 2, 3  }, 3 }, // Proyección + Conexiones + Pantallas (Stage) -- mismo grupo, pedido explicito
-    { "AUDIO",      { 4, 5,    }, 2 },
-    { "SISTEMA",    { 6, 7, 8  }, 3 },
+    { "APARIENCIA",      { 0,          }, 1 },
+    { "PANTALLAS",       { 1, 2, 3     }, 3 }, // Proyección + Conexiones + Pantallas (Stage)
+    { "AUDIO",           { 4, 5        }, 2 },
+    { "SISTEMA Y DATOS", { 6, 7, 8, 9  }, 4 }, // Teclas + Idioma + Actualizaciones + Datos
 };
 static constexpr int k_NavGroupCount = 4;
 
@@ -706,6 +707,7 @@ void SettingsPanel::RenderContent() {
         case 6: RenderCategoryShortcuts();   break;
         case 7: RenderCategoryLanguage();    break;
         case 8: RenderCategoryUpdates();     break;
+        case 9: RenderCategoryData();        break;
         default: ImGui::TextDisabled("Categoría no implementada."); break;
     }
 

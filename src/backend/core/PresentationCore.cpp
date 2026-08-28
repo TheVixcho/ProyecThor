@@ -117,10 +117,15 @@ void PresentationCore::ClearQuickNote() {
     ++m_StreamVersion;
 }
 
-    void PresentationCore::SetLiveQuickNoteLAN(const std::string& text, const float* /*colorOverride*/) {
+    void PresentationCore::SetLiveQuickNoteLAN(const std::string& text, const float* colorOverride, const std::string& styleName) {
         std::lock_guard<std::mutex> lock(m_Mutex);
         m_State.lanQuickNoteText = text;
         m_State.showLanQuickNote = !text.empty();
+        m_LiveQuickNoteLANStyleName = styleName;
+        m_HasLiveQuickNoteLANColorOverride = (colorOverride != nullptr);
+        if (colorOverride) {
+            for (int i = 0; i < 4; i++) m_LiveQuickNoteLANColorOverride[i] = colorOverride[i];
+        }
         ++m_StreamVersion;
     }
 
@@ -128,6 +133,8 @@ void PresentationCore::ClearQuickNote() {
         std::lock_guard<std::mutex> lock(m_Mutex);
         m_State.lanQuickNoteText = "";
         m_State.showLanQuickNote = false;
+        m_LiveQuickNoteLANStyleName.clear();
+        m_HasLiveQuickNoteLANColorOverride = false;
         ++m_StreamVersion;
     }
 
@@ -1915,30 +1922,75 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
                     break;
             }
 
-            snap.textSize      = st.textSize;
-            snap.textAlignment = st.textAlignment;
             snap.transitionTrigger  = st.transitionTrigger;
-  snap.transitionType     = st.transitionType;
-  snap.transitionDuration = st.transitionDuration;
-            snap.vAlignment    = st.vAlignment;
-            snap.autoScale     = st.autoScale;
-            snap.isBgVideo     = (st.bgType == PresentationState::BackgroundType::Video);
-            snap.version       = m_StreamVersion.load();
-            snap.hasFrame      = m_FrameProviderActive.load();
+            snap.transitionType     = st.transitionType;
+            snap.transitionDuration = st.transitionDuration;
+            snap.isBgVideo          = (st.bgType == PresentationState::BackgroundType::Video);
+            snap.version            = m_StreamVersion.load();
+            snap.hasFrame           = m_FrameProviderActive.load();
 
             snap.refW = m_ProjectorWidth;
             snap.refH = m_ProjectorHeight;
 
-            for (int i = 0; i < 4; i++) snap.margins[i] = st.margins[i];
+            for (int i = 0; i < 3; i++) snap.bgColor[i] = st.bgColor[i];
+
+            std::string lanStyleName;
+            bool hasLanColorOverride = false;
+            float lanColorOverride[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
             {
                 std::lock_guard<std::mutex> lock(m_Mutex);
-                snap.fontFamily = m_ActiveFontName;
+                if (st.showLanQuickNote) {
+                    lanStyleName = m_LiveQuickNoteLANStyleName;
+                    hasLanColorOverride = m_HasLiveQuickNoteLANColorOverride;
+                    if (hasLanColorOverride) {
+                        for (int i = 0; i < 4; i++) lanColorOverride[i] = m_LiveQuickNoteLANColorOverride[i];
+                    }
+                }
             }
-            snap.fontVersion = std::hash<std::string>{}(snap.fontFamily);
 
-            for (int i = 0; i < 4; i++) snap.textColor[i] = st.textColor[i];
-            for (int i = 0; i < 3; i++) snap.bgColor[i]   = st.bgColor[i];
+            SavedStyle lanStyle;
+            bool hasLanStyle = false;
+            if (st.showLanQuickNote && !lanStyleName.empty()) {
+                hasLanStyle = GetSavedStyle(lanStyleName, lanStyle);
+            }
+
+            if (st.showLanQuickNote && hasLanStyle) {
+                snap.textSize      = lanStyle.lyrics.textSize;
+                snap.textAlignment = lanStyle.lyrics.hAlign;
+                snap.vAlignment    = lanStyle.lyrics.vAlign;
+                snap.autoScale     = lanStyle.lyrics.autoScale;
+                snap.margins[0]    = (lanStyle.lyrics.posX - lanStyle.lyrics.sizeW * 0.5f) * 1920.0f;
+                snap.margins[1]    = (lanStyle.lyrics.posY - lanStyle.lyrics.sizeH * 0.5f) * 1080.0f;
+                snap.margins[2]    = (1.0f - (lanStyle.lyrics.posX + lanStyle.lyrics.sizeW * 0.5f)) * 1920.0f;
+                snap.margins[3]    = (1.0f - (lanStyle.lyrics.posY + lanStyle.lyrics.sizeH * 0.5f)) * 1080.0f;
+                snap.fontFamily    = lanStyle.lyrics.fontName.empty() ? "Predeterminada" : lanStyle.lyrics.fontName;
+
+                if (hasLanColorOverride) {
+                    for (int i = 0; i < 4; i++) snap.textColor[i] = lanColorOverride[i];
+                } else {
+                    for (int i = 0; i < 4; i++) snap.textColor[i] = lanStyle.lyrics.color[i];
+                }
+            } else {
+                snap.textSize      = st.textSize;
+                snap.textAlignment = st.textAlignment;
+                snap.vAlignment    = st.vAlignment;
+                snap.autoScale     = st.autoScale;
+                for (int i = 0; i < 4; i++) snap.margins[i] = st.margins[i];
+
+                {
+                    std::lock_guard<std::mutex> lock(m_Mutex);
+                    snap.fontFamily = m_ActiveFontName;
+                }
+
+                if (st.showLanQuickNote && hasLanColorOverride) {
+                    for (int i = 0; i < 4; i++) snap.textColor[i] = lanColorOverride[i];
+                } else {
+                    for (int i = 0; i < 4; i++) snap.textColor[i] = st.textColor[i];
+                }
+            }
+
+            snap.fontVersion = std::hash<std::string>{}(snap.fontFamily);
 
             return snap;
         });
@@ -1951,7 +2003,26 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
 
         srv.SetFontPathProvider([this]() -> std::string
         {
-            return GetActiveFontFilePath();
+            PresentationState st = GetState();
+            std::string fontName;
+            if (st.showLanQuickNote) {
+                std::string lanStyleName;
+                {
+                    std::lock_guard<std::mutex> lock(m_Mutex);
+                    lanStyleName = m_LiveQuickNoteLANStyleName;
+                }
+                if (!lanStyleName.empty()) {
+                    SavedStyle lanStyle;
+                    if (GetSavedStyle(lanStyleName, lanStyle) && !lanStyle.lyrics.fontName.empty()) {
+                        fontName = lanStyle.lyrics.fontName;
+                    }
+                }
+            }
+            if (fontName.empty()) {
+                std::lock_guard<std::mutex> lock(m_Mutex);
+                fontName = m_ActiveFontName;
+            }
+            return ResolveFontFilePath(fontName);
         });
     }
 

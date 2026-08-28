@@ -5,6 +5,7 @@
 #include "backend/core/AppPaths.h"
 #include <imgui.h>
 #include <algorithm>
+#include <filesystem>
 
 #include "MonitorDesign.h"
 #include "MonitorUIHelpers.h"
@@ -18,15 +19,15 @@ using namespace Components;
 // Columna central: botones TRANSMITIR y LOOP.
 void MonitorView::RenderCenterColumn(float w, float h, Core::VLCBasePlayer* previewPlayer)
 {
+    float btnW   = std::max(w - 4.0f, 16.0f);
+    float hPad   = (w - btnW) * 0.5f;
+
     ImGui::PushStyleColor(ImGuiCol_ChildBg, { 0.0f, 0.0f, 0.0f, 0.0f });
     ImGui::BeginChild("##center_col", { w, h }, false,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
-    const float hPad    = 8.0f;
-    const float btnW    = w - hPad * 2.0f;
-
-    const float baseMainH   = 50.0f;
-    const float baseLoopH   = 32.0f;
+    const float baseMainH   = 72.0f;
+    const float baseLoopH   = 36.0f;
     const float baseSpacing = 8.0f;
     const float baseTotalH  = baseMainH + baseSpacing + baseLoopH;
     const float scale       = std::clamp(h / baseTotalH, 0.55f, 1.0f);
@@ -47,7 +48,7 @@ void MonitorView::RenderCenterColumn(float w, float h, Core::VLCBasePlayer* prev
         if (!sel.title.empty())
         {
             std::string finalPath = sel.title;
-            if (finalPath.rfind("http", 0) != 0)
+            if (finalPath.rfind("http", 0) != 0 && !std::filesystem::path(finalPath).is_absolute())
                 finalPath = VideosPath() + finalPath;
 
             Core::PresentationCore::Get().SetLiveMute(m_LiveMuted);

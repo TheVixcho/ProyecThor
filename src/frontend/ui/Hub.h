@@ -27,12 +27,9 @@ public:
     int  GetActiveTab()         const { return m_ActiveTab; }
 
 private:
-    // Layout de un solo flujo central de paneles (logo, hero "Empezar a
-    // proyectar", config con textura, Biblioteca/Novedades, accesos rapidos,
-    // resumen local) usando todo el ancho del Hub -- reemplaza al viejo
-    // layout de 3 columnas fijas (izquierda/centro/derecha).
+    // Layout de un solo flujo central de paneles, con las acciones principales
+    // apiladas y las utilidades compactas debajo.
     void RenderContent(float w, float h);
-    void RenderResumenLocalSection(float w);
     void RenderNovedadesPanel();
     void RenderUpdateDetailModal();
     void RenderDownloadSubtitlesPanel();
@@ -58,7 +55,7 @@ private:
     // --- Modal universal de detalle de actualizacion -- compartido entre
     // el hero de Novedades ("Ver todo el detalle") y su lista de historial ---
     bool  m_IsUpdateModalOpen     = false;
-    int   m_SelectedUpdateVer     = 13; // id de kUpdateRegistry; arranca en la mas reciente
+    int   m_SelectedUpdateVer     = 15; // id de kUpdateRegistry; arranca en la mas reciente
     float m_UpdateModalAnim       = 0.0f;
 
     // --- "Descargar subtitulos" -- utilidad independiente de la Biblioteca:

@@ -1,16 +1,30 @@
 #pragma once
 #include <string>
+#include <vector>
 #include <array>
 
 namespace ProyecThor::UI {
 
-// Mismo esquema que OClockTransmitMode: reutilizarlo tal cual evitaria
-// duplicacion, pero lo declaro aparte para no acoplar OClock <-> QuickNotes.
 enum class QuickNoteTransmitMode {
     Off,
     MainOnly,
     LANOnly,
     Both
+};
+
+struct QuickNoteItem {
+    std::string id;
+    std::string title;
+    std::string content;
+    std::string category;     // "General", "Urgente", "Anuncio", "Culto", "Otro"
+    std::string styleName;
+    std::string updatedAt;
+    bool        isFavorite = false;
+};
+
+enum class QuickNotesTab {
+    LiveEditor = 0,
+    Library = 1
 };
 
 class QuickNotes {
@@ -20,33 +34,49 @@ public:
 
     std::string GetName() const;
     void Render();
-
-    // Fuerza el guardado a disco del texto actual, saltando el debounce del
-    // autoguardado -- llamado por UIManager al cerrar la ventana flotante
-    // (X o Shift+Z) para que el cierre nunca pierda las ultimas pulsaciones.
     void PersistNow();
 
+    void SaveCurrentToLibrary(const std::string& title, const std::string& category = "General");
+    void LoadFromLibrary(const QuickNoteItem& item, bool transmitImmediately = false);
+    void DeleteFromLibrary(const std::string& id);
+    void ToggleFavorite(const std::string& id);
+
 private:
-    void PushToCore();
+    void SyncTransmission();
     void ClearFromCore();
-    void SyncTransmission();      // <-- nuevo: reemplaza el push directo
-    void RenderTransmitCards();   // <-- nuevo: UI tipo tarjetas (igual a OClock)
-    void RenderStyleSelector();   // <-- nuevo
-    void LoadPersisted();         // carga m_TextBuffer desde Settings::general.quickNotesText
+    void RenderHeaderBar();
+    void RenderLiveEditorTab();
+    void RenderLibraryTab();
+    void RenderTransmitCards();
+    void RenderStyleSelector();
+    void RenderSaveModal();
+    void LoadPersisted();
+    void LoadLibraryFromDisk();
+    void SaveLibraryToDisk();
 
     std::array<char, 4096> m_TextBuffer{};
     bool m_IsLive = false;
-
-    // Autoguardado con debounce (ver Render()/PersistNow()) -- evita escribir
-    // a disco en cada tecla mientras se tipea rapido.
     double m_LastPersistTime = 0.0;
 
-    // ── Transmision ───────────────────────────────────────────────────
     QuickNoteTransmitMode m_TransmitMode     = QuickNoteTransmitMode::Off;
     QuickNoteTransmitMode m_PrevTransmitMode = QuickNoteTransmitMode::Off;
+    std::string m_StyleName;
 
-    // ── Estilo predeterminado (igual criterio que OClock) ──────────────
-    std::string m_StyleName; // vacio = usar el estilo activo actual
+    // ── Biblioteca de Notas ────────────────────────────────────────────
+    std::vector<QuickNoteItem> m_SavedNotes;
+    QuickNotesTab              m_CurrentTab = QuickNotesTab::LiveEditor;
+    char                       m_SearchFilter[128]{};
+    std::string                m_SelectedCategoryFilter = "Todos";
+
+    // Modal de guardado en biblioteca
+    bool                       m_ShowSaveModal = false;
+    char                       m_SaveTitleBuf[128]{};
+    int                        m_SaveCategoryIdx = 0; // 0=Anuncios, 1=Avisos, 2=Urgente, 3=Culto, 4=General, 5=Personalizado
+    char                       m_SaveCustomCategoryBuf[64]{};
+
+    // Notificación flotante de feedback (ej: "Nota cargada", "Guardada en biblioteca")
+    std::string                m_FeedbackMessage;
+    double                     m_FeedbackTime = 0.0;
 };
 
 } // namespace ProyecThor::UI

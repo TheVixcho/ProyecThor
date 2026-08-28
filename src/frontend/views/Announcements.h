@@ -20,24 +20,30 @@ public:
 
     bool IsLive() const { return m_IsLive && !m_Messages.empty(); }
 
-    // Para paneles externos (ej. ViewPanel > "Limpiar anuncios") que
-    // necesitan sacarlo de pantalla sin pasar por los controles internos.
+    // Para paneles externos (ej. ViewPanel > "Limpiar anuncios" o QuickNotes) que
+    // necesitan interactuar o agregar mensajes al banner.
     void SetLive(bool live) { m_IsLive = live; }
+    void AddMessage(const std::string& text, const std::string& tag = "Anuncios", bool enabled = true);
 
 private:
     void               TickScroll(float deltaTime, float contentWidth, float screenW);
     const std::string& GetCurrentMessage() const;
+    void               RenderNotesImportModal();
 
     // Sincroniza la lista de fuentes desde disco via PresentationCore
     void SyncFontList();
 
     struct Message {
         char text[512] = {};
+        char tag[64]   = "Anuncios"; // "Anuncios", "Avisos", "Urgente", "Culto", "General"
         bool enabled   = true;
     };
 
     std::vector<Message> m_Messages;
+    std::string          m_CategoryFilter = "Todos";
     int                  m_ActiveIndex = 0;
+    bool                 m_ShowNotesImportModal = false;
+    char                 m_ImportSearchFilter[128] = {};
 
     enum class Direction { RightToLeft = 0, LeftToRight = 1 };
 

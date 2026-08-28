@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.11)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 project(ProyecThor
-    VERSION 0.6.0
+    VERSION 0.7.0
     LANGUAGES C CXX
 )
 
@@ -41,10 +41,10 @@ if(NOT DEFINED PROYECTHOR_BUILD_NUMBER)
 endif()
 
 # ── SUFIJO DE VERSION (pre-release) ──────────────────────────────────────────
-# Vacio = release estable ("0.6.0"). Para una beta/rc que todavia no es la
-# version final, pasar -DPROYECTHOR_VERSION_SUFFIX=-beta.1 al configurar (o
+# Vacio = release estable ("0.7.0"). Para una beta/rc que todavia no es la
+# version final, pasar -DPROYECTHOR_VERSION_SUFFIX=-beta.2 al configurar (o
 # cambiar el default de aca a mano). IMPORTANTE: volver a "" ANTES de compilar
-# la 0.6.0 estable de verdad, sino queda marcada como beta para siempre.
+# la 0.7.0 estable de verdad, sino queda marcada como beta para siempre.
 # project(VERSION ...) arriba no puede llevar el sufijo (CMake solo acepta
 # numeros en esa directiva), por eso se maneja aparte y se concatena a mano en
 # Version.h.in. El comparador de versiones del updater (IsNewer, ver

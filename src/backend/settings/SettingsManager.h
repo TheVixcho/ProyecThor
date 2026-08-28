@@ -533,6 +533,18 @@ namespace ProyecThor::Settings {
         std::string model   = "claude-sonnet-5";
     };
 
+    // ── Almacenamiento y Carpetas de Datos (Ajustes > Datos) ───────────
+    struct WatchedFolder {
+        std::string path;
+        bool        copyToDataDir = false; // false = reproducir original; true = copiar a AppData/carpeta de datos
+        bool        enabled       = true;
+    };
+
+    struct StorageSettings {
+        std::string                customDataRoot = "";
+        std::vector<WatchedFolder> watchedFolders;
+    };
+
     struct AppSettings {
         ProjectionSettings     projection;
         AudioSettings          audio;
@@ -553,6 +565,7 @@ namespace ProyecThor::Settings {
         SyncSettings           sync;
         TransitionSettings     transitions;
         AISettings             ai;
+        StorageSettings        storage;
     };
 
     class SettingsManager {

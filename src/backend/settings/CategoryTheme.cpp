@@ -504,11 +504,7 @@ void SettingsPanel::RenderCategoryTheme() {
         static const WsEntry entries[] = {
             { "Clásico",     WorkspaceLayoutPreset::Classic,   DrawWorkspaceDiagramClassic   },
             { "Simple",      WorkspaceLayoutPreset::Simple,    DrawWorkspaceDiagramSimple    },
-            { "Transmisión", WorkspaceLayoutPreset::Broadcast, DrawWorkspaceDiagramBroadcast },
             { "Biblioteca",  WorkspaceLayoutPreset::Library,   DrawWorkspaceDiagramLibrary   },
-            // "Render"/"Audio"/"Imagen" ya no son espacios de trabajo propios
-            // -- todos absorbidos como pestañas dentro de "Producción" (ver
-            // VideoEditorPanel: Render/Colorimetria/Canales/Audio/Overlays).
             { "Producción",  WorkspaceLayoutPreset::Video,     DrawWorkspaceDiagramVideo     },
         };
         const int entryCount = (int)(sizeof(entries) / sizeof(entries[0]));

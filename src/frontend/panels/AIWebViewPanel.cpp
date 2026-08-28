@@ -282,6 +282,16 @@ void AIWebViewPanel::UpdateBounds(int screenX, int screenY, int width, int heigh
     ScreenToClient(m_Impl->parentHwnd, &topLeft);
 
     if (!visible || width <= 0 || height <= 0 || m_Impl->failed) {
+        HWND focusWnd = GetFocus();
+        if (focusWnd && (focusWnd == m_Impl->hostHwnd || IsChild(m_Impl->hostHwnd, focusWnd))) {
+            if (m_Impl->controller) {
+                m_Impl->controller->MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
+            }
+            if (m_Impl->parentHwnd) {
+                SetFocus(m_Impl->parentHwnd);
+                SetActiveWindow(m_Impl->parentHwnd);
+            }
+        }
         ShowWindow(m_Impl->hostHwnd, SW_HIDE);
         if (m_Impl->controller) m_Impl->controller->put_IsVisible(FALSE);
         return;

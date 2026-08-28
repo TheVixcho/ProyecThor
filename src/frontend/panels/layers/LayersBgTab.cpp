@@ -1,6 +1,8 @@
 #include "LayersBgTab.h"
 #include "LayersTheme.h"
 #include "backend/core/PresentationCore.h"
+#include "backend/core/AppPaths.h"
+#include "frontend/panels/biblio/LibraryMultimedia.h"
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
 #ifdef _WIN32
@@ -352,6 +354,27 @@ void LayersBgTab::BgContextMenu(const BgEntry& entry) {
     std::string disp = entry.name.length() > 22 ? entry.name.substr(0,19)+"..." : entry.name;
     ImGui::Text("%s", disp.c_str());
     ImGui::PopStyleColor();
+    ImGui::Separator();
+
+    if (ImGui::Selectable("  Mover a Biblioteca (Media)")) {
+        std::error_code ec;
+        fs::path src(entry.fullPath);
+        std::string targetDir = entry.isImage ? (GetAssetsPath() + "/images") : (GetAssetsPath() + "/videos");
+        fs::create_directories(targetDir, ec);
+        fs::path dst = fs::path(targetDir) / src.filename();
+        fs::rename(src, dst, ec);
+        ReloadList();
+        Library::RefreshMultimediaLists();
+    }
+    if (ImGui::Selectable("  Copiar a Biblioteca (Media)")) {
+        std::error_code ec;
+        fs::path src(entry.fullPath);
+        std::string targetDir = entry.isImage ? (GetAssetsPath() + "/images") : (GetAssetsPath() + "/videos");
+        fs::create_directories(targetDir, ec);
+        fs::path dst = fs::path(targetDir) / src.filename();
+        fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+        Library::RefreshMultimediaLists();
+    }
     ImGui::Separator();
 
     if (ImGui::Selectable("  Renombrar")) {
@@ -784,6 +807,7 @@ void LayersBgTab::RenderBgCard(const BgEntry& e, float W, float H, int col, int 
     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
         wasDragged = true;
         ImGui::SetDragDropPayload("BG_FILE", e.fullPath.c_str(), e.fullPath.size()+1);
+        ImGui::SetDragDropPayload("BG_ITEM_PATH", e.fullPath.c_str(), e.fullPath.size()+1);
         ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
         ImGui::Text("Mover: %s", dn.c_str());
         ImGui::PopStyleColor();
@@ -868,6 +892,7 @@ void LayersBgTab::RenderBgRow(const BgEntry& e, float W, float rowH) {
     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
         wasDragged = true;
         ImGui::SetDragDropPayload("BG_FILE", e.fullPath.c_str(), e.fullPath.size()+1);
+        ImGui::SetDragDropPayload("BG_ITEM_PATH", e.fullPath.c_str(), e.fullPath.size()+1);
         ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
         ImGui::Text("Mover: %s", dn.c_str());
         ImGui::PopStyleColor();
@@ -951,6 +976,28 @@ void LayersBgTab::RenderContentArea(float w, float h) {
     } else {
         for (const auto* bg : files)
             RenderBgRow(*bg, w, 44.0f);
+    }
+
+    if (ImGui::BeginDragDropTarget()) {
+        auto HandleDrop = [&](const ImGuiPayload* payload) {
+            const char* droppedPath = (const char*)payload->Data;
+            if (droppedPath && *droppedPath) {
+                std::error_code ec;
+                fs::path src(droppedPath);
+                fs::path dstFolder = m_CurrentBgFolder.empty() ? BgRootDir() : (BgRootDir() / m_CurrentBgFolder);
+                fs::create_directories(dstFolder, ec);
+                fs::path dst = dstFolder / src.filename();
+                fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+                ReloadList();
+            }
+        };
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("MEDIA_ITEM_PATH")) {
+            HandleDrop(payload);
+        }
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VIDEO_TO_QUEUE")) {
+            HandleDrop(payload);
+        }
+        ImGui::EndDragDropTarget();
     }
 }
 

@@ -621,8 +621,8 @@ void SettingsManager::ApplyTheme() {
     c[ImGuiCol_DragDropTarget]        = V(t.accent, 0.9f);
     c[ImGuiCol_NavHighlight]          = V(t.accent);
     c[ImGuiCol_NavWindowingHighlight] = ImVec4(1, 1, 1, 0.6f);
-    c[ImGuiCol_NavWindowingDimBg]     = ImVec4(0, 0, 0, 0.45f);
-    c[ImGuiCol_ModalWindowDimBg]      = ImVec4(0, 0, 0, 0.55f);
+    c[ImGuiCol_NavWindowingDimBg]     = ImVec4(0, 0, 0, 0.0f);
+    c[ImGuiCol_ModalWindowDimBg]      = ImVec4(0, 0, 0, 0.0f);
 
     c[ImGuiCol_Text]         = V(t.textPrimary);
     c[ImGuiCol_TextDisabled] = V(t.textFaint);
@@ -833,6 +833,15 @@ void SettingsManager::SaveSettings() {
     j["ai"]["enabled"] = m_Settings.ai.enabled;
     j["ai"]["apiKey"]  = m_Settings.ai.apiKey;
     j["ai"]["model"]   = m_Settings.ai.model;
+
+    j["storage"]["customDataRoot"] = m_Settings.storage.customDataRoot;
+    for (size_t i = 0; i < m_Settings.storage.watchedFolders.size(); i++) {
+        const auto& wf = m_Settings.storage.watchedFolders[i];
+        auto& jwf = j["storage"]["watchedFolders"][i];
+        jwf["path"]          = wf.path;
+        jwf["copyToDataDir"] = wf.copyToDataDir;
+        jwf["enabled"]       = wf.enabled;
+    }
 
     std::string langStr = "es";
     if      (m_Settings.general.language == Language::English)    langStr = "en";
@@ -1245,6 +1254,22 @@ void SettingsManager::LoadSettings() {
             m_Settings.theme.customFontPath = jt.value("customFontPath", "");
         } else {
             m_Settings.theme = MakeThemePreset(ThemePreset::Dark);
+        }
+
+        if (j.contains("storage")) {
+            const auto& js = j["storage"];
+            m_Settings.storage.customDataRoot = js.value("customDataRoot", "");
+            m_Settings.storage.watchedFolders.clear();
+            if (js.contains("watchedFolders") && js["watchedFolders"].is_array()) {
+                for (const auto& jw : js["watchedFolders"]) {
+                    WatchedFolder wf;
+                    wf.path          = jw.value("path", "");
+                    wf.copyToDataDir = jw.value("copyToDataDir", false);
+                    wf.enabled       = jw.value("enabled", true);
+                    if (!wf.path.empty())
+                        m_Settings.storage.watchedFolders.push_back(wf);
+                }
+            }
         }
 
     } catch (const std::exception& e) {

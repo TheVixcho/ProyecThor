@@ -166,19 +166,13 @@ void OClock::SyncTransmission(const std::string& timeStr) {
     bool wasLAN = (m_PrevTransmitMode == OClockTransmitMode::LAN);
     bool isLAN  = (m_TransmitMode     == OClockTransmitMode::LAN);
 
-    // Estilo: si el usuario definio un "estilo final" explicito, se usa
-    // completo (color/tamano/alineacion propios) al llegar al final. Si no
-    // definio uno, se mantiene el comportamiento clasico: estilo normal +
-    // color de peligro forzado via colorOverride. En modo WallClock
-    // m_IsOvertime siempre es false, asi que esto naturalmente nunca se
-    // activa fuera del modo Timer.
+    // Estilo (solo LAN): si el usuario definio un "estilo final" explicito, se
+    // usa al llegar al final del conteo (overtime). Si no definio uno, se usa el
+    // estilo normal configurado para LAN + color de peligro forzado via colorOverride.
+    // El estilo de la pantalla publica NUNCA se modifica desde aca (para el
+    // publico se usa la capa Clock del editor de overlays).
     bool usingFinalStyle = m_IsOvertime && !m_FinalStyleName.empty();
-
-    if (isLAN) {
-        const std::string& styleToApply = usingFinalStyle ? m_FinalStyleName : m_StyleName;
-        if (!styleToApply.empty())
-            core.ApplyStyleByName(styleToApply);
-    }
+    const std::string& styleToApply = usingFinalStyle ? m_FinalStyleName : m_StyleName;
 
     ImVec4 dangerV4 = ImGui::ColorConvertU32ToFloat4(DS::DangerColor);
     float  dangerRGBA[4] = { dangerV4.x, dangerV4.y, dangerV4.z, dangerV4.w };
@@ -189,7 +183,7 @@ void OClock::SyncTransmission(const std::string& timeStr) {
     std::string fullText = title.empty() ? timeStr : (title + "\n" + timeStr);
 
     if (isLAN) {
-        core.SetLiveQuickNoteLAN(fullText, colorOverride);
+        core.SetLiveQuickNoteLAN(fullText, colorOverride, styleToApply);
     } else if (wasLAN) {
         core.ClearQuickNoteLAN();
     }

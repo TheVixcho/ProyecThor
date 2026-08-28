@@ -14,8 +14,6 @@ void WebBrowserPanel::Go()
 {
     std::string url = m_UrlBuf;
     if (url.empty()) return;
-    // Sin esquema, la mayoria de los sitios igual resuelven con https --
-    // evita que el operador tenga que acordarse de escribir "https://".
     if (url.rfind("http://", 0) != 0 && url.rfind("https://", 0) != 0)
         url = "https://" + url;
 
@@ -29,8 +27,6 @@ void WebBrowserPanel::Go()
 void WebBrowserPanel::StartSendToPublic()
 {
     m_SendingToPublic = true;
-    // Por si el proyector todavia no estaba activo -- UpdateSendToPublicBounds
-    // reintenta cada frame hasta que la ventana nativa exista.
     Core::PresentationCore::Get().SetProjecting(true);
 }
 
@@ -43,7 +39,7 @@ void WebBrowserPanel::StopSendToPublic()
 void WebBrowserPanel::UpdateSendToPublicBounds()
 {
     void* hwnd = Core::PresentationCore::Get().GetProjectorNativeWindow();
-    if (!hwnd) return; // ventana del proyector todavia no existe este frame, se reintenta el que viene
+    if (!hwnd) return;
 
     m_WebView.Reparent(hwnd);
 
@@ -63,68 +59,93 @@ void WebBrowserPanel::UpdateSendToPublicBounds()
 
 void WebBrowserPanel::Render()
 {
-    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 190.0f);
-    bool enterPressed = ImGui::InputText("##webUrl", m_UrlBuf, sizeof(m_UrlBuf), ImGuiInputTextFlags_EnterReturnsTrue);
-    ImGui::SameLine();
-    bool goClicked = DS::GlassButton("Ir", ImVec2(50.0f, 0.0f));
+    const float availW = ImGui::GetContentRegionAvail().x;
 
-    ImGui::SameLine();
+    // ── Fila 1: Barra de URL + Botón de Navegación ───────────────────────
+    const float goBtnW = 38.0f;
+    const float urlInputW = std::max(80.0f, availW - goBtnW - 4.0f);
+
+    ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  ImGui::ColorConvertU32ToFloat4(DS::AccentColorDim));
+    ImGui::PushStyleColor(ImGuiCol_Border,         ImVec4(1.0f, 1.0f, 1.0f, 0.12f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(8.0f, 5.0f));
+
+    ImGui::SetNextItemWidth(urlInputW);
+    bool enterPressed = ImGui::InputTextWithHint("##webUrl", "https://ejemplo.com...", m_UrlBuf, sizeof(m_UrlBuf), ImGuiInputTextFlags_EnterReturnsTrue);
+
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(4);
+
+    ImGui::SameLine(0.0f, 4.0f);
+    bool goClicked = DS::GlassButton("->", ImVec2(goBtnW, 28.0f));
+
+    if (enterPressed || goClicked) Go();
+
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+    // ── Fila 2: Botón de Acción Completa (Enviar a Público / Detener) ────
     bool canSend = m_Navigated && m_WebView.IsAvailable();
     ImGui::BeginDisabled(!canSend);
     if (m_SendingToPublic) {
-        if (DS::GlassButton("Dejar de enviar", ImVec2(130.0f, 0.0f), DS::DangerColor))
+        if (DS::GlassButton("Detener envío a Público", ImVec2(availW, 30.0f), DS::DangerColor))
             StopSendToPublic();
     } else {
-        if (DS::GlassButton("Enviar a Público", ImVec2(130.0f, 0.0f), DS::SuccessColor))
+        if (DS::GlassButton("Enviar a Público", ImVec2(availW, 30.0f), DS::SuccessColor))
             StartSendToPublic();
     }
     ImGui::EndDisabled();
 
-    if (enterPressed || goClicked) Go();
-
-    ImGui::Dummy(ImVec2(0.0f, 8.0f));
-
+    // ── Instrucción inicial cuando aún no se ha navegado ────────────────
     if (!m_Navigated) {
+        ImGui::Dummy(ImVec2(0.0f, 12.0f));
         ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextHint),
-            "Escribi una URL y toca Ir -- podes navegar como en cualquier navegador.");
+            "Escribe una URL en la barra superior y presiona '->' para navegar.");
         return;
     }
 
+    // ── Estado de proyección a público ───────────────────────────────────
     if (m_SendingToPublic) {
         UpdateSendToPublicBounds();
+        ImGui::Dummy(ImVec2(0.0f, 10.0f));
         ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::SuccessColor),
-            "Mostrando esta pagina en la salida real al público.");
+            "Mostrando en vivo en la salida de video.");
         ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextHint),
-            "El navegador se movio a esa pantalla -- ya no se previsualiza aca mientras dure.");
+            "El navegador se encuentra activo en la pantalla secundaria.");
         return;
     }
 
     if (!m_WebView.IsAvailable()) {
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
         ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextSecondary),
-            "Se abrio en tu navegador externo (esta ventana no puede embeberlo aca).");
-        if (DS::GlassButton("Volver a abrir", ImVec2(160.0f, 30.0f)))
+            "Se abrió en tu navegador externo.");
+        if (DS::GlassButton("Volver a abrir", ImVec2(availW, 30.0f)))
             ProyecThor::External::OpenURL(m_UrlBuf);
         return;
     }
 
     if (m_WebView.HasError()) {
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
         ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::DangerColor), "%s", m_WebView.GetLastError().c_str());
         return;
     }
 
+    // ── Área del Navegador Web (Ocupa todo el alto disponible) ───────────
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
     ImGui::BeginChild("##webArea", ImVec2(0.0f, 0.0f), false,
         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     bool ready = m_WebView.IsReady();
     if (!ready) {
-        ImVec2 avail = ImGui::GetContentRegionAvail();
-        ImVec2 center = { avail.x * 0.5f, avail.y * 0.42f };
+        ImVec2 childAvail = ImGui::GetContentRegionAvail();
+        ImVec2 center = { childAvail.x * 0.5f, childAvail.y * 0.40f };
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ImVec2 origin = ImGui::GetCursorScreenPos();
         DrawLoadingSpinner(dl, { origin.x + center.x, origin.y + center.y }, 16.0f);
 
-        const char* msg = "Cargando la pagina...";
+        const char* msg = "Cargando página...";
         ImVec2 ts = ImGui::CalcTextSize(msg);
-        ImGui::SetCursorPos({ center.x - ts.x * 0.5f, center.y + 26.0f });
+        ImGui::SetCursorPos({ center.x - ts.x * 0.5f, center.y + 24.0f });
         ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextSecondary), "%s", msg);
     }
     ImVec2 areaPos  = ImGui::GetWindowPos();
