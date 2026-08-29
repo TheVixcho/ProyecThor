@@ -48,7 +48,16 @@ void MonitorView::Update()
                     {
                         std::string path = bg->GetCurrentPath();
                         if (!path.empty())
-                            core.SetBackgroundMedia(path, /*isVideo=*/true, /*allowAudio=*/true);
+                        {
+                            bool allowAudio = core.GetContentAllowsAudio();
+                            std::string norm = path;
+                            std::replace(norm.begin(), norm.end(), '\\', '/');
+                            if (norm.find("/backgrounds/") != std::string::npos ||
+                                norm.find("assets/backgrounds") != std::string::npos) {
+                                allowAudio = false;
+                            }
+                            core.SetBackgroundMedia(path, /*isVideo=*/true, allowAudio);
+                        }
                     }
                 }
             }
@@ -167,34 +176,23 @@ void MonitorView::Render(Core::VLCBasePlayer* player)
     }
 
     // ── Layout ────────────────────────────────────────────────────────────────
-    // El monitor "PGM"/Live (video + meters + transporte del player general)
-    // se movio a ViewPanel — aca solo queda Preview + columna central +
-    // Queue, lo que le da mas aire al Monitor en pantallas chicas.
+    // Preview toma TODO el alto y ancho disponible con controles flotantes (HUD),
+    // y la Cola es plegable hacia el borde derecho para maximizar el espacio.
     const float totalW   = ImGui::GetContentRegionAvail().x;
     const float totalH   = ImGui::GetContentRegionAvail().y;
-    const float queueW   = std::min(320.0f, totalW * 0.32f);
-    const float mainW    = totalW - queueW - 6.0f;
-    const float centerW  = k_CenterW;
-    const float previewW = std::max(160.0f, mainW - centerW);
-    const float ctrlH    = k_ControlsH;
-    const float rowGap   = 6.0f;
-    const float monitorH = std::max(totalH - ctrlH - rowGap * 2.0f, 60.0f);
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, { 0.0f, 0.0f, 0.0f, 0.0f });
-    ImGui::BeginChild("##main_col", { mainW, totalH }, false,
-                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    ImGui::PopStyleColor();
+    const float queueExpandedW = std::clamp(totalW * 0.30f, 220.0f, 320.0f);
+    const float targetQueueW   = m_QueueCollapsed ? 34.0f : queueExpandedW;
+    if (m_QueueAnimW <= 0.0f)
+        m_QueueAnimW = targetQueueW;
+    else
+        m_QueueAnimW += (targetQueueW - m_QueueAnimW) * std::min(1.0f, ImGui::GetIO().DeltaTime * 14.0f);
 
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, { 0.0f, rowGap });
+    const float queueW   = m_QueueAnimW;
+    const float previewW = std::max(120.0f, totalW - queueW - 6.0f);
+    const float previewH = totalH;
 
-    RenderPreviewMonitor(player, previewW, monitorH);
-    ImGui::SameLine(0, 0);
-    RenderCenterColumn(centerW, monitorH, player);
-
-    RenderPreviewControls(player, previewW);
-
-    ImGui::PopStyleVar();
-    ImGui::EndChild();
+    RenderPreviewMonitor(player, previewW, previewH);
 
     ImGui::SameLine(0, 6);
     RenderQueue(queueW);

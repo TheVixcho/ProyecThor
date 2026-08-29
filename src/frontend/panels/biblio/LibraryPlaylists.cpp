@@ -1,5 +1,6 @@
 #include "LibraryPlaylists.h"
 #include "LibraryHelpers.h"
+#include "backend/core/FileDeletionManager.h"
 
 #include <filesystem>
 #include <fstream>
@@ -80,8 +81,7 @@ bool CreatePlaylist(const std::string& name)
 
 void DeletePlaylist(const std::string& name)
 {
-    std::error_code ec;
-    fs::remove(U8Path(PlaylistFilePath(name)), ec);
+    Core::FileDeletionManager::ForceDeleteFile(PlaylistFilePath(name));
 }
 
 bool RenamePlaylist(const std::string& oldName, const std::string& newName)

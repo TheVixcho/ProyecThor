@@ -358,6 +358,7 @@ void SetGlobalMute(bool mute);
         float          GetFillBlurBrightness() const;
 
         VLCBasePlayer* GetBackgroundPlayer();
+        void           GetBackgroundVideoSize(int& width, int& height);
 
         void  SetFSREnabled(bool enabled);
         bool  GetFSREnabled() const;
@@ -556,6 +557,9 @@ void SetGlobalMute(bool mute);
         // cualquier codigo de UI que reaccione a una seleccion cambiante.
         void RequestPreviewLoad(const std::string& path, bool loop, bool startMuted);
         void RequestPreviewStop();
+        void StopPreviewSync();
+        void ClearSelection();
+        void ReleasePathUsages(const std::string& path);
 
         // Aplica la caja de Letras: guarda state.lyricsBox TAL CUAL y
         // ademas espeja sus campos hacia los campos planos legacy de
@@ -702,6 +706,7 @@ void SetGlobalMute(bool mute);
         // allowAudio=true explicitamente (ver MonitorCenterColumn,
         // MonitorQueueEngine, LibraryVideos "Enviar al monitor").
         void SetBackgroundMedia(const std::string& path, bool isVideo, bool allowAudio = false);
+        bool GetContentAllowsAudio() const;
 
         // ── Overlay (PNG transparente) ───────────────────────────────────────
         // Capa APARTE de Layer0 (fondo) y Layer2 (texto): se dibuja ENCIMA de
@@ -770,6 +775,12 @@ void SetGlobalMute(bool mute);
 
         void                       SetCapturePanelRef(ProyecThor::UI::CapturePanel* c) { m_CapturePanelRef = c; }
         ProyecThor::UI::CapturePanel* GetCapturePanelRef() const { return m_CapturePanelRef; }
+
+        // ── Proyección de Modelos y Recursos 3D ─────────────────────────────
+        void   SetLive3DModelActive(bool active) { m_Live3DModelActive = active; }
+        bool   IsLive3DModelActive() const { return m_Live3DModelActive; }
+        void   SetLive3DModelTexture(void* texID) { m_Live3DModelTexture = texID; }
+        void*  GetLive3DModelTexture() const { return m_Live3DModelTexture; }
 
         // ── Preload adelantado (ver BackgroundLayer::Prefetch/CommitPrefetch) ──
         // Usado por la cola del Monitor para cargar el SIGUIENTE clip en
@@ -933,6 +944,9 @@ bool m_GlobalMuted = false;
         ProyecThor::UI::Announcements* m_AnnouncementsRef = nullptr;
         ProyecThor::UI::OClock*        m_OClockRef        = nullptr;
         ProyecThor::UI::CapturePanel*  m_CapturePanelRef  = nullptr;
+
+        std::atomic<bool>              m_Live3DModelActive{ false };
+        void*                          m_Live3DModelTexture = nullptr;
 
         // Unico lugar que escribe m_State.bgType: si se esta dejando Audio
         // por otra cosa, apaga el boton "En vivo" del panel de audio. Debe

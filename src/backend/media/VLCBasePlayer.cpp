@@ -730,7 +730,10 @@ void VLCBasePlayer::Stop()
 
     std::lock_guard<std::mutex> lock(m_MediaSwapMutex);
     if (m_MediaPlayer)
+    {
         libvlc_media_player_stop(m_MediaPlayer);
+        libvlc_media_player_set_media(m_MediaPlayer, nullptr);
+    }
 }
 
 bool VLCBasePlayer::ConsumeEndReached()
@@ -751,7 +754,16 @@ void VLCBasePlayer::SetMute(bool mute)
               << ") -> effectiveMute=" << (effectiveMute ? "true" : "false") << "\n";
 
     m_Muted.store(effectiveMute, std::memory_order_relaxed);
-#ifndef _WIN32
+#ifdef _WIN32
+    if (effectiveMute && m_AudioCtx)
+    {
+        auto* ctx = static_cast<VLCAudioCtx*>(m_AudioCtx);
+        std::lock_guard<std::mutex> lock(ctx->deviceMutex);
+        if (ctx->hWaveOut) {
+            waveOutReset(ctx->hWaveOut);
+        }
+    }
+#else
     if (m_MediaPlayer)
     {
         libvlc_audio_set_mute(m_MediaPlayer, effectiveMute ? 1 : 0);
@@ -773,7 +785,16 @@ void VLCBasePlayer::SetAudioActive(bool active)
               << ") -> effectiveActive=" << (effectiveActive ? "true" : "false") << "\n";
 
     m_AudioActive.store(effectiveActive, std::memory_order_relaxed);
-#ifndef _WIN32
+#ifdef _WIN32
+    if (!effectiveActive && m_AudioCtx)
+    {
+        auto* ctx = static_cast<VLCAudioCtx*>(m_AudioCtx);
+        std::lock_guard<std::mutex> lock(ctx->deviceMutex);
+        if (ctx->hWaveOut) {
+            waveOutReset(ctx->hWaveOut);
+        }
+    }
+#else
     if (m_MediaPlayer)
     {
         bool shouldMute = !effectiveActive || m_Muted.load(std::memory_order_relaxed);

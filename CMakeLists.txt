@@ -126,6 +126,7 @@ file(GLOB PREVIEW_MON_SOURCES       CONFIGURE_DEPENDS "src/frontend/panels/previ
 file(GLOB PREVIEW_MON_SOURCES       CONFIGURE_DEPENDS "src/frontend/panels/stb_image_write_impl.cpp")
 file(GLOB FRONTEND_BIBLIO_SOURCES   CONFIGURE_DEPENDS "src/frontend/panels/biblio/*.cpp")
 file(GLOB FRONTEND_HOME_SOURCES     CONFIGURE_DEPENDS "src/frontend/panels/home/*.cpp")
+file(GLOB FRONTEND_MODEL3D_SOURCES  CONFIGURE_DEPENDS "src/frontend/panels/model3d/*.cpp")
 # -- RAIZ src/ (main.cpp y similares) --
 file(GLOB ROOT_SOURCES              CONFIGURE_DEPENDS "src/*.cpp")
 
@@ -167,6 +168,7 @@ if(WIN32)
         ${AUDIO_SOURCES}
         ${FRONTEND_BIBLIO_SOURCES}
         ${FRONTEND_HOME_SOURCES}
+        ${FRONTEND_MODEL3D_SOURCES}
         ${ROOT_SOURCES}
         ${FRONTEND_UI_BIN_SOURCES}
         ${BACKEND_CORE_SOURCES}
@@ -199,6 +201,7 @@ else()
         ${AUDIO_SOURCES}
         ${FRONTEND_BIBLIO_SOURCES}
         ${FRONTEND_HOME_SOURCES}
+        ${FRONTEND_MODEL3D_SOURCES}
         ${ROOT_SOURCES}
         ${FRONTEND_UI_BIN_SOURCES}
         ${BACKEND_CORE_SOURCES}

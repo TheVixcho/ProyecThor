@@ -1,6 +1,7 @@
 #include "LayersStyleTab.h"
 #include "LayersTheme.h"
 #include "../../backend/core/PresentationCore.h"
+#include "../../backend/core/FileDeletionManager.h"
 #include "frontend/ui/UIManager.h"
 #include "frontend/ui/IconRail.h"
 #include <imgui.h>
@@ -303,10 +304,9 @@ void LayersStyleTab::ApplyTheme(const std::string& name) {
 }
 
 void LayersStyleTab::DeleteTheme(const std::string& name) {
-    std::error_code ec;
-    fs::remove(ThemesDir()/(name+".theme"),ec);
+    Core::FileDeletionManager::ForceDeleteFile((ThemesDir() / (name + ".theme")).string());
     LoadThemeList();
-    if (m_SelectedTheme==name) m_SelectedTheme.clear();
+    if (m_SelectedTheme == name) m_SelectedTheme.clear();
 }
 
 // FIXED: also call SetProjecting(true) so the projector re-renders with the
@@ -333,53 +333,16 @@ void LayersStyleTab::ApplyCurrentStyleToCore() {
 //  para las tarjetas de tema, ver Render()).
 // ─────────────────────────────────────────────────────────────────────────────
 void LayersStyleTab::RenderLeftRail() {
-    const float btnSz = 26.0f;
-    const float gap   = 6.0f;
+    const float btnSz = 24.0f;
+    const float gap   = 4.0f;
 
-    ImGui::PushID("styleview");
-    if (LPCornerIconBtn("##sgridm", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
-            float cs = r*0.42f, g = r*0.18f;
-            for (int rI=0; rI<2; rI++) for (int cI=0; cI<2; cI++) {
-                ImVec2 o = { c.x - cs - g*0.5f + cI*(cs+g), c.y - cs - g*0.5f + rI*(cs+g) };
-                dl->AddRectFilled(o, {o.x+cs, o.y+cs}, col, 1.5f);
-            }
-        }, "Vista en cuadricula", {btnSz,btnSz}, m_GridMode))
-        m_GridMode = true;
-    ImGui::Dummy(ImVec2(0.0f, gap));
-    if (LPCornerIconBtn("##slistm", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
-            for (int i=0;i<3;i++) {
-                float y = c.y - r*0.5f + i*r*0.5f;
-                dl->AddRectFilled({c.x-r*0.7f, y}, {c.x+r*0.7f, y+r*0.22f}, col, 1.0f);
-            }
-        }, "Vista en lista", {btnSz,btnSz}, !m_GridMode))
-        m_GridMode = false;
-    ImGui::PopID();
-
-    if (m_GridMode) {
-        // Zoom de miniaturas -- botones +/- en vez del slider horizontal de
-        // antes, que no entraba comodo en un riel angosto.
-        ImGui::Dummy(ImVec2(0.0f, gap * 2.0f));
-        if (LPCornerIconBtn("##zoomOut", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
-                float s = r * 0.7f, th = std::max(1.4f, r * 0.22f);
-                dl->AddLine({c.x - s, c.y}, {c.x + s, c.y}, col, th);
-            }, "Miniaturas mas chicas", {btnSz,btnSz}))
-            m_ThumbZoom = std::max(0.65f, m_ThumbZoom - 0.15f);
-        ImGui::Dummy(ImVec2(0.0f, gap));
-        if (LPCornerIconBtn("##zoomIn", LPDrawPlus, "Miniaturas mas grandes", {btnSz,btnSz}))
-            m_ThumbZoom = std::min(1.8f, m_ThumbZoom + 0.15f);
-    }
-
-    ImGui::Dummy(ImVec2(0.0f, gap * 2.0f));
-
-    if (LPCornerIconBtn("##reloadfonts", LPDrawRefresh, "Recargar fuentes", {btnSz,btnSz}))
-        LoadFontsList();
-    ImGui::Dummy(ImVec2(0.0f, gap));
-    if (LPCornerIconBtn("##newstyle", LPDrawPlus, "Nuevo estilo", {btnSz,btnSz}, true))
+    // 1. Nuevo estilo (Acción principal arriba)
+    if (LPCornerIconBtn("##newstyle", LPDrawPlus, "Nuevo estilo", { btnSz, btnSz }, true))
         OpenStyleEditorFullscreen(true, "", m_CurrentStyle);
     ImGui::Dummy(ImVec2(0.0f, gap));
+
+    // 2. Ajustes rápidos (Más accesible, directamente abajo de nuevo estilo)
     if (LPCornerIconBtn("##quickadjust", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
-            // Tres sliders verticales — mismo lenguaje visual que
-            // ControlIcons::DrawQuality, para "ajustes rápidos".
             float th = std::max(1.2f, r * 0.16f);
             const float xs[3]    = { -0.5f, 0.0f, 0.5f };
             const float knobY[3] = { 0.18f, -0.28f, 0.05f };
@@ -388,8 +351,36 @@ void LayersStyleTab::RenderLeftRail() {
                 dl->AddLine({x, c.y - r*0.75f}, {x, c.y + r*0.75f}, col, th);
                 dl->AddCircleFilled({x, c.y + knobY[i]*r}, r*0.16f, col, 12);
             }
-        }, "Ajustes rápidos", {btnSz,btnSz}))
+        }, "Ajustes rápidos", { btnSz, btnSz }))
         ImGui::OpenPopup("##QuickAdjustPopup");
+
+    ImGui::Dummy(ImVec2(0.0f, gap + 2.0f));
+
+    // 3. Modos de vista (Cuadrícula / Lista)
+    ImGui::PushID("styleview");
+    if (LPCornerIconBtn("##sgridm", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
+            float cs = r*0.42f, g = r*0.18f;
+            for (int rI=0; rI<2; rI++) for (int cI=0; cI<2; cI++) {
+                ImVec2 o = { c.x - cs - g*0.5f + cI*(cs+g), c.y - cs - g*0.5f + rI*(cs+g) };
+                dl->AddRectFilled(o, {o.x+cs, o.y+cs}, col, 1.5f);
+            }
+        }, "Vista en cuadrícula", { btnSz, btnSz }, m_GridMode))
+        m_GridMode = true;
+    ImGui::Dummy(ImVec2(0.0f, gap));
+    if (LPCornerIconBtn("##slistm", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
+            for (int i=0;i<3;i++) {
+                float y = c.y - r*0.5f + i*r*0.5f;
+                dl->AddRectFilled({c.x-r*0.7f, y}, {c.x+r*0.7f, y+r*0.22f}, col, 1.0f);
+            }
+        }, "Vista en lista", { btnSz, btnSz }, !m_GridMode))
+        m_GridMode = false;
+    ImGui::PopID();
+
+    ImGui::Dummy(ImVec2(0.0f, gap + 2.0f));
+
+    // 4. Recargar fuentes
+    if (LPCornerIconBtn("##reloadfonts", LPDrawRefresh, "Recargar fuentes", { btnSz, btnSz }))
+        LoadFontsList();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -398,43 +389,69 @@ void LayersStyleTab::RenderLeftRail() {
 void LayersStyleTab::RenderThemeCard(const std::string& name, float W, float H,
                                      int idx, int col, int cols) {
     ImGui::PushID(idx);
-    bool isSel = (m_SelectedTheme==name);
+    bool isSel = (m_SelectedTheme == name);
     ImVec2 pos = ImGui::GetCursorScreenPos();
-    bool hovRaw = ImGui::IsMouseHoveringRect(pos,{pos.x+W,pos.y+H});
+    bool hovRaw = ImGui::IsMouseHoveringRect(pos, { pos.x + W, pos.y + H });
     float t = LPHoverLerp(ImGui::GetID("##hov"), hovRaw);
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
     float inset = 2.0f * t;
-    ImVec2 p0 = {pos.x - inset, pos.y - inset};
-    ImVec2 p1 = {pos.x + W + inset, pos.y + H + inset};
+    ImVec2 p0 = { pos.x - inset, pos.y - inset };
+    ImVec2 p1 = { pos.x + W + inset, pos.y + H + inset };
 
-    ImU32 bg = isSel ? LPU32({0.18f,0.20f,0.36f,1.0f})
-                     : LPU32(ImVec4(LP::Surface1.x+(LP::Surface2.x-LP::Surface1.x)*t,
-                                    LP::Surface1.y+(LP::Surface2.y-LP::Surface1.y)*t,
-                                    LP::Surface1.z+(LP::Surface2.z-LP::Surface1.z)*t, 1.0f));
-    dl->AddRectFilled(p0,p1,bg,10.0f);
+    // Card background: subtle dark glass container
+    ImU32 bg = isSel ? LPU32({ 0.16f, 0.18f, 0.28f, 1.0f })
+                     : LPU32(ImVec4(LP::Surface1.x + (LP::Surface2.x - LP::Surface1.x) * t,
+                                    LP::Surface1.y + (LP::Surface2.y - LP::Surface1.y) * t,
+                                    LP::Surface1.z + (LP::Surface2.z - LP::Surface1.z) * t, 1.0f));
+    dl->AddRectFilled(p0, p1, bg, 10.0f);
 
+    // Glowing border
     ImVec4 borderC = isSel ? LP::Accent
-                     : ImVec4(LP::Border.x+(LP::Accent.x-LP::Border.x)*0.4f*t,
-                              LP::Border.y+(LP::Accent.y-LP::Border.y)*0.4f*t,
-                              LP::Border.z+(LP::Accent.z-LP::Border.z)*0.4f*t,
-                              LP::Border.w+(0.4f-LP::Border.w)*t);
-    dl->AddRect(p0,p1,LPU32(borderC),10.0f,0,isSel?2.0f:(1.0f+0.4f*t));
+                     : ImVec4(LP::Border.x + (LP::Accent.x - LP::Border.x) * 0.45f * t,
+                              LP::Border.y + (LP::Accent.y - LP::Border.y) * 0.45f * t,
+                              LP::Border.z + (LP::Accent.z - LP::Border.z) * 0.45f * t,
+                              LP::Border.w + (0.5f - LP::Border.w) * t);
+    dl->AddRect(p0, p1, LPU32(borderC), 10.0f, 0, isSel ? 2.0f : (1.0f + 0.5f * t));
 
-    ImVec2 pp = {p0.x+12.0f, p0.y+12.0f};
-    dl->AddText(ImGui::GetFont(),14.0f,pp,LPU32({1,1,1,0.95f}),"Aa Bb");
-    dl->AddText(ImGui::GetFont(),10.0f,{pp.x,pp.y+18.0f},LPU32({0.65f,0.65f,0.65f,0.75f}),"123 — Gz");
+    // Try loading theme data for real font & color preview
+    StyleData thData;
+    bool hasData = LoadThemeData(name, thData);
 
-    if (isSel) LPBadge(dl,{p1.x-52.0f,p0.y+7.0f},"ACTIVO",LP::Accent,{1,1,1,1});
+    ImVec4 textCol = hasData ? ImVec4(thData.lyrics.color[0], thData.lyrics.color[1], thData.lyrics.color[2], thData.lyrics.color[3])
+                             : ImVec4(1.0f, 1.0f, 1.0f, 0.95f);
+    std::string fontName = (hasData && !thData.lyrics.fontName.empty()) ? thData.lyrics.fontName : "Fuente Predeterminada";
 
-    std::string dn=name.length()>17?name.substr(0,14)+"...":name;
-    dl->AddRectFilled({p0.x,p1.y-24.0f},{p1.x,p1.y},
-        LPU32({0,0,0,0.52f}),10.0f,ImDrawFlags_RoundCornersBottom);
-    ImVec2 ns=ImGui::CalcTextSize(dn.c_str());
-    dl->AddText({p0.x+(W-ns.x)*0.5f,p1.y-20.0f},
-        isSel?LPU32(LP::Accent):LPU32(LP::Text),dn.c_str());
+    // Obtain the real assigned font
+    ImFont* customFont = hasData ? Core::PresentationCore::Get().GetImGuiFont(thData.lyrics.fontName, 22.0f) : nullptr;
+    if (!customFont) customFont = ImGui::GetFont();
+    float previewFontSize = 20.0f;
 
-    ImGui::InvisibleButton("##tcard",{W,H});
+    // Text preview area
+    ImVec2 pp = { p0.x + 14.0f, p0.y + 12.0f };
+    // Shadow
+    dl->AddText(customFont, previewFontSize, { pp.x + 1.0f, pp.y + 1.0f }, IM_COL32(0, 0, 0, 170), "Aa Bb Gg");
+    // Main sample text in real style font & color
+    dl->AddText(customFont, previewFontSize, pp, LPU32(textCol), "Aa Bb Gg");
+
+    // Font name badge / subtitle
+    std::string fontShort = fontName.length() > 16 ? fontName.substr(0, 14) + "..." : fontName;
+    dl->AddText(ImGui::GetFont(), 11.0f, { pp.x, pp.y + 26.0f }, LPU32(LP::TextMuted), fontShort.c_str());
+
+    // Active badge
+    if (isSel) {
+        LPBadge(dl, { p1.x - 56.0f, p0.y + 8.0f }, "ACTIVO", LP::Accent, { 1, 1, 1, 1 }, 6.0f, 2.5f);
+    }
+
+    // Bottom banner with theme name
+    std::string dn = name.length() > 18 ? name.substr(0, 15) + "..." : name;
+    dl->AddRectFilled({ p0.x, p1.y - 26.0f }, { p1.x, p1.y },
+                      LPU32({ 0, 0, 0, 0.65f }), 10.0f, ImDrawFlags_RoundCornersBottom);
+    ImVec2 ns = ImGui::CalcTextSize(dn.c_str());
+    dl->AddText({ p0.x + (W - ns.x) * 0.5f, p1.y - 21.0f },
+                isSel ? LPU32(LP::Accent) : LPU32(LP::Text), dn.c_str());
+
+    ImGui::InvisibleButton("##tcard", { W, H });
     if (ImGui::IsItemClicked()) ApplyTheme(name);
 
     if (ImGui::BeginPopupContextItem("ThCtx")) {
@@ -442,7 +459,7 @@ void LayersStyleTab::RenderThemeCard(const std::string& name, float W, float H,
         ImGui::Text("%s", name.c_str()); ImGui::PopStyleColor();
         ImGui::Separator();
         if (ImGui::Selectable("  Editar")) {
-            StyleData ed; if (LoadThemeData(name,ed)) OpenStyleEditorFullscreen(false, name, ed);
+            StyleData ed; if (LoadThemeData(name, ed)) OpenStyleEditorFullscreen(false, name, ed);
         }
         ImGui::PushStyleColor(ImGuiCol_Text, LP::Red);
         if (ImGui::Selectable("  Eliminar")) DeleteTheme(name);
@@ -450,7 +467,7 @@ void LayersStyleTab::RenderThemeCard(const std::string& name, float W, float H,
         ImGui::EndPopup();
     }
 
-    if (col<cols-1) ImGui::SameLine();
+    if (col < cols - 1) ImGui::SameLine();
     ImGui::PopID();
 }
 
@@ -461,31 +478,52 @@ void LayersStyleTab::RenderThemeRow(const std::string& name, float W, float rowH
     ImGui::PushID(idx);
     bool isSel = (m_SelectedTheme == name);
     ImVec2 pos = ImGui::GetCursorScreenPos();
-    bool hovRaw = ImGui::IsMouseHoveringRect(pos, {pos.x + W, pos.y + rowH});
+    bool hovRaw = ImGui::IsMouseHoveringRect(pos, { pos.x + W, pos.y + rowH });
     float t = LPHoverLerp(ImGui::GetID("##hov"), hovRaw);
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    ImU32 bg = LPU32(ImVec4(LP::Surface1.x+(LP::Surface2.x-LP::Surface1.x)*t,
-                             LP::Surface1.y+(LP::Surface2.y-LP::Surface1.y)*t,
-                             LP::Surface1.z+(LP::Surface2.z-LP::Surface1.z)*t, 1.0f));
-    if (isSel) bg = LPU32(ImVec4(0.15f, 0.16f, 0.20f, 1.0f));
-    dl->AddRectFilled(pos, {pos.x + W, pos.y + rowH}, bg, 3.0f);
+    ImU32 bg = LPU32(ImVec4(LP::Surface1.x + (LP::Surface2.x - LP::Surface1.x) * t,
+                             LP::Surface1.y + (LP::Surface2.y - LP::Surface1.y) * t,
+                             LP::Surface1.z + (LP::Surface2.z - LP::Surface1.z) * t, 1.0f));
+    if (isSel) bg = LPU32(ImVec4(0.16f, 0.18f, 0.26f, 1.0f));
+    dl->AddRectFilled(pos, { pos.x + W, pos.y + rowH }, bg, 6.0f);
 
     if (isSel) {
-        dl->AddRectFilled(pos, {pos.x + 4.0f, pos.y + rowH}, LPU32(LP::Accent), 3.0f, ImDrawFlags_RoundCornersLeft);
+        dl->AddRectFilled(pos, { pos.x + 3.5f, pos.y + rowH }, LPU32(LP::Accent), 6.0f, ImDrawFlags_RoundCornersLeft);
+        dl->AddRect(pos, { pos.x + W, pos.y + rowH }, LPU32(LP::Accent), 6.0f, 0, 1.0f);
     } else if (t > 0.01f) {
-        dl->AddRectFilled(pos, {pos.x + 4.0f, pos.y + rowH}, LPU32({LP::Accent.x, LP::Accent.y, LP::Accent.z, 0.3f*t}), 3.0f, ImDrawFlags_RoundCornersLeft);
+        dl->AddRectFilled(pos, { pos.x + 3.5f, pos.y + rowH }, LPU32({ LP::Accent.x, LP::Accent.y, LP::Accent.z, 0.4f * t }), 6.0f, ImDrawFlags_RoundCornersLeft);
     }
 
-    float px = pos.x + 16.0f, py = pos.y + 8.0f;
-    dl->AddText(ImGui::GetFont(), 14.0f, {px, py}, LPU32({1,1,1,0.9f}), "Aa");
-    dl->AddText(ImGui::GetFont(), 10.0f, {px, py + 18.0f}, LPU32({0.6f,0.6f,0.6f,0.7f}), "123");
+    StyleData thData;
+    bool hasData = LoadThemeData(name, thData);
+    ImVec4 textCol = hasData ? ImVec4(thData.lyrics.color[0], thData.lyrics.color[1], thData.lyrics.color[2], thData.lyrics.color[3])
+                             : ImVec4(1.0f, 1.0f, 1.0f, 0.95f);
+
+    ImFont* customFont = hasData ? Core::PresentationCore::Get().GetImGuiFont(thData.lyrics.fontName, 16.0f) : nullptr;
+    if (!customFont) customFont = ImGui::GetFont();
+
+    float px = pos.x + 14.0f, py = pos.y + (rowH - 26.0f) * 0.5f;
+    // Mini chip preview with real font
+    dl->AddRectFilled({ px, py }, { px + 36.0f, py + 26.0f }, IM_COL32(0, 0, 0, 140), 4.0f);
+    dl->AddText(customFont, 16.0f, { px + 6.0f, py + 3.0f }, LPU32(textCol), "Aa");
 
     std::string dn = name.length() > 28 ? name.substr(0, 25) + "..." : name;
-    float txtX = px + 44.0f, txtY = pos.y + (rowH - ImGui::GetTextLineHeight()) * 0.5f;
-    dl->AddText({txtX, txtY}, isSel ? LPU32(ImVec4(1,1,1,1)) : LPU32(LP::Text), dn.c_str());
+    float txtX = px + 46.0f, txtY = pos.y + (rowH - ImGui::GetTextLineHeight()) * 0.5f;
+    dl->AddText({ txtX, txtY }, isSel ? LPU32(LP::Accent) : LPU32(LP::Text), dn.c_str());
 
-    ImGui::InvisibleButton("##trow", {W, rowH});
+    if (hasData && !thData.lyrics.fontName.empty()) {
+        std::string fn = thData.lyrics.fontName;
+        if (fn.length() > 18) fn = fn.substr(0, 16) + "...";
+        ImVec2 fSz = ImGui::CalcTextSize(fn.c_str());
+        dl->AddText({ pos.x + W - fSz.x - (isSel ? 72.0f : 16.0f), txtY }, LPU32(LP::TextMuted), fn.c_str());
+    }
+
+    if (isSel) {
+        LPBadge(dl, { pos.x + W - 58.0f, pos.y + (rowH - 18.0f) * 0.5f }, "ACTIVO", LP::Accent, { 1, 1, 1, 1 }, 5.0f, 2.0f);
+    }
+
+    ImGui::InvisibleButton("##trow", { W, rowH });
     if (ImGui::IsItemClicked()) ApplyTheme(name);
 
     if (ImGui::BeginPopupContextItem("ThCtxL")) {
@@ -493,7 +531,7 @@ void LayersStyleTab::RenderThemeRow(const std::string& name, float W, float rowH
         ImGui::Text("%s", name.c_str()); ImGui::PopStyleColor();
         ImGui::Separator();
         if (ImGui::Selectable("  Editar")) {
-            StyleData ed; if (LoadThemeData(name,ed)) OpenStyleEditorFullscreen(false, name, ed);
+            StyleData ed; if (LoadThemeData(name, ed)) OpenStyleEditorFullscreen(false, name, ed);
         }
         ImGui::PushStyleColor(ImGuiCol_Text, LP::Red);
         if (ImGui::Selectable("  Eliminar")) DeleteTheme(name);
@@ -501,12 +539,12 @@ void LayersStyleTab::RenderThemeRow(const std::string& name, float W, float rowH
         ImGui::EndPopup();
     }
 
-    ImGui::Dummy({0, 4.0f});
+    ImGui::Dummy({ 0, 4.0f });
     ImGui::PopID();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  RenderThemeGrid (Ajustado para evitar márgenes negativos)
+//  RenderThemeGrid
 // ─────────────────────────────────────────────────────────────────────────────
 void LayersStyleTab::RenderThemeGrid() {
     if (m_AvailableThemes.empty()) {
@@ -522,6 +560,22 @@ void LayersStyleTab::RenderThemeGrid() {
         ImGui::PopStyleColor();
         ImGui::Dummy({0, 8});
         return;
+    }
+
+    // Header bar with count and Zoom Slider
+    {
+        ImGui::AlignTextToFramePadding();
+        ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
+        ImGui::Text("Estilos (%d)", (int)m_AvailableThemes.size());
+        ImGui::PopStyleColor();
+
+        if (m_GridMode) {
+            const float zoomW = 85.0f;
+            float avail = ImGui::GetWindowContentRegionMax().x;
+            ImGui::SameLine(std::max(ImGui::GetCursorPosX(), avail - zoomW - 10.0f));
+            LPZoomSlider("##styleZoom", &m_ThumbZoom, 0.65f, 1.8f, zoomW);
+        }
+        ImGui::Spacing();
     }
 
     if (m_GridMode) {
@@ -698,16 +752,18 @@ void LayersStyleTab::Render() {
     //    usando todo el alto disponible -- antes el mismo riel era una
     //    barra horizontal arriba de la galeria, robandole alto util a las
     //    tarjetas de tema (ver RenderLeftRail).
-    constexpr float kRailW = 30.0f;
+    constexpr float kRailW = 28.0f;
     const float     availH = ImGui::GetContentRegionAvail().y;
 
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGui::BeginChild("##stylesLeftRail", ImVec2(kRailW, availH), false,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    ImGui::Dummy(ImVec2(0.0f, 2.0f));
+    ImGui::Dummy(ImVec2(0.0f, 1.0f));
     RenderLeftRail();
     ImGui::EndChild();
+    ImGui::PopStyleVar();
 
-    ImGui::SameLine(0.0f, 10.0f);
+    ImGui::SameLine(0.0f, 8.0f);
 
     // Divisor vertical -- mismo criterio que el divisor horizontal de
     // StylesHubPanel entre su rail de arriba y el contenido.

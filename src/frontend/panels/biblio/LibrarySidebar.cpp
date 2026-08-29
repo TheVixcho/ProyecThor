@@ -30,6 +30,7 @@ static constexpr int kSideMode_Categories = 0;
 static constexpr int kSideMode_Render     = 3;
 static constexpr int kSideMode_Overlay    = 4;
 static constexpr int kSideMode_Web        = 5;
+static constexpr int kSideMode_Model3D    = 6;
 
 namespace ProyecThor::Library {
 
@@ -159,6 +160,7 @@ void RenderCategoryButtons(LibraryContext& ctx)
         int         catInt;
         DrawFn      drawIcon;
         const char* label;
+        int         colorIndex;
     };
 
     // Sin "static": el label depende del idioma activo (ver GetUIStrings),
@@ -166,10 +168,10 @@ void RenderCategoryButtons(LibraryContext& ctx)
     // frame es gratis y evita que un CatDef "static" quede con el idioma
     // del primer frame para siempre.
     const CatDef k_Cats[] = {
-        { kCat_Songs,      DrawIcon_Music,      str.libRailSongs      },
-        { kCat_Multimedia, DrawIcon_Multimedia, str.libRailMultimedia },
-        { kCat_Bibles,     DrawIcon_Cross,      str.libCatBible       },
-        { kCat_Documents,  DrawIcon_Document,   str.libRailDocs       },
+        { kCat_Multimedia, DrawIcon_Multimedia, str.libRailMultimedia, 1 },
+        { kCat_Songs,      DrawIcon_Music,      str.libRailSongs,      0 },
+        { kCat_Bibles,     DrawIcon_Cross,      str.libCatBible,       3 },
+        { kCat_Documents,  DrawIcon_Document,   str.libRailDocs,       4 },
     };
 
     const auto& sidebarSettings = ProyecThor::Settings::SettingsManager::Get().GetSettings().librarySidebar;
@@ -204,7 +206,7 @@ void RenderCategoryButtons(LibraryContext& ctx)
 
         bool clicked = RenderSidebarButton(dl, storage, sidebarW, btnH, iconSz, lt,
                                            cd.label, cd.drawIcon, active,
-                                           sidebarSettings.categoryColor[catIdx]);
+                                           sidebarSettings.categoryColor[cd.colorIndex]);
         if (clicked) {
             ctx.currentCategoryInt = cd.catInt;
             ctx.sideModeInt        = kSideMode_Categories;
@@ -232,6 +234,7 @@ void RenderCategoryButtons(LibraryContext& ctx)
         { "Render",   ProyecThor::UI::AppIcons::DrawIcon_Swap,       kSideMode_Render    },
         { "Overlay",  ProyecThor::UI::AppIcons::DrawIcon_Overlay,    kSideMode_Overlay   },
         { "Web",      ProyecThor::UI::AppIcons::DrawIcon_Globe,      kSideMode_Web       },
+        { "3D",       ProyecThor::UI::AppIcons::DrawIcon_Cube3D,     kSideMode_Model3D   },
     };
 
     for (const auto& sd : k_SideItems)

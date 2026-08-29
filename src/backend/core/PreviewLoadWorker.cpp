@@ -1,5 +1,8 @@
 #include "PreviewLoadWorker.h"
 #include "backend/media/VLCBasePlayer.h"
+#include <future>
+#include <memory>
+#include <chrono>
 
 namespace ProyecThor::Core {
 
@@ -37,6 +40,30 @@ void PreviewLoadWorker::RequestStop(VLCBasePlayer* player)
 {
     if (!player) return;
     Request([player] { player->Stop(); });
+}
+
+void PreviewLoadWorker::RequestStopSync(VLCBasePlayer* player, int timeoutMs)
+{
+    if (!player) return;
+    auto prom = std::make_shared<std::promise<void>>();
+    auto fut  = prom->get_future();
+    Request([player, prom] {
+        player->Stop();
+        try { prom->set_value(); } catch (...) {}
+    });
+    if (fut.valid())
+        fut.wait_for(std::chrono::milliseconds(timeoutMs));
+}
+
+void PreviewLoadWorker::Flush(int timeoutMs)
+{
+    auto prom = std::make_shared<std::promise<void>>();
+    auto fut  = prom->get_future();
+    Request([prom] {
+        try { prom->set_value(); } catch (...) {}
+    });
+    if (fut.valid())
+        fut.wait_for(std::chrono::milliseconds(timeoutMs));
 }
 
 void PreviewLoadWorker::ThreadFunc()

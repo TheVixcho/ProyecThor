@@ -8,6 +8,7 @@
 #include "frontend/views/audio/AudioAlbumArt.h"
 #include "backend/core/ThumbnailWorker.h"
 #include "backend/core/PresentationCore.h"
+#include "backend/core/FileDeletionManager.h"
 #include "backend/settings/SettingsManager.h"
 
 #include <imgui.h>
@@ -282,6 +283,8 @@ static ImTextureID GetThumbAndAccent(const MMItem& item, UI::LPDrawIconFn& outIc
 //  y no alcanza para saber a que carpeta pertenece el item).
 // =============================================================================
 
+static std::string s_SelectedFile;
+
 static bool        s_ShowRenameModal = false;
 static MMItem       s_RenameItem;
 static char         s_RenameBuffer[256]{};
@@ -346,8 +349,12 @@ static void RenderDeleteModal() {
         ImGui::PushStyleColor(ImGuiCol_Button,        DS::DangerColorDim);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  DS::DangerColor);
         if (ImGui::Button("Eliminar", ImVec2(160, 0))) {
-            std::error_code ec;
-            fs::remove(U8Path(ItemFullPath(s_DeleteItem)), ec);
+            std::string fullPath = ItemFullPath(s_DeleteItem);
+            if (s_SelectedFile == s_DeleteItem.filename) {
+                s_SelectedFile.clear();
+            }
+            s_VideoThumbCache.erase(fullPath);
+            Core::FileDeletionManager::ForceDeleteFile(fullPath);
             RefreshMultimediaLists();
             s_ShowDeleteModal = false;
             ImGui::CloseCurrentPopup();
@@ -367,8 +374,6 @@ static void RenderDeleteModal() {
 //  drag-drop de video y menu contextual son EXACTAMENTE los mismos en los
 //  dos modos de vista, asi que viven en un solo lugar en vez de duplicarse.
 // =============================================================================
-
-static std::string s_SelectedFile;
 
 static void SelectMMItem(const MMItem& item) {
     s_SelectedFile = item.filename;

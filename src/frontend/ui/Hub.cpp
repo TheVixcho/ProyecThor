@@ -336,13 +336,20 @@ static void DrawCoverImageCover(ImDrawList* dl, GLuint texId, int texW, int texH
     const float uh = baseUH / zoom;
 
     const float marginX = std::max(0.0f, (1.0f - uw) * 0.5f);
-    const float marginY = std::max(0.0f, (1.0f - uh) * 0.5f);
+    const float marginY = std::max(0.0f, 1.0f - uh);
 
     const float centerU = 0.5f + st.ox * marginX;
-    const float centerV = 0.5f + st.oy * marginY;
+    // Anclado en la base inferior (v1 = 1.0f, v0 = 1.0f - uh) para que la imagen
+    // parta de abajo hacia arriba y no al medio.
+    float v1 = 1.0f + std::min(0.0f, st.oy) * marginY * 0.5f;
+    float v0 = v1 - uh;
+    if (v0 < 0.0f) {
+        v0 = 0.0f;
+        v1 = std::min(1.0f, uh);
+    }
 
-    const ImVec2 uv0(centerU - uw * 0.5f, centerV - uh * 0.5f);
-    const ImVec2 uv1(centerU + uw * 0.5f, centerV + uh * 0.5f);
+    const ImVec2 uv0(centerU - uw * 0.5f, v0);
+    const ImVec2 uv1(centerU + uw * 0.5f, v1);
 
     const int imgAlpha = static_cast<int>(std::clamp(ImGui::GetStyle().Alpha, 0.0f, 1.0f) * 255.0f);
     dl->AddImageRounded((ImTextureID)(intptr_t)texId, pMin, pMax, uv0, uv1,
@@ -822,7 +829,7 @@ void Hub::RenderContent(float w, float h) {
     // ── 2. Fila Principal: 2 Tarjetas Verticales de Acción (Deadlock Hero Cards) ──
     const float mainGap = 20.0f;
     const float cardW   = (contentW - mainGap) * 0.5f;
-    const float cardH   = 320.0f;
+    const float cardH   = 420.0f;
 
     const ImVec2 row1Pos = ImGui::GetCursorScreenPos();
 

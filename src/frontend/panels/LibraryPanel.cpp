@@ -17,12 +17,14 @@
 #include <imgui_internal.h>
 
 #include "backend/core/PresentationCore.h"
+#include "backend/core/FileDeletionManager.h"
 #include "UIStrings.h"
 #include "frontend/ui/UIManager.h"
 #include "frontend/ui/IconRail.h"
 #include "frontend/ui/FilePicker.h"
 #include "ui/DesignSystem.h"
 #include "biblio/LibraryPlaylists.h"
+#include "frontend/panels/model3d/Model3DPanel.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -249,6 +251,10 @@ void LibraryPanel::SetUIManager(UIManager* manager)
         m_OverlayTab = std::make_unique<OverlayLibraryTab>(m_UIManagerRef);
     if (!m_WebBrowserPanel)
         m_WebBrowserPanel = std::make_unique<WebBrowserPanel>();
+    if (!m_Model3DPanel) {
+        m_Model3DPanel = std::make_unique<Model3DPanel>();
+        m_Model3DPanel->SetUIManager(m_UIManagerRef);
+    }
 }
 
 void LibraryPanel::SetMediaOnlyMode(bool v)
@@ -386,37 +392,25 @@ void LibraryPanel::DeleteSelectedItem()
     const bool isCurrentlySelected =
         (currentSelection.title == itemName) || isDocumentInUse;
 
-    const bool isVideoCategory = (m_CurrentCategory == LibraryCategory::Videos);
-
-    if (isVideoCategory)
-    {
-        // Bloquea la ruta ANTES de detener la reproduccion. Mientras el
-        // bloqueo esta activo, VLCBasePlayer::Play() ignora cualquier
-        // intento de volver a abrir este archivo, sin importar quien lo
-        // dispare (cola automatica, boton manual, etc.). Esto es lo que
-        // evita que el video se reabra justo despues del Stop() y deje el
-        // archivo bloqueado para el borrado.
-        core.BlockBackgroundPath(fullPath);
-        core.StopBackgroundMedia();
-    }
-
     if (isCurrentlySelected)
     {
         core.SetProjecting(false);
         core.ClearLayer2();
     }
 
-    if (m_CurrentCategory == LibraryCategory::Documents && isDocumentInUse)
+    if (m_CurrentCategory == LibraryCategory::Documents)
         m_LoadedDocPath.clear();
 
-    const bool removed = TryRemoveWithRetry(U8Path(fullPath));
-
-    if (isVideoCategory)
-        core.UnblockBackgroundPath();
+    bool removed = false;
+    if (m_CurrentCategory == LibraryCategory::Documents) {
+        removed = Core::FileDeletionManager::ForceDeleteDirectory(fullPath);
+    } else {
+        removed = Core::FileDeletionManager::ForceDeleteFile(fullPath);
+    }
 
     if (!removed)
     {
-        std::cerr << "[LibraryPanel] No se pudo eliminar, el archivo sigue en uso: "
+        std::cerr << "[LibraryPanel] No se pudo eliminar el archivo: "
                   << fullPath << '\n';
         ShowFileInUseToast(itemName);
         return;
@@ -659,6 +653,10 @@ void LibraryPanel::Render()
         else if (m_SideMode == LibrarySideMode::Web)
         {
             if (m_WebBrowserPanel) m_WebBrowserPanel->Render();
+        }
+        else if (m_SideMode == LibrarySideMode::Model3D)
+        {
+            if (m_Model3DPanel) m_Model3DPanel->Render();
         }
         else if (m_CurrentCategory == LibraryCategory::Audio)
         {

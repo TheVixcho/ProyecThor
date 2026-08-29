@@ -314,63 +314,95 @@ void DrawIcon_Disc(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 // AppIcons.h/HomeIcons.h/DrawIcon_Disc/DrawIcon_Gear) en su lugar — el
 // pedido explicito fue "no quiero letras", así que el glifo de texto ya no
 // se usa como ultimo recurso salvo que ninguno de los dos este disponible.
+static float Lerp(float a, float b, float t) { return a + (b - a) * t; }
+
 bool QuickActionButton(const char* id, const char* iconKey, DrawIconFn vectorIcon,
                        const char* fallbackGlyph, const char* tooltip, ImVec2 size,
                        ImVec4 bgColor, ImVec4 hoverColor, ImVec4 activeColor, ImVec4 tint,
                        bool toggledOn)
 {
-    ImVec4 restColor = toggledOn ? activeColor : bgColor;
+    constexpr float rounding = 6.0f;
+    ImVec2 cursor = ImGui::GetCursorScreenPos();
+    ImVec2 bMin   = cursor;
+    ImVec2 bMax   = { cursor.x + size.x, cursor.y + size.y };
 
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
-    ImGui::PushStyleColor(ImGuiCol_Button,        restColor);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hoverColor);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  activeColor);
-    ImGui::PushStyleColor(ImGuiCol_Text,          tint);
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    ImGuiID hovId = ImGui::GetID(id);
+    float*  pT    = storage->GetFloatRef(hovId ^ 0x9876FEDCu, 0.0f);
+    bool hovered  = ImGui::IsMouseHoveringRect(bMin, bMax, false);
+    *pT += ((hovered ? 1.0f : 0.0f) - *pT) * std::min(1.0f, ImGui::GetIO().DeltaTime * 14.0f);
+    float t = *pT;
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    if (toggledOn) {
+        ImVec4 ac = activeColor;
+        ac.w = 0.18f;
+        dl->AddRectFilled(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding);
+        ac.w = 0.35f;
+        dl->AddRect(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding, 0, 1.0f);
+
+        // Indicador inferior
+        float barW = std::max(size.x - 12.0f, 10.0f);
+        float barX0 = cursor.x + (size.x - barW) * 0.5f;
+        dl->AddRectFilled({ barX0, bMax.y - 2.5f }, { barX0 + barW, bMax.y },
+                          ImGui::ColorConvertFloat4ToU32(tint), 1.5f);
+    } else {
+        if (t > 0.01f) {
+            dl->AddRectFilled(bMin, bMax, IM_COL32(255, 255, 255, (int)(t * 18.0f)), rounding);
+        } else {
+            dl->AddRectFilled(bMin, bMax, ImGui::ColorConvertFloat4ToU32(bgColor), rounding);
+        }
+    }
+
+    ImGui::SetCursorScreenPos(bMin);
+    const std::string btnId = std::string("##btn_") + id;
+    bool clicked = ImGui::InvisibleButton(btnId.c_str(), size);
 
     auto it = StyleGeneralApp::Icons.find(iconKey);
     bool hasTexture = (it != StyleGeneralApp::Icons.end() && it->second.textureID != nullptr);
     bool hasIcon    = hasTexture || vectorIcon != nullptr;
-    std::string label = (hasIcon ? "" : std::string(fallbackGlyph)) + "##" + id;
 
-    bool clicked = ImGui::Button(label.c_str(), size);
-
-    ImVec2 bMin = ImGui::GetItemRectMin();
-    ImVec2 bMax = ImGui::GetItemRectMax();
-    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImVec4 textPriV = ImGui::ColorConvertU32ToFloat4(DS::TextPrimary);
+    ImVec4 textDimV = ImGui::ColorConvertU32ToFloat4(DS::TextSecondary);
+    float  brightT  = toggledOn ? 1.0f : t;
+    ImVec4 icF = {
+        Lerp(textDimV.x, textPriV.x, brightT),
+        Lerp(textDimV.y, textPriV.y, brightT),
+        Lerp(textDimV.z, textPriV.z, brightT),
+        1.0f
+    };
+    if (toggledOn) {
+        icF.x = Lerp(icF.x, tint.x, 0.35f);
+        icF.y = Lerp(icF.y, tint.y, 0.35f);
+        icF.z = Lerp(icF.z, tint.z, 0.35f);
+        icF.w = 1.0f;
+    }
+    ImU32 iconColor = ImGui::ColorConvertFloat4ToU32(icF);
 
     if (hasTexture)
     {
-        const float iconSide = std::min(size.x, size.y) * 0.42f;
-        const ImVec2 center  = { (bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f };
+        const float iconSide = std::min(size.x, size.y) * 0.44f;
+        const ImVec2 center  = { (bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f - (toggledOn ? 1.0f : 0.0f) };
         const ImVec2 pMin    = { center.x - iconSide * 0.5f, center.y - iconSide * 0.5f };
         const ImVec2 pMax    = { center.x + iconSide * 0.5f, center.y + iconSide * 0.5f };
 
-        dl->AddImage(it->second.textureID, pMin, pMax,
-            ImVec2(0, 0), ImVec2(1, 1),
-            ImGui::ColorConvertFloat4ToU32(tint));
+        dl->AddImage((ImTextureID)(intptr_t)it->second.textureID, pMin, pMax,
+            ImVec2(0, 0), ImVec2(1, 1), iconColor);
     }
     else if (vectorIcon)
     {
         const float iconSide = std::min(size.x, size.y) * 0.48f;
-        const ImVec2 center  = { (bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f };
+        const ImVec2 center  = { (bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f - (toggledOn ? 1.0f : 0.0f) };
         const ImVec2 origin  = { center.x - iconSide * 0.5f, center.y - iconSide * 0.5f };
-        vectorIcon(dl, origin, iconSide, ImGui::ColorConvertFloat4ToU32(tint));
+        vectorIcon(dl, origin, iconSide, iconColor);
     }
-
-    // Chip de acento fino, centrado abajo del icono, cuando el estado esta
-    // activo/encendido -- reemplaza la barra lateral + linea de celda negra
-    // que tenia la versión "hoja de calculo" anterior.
-    if (toggledOn)
+    else if (fallbackGlyph && fallbackGlyph[0] != '\0')
     {
-        ImU32 accent = ImGui::ColorConvertFloat4ToU32(tint);
-        float chipW = (bMax.x - bMin.x) * 0.36f;
-        float cx = (bMin.x + bMax.x) * 0.5f;
-        dl->AddRectFilled({ cx - chipW * 0.5f, bMax.y - 4.0f }, { cx + chipW * 0.5f, bMax.y - 2.0f },
-                          accent, 1.0f);
+        ImVec2 glyphSz = ImGui::CalcTextSize(fallbackGlyph);
+        ImVec2 glyphPos = { (bMin.x + bMax.x - glyphSz.x) * 0.5f, (bMin.y + bMax.y - glyphSz.y) * 0.5f };
+        dl->AddText(glyphPos, iconColor, fallbackGlyph);
     }
-
-    ImGui::PopStyleColor(4);
-    ImGui::PopStyleVar();
 
     if (tooltip && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
         ImGui::SetTooltip("%s", tooltip);
@@ -888,13 +920,14 @@ void ViewPanel::RenderQuickActionsConfig(float stripH)
     // los pads de Reproduccion), asi que el icono (basado en min(w,h), ver
     // QuickActionButton) no crece aunque el rectangulo sea mas ancho.
     constexpr int kCount = 6;
-    constexpr float kGap = 2.0f;
-    const float   btnH   = std::min(stripH - 4.0f, 28.0f);
+    constexpr float kGap = 4.0f;
+    const float   btnH   = std::min(stripH - 4.0f, 30.0f);
     const float   totalW = ImGui::GetContentRegionAvail().x;
-    const float   cellW  = (totalW - kGap * (kCount - 1)) / (float)kCount;
+    const float   cellW  = (totalW - kGap * (kCount - 1) - 8.0f) / (float)kCount;
     const ImVec2  cellSize(cellW, btnH);
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
+    ImGui::SetCursorPosX(4.0f);
     ImGui::SetCursorPosY((stripH - btnH) * 0.5f);
 
     for (int i = 0; i < kCount; i++)

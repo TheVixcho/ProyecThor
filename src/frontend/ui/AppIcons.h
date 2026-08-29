@@ -199,4 +199,24 @@ inline void DrawIcon_Shader(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
     dl->AddCircleFilled(IcPt(o, sz, 0.86f, 0.62f), sz * 0.035f, col, 8);
 }
 
+// 3D — Cubo isométrico 3D
+inline void DrawIcon_Cube3D(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = std::max(1.2f, sz * 0.065f);
+    ImVec2 center = IcPt(o, sz, 0.5f, 0.5f);
+    ImVec2 top    = IcPt(o, sz, 0.5f, 0.16f);
+    ImVec2 bot    = IcPt(o, sz, 0.5f, 0.84f);
+    ImVec2 midL   = IcPt(o, sz, 0.18f, 0.35f);
+    ImVec2 midR   = IcPt(o, sz, 0.82f, 0.35f);
+    ImVec2 botL   = IcPt(o, sz, 0.18f, 0.65f);
+    ImVec2 botR   = IcPt(o, sz, 0.82f, 0.65f);
+
+    // Cara superior
+    dl->AddQuad(top, midR, center, midL, col, thick);
+    // Cara izquierda
+    dl->AddQuad(midL, center, bot, botL, col, thick);
+    // Cara derecha
+    dl->AddQuad(center, midR, botR, bot, col, thick);
+}
+
 } // namespace ProyecThor::UI::AppIcons

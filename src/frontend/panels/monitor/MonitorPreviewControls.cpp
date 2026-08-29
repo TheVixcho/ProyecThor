@@ -123,8 +123,7 @@ void MonitorView::RenderTransportRow(Core::VLCBasePlayer* player, float innerW)
         ? std::clamp(static_cast<float>(curMs) / static_cast<float>(lenMs), 0.0f, 1.0f)
         : 0.0f;
 
-    ImGui::Spacing();
-    ImGui::SetCursorPosX(MT::k_PadLg);
+    float startX = ImGui::GetCursorPosX();
 
     if (BMSlider("##tl_prev", &pos, 0.0f, 1.0f, "",
                  MT::k_PrevTrack, MT::k_PrevGrab,
@@ -135,20 +134,20 @@ void MonitorView::RenderTransportRow(Core::VLCBasePlayer* player, float innerW)
         curMs = static_cast<int64_t>(pos * static_cast<float>(lenMs));
     }
 
-    DrawTimeRow(innerW, MT::k_PadLg, curMs, lenMs);
-    ImGui::Spacing();
+    DrawTimeRow(innerW, startX, curMs, lenMs);
 
     float gap = MT::k_Gap;
     float btnH = MT::k_TransportH;
     float navBtnW = (innerW - (gap * 4.0f)) / 5.0f;
     float iconSize = 14.0f;
 
-    ImGui::Spacing();
+    ImGui::SetCursorPosX(startX);
 
     ImGui::PushID("btn_inicio_prev");
     if (DrawIconButton("skip_prev", iconSize, MT::k_NeutBtn, MT::k_NeutBtnHov, MT::k_NeutBtnAct, {navBtnW, btnH})) {
         player->SetPosition(0.0f);
     }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Ir al inicio");
     ImGui::PopID();
     ImGui::SameLine(0.0f, gap);
 
@@ -157,6 +156,7 @@ void MonitorView::RenderTransportRow(Core::VLCBasePlayer* player, float innerW)
         int64_t t = std::max(static_cast<int64_t>(0), curMs - 10000);
         player->SetPosition(lenMs > 0 ? static_cast<float>(t) / static_cast<float>(lenMs) : 0.0f);
     }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Atrasar 10 segundos");
     ImGui::PopID();
     ImGui::SameLine(0.0f, gap);
 
@@ -178,6 +178,7 @@ void MonitorView::RenderTransportRow(Core::VLCBasePlayer* player, float innerW)
             m_PreviewPlaying = true;
         }
     }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip(m_PreviewPlaying ? "Pausar" : "Reproducir");
     ImGui::PopID();
     ImGui::SameLine(0.0f, gap);
 
@@ -187,6 +188,7 @@ void MonitorView::RenderTransportRow(Core::VLCBasePlayer* player, float innerW)
         if (lenMs > 0 && t > lenMs) t = lenMs;
         player->SetPosition(lenMs > 0 ? static_cast<float>(t) / static_cast<float>(lenMs) : 0.0f);
     }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Adelantar 10 segundos");
     ImGui::PopID();
     ImGui::SameLine(0.0f, gap);
 
@@ -196,6 +198,7 @@ void MonitorView::RenderTransportRow(Core::VLCBasePlayer* player, float innerW)
         player->SetPause(true);
         m_PreviewPlaying = false;
     }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Detener");
     ImGui::PopID();
 
     ImGui::EndDisabled();
@@ -203,46 +206,55 @@ void MonitorView::RenderTransportRow(Core::VLCBasePlayer* player, float innerW)
 
 void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
 {
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  { MT::k_PadLg, MT::k_Pad });
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, MT::k_Bg1);
-    ImGui::PushStyleColor(ImGuiCol_Border,  MT::k_BorderSubtle);
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
+    const float controlsH = 120.0f;
+    const float padX      = 8.0f;
+    const float innerW    = std::max(60.0f, w - padX * 2.0f);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  { 0.0f, 0.0f });
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding,   MT::k_R);
 
-    ImGui::BeginChild("##ctrl_prev", { w, MT::k_ControlsH }, true,
+    ImGui::BeginChild("##ctrl_prev", { w, controlsH }, false,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
-    const float innerW = w - MT::k_PadLg * 2.0f;
-
+    // Header Top Row
     {
+        float topY = ImGui::GetCursorPosY() + 2.0f;
+        ImGui::SetCursorPosY(topY);
+
         ImVec2 headerPos = ImGui::GetCursorScreenPos();
         DrawStatusDot(
             ImGui::GetWindowDrawList(),
-            { headerPos.x + 7.0f, headerPos.y + 9.0f },
+            { headerPos.x + padX + 5.0f, headerPos.y + 8.0f },
             4.0f, MT::k_PrevAccent, m_PreviewPlaying);
 
-        ImGui::SetCursorPosX(MT::k_PadLg + 18.0f);
+        ImGui::SetCursorPosX(padX + 16.0f);
         ImGui::PushStyleColor(ImGuiCol_Text, MT::k_PrevAccent);
         ImGui::TextUnformatted("PREVIEW");
         ImGui::PopStyleColor();
 
-        const char* badge   = "MONITOR ONLY";
-        ImVec2      badgeSz = ImGui::CalcTextSize(badge);
-        const float eqBtnW  = 26.0f, eqBtnH = 16.0f;
-        const float audioBtnW = 22.0f;
-        float       rightX  = MT::k_PadLg + innerW - eqBtnW - 6.0f - badgeSz.x - audioBtnW - 6.0f;
+        const char* badge     = "MONITOR ONLY";
+        ImVec2      badgeSz   = ImGui::CalcTextSize(badge);
+        const float eqBtnW    = 28.0f, eqBtnH = 18.0f;
+        const float audioBtnW = 20.0f;
+        const float rightGrpW = audioBtnW + 6.0f + eqBtnW + 8.0f + badgeSz.x;
+        float       rightX    = padX + innerW - rightGrpW;
 
         ImGui::SameLine();
-        ImGui::SetCursorPosX(rightX);
+        ImGui::SetCursorPosX(std::max(padX + 70.0f, rightX));
+        ImGui::SetCursorPosY(topY);
         RenderPreviewAudioToggle(player, eqBtnH);
 
         ImGui::SameLine(0, 6);
+        ImGui::SetCursorPosY(topY);
         ImGui::PushStyleColor(ImGuiCol_Button,        m_EqEnabled ? MT::k_AmberBtn    : MT::k_NeutBtn);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  m_EqEnabled ? MT::k_AmberBtnHov : MT::k_NeutBtnHov);
         ImGui::PushStyleColor(ImGuiCol_ButtonActive,   m_EqEnabled ? MT::k_AmberBtnAct : MT::k_NeutBtnAct);
         ImGui::PushStyleColor(ImGuiCol_Text,           m_EqEnabled ? MT::k_AmberAccent : MT::k_TextDim);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(4.0f, 1.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(3.0f, 1.0f));
         if (ImGui::Button("EQ##mon_eq", { eqBtnW, eqBtnH }))
             ImGui::OpenPopup("##mon_eq_popup");
         if (ImGui::IsItemHovered())
@@ -250,7 +262,8 @@ void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor(4);
 
-        ImGui::SameLine(0, 6);
+        ImGui::SameLine(0, 8);
+        ImGui::SetCursorPosY(topY + 1.0f);
         ImGui::PushStyleColor(ImGuiCol_Text, MT::k_TextDim);
         ImGui::TextUnformatted(badge);
         ImGui::PopStyleColor();
@@ -258,8 +271,10 @@ void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
         RenderEqualizerPopup();
     }
 
+    ImGui::SetCursorPosX(padX);
     DrawAccentLine(innerW, MT::k_PrevAccentDim, 1.0f);
 
+    ImGui::SetCursorPosX(padX);
     RenderTransportRow(player, innerW);
 
     ImGui::EndChild();

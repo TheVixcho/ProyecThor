@@ -80,6 +80,59 @@ void MonitorView::RenderQueue(float w)
     int selectedIdx       = m_QueueEngine.SelectedIndex();
 
     const float totalH   = ImGui::GetContentRegionAvail().y;
+
+    if (m_QueueCollapsed && w <= 48.0f)
+    {
+        // ── Vista Plegada (Barra lateral derecha compacta) ────────────────────
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, k_Bg3);
+        ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, 0.25f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding,   k_R);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,   { 2.0f, 6.0f });
+
+        ImGui::BeginChild("##queue_collapsed", { w, totalH }, true,
+                          ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+        // Boton expandir [ < ]
+        ImGui::PushStyleColor(ImGuiCol_Button,        k_NeutBtn);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, k_NeutBtnHov);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  k_NeutBtnAct);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+        if (ImGui::Button("<##expand_queue_btn", { w - 4.0f, 26.0f })) {
+            m_QueueCollapsed = false;
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Desplegar cola de reproducción");
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(3);
+
+        // Contador
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+        char cntStr[16];
+        snprintf(cntStr, sizeof(cntStr), "%d", static_cast<int>(items.size()));
+        ImVec2 cntSz = ImGui::CalcTextSize(cntStr);
+        ImGui::SetCursorPosX((w - cntSz.x) * 0.5f);
+        ImGui::PushStyleColor(ImGuiCol_Text, k_QueueAccent);
+        ImGui::TextUnformatted(cntStr);
+        ImGui::PopStyleColor();
+
+        // Texto vertical "COLA"
+        static const char* kLetters[] = { "C", "O", "L", "A" };
+        ImGui::Dummy(ImVec2(0.0f, 6.0f));
+        for (const char* l : kLetters) {
+            ImVec2 lSz = ImGui::CalcTextSize(l);
+            ImGui::SetCursorPosX((w - lSz.x) * 0.5f);
+            ImGui::PushStyleColor(ImGuiCol_Text, k_TextDim);
+            ImGui::TextUnformatted(l);
+            ImGui::PopStyleColor();
+        }
+
+        ImGui::EndChild();
+        ImGui::PopStyleVar(3);
+        ImGui::PopStyleColor(2);
+        return;
+    }
+
     const float headerH  = ImGui::GetTextLineHeightWithSpacing() + 16.0f;
     const float spacing  = ImGui::GetStyle().ItemSpacing.y;
     const float btnH     = 30.0f;
@@ -111,7 +164,7 @@ void MonitorView::RenderQueue(float w)
         {
             float pulse = 0.65f + 0.35f * std::abs(std::sin((float)ImGui::GetTime() * 2.8f));
             ImGui::SameLine();
-            float badgeX = innerW - ImGui::CalcTextSize("ON AIR").x;
+            float badgeX = innerW - ImGui::CalcTextSize("ON AIR").x - 26.0f;
             ImGui::SetCursorPosX(badgeX);
             ImGui::PushStyleColor(ImGuiCol_Text,
                 ImVec4(k_QueueAccent.x * pulse,
@@ -120,6 +173,23 @@ void MonitorView::RenderQueue(float w)
             ImGui::TextUnformatted("ON AIR");
             ImGui::PopStyleColor();
         }
+
+        // Boton Plegar [ > ] en el extremo derecho
+        const float collapseBtnW = 20.0f;
+        ImGui::SameLine(innerW - collapseBtnW);
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, k_NeutBtnHov);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  k_NeutBtnAct);
+        ImGui::PushStyleColor(ImGuiCol_Text,          k_TextDim);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f, 1.0f));
+        if (ImGui::Button(">##collapse_queue_btn", { collapseBtnW, 18.0f })) {
+            m_QueueCollapsed = true;
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Plegar cola (maximizar preview)");
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(4);
     }
 
     {

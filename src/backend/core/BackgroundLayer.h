@@ -115,7 +115,7 @@ namespace ProyecThor::Core {
         // true  -> viene de "Videos"/cola (audio permitido)
         // false -> viene de "Fondos" (BackgroundsPanel/LayersBgTab), NUNCA
         //          suena sin importar el estado de m_IsLiveToPublic.
-        std::atomic<bool> m_ContentAllowsAudio{true};
+        std::atomic<bool> m_ContentAllowsAudio{false};
 
         // Dispositivo de salida de audio seleccionado por el operador
         // (vacio o "default" = predeterminado del sistema). Se aplica a
@@ -239,6 +239,7 @@ namespace ProyecThor::Core {
         std::unique_ptr<NativePlayback> m_PendingRetireNative;
         bool   m_NativeRevealPending = false;
         double m_NativeRevealStart   = 0.0;
+        double m_LastNativeSyncTime  = 0.0;
         static constexpr double kNativeRevealGiveUpSeconds = 4.0;
 
         // Despacha TODA operacion sobre un NativePlayback::player en un
@@ -366,6 +367,8 @@ namespace ProyecThor::Core {
         // transporte para llegar al reproductor correcto sin importar el
         // motor.
         VLCBasePlayer* GetPlayer();
+        void SeekSync(float pos);
+        void GetActiveVideoSize(int& width, int& height);
 
         void SetTransitionProgress(float p) { m_TransitionProgress = std::clamp(p, 0.0f, 1.0f); }
 
@@ -406,6 +409,7 @@ namespace ProyecThor::Core {
         // con el motor OpenGL, que lo ignora de todos modos).
         void SetPubliclyLive(bool live, int monitorIndex = -1);
         bool IsPubliclyLive() const { return m_IsLiveToPublic; }
+        bool GetContentAllowsAudio() const { return m_ContentAllowsAudio.load(std::memory_order_relaxed); }
 
         void SetLiveVolume(int volume0to200);
         void SetLiveMute(bool mute);

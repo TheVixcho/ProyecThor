@@ -4,6 +4,7 @@
 #include "layers/LayersTheme.h"
 #include "frontend/ui/UIManager.h"
 #include "backend/core/PresentationCore.h"
+#include "backend/core/FileDeletionManager.h"
 #include "backend/core/AppPaths.h"
 #include <imgui.h>
 #ifdef _WIN32
@@ -371,9 +372,8 @@ OverlayLayer OverlayLibraryTab::ImportOverlaySvgSingle(int canvasW, int canvasH)
 //  control remoto de Overlays desde el celular).
 // ─────────────────────────────────────────────────────────────────────────────
 bool OverlayLibraryTab::DeleteOverlay(const std::string& name) {
-    std::error_code ec;
-    fs::remove(OverlaysDir() / (name + ".overlay"), ec);
-    fs::remove(OverlaysDir() / (name + ".png"), ec);
+    Core::FileDeletionManager::ForceDeleteFile((OverlaysDir() / (name + ".overlay")).string());
+    Core::FileDeletionManager::ForceDeleteFile((OverlaysDir() / (name + ".png")).string());
     m_ThumbnailCache.erase(ResolvePngPath(name));
     return true;
 }

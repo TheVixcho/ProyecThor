@@ -14,6 +14,7 @@
 #include "backend/core/MediaConverter.h"
 #include "overlay/OverlayLibraryTab.h"
 #include "WebBrowserPanel.h"
+#include "model3d/Model3DPanel.h"
 #include <memory>
 
 namespace ProyecThor::UI { class UIManager; class MonitorView; }
@@ -56,6 +57,7 @@ enum class LibrarySideMode {
     Web        = 5, // "Web" — navegador embebido generico (ver WebBrowserPanel),
                      // con "Enviar a Público" para mostrar cualquier pagina en
                      // la salida real, no solo contenido de la Biblioteca.
+    Model3D    = 6, // "3D" — visor y catálogo de modelos y recursos 3D (OBJ, STL, PLY)
 };
 
 class LibraryPanel : public IPanel {
@@ -116,8 +118,8 @@ private:
     // RenderConverterSection() ahora es publico, ver mas arriba.
     void RefreshConvertibleItems();
 
-    LibraryCategory          m_CurrentCategory     = LibraryCategory::Songs;
-    LibraryCategory          m_PrevCategory        = LibraryCategory::Songs;
+    LibraryCategory          m_CurrentCategory     = LibraryCategory::Multimedia;
+    LibraryCategory          m_PrevCategory        = LibraryCategory::Multimedia;
     bool                     m_MediaOnlyMode       = false;
     bool                     m_RenderOnlyMode      = false;
     Library::MultimediaFilter m_MultimediaFilter   = Library::MultimediaFilter::All;
@@ -146,6 +148,9 @@ private:
 
     // ── Grupo "Web" del sidebar (ver LibrarySideMode) ─────────────────────
     std::unique_ptr<WebBrowserPanel> m_WebBrowserPanel;
+
+    // ── Grupo "3D" del sidebar (ver LibrarySideMode::Model3D) ────────────
+    std::unique_ptr<Model3DPanel>    m_Model3DPanel;
 
     // ── Render (conversor de formato) ─────────────────────────────────────
     struct ConvertibleItem { std::string filename; bool isVideo; };

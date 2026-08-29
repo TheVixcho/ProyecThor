@@ -403,8 +403,7 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                         IM_COL32(0, 0, 0, 255));
 
                     int srcW = 0, srcH = 0;
-                    auto* player = Core::PresentationCore::Get().GetBackgroundPlayer();
-                    if (player) player->GetVideoSize(srcW, srcH);
+                    Core::PresentationCore::Get().GetBackgroundVideoSize(srcW, srcH);
 
                     bool stretch = Core::PresentationCore::Get().GetStretchToFill();
 
@@ -659,6 +658,18 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                         ImVec2((float)mx, (float)my),
                         ImVec2((float)(mx + mode->width), (float)(my + mode->height)),
                         ImVec2(0, 0), ImVec2(1, 1));
+                }
+
+                // ── Capa 3D (Modelos y Recursos 3D en vivo) ─────────────────
+                if (Core::PresentationCore::Get().IsLive3DModelActive())
+                {
+                    if (void* model3dTex = Core::PresentationCore::Get().GetLive3DModelTexture())
+                    {
+                        drawList->AddImage(model3dTex,
+                            ImVec2((float)mx, (float)my),
+                            ImVec2((float)(mx + mode->width), (float)(my + mode->height)),
+                            ImVec2(0, 0), ImVec2(1, 1));
+                    }
                 }
 
                 // ── Reloj/contador en vivo sobre el overlay ──────────────────
@@ -1187,6 +1198,8 @@ void UIManager::RenderModeToolbar()
         // idioma visual que una bottom-tab-bar. drawLabel/measureLabel usan
         // labelSz (mas chico que el font por defecto) para que el texto entre
         // completo debajo del icono sin agrandar la barra.
+        auto Lerp = [](float a, float b, float t) { return a + (b - a) * t; };
+
         auto measureLabelW = [&](const char* text) {
             return showLbl ? font->CalcTextSizeA(labelSz, FLT_MAX, 0.0f, text).x : 0.0f;
         };
@@ -1209,7 +1222,7 @@ void UIManager::RenderModeToolbar()
             if (sameLine) ImGui::SameLine(0.0f, sameLineSpacing);
 
             ImVec2 cursor = ImGui::GetCursorScreenPos();
-            ImVec2 bMin   = cursor;
+            ImVec2 bMin   = { cursor.x, cursor.y };
             ImVec2 bMax   = { cursor.x + btnW, cursor.y + btnH };
 
             ImGuiID hovId = ImGui::GetID(label);
@@ -1219,29 +1232,50 @@ void UIManager::RenderModeToolbar()
             float t = *pT;
 
             if (active) {
-                dl->AddRectFilled(bMin, bMax, ImGui::ColorConvertFloat4ToU32(accent), rounding);
+                ImVec4 ac = accent;
+                ac.w = 0.16f;
+                dl->AddRectFilled(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding);
+                ac.w = 0.32f;
+                dl->AddRect(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding, 0, 1.0f);
             } else if (t > 0.01f) {
                 dl->AddRectFilled(bMin, bMax, IM_COL32(255, 255, 255, (int)(t * 18.0f)), rounding);
+            }
+
+            // Barra indicadora inferior (indicador de seleccion)
+            {
+                float barW     = (btnW - 14.0f) * (active ? 1.0f : t);
+                float barX0    = cursor.x + (btnW - barW) * 0.5f;
+                float barAlpha = active ? 1.0f : t * 0.60f;
+                ImVec4 ac      = accent;
+                ac.w           = barAlpha;
+                dl->AddRectFilled({ barX0, bMax.y - 2.5f }, { barX0 + barW, bMax.y },
+                                  ImGui::ColorConvertFloat4ToU32(ac), 1.5f);
             }
 
             ImGui::SetCursorScreenPos(bMin);
             const std::string btnId = std::string("##modeTb_") + label;
             bool clicked = ImGui::InvisibleButton(btnId.c_str(), { btnW, btnH });
 
-            ImU32 icCol;
+            ImVec4 textPriV = ImGui::ColorConvertU32ToFloat4(DS::TextPrimary);
+            ImVec4 textDimV = ImGui::ColorConvertU32ToFloat4(DS::TextSecondary);
+            float  brightT  = active ? 1.0f : t;
+            ImVec4 icF = {
+                Lerp(textDimV.x, textPriV.x, brightT),
+                Lerp(textDimV.y, textPriV.y, brightT),
+                Lerp(textDimV.z, textPriV.z, brightT),
+                1.0f
+            };
             if (active) {
-                icCol = IM_COL32(18, 18, 20, 255);
-            } else {
-                ImVec4 base  = ImGui::ColorConvertU32ToFloat4(DS::TextSecondary);
-                ImVec4 hover = ImGui::ColorConvertU32ToFloat4(DS::TextPrimary);
-                base.x += (hover.x - base.x) * t;
-                base.y += (hover.y - base.y) * t;
-                base.z += (hover.z - base.z) * t;
-                icCol = ImGui::ColorConvertFloat4ToU32(base);
+                icF.x = Lerp(icF.x, accent.x, 0.35f);
+                icF.y = Lerp(icF.y, accent.y, 0.35f);
+                icF.z = Lerp(icF.z, accent.z, 0.35f);
+                icF.w = 1.0f;
             }
 
+            ImU32 icCol = ImGui::ColorConvertFloat4ToU32(icF);
+
             float iconX = bMin.x + (btnW - iconSz) * 0.5f;
-            float iconY = bMin.y + 1.0f;
+            float iconY = bMin.y + 2.0f;
             drawIcon(dl, { iconX, iconY }, iconSz, icCol);
             drawLabelCentered(label, btnW, bMin, iconY + iconSz + iconGap, icCol);
 

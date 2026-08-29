@@ -188,6 +188,67 @@ bool PresentationCore::GetGlobalMute() const {
         m_Impl->previewLoader.RequestStop(m_Impl->preview.GetPlayer());
     }
 
+    void PresentationCore::StopPreviewSync() {
+        if (!m_Impl) return;
+        m_Impl->previewLoader.RequestStopSync(m_Impl->preview.GetPlayer(), 1000);
+        m_Impl->preview.SetSolidColor(0.0f, 0.0f, 0.0f);
+    }
+
+    void PresentationCore::ClearSelection() {
+        {
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            m_CurrentSelection = LibrarySelection{};
+            m_SelectionFromQueue = false;
+            ++m_StreamVersion;
+        }
+    }
+
+    void PresentationCore::ReleasePathUsages(const std::string& path) {
+        if (path.empty()) return;
+
+        std::string normTarget = path;
+        std::replace(normTarget.begin(), normTarget.end(), '\\', '/');
+        std::transform(normTarget.begin(), normTarget.end(), normTarget.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+        // 1. Detener preview sincronicamente
+        StopPreviewSync();
+
+        // 2. Comprobar si la seleccion actual contiene la ruta o nombre del archivo
+        bool clearSel = false;
+        {
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::string normSel = m_CurrentSelection.title;
+            std::replace(normSel.begin(), normSel.end(), '\\', '/');
+            std::transform(normSel.begin(), normSel.end(), normSel.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+            if (!normSel.empty() && (normSel == normTarget || normTarget.find(normSel) != std::string::npos || normSel.find(normTarget) != std::string::npos)) {
+                clearSel = true;
+            }
+        }
+        if (clearSel) {
+            ClearSelection();
+        }
+
+        // 3. Comprobar si el fondo en vivo esta reproduciendo este archivo
+        bool stopBg = false;
+        {
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::string normBg = m_State.bgPath;
+            std::replace(normBg.begin(), normBg.end(), '\\', '/');
+            std::transform(normBg.begin(), normBg.end(), normBg.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+            if (!normBg.empty() && (normBg == normTarget || normTarget.find(normBg) != std::string::npos || normBg.find(normTarget) != std::string::npos)) {
+                stopBg = true;
+            }
+        }
+        if (stopBg) {
+            StopBackgroundMedia();
+        }
+    }
+
     void* PresentationCore::GetProcessedBackgroundTexture(int targetW, int targetH) {
         return m_Impl ? m_Impl->background.GetProcessedTexture(targetW, targetH) : nullptr;
     }
@@ -778,6 +839,12 @@ void PresentationCore::SetBackgroundMedia(const std::string& path, bool /*isVide
         m_Impl->background.SetVideo(path, allowAudio);
 }
 
+bool PresentationCore::GetContentAllowsAudio() const {
+    if (m_Impl)
+        return m_Impl->background.GetContentAllowsAudio();
+    return false;
+}
+
 void PresentationCore::StopBackgroundMedia() {
     {
         std::lock_guard<std::mutex> lock(m_Mutex);
@@ -1226,6 +1293,13 @@ void PresentationCore::SetNextText(const std::string& text) {
         return m_Impl ? m_Impl->background.GetPlayer() : nullptr;
     }
 
+    void PresentationCore::GetBackgroundVideoSize(int& width, int& height) {
+        if (m_Impl)
+            m_Impl->background.GetActiveVideoSize(width, height);
+        else
+            width = height = 0;
+    }
+
     float PresentationCore::GetLivePosition() {
         std::lock_guard<std::mutex> lock(m_Mutex);
         return m_State.livePosition;
@@ -1239,6 +1313,7 @@ void PresentationCore::SetNextText(const std::string& text) {
         if (m_Impl) {
             VLCBasePlayer* player = m_Impl->background.GetPlayer();
             if (player) player->SetPosition(pos);
+            m_Impl->background.SeekSync(pos);
         }
     }
 

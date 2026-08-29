@@ -184,23 +184,55 @@ inline float LPApproach(float current, float target, float speed) {
 using LPDrawIconFn = void(*)(ImDrawList*, ImVec2, float, ImU32);
 
 inline bool LPCornerIconBtn(const char* id, LPDrawIconFn drawIcon, const char* tooltip,
-                            ImVec2 size = {26.0f, 26.0f}, bool active = false) {
-    ImVec4 bg = active ? ImGui::ColorConvertU32ToFloat4(DS::AccentColorDim) : ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
-    ImGui::PushStyleColor(ImGuiCol_Button,        bg);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImGui::ColorConvertU32ToFloat4(DS::AccentColorHov));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
-    bool clicked = ImGui::Button(id, size);
+                            ImVec2 size = {28.0f, 28.0f}, bool active = false) {
+    ImVec2 cursor = ImGui::GetCursorScreenPos();
+    ImVec2 bMin   = cursor;
+    ImVec2 bMax   = { cursor.x + size.x, cursor.y + size.y };
 
-    ImVec2 bMin = ImGui::GetItemRectMin();
-    ImVec2 bMax = ImGui::GetItemRectMax();
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    ImGuiID hovId = ImGui::GetID(id);
+    float*  pT    = storage->GetFloatRef(hovId ^ 0x6543ABCDu, 0.0f);
+    bool hovered  = ImGui::IsMouseHoveringRect(bMin, bMax, false);
+    *pT += ((hovered ? 1.0f : 0.0f) - *pT) * std::min(1.0f, ImGui::GetIO().DeltaTime * 14.0f);
+    float t = *pT;
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    constexpr float rounding = 6.0f;
+
+    if (active) {
+        ImVec4 ac = LP::Accent;
+        ac.w = 0.20f;
+        dl->AddRectFilled(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding);
+        ac.w = 0.40f;
+        dl->AddRect(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding, 0, 1.0f);
+    } else if (t > 0.01f) {
+        dl->AddRectFilled(bMin, bMax, IM_COL32(255, 255, 255, (int)(t * 20.0f)), rounding);
+    } else {
+        dl->AddRectFilled(bMin, bMax, IM_COL32(255, 255, 255, 8), rounding);
+    }
+
+    ImGui::SetCursorScreenPos(bMin);
+    bool clicked = ImGui::InvisibleButton(id, size);
+
     ImVec2 center = { (bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f };
-    ImU32 col = active ? DS::AccentLight : (ImGui::IsItemHovered() ? DS::TextPrimary : DS::TextSecondary);
-    float r = size.x * 0.44f;
-    drawIcon(ImGui::GetWindowDrawList(), center, r, col);
+    ImVec4 textPriV = ImGui::ColorConvertU32ToFloat4(DS::TextPrimary);
+    ImVec4 textDimV = ImGui::ColorConvertU32ToFloat4(DS::TextSecondary);
+    float  brightT  = active ? 1.0f : t;
+    ImVec4 icF = {
+        textDimV.x + (textPriV.x - textDimV.x) * brightT,
+        textDimV.y + (textPriV.y - textDimV.y) * brightT,
+        textDimV.z + (textPriV.z - textDimV.z) * brightT,
+        1.0f
+    };
+    if (active) {
+        icF.x += (LP::Accent.x - icF.x) * 0.40f;
+        icF.y += (LP::Accent.y - icF.y) * 0.40f;
+        icF.z += (LP::Accent.z - icF.z) * 0.40f;
+    }
+    ImU32 col = ImGui::ColorConvertFloat4ToU32(icF);
 
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor(3);
+    float r = size.x * 0.42f;
+    drawIcon(dl, center, r, col);
 
     if (tooltip && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
         ImGui::SetTooltip("%s", tooltip);

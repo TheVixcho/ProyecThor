@@ -29,47 +29,79 @@ void StylesHubPanel::RenderTransitionQuickBar()
 {
     if (!m_TransitionsRef) return;
 
-    const ImU32  kAccent  = IM_COL32(94, 107, 255, 255);
+    const ImU32  kAccent  = DS::AccentColor;
     const ImVec4 kAccentV = ImGui::ColorConvertU32ToFloat4(kAccent);
     const ImVec4 kMutedV  = ImGui::ColorConvertU32ToFloat4(DS::TextSecondary);
-    constexpr float kBtnSz    = 26.0f;
-    constexpr float kGap      = 4.0f;
-    constexpr float kSliderW  = 90.0f;
 
     TransitionType current  = m_TransitionsRef->GetCurrentType();
     float          duration = m_TransitionsRef->GetDuration();
     bool           isAdvanced = current != TransitionType::None && current != TransitionType::Fade;
 
-    float rowY = ImGui::GetCursorPosY();
+    ImGui::PushStyleColor(ImGuiCol_Text, DS::AccentColor);
+    ImGui::TextUnformatted("TRANSICIÓN RÁPIDA");
+    ImGui::PopStyleColor();
+    ImGui::Separator();
+    ImGui::Spacing();
 
-    if (DS::GlassIconButton("##transNone", "", "—", "Sin transición", { kBtnSz, kBtnSz },
-                            current == TransitionType::None ? kAccentV : kMutedV))
-        m_TransitionsRef->SetType(TransitionType::None);
-    ImGui::SameLine(0.0f, kGap);
+    // 3 Mode selection pills
+    auto RenderTransOption = [&](const char* label, bool active, TransitionType type, bool isAdv) {
+        ImVec4 bg = active ? ImVec4(kAccentV.x, kAccentV.y, kAccentV.z, 0.22f) : ImVec4(1,1,1,0.06f);
+        ImVec4 bdr = active ? kAccentV : ImVec4(1,1,1,0.12f);
+        ImGui::PushStyleColor(ImGuiCol_Button, bg);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(kAccentV.x, kAccentV.y, kAccentV.z, 0.35f));
+        ImGui::PushStyleColor(ImGuiCol_Border, bdr);
+        ImGui::PushStyleColor(ImGuiCol_Text, active ? ImVec4(1,1,1,1) : kMutedV);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
 
-    if (DS::GlassIconButton("##transFade", "", "~", "Disolver", { kBtnSz, kBtnSz },
-                            current == TransitionType::Fade ? kAccentV : kMutedV))
-        m_TransitionsRef->SetType(TransitionType::Fade);
-    ImGui::SameLine(0.0f, kGap);
+        if (ImGui::Button(label, ImVec2(94.0f, 28.0f))) {
+            if (isAdv) {
+                ImGui::OpenPopup("##transAdvancedPopup");
+            } else {
+                m_TransitionsRef->SetType(type);
+            }
+        }
 
-    if (DS::GlassIconButton("##transAdv", "", "…", "Avanzado (Zoom, Slide, Cover...)", { kBtnSz, kBtnSz },
-                            isAdvanced ? kAccentV : kMutedV))
-        ImGui::OpenPopup("##transAdvancedPopup");
-    ImGui::SameLine(0.0f, kGap * 2.0f);
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(4);
+    };
 
-    // Slider chico centrado verticalmente contra los botones de icono (su
-    // alto propio, thumbR*2+6, es menor que kBtnSz).
-    ImGui::SetCursorPosY(rowY + (kBtnSz - 20.0f) * 0.5f);
-    if (DS::ModernSlider("##quickTransDur", &duration, 0.1f, 3.0f, kSliderW, kAccent))
-        m_TransitionsRef->SetDuration(duration);
+    RenderTransOption("Corte", current == TransitionType::None, TransitionType::None, false);
     ImGui::SameLine(0.0f, 6.0f);
+    RenderTransOption("Disolver", current == TransitionType::Fade, TransitionType::Fade, false);
+    ImGui::SameLine(0.0f, 6.0f);
+    RenderTransOption("Avanzado...", isAdvanced, TransitionType::None, true);
 
-    ImGui::SetCursorPosY(rowY + (kBtnSz - ImGui::GetTextLineHeight()) * 0.5f);
-    ImGui::PushStyleColor(ImGuiCol_Text, kMutedV);
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    // Duración slider
+    ImGui::TextUnformatted("Duración:");
+    ImGui::SameLine(0.0f, 8.0f);
+    ImGui::PushStyleColor(ImGuiCol_Text, DS::AccentLight);
     ImGui::Text("%.2fs", duration);
     ImGui::PopStyleColor();
 
-    ImGui::SetCursorPosY(rowY + kBtnSz);
+    if (DS::ModernSlider("##quickTransDur", &duration, 0.1f, 3.0f, 290.0f, kAccent))
+        m_TransitionsRef->SetDuration(duration);
+
+    // Quick preset buttons
+    ImGui::Spacing();
+    const float presets[4] = { 0.3f, 0.5f, 1.0f, 1.5f };
+    const char* presetLabels[4] = { "0.3s", "0.5s", "1.0s", "1.5s" };
+    for (int i = 0; i < 4; i++) {
+        if (i > 0) ImGui::SameLine(0.0f, 6.0f);
+        bool sel = (std::abs(duration - presets[i]) < 0.05f);
+        ImGui::PushStyleColor(ImGuiCol_Button, sel ? ImVec4(kAccentV.x, kAccentV.y, kAccentV.z, 0.30f) : ImVec4(1,1,1,0.06f));
+        ImGui::PushStyleColor(ImGuiCol_Text, sel ? ImVec4(1,1,1,1) : kMutedV);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+        if (ImGui::Button(presetLabels[i], ImVec2(67.0f, 22.0f))) {
+            m_TransitionsRef->SetDuration(presets[i]);
+        }
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(2);
+    }
 
     if (ImGui::BeginPopup("##transAdvancedPopup"))
     {
@@ -79,26 +111,70 @@ void StylesHubPanel::RenderTransitionQuickBar()
     }
 }
 
-// Icono chico en el rail de arriba (junto a Fondos/Estilos/Shaders/...) que
-// abre RenderTransitionQuickBar como popup flotante -- reemplaza la barra
-// fija que antes vivia arriba del contenido de Estilos, empujandolo hacia
-// abajo para algo que en la practica solo importa para canciones (multi-
-// slide). Se dibuja siempre (no solo en la seccion Estilos) porque configura
-// una transicion global, no algo propio de esa pestaña.
+// Icono en el rail de arriba con dibujo vectorial y popup moderno
 void StylesHubPanel::RenderTransitionRailButton()
 {
     if (!m_TransitionsRef) return;
 
-    const ImVec4 kMutedV = ImGui::ColorConvertU32ToFloat4(DS::TextSecondary);
-    constexpr float kBtnSz = 26.0f;
+    TransitionType current  = m_TransitionsRef->GetCurrentType();
+    float          duration = m_TransitionsRef->GetDuration();
+    bool           hasTrans = (current != TransitionType::None);
 
-    if (DS::GlassIconButton("##transRail", "", "~", "Transición", { kBtnSz, kBtnSz }, kMutedV))
+    const ImVec2 size = { 32.0f, 32.0f };
+    ImVec2 cursor = ImGui::GetCursorScreenPos();
+    ImVec2 bMin   = cursor;
+    ImVec2 bMax   = { cursor.x + size.x, cursor.y + size.y };
+
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    ImGuiID hovId = ImGui::GetID("##transRailBtn");
+    float*  pT    = storage->GetFloatRef(hovId ^ 0x7654ABCDu, 0.0f);
+    bool hovered  = ImGui::IsMouseHoveringRect(bMin, bMax, false);
+    *pT += ((hovered ? 1.0f : 0.0f) - *pT) * std::min(1.0f, ImGui::GetIO().DeltaTime * 14.0f);
+    float t = *pT;
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    constexpr float rounding = 6.0f;
+
+    if (hasTrans) {
+        ImVec4 ac = ImGui::ColorConvertU32ToFloat4(DS::AccentColor);
+        ac.w = 0.18f;
+        dl->AddRectFilled(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding);
+        ac.w = 0.35f;
+        dl->AddRect(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding, 0, 1.0f);
+    } else if (t > 0.01f) {
+        dl->AddRectFilled(bMin, bMax, IM_COL32(255, 255, 255, (int)(t * 20.0f)), rounding);
+    } else {
+        dl->AddRectFilled(bMin, bMax, IM_COL32(255, 255, 255, 8), rounding);
+    }
+
+    ImGui::SetCursorScreenPos(bMin);
+    if (ImGui::InvisibleButton("##transRailBtn", size)) {
         ImGui::OpenPopup("##transQuickPopup");
+    }
+
+    ImVec2 center = { (bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f };
+    ImU32 icCol = hasTrans ? DS::AccentLight : (hovered ? DS::TextPrimary : DS::TextSecondary);
+    const float iconSz = 18.0f;
+    ImVec2 iconPos = { center.x - iconSz * 0.5f, center.y - iconSz * 0.5f };
+    AppIcons::DrawIcon_Swap(dl, iconPos, iconSz, icCol);
+
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+        const char* typeName = (current == TransitionType::None) ? "Sin transición" :
+                               (current == TransitionType::Fade) ? "Disolver" : "Avanzada";
+        ImGui::SetTooltip("Transición rápida: %s (%.2fs)", typeName, duration);
+    }
+
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.11f, 0.12f, 0.15f, 0.98f));
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 8.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f, 12.0f));
 
     if (ImGui::BeginPopup("##transQuickPopup")) {
         RenderTransitionQuickBar();
         ImGui::EndPopup();
     }
+
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor();
 }
 
 // Divisor con gradiente entre el rail de iconos y el contenido -- horizontal
@@ -188,8 +264,8 @@ void StylesHubPanel::Render()
 
         // Boton de transicion -- abajo del todo de la columna, no hay
         // "derecha" a la que pegarlo como en el rail horizontal.
-        ImGui::SetCursorPosY(std::max(ImGui::GetCursorPosY(), totalH - 34.0f));
-        ImGui::SetCursorPosX(std::max(0.0f, (railW - 26.0f) * 0.5f));
+        ImGui::SetCursorPosY(std::max(ImGui::GetCursorPosY(), totalH - 40.0f));
+        ImGui::SetCursorPosX(std::max(0.0f, (railW - 32.0f) * 0.5f));
         RenderTransitionRailButton();
 
         ImGui::EndChild();
@@ -212,7 +288,8 @@ void StylesHubPanel::Render()
         RenderIconRail(kItems, 6, currentIndex, IconRailOrientation::Horizontal, hubSettings.categoryColor);
         m_CurrentSection = (StylesSection)currentIndex;
 
-        ImGui::SameLine(std::max(ImGui::GetCursorPosX(), totalW - 30.0f));
+        ImGui::SetCursorPosY((railH - 32.0f) * 0.5f);
+        ImGui::SameLine(std::max(ImGui::GetCursorPosX(), totalW - 44.0f));
         RenderTransitionRailButton();
 
         ImGui::EndChild();

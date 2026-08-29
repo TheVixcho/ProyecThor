@@ -61,8 +61,7 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
             // coincidian.
             ImVec2 vp0 = p0, vp1 = p1;
             int vw = 0, vh = 0;
-            Core::VLCBasePlayer* bgPlayer = core.GetBackgroundPlayer();
-            if (bgPlayer) bgPlayer->GetVideoSize(vw, vh);
+            core.GetBackgroundVideoSize(vw, vh);
 
             if (vw > 0 && vh > 0 && !core.GetStretchToFill())
             {
@@ -214,6 +213,12 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
     // alpha real del PNG. Mismo orden que en la salida real (UIManager.cpp).
     if (void* overlayTex = core.GetOverlayTexture())
         dl->AddImage(overlayTex, p0, p1);
+
+    // ── Capa 3D (Modelos y Recursos 3D en vivo) ─────────────────────────────
+    if (core.IsLive3DModelActive()) {
+        if (void* model3dTex = core.GetLive3DModelTexture())
+            dl->AddImage(model3dTex, p0, p1);
+    }
 
     // ── Reloj/contador en vivo sobre el overlay ─────────────────────────────
     // Cuadro-flag definido en el overlay activo (ver OverlayCanvasEditor,

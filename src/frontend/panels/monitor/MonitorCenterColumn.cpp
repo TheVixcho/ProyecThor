@@ -26,9 +26,9 @@ void MonitorView::RenderCenterColumn(float w, float h, Core::VLCBasePlayer* prev
     ImGui::BeginChild("##center_col", { w, h }, false,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
-    const float baseMainH   = 72.0f;
-    const float baseLoopH   = 36.0f;
-    const float baseSpacing = 8.0f;
+    const float baseMainH   = 52.0f;
+    const float baseLoopH   = 32.0f;
+    const float baseSpacing = 6.0f;
     const float baseTotalH  = baseMainH + baseSpacing + baseLoopH;
     const float scale       = std::clamp(h / baseTotalH, 0.55f, 1.0f);
 
@@ -48,14 +48,23 @@ void MonitorView::RenderCenterColumn(float w, float h, Core::VLCBasePlayer* prev
         if (!sel.title.empty())
         {
             std::string finalPath = sel.title;
-            if (finalPath.rfind("http", 0) != 0 && !std::filesystem::path(finalPath).is_absolute())
-                finalPath = VideosPath() + finalPath;
+            bool isVideo = (sel.type == Core::ItemType::Video);
+            if (finalPath.rfind("http", 0) != 0 && !std::filesystem::path(finalPath).is_absolute()) {
+                if (isVideo) finalPath = VideosPath() + finalPath;
+            }
+
+            std::string norm = finalPath;
+            std::replace(norm.begin(), norm.end(), '\\', '/');
+            bool isBg = (norm.find("/backgrounds/") != std::string::npos ||
+                         norm.find("assets/backgrounds") != std::string::npos ||
+                         sel.type != Core::ItemType::Video);
+            bool allowAudio = isVideo && !isBg;
 
             Core::PresentationCore::Get().SetLiveMute(m_LiveMuted);
             Core::PresentationCore::Get().SetLiveVolume(
                 m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
 
-            Core::PresentationCore::Get().SetBackgroundMedia(finalPath, true, /*allowAudio=*/true);
+            Core::PresentationCore::Get().SetBackgroundMedia(finalPath, isVideo, allowAudio);
             Core::PresentationCore::Get().SetProjecting(true);
             m_LivePlaying = true;
 

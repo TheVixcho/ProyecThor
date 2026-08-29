@@ -6,6 +6,7 @@
 #include "audio/AudioHelpers.h"
 #include "frontend/ui/bin/StyleGeneralApp.h"
 #include "backend/core/PresentationCore.h"
+#include "backend/core/FileDeletionManager.h"
 #include "frontend/panels/monitor/MonitorTheme.h"
 
 namespace { namespace MT = ProyecThor::UI::MonitorTheme; }
@@ -446,7 +447,19 @@ void AudioPanel::Render()
 //  Constructor / Destructor
 // ─────────────────────────────────────────────────────────────────────────────
 
+static AudioPanel* s_ActiveAudioPanel = nullptr;
+
+static bool s_AudioHookRegistered = []() {
+    Core::FileDeletionManager::RegisterUsageReleaseHook([](const std::string& path) {
+        if (s_ActiveAudioPanel) {
+            s_ActiveAudioPanel->StopIfPathMatches(path);
+        }
+    });
+    return true;
+}();
+
 AudioPanel::AudioPanel() {
+    s_ActiveAudioPanel = this;
     try {
         fs::create_directories(ProyecThor::Audio::GetAudioPath());
     } catch (const std::exception& e) {
@@ -465,6 +478,9 @@ AudioPanel::AudioPanel() {
 
 AudioPanel::~AudioPanel()
 {
+    if (s_ActiveAudioPanel == this)
+        s_ActiveAudioPanel = nullptr;
+
     // m_VlcPlayer se destruye solo (miembro por valor) -- ya no hay
     // handles crudos de libVLC que liberar a mano aca.
 
@@ -478,6 +494,41 @@ AudioPanel::~AudioPanel()
     // Liberar texturas GL de portadas
     for (auto& track : m_Tracks)
         ProyecThor::Audio::FreeAlbumArtTexture(track.coverArt);
+}
+
+void AudioPanel::StopIfPathMatches(const std::string& path) {
+    if (path.empty()) return;
+
+    std::string normTarget = path;
+    std::replace(normTarget.begin(), normTarget.end(), '\\', '/');
+    std::transform(normTarget.begin(), normTarget.end(), normTarget.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    bool shouldStop = false;
+    if (m_CurrentTrack >= 0 && m_CurrentTrack < static_cast<int>(m_Tracks.size())) {
+        std::string curPath = m_Tracks[m_CurrentTrack].fullPath;
+        std::replace(curPath.begin(), curPath.end(), '\\', '/');
+        std::transform(curPath.begin(), curPath.end(), curPath.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+        if (curPath == normTarget || normTarget.find(curPath) != std::string::npos || curPath.find(normTarget) != std::string::npos) {
+            shouldStop = true;
+        }
+    }
+    if (!m_LastExternalSelection.empty()) {
+        std::string curSel = m_LastExternalSelection;
+        std::replace(curSel.begin(), curSel.end(), '\\', '/');
+        std::transform(curSel.begin(), curSel.end(), curSel.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (curSel == normTarget || normTarget.find(curSel) != std::string::npos || curSel.find(normTarget) != std::string::npos) {
+            m_LastExternalSelection.clear();
+            shouldStop = true;
+        }
+    }
+    if (shouldStop) {
+        Stop();
+        RefreshLibrary();
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

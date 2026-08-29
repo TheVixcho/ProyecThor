@@ -395,18 +395,31 @@ void Announcements::Render(GlassRenderer& glass) {
         dl->AddRectFilled(
             previewPos,
             ImVec2(previewPos.x + panelW, previewPos.y + previewH),
-            AnnColU32(m_BgR, m_BgG, m_BgB, m_IsLive ? m_BgA : 0.5f),
-            6.0f);
+            AnnColU32(m_BgR, m_BgG, m_BgB, m_IsLive ? m_BgA : 0.65f),
+            8.0f);
 
         dl->AddRect(
             previewPos,
             ImVec2(previewPos.x + panelW, previewPos.y + previewH),
-            m_IsLive ? ColA(DS::AccentColor, 179) : DS::GlassBorder,
-            6.0f, 0, 1.5f);
+            m_IsLive ? ColA(DS::AccentColor, 190) : ColA(DS::GlassBorder, 100),
+            8.0f, 0, m_IsLive ? 1.8f : 1.0f);
+
+        // Status badge en la esquina
+        {
+            const char* bText = m_IsLive ? "EN VIVO" : "STANDBY";
+            ImVec2 bSz = ImGui::CalcTextSize(bText);
+            float bx1 = previewPos.x + panelW - 8.0f;
+            float bx0 = bx1 - bSz.x - 10.0f;
+            float by0 = previewPos.y + 6.0f;
+            float by1 = by0 + bSz.y + 4.0f;
+            ImU32 bCol = m_IsLive ? ColA(DS::DangerColor, 220) : IM_COL32(0, 0, 0, 160);
+            dl->AddRectFilled({ bx0, by0 }, { bx1, by1 }, bCol, 4.0f);
+            dl->AddText({ bx0 + 5.0f, by0 + 2.0f }, IM_COL32_WHITE, bText);
+        }
 
         dl->PushClipRect(
             previewPos,
-            ImVec2(previewPos.x + panelW, previewPos.y + previewH),
+            ImVec2(previewPos.x + panelW - 75.0f, previewPos.y + previewH),
             true);
 
         const std::string& msg = GetCurrentMessage();
@@ -479,24 +492,27 @@ void Announcements::Render(GlassRenderer& glass) {
     {
         const std::vector<std::string> categories = { "Todos", "Anuncios", "Avisos", "Urgente", "Culto", "General" };
 
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 4.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, 4.0f));
 
         for (const auto& cat : categories) {
             bool selected = (m_CategoryFilter == cat);
 
             ImVec4 bg = selected
-                ? ImGui::ColorConvertU32ToFloat4(DS::AccentColor)
-                : ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill);
+                ? ImGui::ColorConvertU32ToFloat4(ColA(DS::AccentColor, 55))
+                : ImGui::ColorConvertU32ToFloat4(IM_COL32(255, 255, 255, 10));
 
             ImGui::PushStyleColor(ImGuiCol_Button, bg);
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill));
-            ImGui::PushStyleColor(ImGuiCol_Text, selected ? ImVec4(1,1,1,1) : ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::ColorConvertU32ToFloat4(IM_COL32(255, 255, 255, 24)));
+            ImGui::PushStyleColor(ImGuiCol_Border, selected ? ImGui::ColorConvertU32ToFloat4(ColA(DS::AccentColor, 180)) : ImGui::ColorConvertU32ToFloat4(IM_COL32(255, 255, 255, 18)));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+            ImGui::PushStyleColor(ImGuiCol_Text, selected ? ImVec4(1, 1, 1, 1) : ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
 
-            if (ImGui::Button(cat.c_str()))
+            if (ImGui::Button(cat.c_str(), ImVec2(0.0f, 26.0f)))
                 m_CategoryFilter = cat;
 
-            ImGui::PopStyleColor(3);
+            ImGui::PopStyleColor(4);
+            ImGui::PopStyleVar();
             ImGui::SameLine();
         }
         ImGui::NewLine();

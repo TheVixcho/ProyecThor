@@ -176,13 +176,37 @@ void main() {
         // el .h. Corre siempre, sin importar el motor actual.
         PollNativeReveal();
 
-        // Contenido activo por motor nativo: no hay textura/crossfade que
-        // actualizar para ESTE contenido — VLC dibuja directo en su
-        // ventana por su cuenta (ver SetVideo/SyncNativeWindowVisibility).
-        // Active()/Standby() pueden tener un Fondo residual cargado (ver
-        // SetVideo()), pero no hace falta seguir subiendole textura
-        // mientras no sea lo que se este mostrando.
-        if (m_ActiveIsNative) return;
+        // Contenido activo por motor nativo: Active() reproduce el mismo video
+        // en silencio para mantener su textura OpenGL actualizada y alimentar
+        // la Vista en Vivo (ViewPanel).
+        if (m_ActiveIsNative)
+        {
+            Active().UpdateTexture();
+            Active().SetAudioActive(false);
+            Active().SetMute(true);
+            Active().SetVolume(0);
+
+            if (m_ActiveNative)
+            {
+                bool nativePaused = m_ActiveNative->player.IsPaused();
+                if (Active().IsPaused() != nativePaused)
+                    Active().SetPause(nativePaused);
+
+                double now = NowSeconds();
+                if (now - m_LastNativeSyncTime > 1.5)
+                {
+                    m_LastNativeSyncTime = now;
+                    int64_t nativeTime = m_ActiveNative->player.GetTime();
+                    int64_t activeTime = Active().GetTime();
+                    int64_t len = m_ActiveNative->player.GetLength();
+                    if (len > 0 && std::abs(nativeTime - activeTime) > 1500)
+                    {
+                        Active().SetPosition(static_cast<float>(nativeTime) / static_cast<float>(len));
+                    }
+                }
+            }
+            return;
+        }
 
         Active().UpdateTexture();
         Active().EnforceSilenceIfNeeded();
@@ -482,12 +506,36 @@ void main() {
 
         if (m_SwapPending && Standby().HasVideoFrame())
         {
+            int stW = 0, stH = 0;
+            Standby().GetVideoSize(stW, stH);
+            int sbX = 0, sbY = 0, sbW = outputW, sbH = outputH;
+            if (stW > 0 && stH > 0 && !m_StretchToFill) {
+                float videoRatio  = static_cast<float>(stW) / static_cast<float>(stH);
+                float screenRatio = static_cast<float>(outputW) / static_cast<float>(outputH);
+                if (videoRatio > screenRatio + 0.001f) {
+                    sbW = outputW;
+                    sbH = static_cast<int>(static_cast<float>(outputW) / videoRatio);
+                    sbX = 0;
+                    sbY = (outputH - sbH) / 2;
+                } else if (videoRatio < screenRatio - 0.001f) {
+                    sbH = outputH;
+                    sbW = static_cast<int>(static_cast<float>(outputH) * videoRatio);
+                    sbX = (outputW - sbW) / 2;
+                    sbY = 0;
+                }
+            }
+
             GLuint standbyTex = static_cast<GLuint>(reinterpret_cast<uintptr_t>(Standby().GetTextureID()));
             glEnable(GL_BLEND);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            glViewport(viewX, viewY, viewW, viewH);
-            BlitTexture(finalTex,   1.0f - m_TransitionProgress, m_FlipVideoY ? 1.0f : 0.0f);
-            BlitTexture(standbyTex, m_TransitionProgress,          m_FlipVideoY ? 1.0f : 0.0f);
+
+            if (finalTex != 0 && (1.0f - m_TransitionProgress) > 0.001f) {
+                glViewport(viewX, viewY, viewW, viewH);
+                BlitTexture(finalTex, 1.0f - m_TransitionProgress, m_FlipVideoY ? 1.0f : 0.0f);
+            }
+
+            glViewport(sbX, sbY, sbW, sbH);
+            BlitTexture(standbyTex, m_TransitionProgress, m_FlipVideoY ? 1.0f : 0.0f);
             glDisable(GL_BLEND);
         }
         else
@@ -615,8 +663,74 @@ void main() {
         return &Active();
     }
 
+    void BackgroundLayer::SeekSync(float pos)
+    {
+        if (m_ActiveIsNative)
+            Active().SetPosition(pos);
+    }
+
+    void BackgroundLayer::GetActiveVideoSize(int& width, int& height)
+    {
+        if (m_SwapPending && Standby().HasVideoFrame())
+        {
+            int sw = 0, sh = 0;
+            Standby().GetVideoSize(sw, sh);
+            if (sw > 0 && sh > 0)
+            {
+                width = sw;
+                height = sh;
+                return;
+            }
+        }
+
+        if (m_ActiveIsNative && m_ActiveNative)
+        {
+            m_ActiveNative->player.GetVideoSize(width, height);
+            if (width > 0 && height > 0) return;
+        }
+
+        Active().GetVideoSize(width, height);
+        if ((width <= 0 || height <= 0) && Standby().HasVideoFrame())
+        {
+            Standby().GetVideoSize(width, height);
+        }
+    }
+
     void BackgroundLayer::SetVideo(const std::string& path, bool allowAudio)
     {
+        // 0. Seguridad absoluta: Los fondos de pantalla (assets/backgrounds) NUNCA deben sonar.
+        // Solo videos de medios (assets/videos) o streams pueden permitir audio si allowAudio=true.
+        std::string normPath = path;
+        std::replace(normPath.begin(), normPath.end(), '\\', '/');
+        std::transform(normPath.begin(), normPath.end(), normPath.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (normPath.find("/backgrounds/") != std::string::npos ||
+            normPath.find("assets/backgrounds") != std::string::npos)
+        {
+            allowAudio = false;
+        }
+
+        m_ContentAllowsAudio = allowAudio;
+
+        // Si el contenido a reproducir NO permite audio (ej: es un Background decorativo),
+        // debemos SILENCIAR INMEDIATAMENTE cualquier audio activo (del video anterior)
+        // para que no siga sonando durante el swap/crossfade/transicion.
+        if (!allowAudio)
+        {
+            Active().SetAudioActive(false);
+            Active().SetMute(true);
+            Active().SetVolume(0);
+            Standby().SetAudioActive(false);
+            Standby().SetMute(true);
+            Standby().SetVolume(0);
+            if (m_ActiveNative)
+            {
+                m_ActiveNative->player.SetAudioActive(false);
+                m_ActiveNative->player.SetMute(true);
+                m_ActiveNative->player.SetVolume(0);
+            }
+        }
+
         // El motor nativo aplica SOLO a video real (allowAudio=true —
         // Videos/cola del Monitor): Fondos/imagenes (allowAudio=false)
         // siempre necesitan overlays/texto encima, asi que siempre van
@@ -624,36 +738,29 @@ void main() {
         // miembro m_UseNativeEngine en el .h).
         if (m_UseNativeEngine && allowAudio)
         {
-            // Sin crossfade/standby en este motor: corte directo, igual
-            // que un reproductor simple. m_TargetMuted/m_TargetVolume son
-            // los mismos que ya usa el motor OpenGL (ver SetLiveVolume/
-            // SetLiveMute), asi que respetar el volumen ya configurado.
-            // Active()/Standby() (el Fondo que hubiera, si alguno) se
-            // dejan tal cual estan: no hace falta pararlos, Update()/
-            // Render() ya los ignoran mientras m_ActiveIsNative sea true,
-            // y vuelven a mostrarse solos si el operador carga otro Fondo.
+            // Sin crossfade/standby en este motor: corte directo.
             m_IsVideo             = true;
-            m_ContentAllowsAudio  = allowAudio;
             m_ActiveIsNative      = true;
 
-            // FIX (colgaba/"No responde" desde el 2do clip en adelante,
-            // confirmado con Wine: dos hilos bloqueados entre si en una
-            // critical section de Windows, incluso despues de serializar
-            // Play/Stop/Attach/Detach en un solo hilo): el problema real
-            // era REUSAR el mismo reproductor+ventana para reproducir un
-            // clip nuevo (Stop() + set_media() + play() sobre una ventana
-            // ya adjuntada). La solucion: cada clip nuevo arranca en un
-            // NativePlayback 100% fresco (reproductor + ventana nuevos);
-            // el anterior se retira (nunca se vuelve a reproducir en el).
-            //
-            // FIX (flash blanco durante el cambio): la ventana nueva NO se
-            // muestra todavia — se crea oculta (CreateHidden) y
-            // PollNativeReveal() la revela recien cuando el reproductor
-            // nuevo confirma que ya esta reproduciendo de verdad. Mientras
-            // tanto, el anterior (si habia) sigue VISIBLE (silenciado ya
-            // mismo, para que no se escuchen dos audios a la vez) tapando
-            // la transicion — nunca se lo para/desvincula todavia, eso lo
-            // cortaria a negro de golpe antes de que el nuevo este listo.
+            // Reproducir el video en Active() (OpenGL) en modo 100% silencioso
+            // para proveer la textura en tiempo real a ViewPanel (Vista en Vivo).
+            Active().Play(path, /*loop=*/false, /*startMuted=*/true);
+            Active().SetAudioActive(false);
+            Active().SetMute(true);
+            Active().SetVolume(0);
+
+            Standby().SetAudioActive(false);
+            Standby().SetMute(true);
+            Standby().SetVolume(0);
+            Standby().Stop();
+
+            m_SwapPending        = false;
+            m_SwapReadyAt        = 0.0;
+            m_SwapSettledAt      = 0.0;
+            m_TransitionProgress = 0.0f;
+            m_PrefetchArmed      = false;
+            m_PrefetchedPath.clear();
+
             if (m_PendingRetireNative) {
                 // Ya habia una transicion en danza cuando aparecio esta
                 // tercera — ese "anterior" quedo doblemente obsoleto.
@@ -661,6 +768,8 @@ void main() {
             }
             if (m_ActiveNative) {
                 m_ActiveNative->player.SetAudioActive(false);
+                m_ActiveNative->player.SetMute(true);
+                m_ActiveNative->player.SetVolume(0);
                 m_PendingRetireNative = std::move(m_ActiveNative);
             }
 
@@ -677,17 +786,6 @@ void main() {
             // Adjuntar la ventana tiene que pasar ANTES de Play() (la doc
             // de libVLC dice que set_hwnd/set_xwindow "toma efecto cuando
             // arranca la reproduccion").
-            //
-            // FIX (videos salian mudos): el gate de audio real se
-            // RECALCULA ADENTRO del lambda (leyendo los atomics m_TargetMuted/
-            // m_TargetVolume/m_IsLiveToPublic FRESCOS, no un valor
-            // capturado por copia al momento de encolar) — Play(startMuted=
-            // true) siempre arranca mudo por diseño, y si algo como
-            // SetLiveMute()/ApplyAV() corria en el hilo principal DESPUES
-            // de encolar pero ANTES de que el worker llegara a ejecutar
-            // esto, un valor capturado de antemano pisaba esa correccion
-            // con el estado viejo. Leerlo fresco aca lo hace correcto sin
-            // importar el orden/timing entre ambos hilos.
             bool allowAudioCopy = allowAudio;
             m_NativeLoader.Request([this, newPlayerPtr, path, handle, allowAudioCopy]() {
                 if (handle) newPlayerPtr->AttachNativeWindow(handle);
@@ -734,7 +832,6 @@ void main() {
             return;
 
         m_IsVideo = true;
-        m_ContentAllowsAudio = allowAudio;   // <-- se fija ANTES de reproducir
 
         // Fondos con ping-pong activo NO deben loopear via libVLC
         // (input-repeat): necesitamos que llegue un EndReached real al
@@ -759,33 +856,12 @@ void main() {
             // este activo, los videos reales nunca.
             Standby().Play(path, /*loop=*/wantNativeLoop, /*startMuted=*/true);
             Standby().SetAudioActive(false);
+            Standby().SetMute(true);
+            Standby().SetVolume(0);
             m_SwapPending      = true;
             m_PendingSwapStart = NowSeconds();
-            // FIX (fondo "de otro video" en el flash): si esto pisa un swap
-            // que YA estaba en curso (m_SwapPending ya era true — ej. el
-            // operador elige otra cosa mientras la cola todavia estaba
-            // blendeando la transicion anterior), m_SwapReadyAt/
-            // m_SwapSettledAt quedaban con la marca de tiempo del swap
-            // VIEJO. El contenido nuevo entonces "heredaba" un progreso de
-            // blend ya adelantado (a veces ya completo), revelandose de
-            // golpe en un momento arbitrario con lo que sea que hubiera en
-            // el buffer en ese instante — ni el fondo viejo ni el nuevo de
-            // verdad, un tercer frame a medio cargar. Cada swap nuevo
-            // arranca su propio asentamiento de cero.
             m_SwapReadyAt   = 0.0;
             m_SwapSettledAt = 0.0;
-            // FIX (parte 2, la que realmente causaba el flash): resetear
-            // SOLO el cronometro no alcanzaba — m_TransitionProgress
-            // (el valor de blend en si) quedaba con el numero del swap
-            // VIEJO (ej. 0.75 = 75% mezclado hacia el fondo anterior).
-            // Eso se veia mientras el nuevo contenido cargaba (mezcla
-            // vieja de mas), y despues SALTABA de golpe a 0.0 apenas el
-            // codigo de abajo entraba a la rama "todavia asentando" —
-            // exactamente el salto/flash que se ve como un tercer fondo.
-            // Forzar el valor a 0 aca, en el mismo instante en que se pide
-            // el swap nuevo, hace que ese salto pase ANTES de que haya
-            // nada nuevo que mostrar (imperceptible) en vez de a mitad de
-            // una mezcla ya visible.
             m_TransitionProgress = 0.0f;
         }
         else
@@ -794,15 +870,11 @@ void main() {
             if (!m_IsLiveToPublic || !allowAudio)
             {
                 Active().SetAudioActive(false);
+                Active().SetMute(true);
+                Active().SetVolume(0);
             }
             else
             {
-                // Play(..., startMuted=true) siempre arranca muteado (evita
-                // un "pop" al cargar) — cuando SI corresponde audio real
-                // (en vivo + contenido que lo permite) hay que restaurarlo
-                // aca, igual que ya hacen PerformSwap() y SetPubliclyLive().
-                // Antes esta rama no lo hacia: el fondo quedaba mudo hasta
-                // que el operador tocaba mute/desmute a mano.
                 Active().SetAudioActive(true);
                 Active().SetMute(m_TargetMuted);
                 Active().SetVolume(m_TargetMuted ? 0 : m_TargetVolume.load());
@@ -821,6 +893,16 @@ void main() {
 
     void BackgroundLayer::Prefetch(const std::string& path, bool allowAudio)
     {
+        std::string normPath = path;
+        std::replace(normPath.begin(), normPath.end(), '\\', '/');
+        std::transform(normPath.begin(), normPath.end(), normPath.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (normPath.find("/backgrounds/") != std::string::npos ||
+            normPath.find("assets/backgrounds") != std::string::npos)
+        {
+            allowAudio = false;
+        }
+
         // Sin crossfade en el motor nativo, no hay nada util que precargar
         // (ver CommitPrefetch(), que en este modo cae directo a SetVideo()).
         // Igual que en SetVideo(): solo aplica a video real (allowAudio).
@@ -849,10 +931,38 @@ void main() {
         bool wantNativeLoop = !allowAudio && !m_PingPongEnabled;
         Standby().Play(path, /*loop=*/wantNativeLoop, /*startMuted=*/true);
         Standby().SetAudioActive(false);
+        Standby().SetMute(true);
+        Standby().SetVolume(0);
     }
 
     void BackgroundLayer::CommitPrefetch(const std::string& path, bool allowAudio)
     {
+        std::string normPath = path;
+        std::replace(normPath.begin(), normPath.end(), '\\', '/');
+        std::transform(normPath.begin(), normPath.end(), normPath.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (normPath.find("/backgrounds/") != std::string::npos ||
+            normPath.find("assets/backgrounds") != std::string::npos)
+        {
+            allowAudio = false;
+        }
+
+        if (!allowAudio)
+        {
+            Active().SetAudioActive(false);
+            Active().SetMute(true);
+            Active().SetVolume(0);
+            Standby().SetAudioActive(false);
+            Standby().SetMute(true);
+            Standby().SetVolume(0);
+            if (m_ActiveNative)
+            {
+                m_ActiveNative->player.SetAudioActive(false);
+                m_ActiveNative->player.SetMute(true);
+                m_ActiveNative->player.SetVolume(0);
+            }
+        }
+
         // Sin prefetch en el motor nativo (ver Prefetch()): cae directo a
         // un corte simple, igual que si nunca se hubiera precargado nada.
         if (m_UseNativeEngine && allowAudio) { SetVideo(path, allowAudio); return; }
@@ -900,7 +1010,7 @@ void main() {
 
         // Ahora el swap respeta el permiso asociado al contenido que se esta
         // por mostrar, no solo el estado global "al aire".
-        if (m_IsLiveToPublic && m_ContentAllowsAudio)
+        if (m_IsLiveToPublic && m_ContentAllowsAudio.load(std::memory_order_relaxed))
         {
             newActive.SetAudioActive(true);
             newActive.SetMute(m_TargetMuted);
@@ -910,11 +1020,14 @@ void main() {
         else
         {
             newActive.SetAudioActive(false);
+            newActive.SetMute(true);
+            newActive.SetVolume(0);
         }
         newActive.SetPause(false);
 
         oldActive.SetAudioActive(false);
         oldActive.SetMute(true);
+        oldActive.SetVolume(0);
         oldActive.Stop();
 
         m_SwapPending = false;
@@ -928,6 +1041,7 @@ void main() {
 
     void BackgroundLayer::SetSolidColor(float r, float g, float b)
     {
+        m_ContentAllowsAudio = false;
         m_IsVideo    = false;
         m_BgColor[0] = r;
         m_BgColor[1] = g;
@@ -938,7 +1052,15 @@ void main() {
         m_SwapSettledAt = 0.0;
         m_PrefetchArmed = false;
         m_PrefetchedPath.clear();
+
+        m_PlayerA.SetAudioActive(false);
+        m_PlayerA.SetMute(true);
+        m_PlayerA.SetVolume(0);
         m_PlayerA.Stop();
+
+        m_PlayerB.SetAudioActive(false);
+        m_PlayerB.SetMute(true);
+        m_PlayerB.SetVolume(0);
         m_PlayerB.Stop();
 
         // Un color solido nunca es "video nativo" — si lo activo hasta
@@ -1028,6 +1150,9 @@ void main() {
         if (!np) return;
 
         VLCBasePlayer* p = &np->player;
+        p->SetAudioActive(false);
+        p->SetMute(true);
+        p->SetVolume(0);
         np->window.Hide(); // GLFW: hilo principal
         np->retiredAt = NowSeconds();
 
@@ -1141,18 +1266,30 @@ void main() {
             // volumen/mute que el operador ya haya configurado (ver
             // SetLiveVolume/SetLiveMute). Sin embargo, si el contenido
             // actualmente cargado no permite audio, debe permanecer mudo.
-            bool activeAudioAllowed = m_ContentAllowsAudio;
+            bool activeAudioAllowed = m_ContentAllowsAudio.load(std::memory_order_relaxed);
             Active().SetAudioActive(activeAudioAllowed);
             Active().SetMute(m_TargetMuted || !activeAudioAllowed);
             Active().SetVolume(activeAudioAllowed && !m_TargetMuted ? m_TargetVolume.load() : 0);
             Standby().SetAudioActive(false);
+            Standby().SetMute(true);
+            Standby().SetVolume(0);
         }
         else
         {
             // Cortar audio de raiz en ambos players, sin importar el
             // volumen/mute configurado.
             m_PlayerA.SetAudioActive(false);
+            m_PlayerA.SetMute(true);
+            m_PlayerA.SetVolume(0);
             m_PlayerB.SetAudioActive(false);
+            m_PlayerB.SetMute(true);
+            m_PlayerB.SetVolume(0);
+            if (m_ActiveNative)
+            {
+                m_ActiveNative->player.SetAudioActive(false);
+                m_ActiveNative->player.SetMute(true);
+                m_ActiveNative->player.SetVolume(0);
+            }
         }
     }
 
@@ -1161,10 +1298,11 @@ void main() {
         m_TargetVolume = volume0to200;
         if (!m_IsLiveToPublic) return;
 
+        bool allow = m_ContentAllowsAudio.load(std::memory_order_relaxed);
         if (m_ActiveIsNative && m_ActiveNative)
-            m_ActiveNative->player.SetVolume(m_TargetMuted ? 0 : m_TargetVolume.load());
+            m_ActiveNative->player.SetVolume((allow && !m_TargetMuted) ? m_TargetVolume.load() : 0);
         else
-            Active().SetVolume(m_TargetMuted ? 0 : m_TargetVolume.load());
+            Active().SetVolume((allow && !m_TargetMuted) ? m_TargetVolume.load() : 0);
     }
 
     void BackgroundLayer::SetLiveMute(bool mute)
@@ -1172,9 +1310,11 @@ void main() {
         m_TargetMuted = mute;
         if (!m_IsLiveToPublic) return;
 
+        bool allow = m_ContentAllowsAudio.load(std::memory_order_relaxed);
         VLCBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
-        target.SetMute(mute);
-        target.SetVolume(mute ? 0 : m_TargetVolume.load());
+        target.SetAudioActive(allow && !mute);
+        target.SetMute(mute || !allow);
+        target.SetVolume((allow && !mute) ? m_TargetVolume.load() : 0);
     }
 
     // ── Ecualizador en vivo ──────────────────────────────────────────────

@@ -1,6 +1,7 @@
 #include "LayersBgTab.h"
 #include "LayersTheme.h"
 #include "backend/core/PresentationCore.h"
+#include "backend/core/FileDeletionManager.h"
 #include "backend/core/AppPaths.h"
 #include "frontend/panels/biblio/LibraryMultimedia.h"
 #include <imgui.h>
@@ -330,10 +331,10 @@ bool LayersBgTab::RenameBgFolder(const std::string& oldName, const std::string& 
     std::error_code ec; fs::rename(BgRootDir()/oldName, BgRootDir()/newName, ec); return !ec;
 }
 bool LayersBgTab::DeleteBgFile(const std::string& fullPath) {
-    std::error_code ec; fs::remove(fs::path(fullPath), ec); return !ec;
+    return Core::FileDeletionManager::ForceDeleteFile(fullPath);
 }
 bool LayersBgTab::DeleteBgFolder(const std::string& folderName) {
-    std::error_code ec; fs::remove_all(BgRootDir()/folderName, ec); return !ec;
+    return Core::FileDeletionManager::ForceDeleteDirectory((BgRootDir() / folderName).string());
 }
 bool LayersBgTab::MoveBgToFolder(const std::string& srcFull, const std::string& destFolder) {
     fs::path src  = srcFull;
@@ -792,12 +793,14 @@ void LayersBgTab::RenderBgCard(const BgEntry& e, float W, float H, int col, int 
 
     // Overlay de hover: play/imagen
     if (t > 0.02f) {
-        const char* icon = e.isImage ? "[ IMG ]" : "[ PLAY ]";
-        ImVec2 is = ImGui::CalcTextSize(icon);
-        dl->AddRectFilled({p0.x,p0.y},{p1.x,p1.y-26.0f},
-            LPU32({0,0,0,0.35f*t}), 10.0f, ImDrawFlags_RoundCornersTop);
-        dl->AddText({p0.x+(W-is.x)*0.5f, p0.y+(H-26.0f-is.y)*0.5f},
-            LPU32(ImVec4(1,1,1,t)), icon);
+        ImVec2 center = { (p0.x + p1.x) * 0.5f, p0.y + (H - 26.0f) * 0.5f };
+        dl->AddCircleFilled(center, 18.0f, IM_COL32(0, 0, 0, (int)(170.0f * t)), 24);
+        dl->AddCircle(center, 18.0f, LPU32({ LP::Accent.x, LP::Accent.y, LP::Accent.z, 0.7f * t }), 24, 1.3f);
+        if (e.isImage) {
+            LPDrawImage(dl, center, 11.0f, LPU32(ImVec4(1, 1, 1, t)));
+        } else {
+            LPDrawPlay(dl, center, 12.0f, LPU32(ImVec4(1, 1, 1, t)));
+        }
     }
 
     ImGui::InvisibleButton(id.c_str(), {W, H});

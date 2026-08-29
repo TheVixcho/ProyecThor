@@ -1,6 +1,7 @@
 #include "LibraryVideoPreview.h"
 #include "LibraryHelpers.h"
 #include "backend/media/VLCBasePlayer.h"
+#include "backend/core/FileDeletionManager.h"
 #include "backend/monitors/MonitorUIHelpers.h"
 #include "frontend/ui/bin/StyleGeneralApp.h"
 
@@ -26,6 +27,17 @@ int         s_Index   = -1;
 bool        s_Playing = false;
 bool        s_Muted   = true;
 float       s_Volume  = 0.6f; // 0..2, mismo rango que Components::RenderVolumeRow
+
+static bool s_HookRegistered = []() {
+    Core::FileDeletionManager::RegisterUsageReleaseHook([](const std::string& /*path*/) {
+        if (s_Open) {
+            s_Open = false;
+            s_Playing = false;
+            if (s_Player) s_Player->Stop();
+        }
+    });
+    return true;
+}();
 
 std::string FullVideoPath(const std::string& filename) {
     return GetAssetsPath() + "/videos/" + filename;

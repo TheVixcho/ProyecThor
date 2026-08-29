@@ -142,6 +142,12 @@ private:
     float m_EqBandAmps[kEqBands] = { 0.0f };
     bool  m_ShowEqPopup = false;
     void  RenderEqualizerPopup();
+
+    // ── HUD flotante auto-oculto sobre Preview y Cola Plegable ─────────────
+    float m_HudAlpha        = 1.0f;
+    float m_HudIdleTimer    = 0.0f;
+    bool  m_QueueCollapsed  = false;
+    float m_QueueAnimW      = 0.0f;
 };
 
 } // namespace ProyecThor::UI

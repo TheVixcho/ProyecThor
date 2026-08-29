@@ -132,6 +132,54 @@ void MonitorView::RenderPreviewMonitor(Core::VLCBasePlayer* player, float w, flo
             RequestPreviewFullscreen(player);
     }
 
+    // ── HUD flotante auto-oculto (dock central + barra de transporte) ─────
+    ImVec2 mousePos = ImGui::GetIO().MousePos;
+    bool mouseInPreview = (mousePos.x >= wp.x && mousePos.x <= wp.x + w &&
+                           mousePos.y >= wp.y && mousePos.y <= wp.y + h);
+    bool isInteracting = ImGui::IsAnyItemActive() || m_ShowEqPopup;
+    if (mouseInPreview || isInteracting)
+        m_HudIdleTimer = 0.0f;
+    else
+        m_HudIdleTimer += ImGui::GetIO().DeltaTime;
+
+    float targetAlpha = (m_HudIdleTimer < 2.5f) ? 1.0f : 0.0f;
+    m_HudAlpha += (targetAlpha - m_HudAlpha) * std::min(1.0f, ImGui::GetIO().DeltaTime * 7.0f);
+
+    if (m_HudAlpha > 0.01f)
+    {
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, m_HudAlpha);
+
+        // 1. Dock flotante central-derecha: TRANSMITIR (->) y BUCLE (<->)
+        const float dockW = 58.0f;
+        const float dockH = 106.0f;
+        const float dockX = wp.x + w - dockW - 12.0f;
+        const float dockY = wp.y + std::max(38.0f, (h - dockH) * 0.42f);
+        ImVec2 dockMin(dockX, dockY);
+        ImVec2 dockMax(dockX + dockW, dockY + dockH);
+
+        dl->AddRectFilled(dockMin, dockMax, MT::ColAf(MT::k_Bg0, 0.76f * m_HudAlpha), MT::k_R);
+        dl->AddRect(dockMin, dockMax, MT::ColAf(MT::k_BorderSubtle, 0.85f * m_HudAlpha), MT::k_R, 0, 1.0f);
+
+        ImGui::SetCursorScreenPos({ dockMin.x + 3.0f, dockMin.y + 4.0f });
+        RenderCenterColumn(dockW - 6.0f, dockH - 8.0f, player);
+
+        // 2. Barra flotante inferior: Reproductor de Preview (Timeline + Controles + EQ)
+        const float barH = 124.0f;
+        const float barW = std::max(100.0f, w - 24.0f);
+        const float barX = wp.x + 12.0f;
+        const float barY = wp.y + h - barH - 8.0f;
+        ImVec2 barMin(barX, barY);
+        ImVec2 barMax(barX + barW, barY + barH);
+
+        dl->AddRectFilled(barMin, barMax, MT::ColAf(MT::k_Bg0, 0.78f * m_HudAlpha), MT::k_RLg);
+        dl->AddRect(barMin, barMax, MT::ColAf(MT::k_BorderSubtle, 0.90f * m_HudAlpha), MT::k_RLg, 0, 1.0f);
+
+        ImGui::SetCursorScreenPos({ barMin.x + 4.0f, barMin.y + 2.0f });
+        RenderPreviewControls(player, barW - 8.0f);
+
+        ImGui::PopStyleVar();
+    }
+
     ImGui::EndChild();
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(2);

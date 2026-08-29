@@ -115,6 +115,7 @@ public:
     float                     GetAccentHue() const;
     float                     GetTime()      const { return m_LastTime; }
     bool                      GetIsPlaying() const { return m_IsPlaying && !m_IsPaused; }
+    void                      StopIfPathMatches(const std::string& path);
 
 private:
     // ── Reproduccion ─────────────────────────────────────────────────────

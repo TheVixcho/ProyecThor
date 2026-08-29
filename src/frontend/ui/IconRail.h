@@ -20,7 +20,7 @@ enum class IconRailOrientation {
 // Ancho fijo de columna (Vertical) / alto fijo de fila (Horizontal).
 // Tamaños compactos tipo toolbar (Holyrics/ProPresenter) — no tarjetas grandes.
 inline constexpr float kIconRailVerticalSize    = 56.0f;
-inline constexpr float kIconRailHorizontalSize  = 46.0f;
+inline constexpr float kIconRailHorizontalSize  = 50.0f;
 inline constexpr float kIconRailHorizontalItemW = 64.0f;
 
 // Variantes "solo icono" (sin título) — usadas cuando el usuario apaga
