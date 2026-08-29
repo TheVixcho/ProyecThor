@@ -58,6 +58,12 @@ struct UpdateVersionInfo {
 
 static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
+        17, "0.7.1",
+        "ACTUALIZACION ESTABLE", "ACTUALIZACION ESTABLE",
+        "bin/assets/ui/textures/iniciarpro.jpg",
+        "ProyecThor v0.7.1 - ACTUALIZACION ESTABLE: Nuevo visor y catalogo de recursos y modelos 3D (.gltf, .glb, .obj, .stl, .ply) con renderizado acelerado por GPU y proyeccion a pantalla en vivo, miniaturas con tipografia real en Estilos, zoom con control deslizante fluido, boton de transicion rapida renovado con centrado vectorial de precision, alineacion milimetrica en controles del monitor y optimizaciones de rendimiento en todo el sistema."
+    },
+    {
         16, "0.7.0",
         "ACTUALIZACION ESTABLE", "ACTUALIZACION ESTABLE",
         "bin/assets/ui/textures/iniciarpro.jpg",
@@ -1617,7 +1623,37 @@ void Hub::RenderUpdateDetailModal() {
                 ImGui::Dummy(ImVec2(0,4));
             };
 
-            if (selectedUpdateVer == 16) {
+            if (selectedUpdateVer == 17) {
+                Cat("Visor y Catálogo de Recursos / Modelos 3D");
+                Bul("Nuevo botón '3D' con icono isométrico vectorial en el riel lateral izquierdo de la Biblioteca.");
+                Bul("Compatibilidad universal con archivos y carpetas glTF 2.0 (.gltf con buffers binarios .bin o base64 embebido) y Binary glTF (.glb).");
+                Bul("Compatibilidad con formatos 3D clásicos: Wavefront OBJ (.obj con normales y UVs), Stereolithography (.stl binario y ASCII) y Polygon File (.ply).");
+                Bul("Detección inteligente de carpetas de modelos descargadas (Sketchfab, Blender, Turbosquid): asigna automáticamente el nombre de la carpeta contenedora.");
+                Bul("Modelos 3D integrados listos para usar sin archivos externos: Cruz Latina 3D biselada, Cubo, Esfera, Cilindro, Torus / Anillo y Pirámide.");
+                Bul("Visor orbital 3D interactivo acelerado por hardware OpenGL: rotación libre con clic izquierdo, desplazamiento (pan) con clic derecho y zoom con rueda.");
+                Bul("Botón '⊙ Centrar' para restablecer encuadre y orientación de cámara de forma instantánea.");
+                Bul("Giro continuo automático '⟳ Auto-rotar' (Turntable 360°) a 60 FPS con velocidad ajustable.");
+                Bul("Modos de sombreado avanzados (Sombreado Blinn-Phong, Malla / Wireframe, Sombreado con Bordes resaltados) y paleta de colores/materiales con presets (Oro, Plata, Bronce, etc.).");
+                Bul("Proyección en vivo a pantalla pública con botón '[ 🚀 PROYECTAR 3D A PANTALLA ]' y superposición transparente sobre fondos o videos en tiempo real.");
+                ImGui::Dummy(ImVec2(0, 12));
+
+                Cat("Tipografía Real en Miniaturas de Estilos");
+                Bul("Previsualización tipográfica dinámica: cada tarjeta y fila de tema renderiza su muestra de texto con la tipografía real asignada.");
+                Bul("Riel lateral izquierdo optimizado con acceso prioritario a 'Nuevo estilo', 'Ajustes rápidos' y botón de 'Recargar fuentes ↺' 100% visible.");
+                Bul("Nuevo control deslizante (slider) de zoom suave en la cabecera de la cuadrícula.");
+                ImGui::Dummy(ImVec2(0, 12));
+
+                Cat("Transiciones Rápidas y Controles del Monitor");
+                Bul("Botón de transición rápida con icono vectorial de swap perfectamente centrado.");
+                Bul("Menú popup con presets de duración rápida (0.3s, 0.5s, 1.0s, 1.5s) y modos de corte / disolución.");
+                Bul("Alineación y distribución simétrica de borde a borde en los 5 botones de transporte y cabecera del Monitor de Vista en Vivo.");
+                ImGui::Dummy(ImVec2(0, 12));
+
+                Cat("Rendimiento y Pipeline Gráfico");
+                Bul("Pipeline OpenGL Framebuffer (FBO) desacoplado para renderizado de mallas tridimensionales sin impacto en la interfaz.");
+                Bul("Optimizaciones de estabilidad en la carga y escaneo de directorios con recarga en caliente.");
+                ImGui::Dummy(ImVec2(0, 12));
+            } else if (selectedUpdateVer == 16) {
                 Cat("HUD Estilizado y Fondo de Ondas Dinámicas");
                 Bul("Nuevo fondo atmosférico con ondas topográficas fluidas en movimiento lento y partículas astrales en suspensión.");
                 Bul("Tarjetas de inicio tipo póster con iluminación reactiva, brackets angulares y respiración ambiental armónica.");

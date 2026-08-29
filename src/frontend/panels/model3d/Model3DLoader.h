@@ -14,6 +14,8 @@ public:
     static bool LoadOBJ(const std::string& filePath, Model3DMesh& outMesh);
     static bool LoadSTL(const std::string& filePath, Model3DMesh& outMesh);
     static bool LoadPLY(const std::string& filePath, Model3DMesh& outMesh);
+    static bool LoadGLTF(const std::string& filePath, Model3DMesh& outMesh);
+    static bool LoadGLB(const std::string& filePath, Model3DMesh& outMesh);
 
     // Creador de primitivas y modelos 3D integrados
     static Model3DMesh CreatePrimitive(const std::string& primitiveName);
