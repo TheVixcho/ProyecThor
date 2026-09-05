@@ -325,7 +325,7 @@ unsigned int Model3DRenderer::RenderToTexture(Model3DMesh& mesh, const Model3DRe
 
     // Dibujar modelo 3D
     if (mesh.isGpuLoaded && !mesh.indices.empty()) {
-        Mat4 model = Mat4::Identity();
+        Mat4 model = config.flipY ? Mat4::RotationX(3.14159265f) : Mat4::Identity();
         Mat4 mvp   = proj * view * model;
 
         glUseProgram(m_ShaderProgram);

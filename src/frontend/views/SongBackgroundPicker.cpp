@@ -75,4 +75,5 @@ std::vector<SongBgEntry> ListSongBackgrounds()
     return out;
 }
 
-} // namespace ProyecThor::UI
+}
+

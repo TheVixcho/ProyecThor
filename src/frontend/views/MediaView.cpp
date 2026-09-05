@@ -31,37 +31,18 @@ namespace ProyecThor::UI {
         if (selection.title != m_LastSelectedFile) {
             m_LastSelectedFile = selection.title;
 
-            // FIX (crash en Windows/Wine): la cola del Monitor pasa por
-            // SetSelection(..., fromQueue=true) al arrancar/avanzar cada
-            // item, solo para que el titulo se muestre — no es una eleccion
-            // manual del operador en la Biblioteca. Antes esto no se
-            // distinguia, asi que cada avance de la cola disparaba TAMBIEN
-            // una carga en el reproductor de Preview del mismo archivo que
-            // la cola ya esta reproduciendo/precargando (a la vez que
-            // MonitorView::Render() hacia lo mismo sobre el mismo preview
-            // player) — dos/tres instancias de VLC abriendo el mismo
-            // archivo al mismo tiempo, lo que crasheaba en Windows.
             bool fromQueue = Core::PresentationCore::Get().IsSelectionFromQueue();
 
             if (selection.type == Core::ItemType::Video && fromQueue) {
-                // No tocar el preview para nada: ni cargarlo (evita el
-                // choque de instancias de VLC descripto arriba) ni
-                // detenerlo (si el operador tenia otra cosa en preview,
-                // que un avance interno de la cola no se lo pise).
             } else if (selection.type == Core::ItemType::Video) {
                 if (previewPlayer) {
                     std::string previewPath = selection.title;
 
-                    // Si NO es un enlace de internet ni ruta absoluta, armamos la ruta local
                     if (previewPath.rfind("http", 0) != 0 && !std::filesystem::path(previewPath).is_absolute()) {
                         previewPath = VideosPath() + previewPath;
                     }
 
-                    // Carga en un hilo aparte (ver
-                    // PresentationCore::RequestPreviewLoad): el video en
-                    // vivo al publico nunca debe esperar a que el Preview
-                    // termine de abrir un archivo.
-                    Core::PresentationCore::Get().RequestPreviewLoad(previewPath, /*loop=*/true, /*startMuted=*/true);
+                    Core::PresentationCore::Get().RequestPreviewLoad(previewPath, true, true);
                     m_IsPlayingPreview = true;
                 }
             } else if (selection.type == Core::ItemType::Image) {
@@ -99,7 +80,6 @@ namespace ProyecThor::UI {
             }
             ImGui::EndChild();
         } else if (selection.type == Core::ItemType::Image) {
-            // (Mantenemos la lógica de la imagen como la tienes)
             std::string dispTitle = std::filesystem::path(selection.title).filename().string();
             ImGui::TextDisabled("%s", dispTitle.c_str());
             ImGui::Spacing();
@@ -128,10 +108,7 @@ namespace ProyecThor::UI {
             m_ImageView.Render(availSize.x, availSize.y - 10.0f);
 
         } else if (selection.type == Core::ItemType::Video) {
-            // --- AQUÍ ESTABA EL CAMBIO ---
-            // Simplemente dejamos este bloque vacío o añadimos un espaciado mínimo 
-            // si quieres que no se pegue al borde, pero ya no habrá textos.
         }
     }
 
-} // namespace ProyecThor::UI
+}

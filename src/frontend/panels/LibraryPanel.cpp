@@ -255,6 +255,10 @@ void LibraryPanel::SetUIManager(UIManager* manager)
         m_Model3DPanel = std::make_unique<Model3DPanel>();
         m_Model3DPanel->SetUIManager(m_UIManagerRef);
     }
+    if (!m_LabPanel) {
+        m_LabPanel = std::make_unique<LabPanel>();
+        m_LabPanel->SetUIManager(m_UIManagerRef);
+    }
 }
 
 void LibraryPanel::SetMediaOnlyMode(bool v)
@@ -657,6 +661,10 @@ void LibraryPanel::Render()
         else if (m_SideMode == LibrarySideMode::Model3D)
         {
             if (m_Model3DPanel) m_Model3DPanel->Render();
+        }
+        else if (m_SideMode == LibrarySideMode::Lab)
+        {
+            if (m_LabPanel) m_LabPanel->Render();
         }
         else if (m_CurrentCategory == LibraryCategory::Audio)
         {

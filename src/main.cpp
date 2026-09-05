@@ -550,6 +550,95 @@ ProyecThor::Splash::Fonts LoadSplashFonts(ImGuiIO& io, float dpiScale)
     return fonts;
 }
 
+static void LoadMainApplicationFonts(ImGuiIO& io, float dpiScale)
+{
+    using namespace ProyecThor::Settings;
+    const std::string& customFontPath = SettingsManager::Get().GetSettings().theme.customFontPath;
+    const char* defaultFontPath = "bin/assets/fonts/OpenSans-Regular.ttf";
+
+    std::string fontToLoad;
+    if (!customFontPath.empty() && IsValidFontFile(customFontPath))
+        fontToLoad = customFontPath;
+    else if (IsValidFontFile(defaultFontPath))
+        fontToLoad = defaultFontPath;
+
+    // 1. Rango extendido completo de símbolos, puntuación, flechas, geometrías y emojis
+    static ImVector<ImWchar> s_FullGlyphRanges;
+    if (s_FullGlyphRanges.empty())
+    {
+        ImFontGlyphRangesBuilder builder;
+        builder.AddRanges(io.Fonts->GetGlyphRangesDefault());
+        builder.AddRanges(io.Fonts->GetGlyphRangesGreek());
+        builder.AddRanges(io.Fonts->GetGlyphRangesCyrillic());
+
+        static const ImWchar kExtraSymbolsAndEmojis[] = {
+            0x0100, 0x024F, // Latin Extended-A & B
+            0x2000, 0x206F, // General Punctuation
+            0x2070, 0x209F, // Superscripts and Subscripts
+            0x20A0, 0x20CF, // Currency Symbols (€, $, £, etc.)
+            0x2100, 0x214F, // Letterlike Symbols (№, ™, ℠)
+            0x2150, 0x218F, // Number Forms (½, ⅓, etc.)
+            0x2190, 0x21FF, // Arrows (←, ↑, →, ↓, ↔, ↕)
+            0x2200, 0x22FF, // Mathematical Operators
+            0x2300, 0x23FF, // Miscellaneous Technical (⌘, ⌚, ⌛, ⌫)
+            0x2460, 0x24FF, // Enclosed Alphanumerics (①, ②, etc.)
+            0x2500, 0x257F, // Box Drawing
+            0x2580, 0x259F, // Block Elements
+            0x25A0, 0x25FF, // Geometric Shapes (■, □, ▲, △, ▶, ▼, ◆, ●, ○)
+            0x2600, 0x26FF, // Miscellaneous Symbols (☀, ☁, ⚡, ☕, ⛑, ⛪, ✝, ⚔, ⚙, ⚠)
+            0x2700, 0x27BF, // Dingbats (✂, ✈, ✉, ✔, ✕, ✖, ✝, ✨, ✦, ✪, ✰, ➔)
+            0x2B00, 0x2BFF, // Miscellaneous Symbols and Arrows (⬡, ⬢, ↺, ⟳, ⬅, ⬆, ⬇)
+            0x1F000, 0x1F02F, // Mahjong
+            0x1F0A0, 0x1F0FF, // Playing Cards
+            0x1F300, 0x1F5FF, // Misc Symbols & Pictographs (🔍, 🎬, 📺, 💎, 🌊, 🍿, 🎵, 🎸, 🎹, 🎧, 🎨, 💡, 🏷, 🕹, 🚀)
+            0x1F600, 0x1F64F, // Emoticons (😀, 😂, 😍, 🤔, etc.)
+            0x1F680, 0x1F6FF, // Transport and Map
+            0x1F900, 0x1F9FF, // Supplemental Symbols and Pictographs
+            0x1FA70, 0x1FAFF, // Symbols and Pictographs Extended-A
+            0
+        };
+        builder.AddRanges(kExtraSymbolsAndEmojis);
+        builder.BuildRanges(&s_FullGlyphRanges);
+    }
+
+    ImFont* mainFont = nullptr;
+    if (!fontToLoad.empty())
+    {
+        ImFontConfig cfg;
+        cfg.OversampleH = 2;
+        cfg.OversampleV = 2;
+        cfg.PixelSnapH  = true;
+        mainFont = io.Fonts->AddFontFromFileTTF(fontToLoad.c_str(), 16.0f * dpiScale, &cfg, s_FullGlyphRanges.Data);
+    }
+
+    // 2. Fusionar fuentes de emojis y símbolos del sistema (Windows / Linux)
+    static const char* kFallbackFonts[] = {
+        "C:\\Windows\\Fonts\\seguisym.ttf",
+        "C:\\Windows\\Fonts\\seguiemj.ttf",
+        "C:\\Windows\\Fonts\\arial.ttf",
+        "bin/assets/fonts/NotoEmoji-Regular.ttf",
+        "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/symbola/Symbola.ttf"
+    };
+
+    for (const char* fallbackPath : kFallbackFonts)
+    {
+        if (IsValidFontFile(fallbackPath))
+        {
+            ImFontConfig mergeCfg;
+            mergeCfg.MergeMode   = true;
+            mergeCfg.OversampleH = 1;
+            mergeCfg.OversampleV = 1;
+            mergeCfg.PixelSnapH  = true;
+            io.Fonts->AddFontFromFileTTF(fallbackPath, 16.0f * dpiScale, &mergeCfg, s_FullGlyphRanges.Data);
+        }
+    }
+
+    if (!mainFont)
+        io.Fonts->AddFontDefault();
+}
+
 void LoadUIIcons()
 {
     StyleGeneralApp::LoadAppIcon("search",            "bin/assets/icons/ui/searchico.png");
@@ -938,20 +1027,7 @@ int main(int argc, char** argv)
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.IniFilename  = "proyecthor_ui.ini";
 
-    {
-        using namespace ProyecThor::Settings;
-        const std::string& customFontPath = SettingsManager::Get().GetSettings().theme.customFontPath;
-        const char* defaultFontPath = "bin/assets/fonts/OpenSans-Regular.ttf";
-
-        std::string fontToLoad;
-        if (!customFontPath.empty() && IsValidFontFile(customFontPath))
-            fontToLoad = customFontPath;
-        else if (IsValidFontFile(defaultFontPath))
-            fontToLoad = defaultFontPath;
-
-        if (!fontToLoad.empty())
-            io.Fonts->AddFontFromFileTTF(fontToLoad.c_str(), 16.0f * dpiScale);
-    }
+    LoadMainApplicationFonts(io, dpiScale);
     ProyecThor::Core::PresentationCore::Get().LoadFontsIntoImGui();
 
     ImGui_ImplGlfw_InitForOpenGL(mainWindow, true);

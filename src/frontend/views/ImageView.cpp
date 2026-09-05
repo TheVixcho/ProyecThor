@@ -5,9 +5,6 @@
 #include <cstring>
 #include <cmath>
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GLSL: vertex shader
-// ─────────────────────────────────────────────────────────────────────────────
 static const char* k_VertSrc = R"GLSL(
 #version 330 core
 layout(location = 0) in vec2 a_Pos;
@@ -19,11 +16,6 @@ void main() {
 }
 )GLSL";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GLSL: fragment shader
-// Aplica en orden: brillo, contraste, saturacion, hue, temperatura, gamma,
-//                 sharpness (unsharp mask 3x3), viñeta
-// ─────────────────────────────────────────────────────────────────────────────
 static const char* k_FragSrc = R"GLSL(
 #version 330 core
 in  vec2 v_UV;
@@ -120,10 +112,8 @@ void main() {
 }
 )GLSL";
 
-// ─────────────────────────────────────────────────────────────────────────────
 namespace ProyecThor::UI {
 
-// ── Helpers internos ─────────────────────────────────────────────────────────
 static GLuint CompileShader(GLenum type, const char* src) {
     GLuint s = glCreateShader(type);
     glShaderSource(s, 1, &src, nullptr);
@@ -157,7 +147,6 @@ static GLuint LinkProgram(GLuint vert, GLuint frag) {
     return p;
 }
 
-// ── Constructor / destructor ──────────────────────────────────────────────────
 ImageView::ImageView() {
     InitShader();
     InitQuad();
@@ -169,7 +158,6 @@ ImageView::~ImageView() {
     DestroyQuad();
 }
 
-// ── Shader ────────────────────────────────────────────────────────────────────
 void ImageView::InitShader() {
     GLuint vert = CompileShader(GL_VERTEX_SHADER,   k_VertSrc);
     GLuint frag = CompileShader(GL_FRAGMENT_SHADER, k_FragSrc);
@@ -183,7 +171,6 @@ void ImageView::InitShader() {
     glDeleteShader(frag);
     if (!m_ShaderProgram) return;
 
-    // Cachear uniform locations
     m_uTexture     = glGetUniformLocation(m_ShaderProgram, "u_Texture");
     m_uBrightness  = glGetUniformLocation(m_ShaderProgram, "u_Brightness");
     m_uContrast    = glGetUniformLocation(m_ShaderProgram, "u_Contrast");
@@ -206,9 +193,7 @@ void ImageView::DestroyShader() {
     m_ShaderReady = false;
 }
 
-// ── Quad NDC (fullscreen triangle strip) ─────────────────────────────────────
 void ImageView::InitQuad() {
-    // pos (x,y) + uv (u,v)
     float verts[] = {
         -1.0f, -1.0f,  0.0f, 0.0f,
          1.0f, -1.0f,  1.0f, 0.0f,
@@ -220,10 +205,8 @@ void ImageView::InitQuad() {
     glBindVertexArray(m_VAO);
     glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
-    // location 0 = pos
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-    // location 1 = uv
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
     glBindVertexArray(0);
@@ -234,7 +217,6 @@ void ImageView::DestroyQuad() {
     if (m_VBO) { glDeleteBuffers(1, &m_VBO);       m_VBO = 0; }
 }
 
-// ── Carga de imagen ───────────────────────────────────────────────────────────
 void ImageView::Clear() {
     if (m_TextureID != 0) {
         glDeleteTextures(1, &m_TextureID);
@@ -263,16 +245,12 @@ bool ImageView::LoadImageFromFile(const std::string& path) {
     return true;
 }
 
-// ── Render con shader via FBO ─────────────────────────────────────────────────
-// Se renderiza la imagen original con el shader a un FBO del mismo tamanio
-// que la imagen. Luego ImGui::Image muestra la textura del FBO.
 void ImageView::ApplyRenderWithShader(float renderWidth, float renderHeight,
                                       float offsetX,    float offsetY)
 {
     int iW = static_cast<int>(renderWidth);
     int iH = static_cast<int>(renderHeight);
 
-    // Recrear FBO / textura de salida si cambio el tamanio
     if (m_FBO == 0 || m_FBOWidth != iW || m_FBOHeight != iH) {
         if (m_FBO)       { glDeleteFramebuffers(1, &m_FBO);   m_FBO = 0; }
         if (m_OutputTex) { glDeleteTextures(1, &m_OutputTex); m_OutputTex = 0; }
@@ -293,13 +271,11 @@ void ImageView::ApplyRenderWithShader(float renderWidth, float renderHeight,
         m_FBOHeight = iH;
     }
 
-    // Guardar estado de OpenGL que ImGui necesita restaurar
     GLint prevFBO      = 0;
     GLint prevViewport[4] = {};
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFBO);
     glGetIntegerv(GL_VIEWPORT, prevViewport);
 
-    // Renderizar al FBO
     glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
     glViewport(0, 0, iW, iH);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -314,7 +290,7 @@ void ImageView::ApplyRenderWithShader(float renderWidth, float renderHeight,
     glUniform1f(m_uBrightness,  m_Adj.brightness);
     glUniform1f(m_uContrast,    m_Adj.contrast);
     glUniform1f(m_uSaturation,  m_Adj.saturation);
-    glUniform1f(m_uHue,         m_Adj.hue * (3.14159265f / 180.0f)); // grados a radianes
+    glUniform1f(m_uHue,         m_Adj.hue * (3.14159265f / 180.0f));
     glUniform1f(m_uTemperature, m_Adj.temperature);
     glUniform1f(m_uSharpness,   m_Adj.sharpness);
     glUniform1f(m_uGamma,       m_Adj.gamma);
@@ -326,13 +302,11 @@ void ImageView::ApplyRenderWithShader(float renderWidth, float renderHeight,
 
     glUseProgram(0);
 
-    // Restaurar estado previo
     glBindFramebuffer(GL_FRAMEBUFFER, prevFBO);
     glViewport(prevViewport[0], prevViewport[1],
                prevViewport[2], prevViewport[3]);
 }
 
-// ── Render publico ────────────────────────────────────────────────────────────
 void ImageView::Render(float maxWidth, float maxHeight) {
     if (m_TextureID == 0) return;
 
@@ -349,24 +323,16 @@ void ImageView::Render(float maxWidth, float maxHeight) {
     ImVec2 cursorPos = ImGui::GetCursorPos();
     ImGui::SetCursorPos(ImVec2(cursorPos.x + offsetX, cursorPos.y));
 
-    // FIXED: ImTextureID en este proyecto es un entero (ImU64), no un puntero.
-    // reinterpret_cast entre dos tipos enteros no relacionados (uintptr_t y
-    // ImTextureID) no es una conversion valida en C++ estandar y falla al
-    // compilar con GCC/Clang en Linux (con MSVC "colaba" por ser mas permisivo
-    // en algunos casos). static_cast es la conversion entero-a-entero correcta
-    // y funciona igual en Windows, Linux y macOS.
     if (m_ShaderReady) {
         ApplyRenderWithShader(renderWidth, renderHeight, offsetX, cursorPos.y);
         ImGui::Image(static_cast<ImTextureID>(m_OutputTex),
                      ImVec2(renderWidth, renderHeight));
     } else {
-        // Fallback: imagen original sin ajustes
         ImGui::Image(static_cast<ImTextureID>(m_TextureID),
                      ImVec2(renderWidth, renderHeight));
     }
 }
 
-// ── Panel de ajustes ImGui ────────────────────────────────────────────────────
 void ImageView::RenderAdjustmentsPanel() {
     if (m_TextureID == 0) return;
 
@@ -374,21 +340,13 @@ void ImageView::RenderAdjustmentsPanel() {
 
     ImGui::SeparatorText("Ajustes de imagen");
 
-    // Brillo
     ImGui::SliderFloat("Brillo",      &m_Adj.brightness,  -1.0f,  1.0f, "%.2f");
-    // Contraste
     ImGui::SliderFloat("Contraste",   &m_Adj.contrast,     0.0f,  3.0f, "%.2f");
-    // Saturacion
     ImGui::SliderFloat("Saturación",  &m_Adj.saturation,   0.0f,  3.0f, "%.2f");
-    // Hue
     ImGui::SliderFloat("Hue",         &m_Adj.hue,        -180.0f, 180.0f, "%.1f deg");
-    // Temperatura
     ImGui::SliderFloat("Temperatura", &m_Adj.temperature, -1.0f,  1.0f, "%.2f");
-    // Nitidez
     ImGui::SliderFloat("Nitidez",     &m_Adj.sharpness,    0.0f,  1.0f, "%.2f");
-    // Gamma
     ImGui::SliderFloat("Gamma",       &m_Adj.gamma,        0.1f,  3.0f, "%.2f");
-    // Viñeta
     ImGui::SliderFloat("Viñeta",      &m_Adj.vignette,     0.0f,  1.0f, "%.2f");
 
     ImGui::Spacing();
@@ -403,4 +361,5 @@ void ImageView::ResetAdjustments() {
     m_Adj = ImageAdjustments{};
 }
 
-} // namespace ProyecThor::UI
+}
+

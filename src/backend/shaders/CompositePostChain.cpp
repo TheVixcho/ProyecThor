@@ -142,6 +142,14 @@ void CompositePostChain::EnsureSized(int w, int h, void* platformHandle) {
         m_Contrast.ForgetGLResources();
         m_Luminosity.ForgetGLResources();
         m_TAA.ForgetGLResources();
+        m_Glitch.ForgetGLResources();
+        m_ColorGrading.ForgetGLResources();
+        m_Pixelate.ForgetGLResources();
+        m_RadialBlur.ForgetGLResources();
+        m_Waves.ForgetGLResources();
+        m_Mirror.ForgetGLResources();
+        m_Thermal.ForgetGLResources();
+        m_Halftone.ForgetGLResources();
         m_SubEffectsInitialized = false;
     } else {
         // Mismo contexto: el resize normal, con glDelete* real, es seguro.
@@ -170,6 +178,17 @@ void CompositePostChain::EnsureSized(int w, int h, void* platformHandle) {
         m_Contrast.Init(w, h);
         m_Luminosity.Init(w, h);
         m_TAA.Init(w, h);
+        m_Glitch.Init(w, h);
+        m_ColorGrading.Init(w, h);
+        m_Pixelate.Init(w, h);
+        m_RadialBlur.Init(w, h);
+        m_Waves.Init(w, h);
+        m_Mirror.Init(w, h);
+        m_Thermal.Init(w, h);
+        m_Halftone.Init(w, h);
+        m_VolumetricFog.Init(w, h);
+        m_VolumetricClouds.Init(w, h);
+        m_ZonedDistortion.Init(w, h);
         m_SubEffectsInitialized = true;
     } else {
         m_CRT.Resize(w, h);
@@ -186,6 +205,17 @@ void CompositePostChain::EnsureSized(int w, int h, void* platformHandle) {
         m_Contrast.Resize(w, h);
         m_Luminosity.Resize(w, h);
         m_TAA.Resize(w, h);
+        m_Glitch.Resize(w, h);
+        m_ColorGrading.Resize(w, h);
+        m_Pixelate.Resize(w, h);
+        m_RadialBlur.Resize(w, h);
+        m_Waves.Resize(w, h);
+        m_Mirror.Resize(w, h);
+        m_Thermal.Resize(w, h);
+        m_Halftone.Resize(w, h);
+        m_VolumetricFog.Resize(w, h);
+        m_VolumetricClouds.Resize(w, h);
+        m_ZonedDistortion.Resize(w, h);
     }
 }
 
@@ -212,36 +242,37 @@ void CompositePostChain::RenderViewport(ImGuiViewport* viewport,
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
 
-    // 1) Captura: todo el drawList de "ProjectorLive" (fondo + overlays +
-    //    texto + anuncios + captura) a nuestro FBO en vez del framebuffer
-    //    real -- mismo llamado que hace el renderer default de ImGui,
-    //    redirigido.
+    // 1) Captura: todo el drawList de "ProjectorLive"
     glBindFramebuffer(GL_FRAMEBUFFER, m_CaptureFBO);
     glViewport(0, 0, m_W, m_H);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     ImGui_ImplOpenGL3_RenderDrawData(viewport->DrawData);
 
-    // 2) Cadena de efectos sobre el composite ya capturado. Orden: primero
-    //    el grado de color (Saturación, Contraste, Luminosidad, Cine),
-    //    despues Bloom (necesita los brillos originales antes de que otros
-    //    efectos los toquen), Sharpen/Blur (nitidez/desenfoque de
-    //    contenido), VHS y los efectos "de estilo" (CRT, Grano, Viñeta),
-    //    Aberracion Cromatica (tipo distorsion de lente), TAA (mezcla
-    //    temporal, va cerca del final porque tiene que suavizar TODO lo de
-    //    arriba), y FXAA al final porque suaviza los bordes que dejo todo
-    //    lo anterior (incluido el propio degradado del viñetado).
+    // 2) Cadena de efectos sobre el composite capturado
+    double curTime = glfwGetTime();
     GLuint tex = m_CaptureTex;
+    if (m_ColorGrading.IsEnabled())        tex = m_ColorGrading.Process(tex);
     if (m_Saturation.IsEnabled())          tex = m_Saturation.Process(tex);
     if (m_Contrast.IsEnabled())            tex = m_Contrast.Process(tex);
     if (m_Luminosity.IsEnabled())          tex = m_Luminosity.Process(tex);
     if (m_Cine.IsEnabled())                tex = m_Cine.Process(tex);
+    if (m_Thermal.IsEnabled())             tex = m_Thermal.Process(tex, curTime);
     if (m_Bloom.IsEnabled())               tex = m_Bloom.Process(tex, m_W, m_H);
     if (m_Sharpen.IsEnabled())             tex = m_Sharpen.Process(tex, m_W, m_H);
     if (m_Blur.IsEnabled())                tex = m_Blur.Process(tex);
-    if (m_VHS.IsEnabled())                 tex = m_VHS.Process(tex, m_W, m_H, glfwGetTime());
+    if (m_Waves.IsEnabled())               tex = m_Waves.Process(tex, curTime);
+    if (m_ZonedDistortion.IsEnabled())     tex = m_ZonedDistortion.Process(tex, curTime);
+    if (m_VolumetricClouds.IsEnabled())    tex = m_VolumetricClouds.Process(tex, curTime);
+    if (m_VolumetricFog.IsEnabled())       tex = m_VolumetricFog.Process(tex, curTime);
+    if (m_RadialBlur.IsEnabled())          tex = m_RadialBlur.Process(tex);
+    if (m_Pixelate.IsEnabled())            tex = m_Pixelate.Process(tex, m_W, m_H);
+    if (m_Halftone.IsEnabled())            tex = m_Halftone.Process(tex, m_W, m_H);
+    if (m_Mirror.IsEnabled())              tex = m_Mirror.Process(tex);
+    if (m_Glitch.IsEnabled())              tex = m_Glitch.Process(tex, m_W, m_H, curTime);
+    if (m_VHS.IsEnabled())                 tex = m_VHS.Process(tex, m_W, m_H, curTime);
     if (m_CRT.IsEnabled())                 tex = m_CRT.Process(tex, m_W, m_H);
-    if (m_Grain.IsEnabled())                tex = m_Grain.Process(tex, glfwGetTime());
+    if (m_Grain.IsEnabled())               tex = m_Grain.Process(tex, curTime);
     if (m_Vignette.IsEnabled())            tex = m_Vignette.Process(tex);
     if (m_ChromaticAberration.IsEnabled()) tex = m_ChromaticAberration.Process(tex);
     if (m_TAA.IsEnabled())                 tex = m_TAA.Process(tex, m_W, m_H);
@@ -273,6 +304,17 @@ void CompositePostChain::Destroy() {
     m_Contrast.Destroy();
     m_Luminosity.Destroy();
     m_TAA.Destroy();
+    m_Glitch.Destroy();
+    m_ColorGrading.Destroy();
+    m_Pixelate.Destroy();
+    m_RadialBlur.Destroy();
+    m_Waves.Destroy();
+    m_Mirror.Destroy();
+    m_Thermal.Destroy();
+    m_Halftone.Destroy();
+    m_VolumetricFog.Destroy();
+    m_VolumetricClouds.Destroy();
+    m_ZonedDistortion.Destroy();
     m_SubEffectsInitialized = false;
 
     m_PreviewCRT.Destroy();
@@ -289,12 +331,23 @@ void CompositePostChain::Destroy() {
     m_PreviewContrast.Destroy();
     m_PreviewLuminosity.Destroy();
     m_PreviewTAA.Destroy();
+    m_PreviewGlitch.Destroy();
+    m_PreviewColorGrading.Destroy();
+    m_PreviewPixelate.Destroy();
+    m_PreviewRadialBlur.Destroy();
+    m_PreviewWaves.Destroy();
+    m_PreviewMirror.Destroy();
+    m_PreviewThermal.Destroy();
+    m_PreviewHalftone.Destroy();
+    m_PreviewVolumetricFog.Destroy();
+    m_PreviewVolumetricClouds.Destroy();
+    m_PreviewZonedDistortion.Destroy();
     m_PreviewInitialized = false;
 }
 
 GLuint CompositePostChain::ProcessBackgroundForPreview(GLuint srcTex, int w, int h) {
     if (srcTex == 0 || w <= 0 || h <= 0) return srcTex;
-    if (!AnyEnabled()) return srcTex; // nada activo -- cero costo extra
+    if (!AnyEnabled()) return srcTex;
 
     if (!m_PreviewInitialized || w != m_PreviewW || h != m_PreviewH) {
         m_PreviewCRT.Destroy();        m_PreviewCRT.Init(w, h);
@@ -311,13 +364,22 @@ GLuint CompositePostChain::ProcessBackgroundForPreview(GLuint srcTex, int w, int
         m_PreviewContrast.Destroy();    m_PreviewContrast.Init(w, h);
         m_PreviewLuminosity.Destroy();  m_PreviewLuminosity.Init(w, h);
         m_PreviewTAA.Destroy();         m_PreviewTAA.Init(w, h);
+        m_PreviewGlitch.Destroy();      m_PreviewGlitch.Init(w, h);
+        m_PreviewColorGrading.Destroy(); m_PreviewColorGrading.Init(w, h);
+        m_PreviewPixelate.Destroy();    m_PreviewPixelate.Init(w, h);
+        m_PreviewRadialBlur.Destroy();  m_PreviewRadialBlur.Init(w, h);
+        m_PreviewWaves.Destroy();       m_PreviewWaves.Init(w, h);
+        m_PreviewMirror.Destroy();      m_PreviewMirror.Init(w, h);
+        m_PreviewThermal.Destroy();     m_PreviewThermal.Init(w, h);
+        m_PreviewHalftone.Destroy();    m_PreviewHalftone.Init(w, h);
+        m_PreviewVolumetricFog.Destroy();    m_PreviewVolumetricFog.Init(w, h);
+        m_PreviewVolumetricClouds.Destroy(); m_PreviewVolumetricClouds.Init(w, h);
+        m_PreviewZonedDistortion.Destroy();  m_PreviewZonedDistortion.Init(w, h);
         m_PreviewW = w;
         m_PreviewH = h;
         m_PreviewInitialized = true;
     }
 
-    // Mismo estado (habilitado/intensidad) que la cadena principal, para
-    // que el preview sea un reflejo fiel de lo que ve el público.
     m_PreviewCRT.SetEnabled(m_CRT.IsEnabled());
     m_PreviewCRT.SetScanlineIntensity(m_CRT.GetScanlineIntensity());
     m_PreviewGrain.SetEnabled(m_Grain.IsEnabled());
@@ -346,19 +408,72 @@ GLuint CompositePostChain::ProcessBackgroundForPreview(GLuint srcTex, int w, int
     m_PreviewLuminosity.SetAmount(m_Luminosity.GetAmount());
     m_PreviewTAA.SetEnabled(m_TAA.IsEnabled());
     m_PreviewTAA.SetIntensity(m_TAA.GetIntensity());
+    m_PreviewGlitch.SetEnabled(m_Glitch.IsEnabled());
+    m_PreviewGlitch.SetIntensity(m_Glitch.GetIntensity());
+    m_PreviewGlitch.SetSpeed(m_Glitch.GetSpeed());
+    m_PreviewGlitch.SetMode(m_Glitch.GetMode());
+    m_PreviewColorGrading.SetEnabled(m_ColorGrading.IsEnabled());
+    m_PreviewColorGrading.SetIntensity(m_ColorGrading.GetIntensity());
+    m_PreviewColorGrading.SetPreset(m_ColorGrading.GetPreset());
+    m_PreviewPixelate.SetEnabled(m_Pixelate.IsEnabled());
+    m_PreviewPixelate.SetPixelSize(m_Pixelate.GetPixelSize());
+    m_PreviewPixelate.SetColorDepth(m_Pixelate.GetColorDepth());
+    m_PreviewRadialBlur.SetEnabled(m_RadialBlur.IsEnabled());
+    m_PreviewRadialBlur.SetIntensity(m_RadialBlur.GetIntensity());
+    m_PreviewWaves.SetEnabled(m_Waves.IsEnabled());
+    m_PreviewWaves.SetIntensity(m_Waves.GetIntensity());
+    m_PreviewWaves.SetSpeed(m_Waves.GetSpeed());
+    m_PreviewWaves.SetFrequency(m_Waves.GetFrequency());
+    m_PreviewMirror.SetEnabled(m_Mirror.IsEnabled());
+    m_PreviewMirror.SetMode(m_Mirror.GetMode());
+    m_PreviewThermal.SetEnabled(m_Thermal.IsEnabled());
+    m_PreviewThermal.SetIntensity(m_Thermal.GetIntensity());
+    m_PreviewThermal.SetMode(m_Thermal.GetMode());
+    m_PreviewHalftone.SetEnabled(m_Halftone.IsEnabled());
+    m_PreviewHalftone.SetDotScale(m_Halftone.GetDotScale());
+    m_PreviewHalftone.SetMode(m_Halftone.GetMode());
 
-    // Mismo orden que RenderViewport().
+    m_PreviewVolumetricFog.SetEnabled(m_VolumetricFog.IsEnabled());
+    m_PreviewVolumetricFog.SetDensity(m_VolumetricFog.GetDensity());
+    m_PreviewVolumetricFog.SetSpeed(m_VolumetricFog.GetSpeed());
+    m_PreviewVolumetricFog.SetScale(m_VolumetricFog.GetScale());
+    m_PreviewVolumetricFog.SetColorMode(m_VolumetricFog.GetColorMode());
+
+    m_PreviewVolumetricClouds.SetEnabled(m_VolumetricClouds.IsEnabled());
+    m_PreviewVolumetricClouds.SetCoverage(m_VolumetricClouds.GetCoverage());
+    m_PreviewVolumetricClouds.SetDensity(m_VolumetricClouds.GetDensity());
+    m_PreviewVolumetricClouds.SetSpeed(m_VolumetricClouds.GetSpeed());
+    m_PreviewVolumetricClouds.SetSunIntensity(m_VolumetricClouds.GetSunIntensity());
+
+    m_PreviewZonedDistortion.SetEnabled(m_ZonedDistortion.IsEnabled());
+    m_PreviewZonedDistortion.SetIntensity(m_ZonedDistortion.GetIntensity());
+    m_PreviewZonedDistortion.SetSpeed(m_ZonedDistortion.GetSpeed());
+    m_PreviewZonedDistortion.SetZone(m_ZonedDistortion.GetZone());
+    m_PreviewZonedDistortion.SetFeather(m_ZonedDistortion.GetFeather());
+
+    double curTime = glfwGetTime();
     GLuint tex = srcTex;
+    if (m_PreviewColorGrading.IsEnabled())        tex = m_PreviewColorGrading.Process(tex);
     if (m_PreviewSaturation.IsEnabled())          tex = m_PreviewSaturation.Process(tex);
     if (m_PreviewContrast.IsEnabled())            tex = m_PreviewContrast.Process(tex);
     if (m_PreviewLuminosity.IsEnabled())          tex = m_PreviewLuminosity.Process(tex);
     if (m_PreviewCine.IsEnabled())                tex = m_PreviewCine.Process(tex);
+    if (m_PreviewThermal.IsEnabled())             tex = m_PreviewThermal.Process(tex, curTime);
     if (m_PreviewBloom.IsEnabled())               tex = m_PreviewBloom.Process(tex, w, h);
     if (m_PreviewSharpen.IsEnabled())             tex = m_PreviewSharpen.Process(tex, w, h);
     if (m_PreviewBlur.IsEnabled())                tex = m_PreviewBlur.Process(tex);
-    if (m_PreviewVHS.IsEnabled())                 tex = m_PreviewVHS.Process(tex, w, h, glfwGetTime());
+    if (m_PreviewWaves.IsEnabled())               tex = m_PreviewWaves.Process(tex, curTime);
+    if (m_PreviewZonedDistortion.IsEnabled())     tex = m_PreviewZonedDistortion.Process(tex, curTime);
+    if (m_PreviewVolumetricClouds.IsEnabled())    tex = m_PreviewVolumetricClouds.Process(tex, curTime);
+    if (m_PreviewVolumetricFog.IsEnabled())       tex = m_PreviewVolumetricFog.Process(tex, curTime);
+    if (m_PreviewRadialBlur.IsEnabled())          tex = m_PreviewRadialBlur.Process(tex);
+    if (m_PreviewPixelate.IsEnabled())            tex = m_PreviewPixelate.Process(tex, w, h);
+    if (m_PreviewHalftone.IsEnabled())            tex = m_PreviewHalftone.Process(tex, w, h);
+    if (m_PreviewMirror.IsEnabled())              tex = m_PreviewMirror.Process(tex);
+    if (m_PreviewGlitch.IsEnabled())              tex = m_PreviewGlitch.Process(tex, w, h, curTime);
+    if (m_PreviewVHS.IsEnabled())                 tex = m_PreviewVHS.Process(tex, w, h, curTime);
     if (m_PreviewCRT.IsEnabled())                 tex = m_PreviewCRT.Process(tex, w, h);
-    if (m_PreviewGrain.IsEnabled())               tex = m_PreviewGrain.Process(tex, glfwGetTime());
+    if (m_PreviewGrain.IsEnabled())               tex = m_PreviewGrain.Process(tex, curTime);
     if (m_PreviewVignette.IsEnabled())            tex = m_PreviewVignette.Process(tex);
     if (m_PreviewChromaticAberration.IsEnabled()) tex = m_PreviewChromaticAberration.Process(tex);
     if (m_PreviewTAA.IsEnabled())                 tex = m_PreviewTAA.Process(tex, w, h);

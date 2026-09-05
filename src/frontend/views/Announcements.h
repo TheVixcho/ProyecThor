@@ -5,7 +5,7 @@
 
 namespace ProyecThor::UI {
 
-class GlassRenderer; // fwd decl (ver GlassRenderer.h)
+class GlassRenderer;
 
 class Announcements {
 public:
@@ -20,8 +20,6 @@ public:
 
     bool IsLive() const { return m_IsLive && !m_Messages.empty(); }
 
-    // Para paneles externos (ej. ViewPanel > "Limpiar anuncios" o QuickNotes) que
-    // necesitan interactuar o agregar mensajes al banner.
     void SetLive(bool live) { m_IsLive = live; }
     void AddMessage(const std::string& text, const std::string& tag = "Anuncios", bool enabled = true);
 
@@ -30,12 +28,11 @@ private:
     const std::string& GetCurrentMessage() const;
     void               RenderNotesImportModal();
 
-    // Sincroniza la lista de fuentes desde disco via PresentationCore
     void SyncFontList();
 
     struct Message {
         char text[512] = {};
-        char tag[64]   = "Anuncios"; // "Anuncios", "Avisos", "Urgente", "Culto", "General"
+        char tag[64]   = "Anuncios";
         bool enabled   = true;
     };
 
@@ -58,22 +55,16 @@ private:
     float m_BgR = 0.04f, m_BgG = 0.04f, m_BgB = 0.08f, m_BgA = 0.82f;
     bool  m_ShowBg          = true;
 
-    // Modo 0: elegir estilo guardado existente
-    // Modo 1: editar fuente, tamaño y color inline
     int  m_StyleMode              = 0;
 
-    // Modo 0: nombre del estilo guardado seleccionado
     char m_AssignedStyleName[128] = {};
 
-    // Modo 1: propiedades editables inline
     float m_FontSize          = 48.0f;
     float m_TextColor[4]      = { 1.0f, 1.0f, 1.0f, 1.0f };
     int   m_SelectedFontIndex = 0;
 
-    // Lista de fuentes disponibles (sincronizada desde disco)
     std::vector<std::string> m_FontList;
 
-    // Popup de guardado de estilo inline
     char m_SaveStyleName[128] = {};
 
     bool m_IsLive = false;
@@ -82,4 +73,4 @@ private:
     bool                                  m_FirstFrame = true;
 };
 
-} // namespace ProyecThor::UI
+}

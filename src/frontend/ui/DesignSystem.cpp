@@ -216,7 +216,8 @@ bool GlassButton(const char* label, const ImVec2& size, ImU32 accent)
     ImVec2 tp(
         bMin.x + std::floor((sz.x - textSize.x) * 0.5f),
         bMin.y + std::floor((sz.y - textSize.y) * 0.5f));
-    dl->AddText(tp, textCol, label);
+    const char* text_end = ImGui::FindRenderedTextEnd(label);
+    dl->AddText(tp, textCol, label, text_end);
 
     return clicked;
 }

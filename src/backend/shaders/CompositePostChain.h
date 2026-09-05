@@ -13,6 +13,17 @@
 #include "PostProcessorContrast.h"
 #include "PostProcessorLuminosity.h"
 #include "PostProcessorTAA.h"
+#include "PostProcessorGlitch.h"
+#include "PostProcessorColorGrading.h"
+#include "PostProcessorPixelate.h"
+#include "PostProcessorRadialBlur.h"
+#include "PostProcessorWaves.h"
+#include "PostProcessorMirror.h"
+#include "PostProcessorThermal.h"
+#include "PostProcessorHalftone.h"
+#include "PostProcessorVolumetricFog.h"
+#include "PostProcessorVolumetricClouds.h"
+#include "PostProcessorZonedDistortion.h"
 #include <imgui.h>
 
 namespace ProyecThor::Shaders {
@@ -20,13 +31,7 @@ namespace ProyecThor::Shaders {
 // Cadena de post-proceso sobre el COMPOSITE completo de la ventana/viewport
 // "ProjectorLive" (fondo + overlays + texto + anuncios + captura, ya
 // dibujados por ImGui en su ImDrawData) — a diferencia de FSR, que sigue
-// viviendo en BackgroundLayer y solo escala el fondo antes de componer (ver
-// PostProcessorFSR.h para la justificacion de por que no se unifican).
-//
-// Se usa desde el override de ImGuiPlatformIO::Renderer_RenderWindow en
-// main.cpp: cuando el viewport que esta por dibujarse es "ProjectorLive",
-// PresentationCore::RenderProjectorViewportPostFX() delega aca en vez de
-// dejar que corra el renderer default de ImGui.
+// viviendo en BackgroundLayer y solo escala el fondo antes de componer.
 class CompositePostChain {
 public:
     CompositePostChain()  = default;
@@ -105,34 +110,114 @@ public:
     void SetTAAIntensity(float v)           { m_TAA.SetIntensity(v); }
     float GetTAAIntensity() const           { return m_TAA.GetIntensity(); }
 
+    // ── Nuevos Efectos de Shaders ──────────────────────────────────────────
+    void SetGlitchEnabled(bool e)           { m_Glitch.SetEnabled(e); }
+    bool GetGlitchEnabled() const           { return m_Glitch.IsEnabled(); }
+    void SetGlitchIntensity(float v)        { m_Glitch.SetIntensity(v); }
+    float GetGlitchIntensity() const        { return m_Glitch.GetIntensity(); }
+    void SetGlitchSpeed(float v)            { m_Glitch.SetSpeed(v); }
+    float GetGlitchSpeed() const            { return m_Glitch.GetSpeed(); }
+    void SetGlitchMode(int m)               { m_Glitch.SetMode(m); }
+    int  GetGlitchMode() const              { return m_Glitch.GetMode(); }
+
+    void SetColorGradingEnabled(bool e)     { m_ColorGrading.SetEnabled(e); }
+    bool GetColorGradingEnabled() const     { return m_ColorGrading.IsEnabled(); }
+    void SetColorGradingIntensity(float v)  { m_ColorGrading.SetIntensity(v); }
+    float GetColorGradingIntensity() const  { return m_ColorGrading.GetIntensity(); }
+    void SetColorGradingPreset(int p)       { m_ColorGrading.SetPreset(p); }
+    int  GetColorGradingPreset() const      { return m_ColorGrading.GetPreset(); }
+
+    void SetPixelateEnabled(bool e)         { m_Pixelate.SetEnabled(e); }
+    bool GetPixelateEnabled() const         { return m_Pixelate.IsEnabled(); }
+    void SetPixelateSize(float v)           { m_Pixelate.SetPixelSize(v); }
+    float GetPixelateSize() const           { return m_Pixelate.GetPixelSize(); }
+    void SetPixelateColorDepth(int d)       { m_Pixelate.SetColorDepth(d); }
+    int  GetPixelateColorDepth() const      { return m_Pixelate.GetColorDepth(); }
+
+    void SetRadialBlurEnabled(bool e)       { m_RadialBlur.SetEnabled(e); }
+    bool GetRadialBlurEnabled() const       { return m_RadialBlur.IsEnabled(); }
+    void SetRadialBlurIntensity(float v)    { m_RadialBlur.SetIntensity(v); }
+    float GetRadialBlurIntensity() const    { return m_RadialBlur.GetIntensity(); }
+
+    void SetWavesEnabled(bool e)            { m_Waves.SetEnabled(e); }
+    bool GetWavesEnabled() const            { return m_Waves.IsEnabled(); }
+    void SetWavesIntensity(float v)         { m_Waves.SetIntensity(v); }
+    float GetWavesIntensity() const         { return m_Waves.GetIntensity(); }
+    void SetWavesSpeed(float v)             { m_Waves.SetSpeed(v); }
+    float GetWavesSpeed() const             { return m_Waves.GetSpeed(); }
+    void SetWavesFrequency(float v)         { m_Waves.SetFrequency(v); }
+    float GetWavesFrequency() const         { return m_Waves.GetFrequency(); }
+
+    void SetMirrorEnabled(bool e)           { m_Mirror.SetEnabled(e); }
+    bool GetMirrorEnabled() const           { return m_Mirror.IsEnabled(); }
+    void SetMirrorMode(int m)               { m_Mirror.SetMode(m); }
+    int  GetMirrorMode() const              { return m_Mirror.GetMode(); }
+
+    void SetThermalEnabled(bool e)          { m_Thermal.SetEnabled(e); }
+    bool GetThermalEnabled() const          { return m_Thermal.IsEnabled(); }
+    void SetThermalIntensity(float v)       { m_Thermal.SetIntensity(v); }
+    float GetThermalIntensity() const       { return m_Thermal.GetIntensity(); }
+    void SetThermalMode(int m)              { m_Thermal.SetMode(m); }
+    int  GetThermalMode() const             { return m_Thermal.GetMode(); }
+
+    void SetHalftoneEnabled(bool e)         { m_Halftone.SetEnabled(e); }
+    bool GetHalftoneEnabled() const         { return m_Halftone.IsEnabled(); }
+    void SetHalftoneDotScale(float v)       { m_Halftone.SetDotScale(v); }
+    float GetHalftoneDotScale() const       { return m_Halftone.GetDotScale(); }
+    void SetHalftoneMode(int m)             { m_Halftone.SetMode(m); }
+    int  GetHalftoneMode() const            { return m_Halftone.GetMode(); }
+
+    // ── Efectos Volumétricos y por Zonas ────────────────────────────────────
+    void SetVolumetricFogEnabled(bool e)         { m_VolumetricFog.SetEnabled(e); }
+    bool GetVolumetricFogEnabled() const         { return m_VolumetricFog.IsEnabled(); }
+    void SetVolumetricFogDensity(float v)        { m_VolumetricFog.SetDensity(v); }
+    float GetVolumetricFogDensity() const        { return m_VolumetricFog.GetDensity(); }
+    void SetVolumetricFogSpeed(float v)          { m_VolumetricFog.SetSpeed(v); }
+    float GetVolumetricFogSpeed() const          { return m_VolumetricFog.GetSpeed(); }
+    void SetVolumetricFogScale(float v)          { m_VolumetricFog.SetScale(v); }
+    float GetVolumetricFogScale() const          { return m_VolumetricFog.GetScale(); }
+    void SetVolumetricFogColorMode(int m)        { m_VolumetricFog.SetColorMode(m); }
+    int  GetVolumetricFogColorMode() const       { return m_VolumetricFog.GetColorMode(); }
+
+    void SetVolumetricCloudsEnabled(bool e)      { m_VolumetricClouds.SetEnabled(e); }
+    bool GetVolumetricCloudsEnabled() const      { return m_VolumetricClouds.IsEnabled(); }
+    void SetVolumetricCloudsCoverage(float v)    { m_VolumetricClouds.SetCoverage(v); }
+    float GetVolumetricCloudsCoverage() const    { return m_VolumetricClouds.GetCoverage(); }
+    void SetVolumetricCloudsDensity(float v)     { m_VolumetricClouds.SetDensity(v); }
+    float GetVolumetricCloudsDensity() const     { return m_VolumetricClouds.GetDensity(); }
+    void SetVolumetricCloudsSpeed(float v)       { m_VolumetricClouds.SetSpeed(v); }
+    float GetVolumetricCloudsSpeed() const       { return m_VolumetricClouds.GetSpeed(); }
+    void SetVolumetricCloudsSunIntensity(float v){ m_VolumetricClouds.SetSunIntensity(v); }
+    float GetVolumetricCloudsSunIntensity() const{ return m_VolumetricClouds.GetSunIntensity(); }
+
+    void SetZonedDistortionEnabled(bool e)       { m_ZonedDistortion.SetEnabled(e); }
+    bool GetZonedDistortionEnabled() const       { return m_ZonedDistortion.IsEnabled(); }
+    void SetZonedDistortionIntensity(float v)    { m_ZonedDistortion.SetIntensity(v); }
+    float GetZonedDistortionIntensity() const    { return m_ZonedDistortion.GetIntensity(); }
+    void SetZonedDistortionSpeed(float v)        { m_ZonedDistortion.SetSpeed(v); }
+    float GetZonedDistortionSpeed() const        { return m_ZonedDistortion.GetSpeed(); }
+    void SetZonedDistortionZone(int z)           { m_ZonedDistortion.SetZone(z); }
+    int  GetZonedDistortionZone() const          { return m_ZonedDistortion.GetZone(); }
+    void SetZonedDistortionFeather(float v)      { m_ZonedDistortion.SetFeather(v); }
+    float GetZonedDistortionFeather() const      { return m_ZonedDistortion.GetFeather(); }
+
     bool AnyEnabled() const {
         return m_CRT.IsEnabled() || m_Grain.IsEnabled() || m_FXAA.IsEnabled() ||
                m_Saturation.IsEnabled() || m_Vignette.IsEnabled() ||
                m_Blur.IsEnabled() || m_Sharpen.IsEnabled() || m_Bloom.IsEnabled() ||
                m_ChromaticAberration.IsEnabled() ||
                m_VHS.IsEnabled() || m_Cine.IsEnabled() || m_Contrast.IsEnabled() ||
-               m_Luminosity.IsEnabled() || m_TAA.IsEnabled();
+               m_Luminosity.IsEnabled() || m_TAA.IsEnabled() ||
+               m_Glitch.IsEnabled() || m_ColorGrading.IsEnabled() ||
+               m_Pixelate.IsEnabled() || m_RadialBlur.IsEnabled() ||
+               m_Waves.IsEnabled() || m_Mirror.IsEnabled() ||
+               m_Thermal.IsEnabled() || m_Halftone.IsEnabled() ||
+               m_VolumetricFog.IsEnabled() || m_VolumetricClouds.IsEnabled() ||
+               m_ZonedDistortion.IsEnabled();
     }
 
-    // Aplica la MISMA cadena de efectos (mismo habilitado/intensidad que
-    // arriba) a una textura arbitraria, en SU PROPIA resolucion chica --
-    // pensado para el preview del operador (ViewPanel/Monitor de Control),
-    // que antes SIEMPRE mostraba el fondo crudo (sin CRT/Grano/FXAA/
-    // Saturación/Viñetado) porque esos solo corrian sobre el composite
-    // completo de la viewport "ProjectorLive" real, nunca sobre el recuadro
-    // chico del preview. Usa instancias PROPIAS (ver m_Preview*, mas abajo)
-    // en vez de las de arriba: esas ya estan dimensionadas a la resolucion
-    // COMPLETA del proyector, y correr esa cadena una segunda vez a full-res
-    // solo para alimentar un recuadro chico seria carisimo de mas. Devuelve
-    // srcTex sin cambios si nada esta activo (costo cero en ese caso).
     GLuint ProcessBackgroundForPreview(GLuint srcTex, int w, int h);
 
-    // Llamado desde el override de Renderer_RenderWindow, con el contexto GL
-    // de esa viewport ya activo (ver PresentationCore::
-    // RenderProjectorViewportPostFX). defaultRenderFn es el renderer
-    // original de ImGui (ImGui_ImplOpenGL3_RenderWindow), usado tal cual
-    // cuando ningun efecto esta activo (costo cero) y como "capturador" del
-    // composite cuando si.
     void RenderViewport(ImGuiViewport* viewport,
                         void (*defaultRenderFn)(ImGuiViewport*, void*));
 
@@ -159,9 +244,19 @@ private:
     PostProcessorContrast    m_Contrast;
     PostProcessorLuminosity  m_Luminosity;
     PostProcessorTAA         m_TAA;
+    PostProcessorGlitch      m_Glitch;
+    PostProcessorColorGrading m_ColorGrading;
+    PostProcessorPixelate    m_Pixelate;
+    PostProcessorRadialBlur  m_RadialBlur;
+    PostProcessorWaves       m_Waves;
+    PostProcessorMirror      m_Mirror;
+    PostProcessorThermal     m_Thermal;
+    PostProcessorHalftone    m_Halftone;
+    PostProcessorVolumetricFog    m_VolumetricFog;
+    PostProcessorVolumetricClouds m_VolumetricClouds;
+    PostProcessorZonedDistortion  m_ZonedDistortion;
 
-    // Segundo juego de las mismas, a resolucion de PREVIEW -- ver
-    // ProcessBackgroundForPreview().
+    // Segundo juego de las mismas, a resolucion de PREVIEW
     PostProcessorCRT        m_PreviewCRT;
     PostProcessorGrain      m_PreviewGrain;
     PostProcessorFXAA       m_PreviewFXAA;
@@ -176,6 +271,17 @@ private:
     PostProcessorContrast    m_PreviewContrast;
     PostProcessorLuminosity  m_PreviewLuminosity;
     PostProcessorTAA         m_PreviewTAA;
+    PostProcessorGlitch      m_PreviewGlitch;
+    PostProcessorColorGrading m_PreviewColorGrading;
+    PostProcessorPixelate    m_PreviewPixelate;
+    PostProcessorRadialBlur  m_PreviewRadialBlur;
+    PostProcessorWaves       m_PreviewWaves;
+    PostProcessorMirror      m_PreviewMirror;
+    PostProcessorThermal     m_PreviewThermal;
+    PostProcessorHalftone    m_PreviewHalftone;
+    PostProcessorVolumetricFog    m_PreviewVolumetricFog;
+    PostProcessorVolumetricClouds m_PreviewVolumetricClouds;
+    PostProcessorZonedDistortion  m_PreviewZonedDistortion;
     int  m_PreviewW = 0, m_PreviewH = 0;
     bool m_PreviewInitialized = false;
 
@@ -188,3 +294,4 @@ private:
 };
 
 } // namespace ProyecThor::Shaders
+

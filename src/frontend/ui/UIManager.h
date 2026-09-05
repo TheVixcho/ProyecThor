@@ -254,6 +254,12 @@ private:
     // aplicar uno sin salir de donde este el operador.
     void RenderStylesPopup();
 
+    // Ventana flotante "Centro de Conexiones" (Red LAN, App Móvil, Transmisión, OSC, Chat)
+    void ToggleConnectionsWindow() { m_ShowConnectionsWindow = !m_ShowConnectionsWindow; }
+    void RenderConnectionsWindow();
+    bool m_ShowConnectionsWindow = false;
+    int  m_ConnectionsActiveTab   = 0;
+
     // Ver comentario de los getters (GetRedPanel/GetChatPanel/GetBroadcastPanel/GetOSCPanel).
     StreamingPanel m_Red;
     TeamChatPanel  m_Chat;

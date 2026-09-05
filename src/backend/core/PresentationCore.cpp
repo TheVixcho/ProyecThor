@@ -80,7 +80,7 @@ namespace ProyecThor::Core {
         DestroyAllSecondaryWindows();
     }
 LibrarySelection PresentationCore::GetSelection() {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         LibrarySelection sel  = m_CurrentSelection;
         m_CurrentSelection.title = "";
         m_CurrentSelection.type  = ItemType::None;
@@ -89,12 +89,12 @@ LibrarySelection PresentationCore::GetSelection() {
     }
 
     LibrarySelection PresentationCore::PeekSelection() {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         return m_CurrentSelection;
     }
 
 void PresentationCore::SetLiveQuickNote(const std::string& text, const float* /*colorOverride*/) {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     m_State.currentText   = text;
     m_State.showText      = !text.empty();
     m_State.showQuickNote = true;
@@ -109,7 +109,7 @@ void PresentationCore::SetLiveQuickNote(const std::string& text, const float* /*
 }
 
 void PresentationCore::ClearQuickNote() {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     m_State.currentText   = "";
     m_State.showText      = false;
     m_State.showQuickNote = false;
@@ -118,7 +118,7 @@ void PresentationCore::ClearQuickNote() {
 }
 
     void PresentationCore::SetLiveQuickNoteLAN(const std::string& text, const float* colorOverride, const std::string& styleName) {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_State.lanQuickNoteText = text;
         m_State.showLanQuickNote = !text.empty();
         m_LiveQuickNoteLANStyleName = styleName;
@@ -130,7 +130,7 @@ void PresentationCore::ClearQuickNote() {
     }
 
     void PresentationCore::ClearQuickNoteLAN() {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_State.lanQuickNoteText = "";
         m_State.showLanQuickNote = false;
         m_LiveQuickNoteLANStyleName.clear();
@@ -139,23 +139,23 @@ void PresentationCore::ClearQuickNote() {
     }
 
     void PresentationCore::PushRemoteClockTitle(const std::string& text) {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_PendingClockTitles.push_back(text);
     }
 
     std::vector<std::string> PresentationCore::DrainRemoteClockTitles() {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         std::vector<std::string> out;
         out.swap(m_PendingClockTitles);
         return out;
     }
 
     PresentationState PresentationCore::GetState() {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         return m_State;
     }
 void PresentationCore::SetGlobalMute(bool mute) {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     m_GlobalMuted = mute;
 }
 
@@ -196,7 +196,7 @@ bool PresentationCore::GetGlobalMute() const {
 
     void PresentationCore::ClearSelection() {
         {
-            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             m_CurrentSelection = LibrarySelection{};
             m_SelectionFromQueue = false;
             ++m_StreamVersion;
@@ -217,7 +217,7 @@ bool PresentationCore::GetGlobalMute() const {
         // 2. Comprobar si la seleccion actual contiene la ruta o nombre del archivo
         bool clearSel = false;
         {
-            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             std::string normSel = m_CurrentSelection.title;
             std::replace(normSel.begin(), normSel.end(), '\\', '/');
             std::transform(normSel.begin(), normSel.end(), normSel.begin(),
@@ -234,7 +234,7 @@ bool PresentationCore::GetGlobalMute() const {
         // 3. Comprobar si el fondo en vivo esta reproduciendo este archivo
         bool stopBg = false;
         {
-            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             std::string normBg = m_State.bgPath;
             std::replace(normBg.begin(), normBg.end(), '\\', '/');
             std::transform(normBg.begin(), normBg.end(), normBg.begin(),
@@ -576,6 +576,332 @@ bool PresentationCore::GetGlobalMute() const {
         return m_Impl ? m_Impl->compositeFX.GetTAAIntensity() : 0.5f;
     }
 
+    void PresentationCore::SetGlitchEnabled(bool enabled) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetGlitchEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetGlitchEnabled(enabled);
+    }
+    bool PresentationCore::GetGlitchEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetGlitchEnabled() : false;
+    }
+    void PresentationCore::SetGlitchIntensity(float intensity) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetGlitchIntensity(intensity);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetGlitchIntensity(intensity);
+    }
+    float PresentationCore::GetGlitchIntensity() const {
+        return m_Impl ? m_Impl->compositeFX.GetGlitchIntensity() : 0.40f;
+    }
+    void PresentationCore::SetGlitchSpeed(float speed) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetGlitchSpeed(speed);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetGlitchSpeed(speed);
+    }
+    float PresentationCore::GetGlitchSpeed() const {
+        return m_Impl ? m_Impl->compositeFX.GetGlitchSpeed() : 1.0f;
+    }
+    void PresentationCore::SetGlitchMode(int mode) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetGlitchMode(mode);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetGlitchMode(mode);
+    }
+    int PresentationCore::GetGlitchMode() const {
+        return m_Impl ? m_Impl->compositeFX.GetGlitchMode() : 0;
+    }
+
+    void PresentationCore::SetColorGradingEnabled(bool enabled) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetColorGradingEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetColorGradingEnabled(enabled);
+    }
+    bool PresentationCore::GetColorGradingEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetColorGradingEnabled() : false;
+    }
+    void PresentationCore::SetColorGradingIntensity(float intensity) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetColorGradingIntensity(intensity);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetColorGradingIntensity(intensity);
+    }
+    float PresentationCore::GetColorGradingIntensity() const {
+        return m_Impl ? m_Impl->compositeFX.GetColorGradingIntensity() : 0.75f;
+    }
+    void PresentationCore::SetColorGradingPreset(int preset) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetColorGradingPreset(preset);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetColorGradingPreset(preset);
+    }
+    int PresentationCore::GetColorGradingPreset() const {
+        return m_Impl ? m_Impl->compositeFX.GetColorGradingPreset() : 1;
+    }
+
+    void PresentationCore::SetPixelateEnabled(bool enabled) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetPixelateEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetPixelateEnabled(enabled);
+    }
+    bool PresentationCore::GetPixelateEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetPixelateEnabled() : false;
+    }
+    void PresentationCore::SetPixelateSize(float size) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetPixelateSize(size);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetPixelateSize(size);
+    }
+    float PresentationCore::GetPixelateSize() const {
+        return m_Impl ? m_Impl->compositeFX.GetPixelateSize() : 12.0f;
+    }
+    void PresentationCore::SetPixelateColorDepth(int depth) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetPixelateColorDepth(depth);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetPixelateColorDepth(depth);
+    }
+    int PresentationCore::GetPixelateColorDepth() const {
+        return m_Impl ? m_Impl->compositeFX.GetPixelateColorDepth() : 0;
+    }
+
+    void PresentationCore::SetRadialBlurEnabled(bool enabled) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetRadialBlurEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetRadialBlurEnabled(enabled);
+    }
+    bool PresentationCore::GetRadialBlurEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetRadialBlurEnabled() : false;
+    }
+    void PresentationCore::SetRadialBlurIntensity(float intensity) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetRadialBlurIntensity(intensity);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetRadialBlurIntensity(intensity);
+    }
+    float PresentationCore::GetRadialBlurIntensity() const {
+        return m_Impl ? m_Impl->compositeFX.GetRadialBlurIntensity() : 0.35f;
+    }
+
+    void PresentationCore::SetWavesEnabled(bool enabled) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetWavesEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetWavesEnabled(enabled);
+    }
+    bool PresentationCore::GetWavesEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetWavesEnabled() : false;
+    }
+    void PresentationCore::SetWavesIntensity(float intensity) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetWavesIntensity(intensity);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetWavesIntensity(intensity);
+    }
+    float PresentationCore::GetWavesIntensity() const {
+        return m_Impl ? m_Impl->compositeFX.GetWavesIntensity() : 0.35f;
+    }
+    void PresentationCore::SetWavesSpeed(float speed) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetWavesSpeed(speed);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetWavesSpeed(speed);
+    }
+    float PresentationCore::GetWavesSpeed() const {
+        return m_Impl ? m_Impl->compositeFX.GetWavesSpeed() : 1.0f;
+    }
+    void PresentationCore::SetWavesFrequency(float freq) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetWavesFrequency(freq);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetWavesFrequency(freq);
+    }
+    float PresentationCore::GetWavesFrequency() const {
+        return m_Impl ? m_Impl->compositeFX.GetWavesFrequency() : 8.0f;
+    }
+
+    void PresentationCore::SetMirrorEnabled(bool enabled) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetMirrorEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetMirrorEnabled(enabled);
+    }
+    bool PresentationCore::GetMirrorEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetMirrorEnabled() : false;
+    }
+    void PresentationCore::SetMirrorMode(int mode) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetMirrorMode(mode);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetMirrorMode(mode);
+    }
+    int PresentationCore::GetMirrorMode() const {
+        return m_Impl ? m_Impl->compositeFX.GetMirrorMode() : 0;
+    }
+
+    void PresentationCore::SetThermalEnabled(bool enabled) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetThermalEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetThermalEnabled(enabled);
+    }
+    bool PresentationCore::GetThermalEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetThermalEnabled() : false;
+    }
+    void PresentationCore::SetThermalIntensity(float intensity) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetThermalIntensity(intensity);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetThermalIntensity(intensity);
+    }
+    float PresentationCore::GetThermalIntensity() const {
+        return m_Impl ? m_Impl->compositeFX.GetThermalIntensity() : 0.85f;
+    }
+    void PresentationCore::SetThermalMode(int mode) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetThermalMode(mode);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetThermalMode(mode);
+    }
+    int PresentationCore::GetThermalMode() const {
+        return m_Impl ? m_Impl->compositeFX.GetThermalMode() : 0;
+    }
+
+    void PresentationCore::SetHalftoneEnabled(bool enabled) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetHalftoneEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetHalftoneEnabled(enabled);
+    }
+    bool PresentationCore::GetHalftoneEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetHalftoneEnabled() : false;
+    }
+    void PresentationCore::SetHalftoneDotScale(float scale) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetHalftoneDotScale(scale);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetHalftoneDotScale(scale);
+    }
+    float PresentationCore::GetHalftoneDotScale() const {
+        return m_Impl ? m_Impl->compositeFX.GetHalftoneDotScale() : 10.0f;
+    }
+    void PresentationCore::SetHalftoneMode(int mode) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetHalftoneMode(mode);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetHalftoneMode(mode);
+    }
+    int PresentationCore::GetHalftoneMode() const {
+        return m_Impl ? m_Impl->compositeFX.GetHalftoneMode() : 0;
+    }
+
+    // ── Volumetric Fog ──
+    void PresentationCore::SetVolumetricFogEnabled(bool enabled) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetVolumetricFogEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetVolumetricFogEnabled(enabled);
+    }
+    bool PresentationCore::GetVolumetricFogEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetVolumetricFogEnabled() : false;
+    }
+    void PresentationCore::SetVolumetricFogDensity(float density) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetVolumetricFogDensity(density);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetVolumetricFogDensity(density);
+    }
+    float PresentationCore::GetVolumetricFogDensity() const {
+        return m_Impl ? m_Impl->compositeFX.GetVolumetricFogDensity() : 0.50f;
+    }
+    void PresentationCore::SetVolumetricFogSpeed(float speed) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetVolumetricFogSpeed(speed);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetVolumetricFogSpeed(speed);
+    }
+    float PresentationCore::GetVolumetricFogSpeed() const {
+        return m_Impl ? m_Impl->compositeFX.GetVolumetricFogSpeed() : 1.0f;
+    }
+    void PresentationCore::SetVolumetricFogScale(float scale) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetVolumetricFogScale(scale);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetVolumetricFogScale(scale);
+    }
+    float PresentationCore::GetVolumetricFogScale() const {
+        return m_Impl ? m_Impl->compositeFX.GetVolumetricFogScale() : 3.5f;
+    }
+    void PresentationCore::SetVolumetricFogColorMode(int mode) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetVolumetricFogColorMode(mode);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetVolumetricFogColorMode(mode);
+    }
+    int PresentationCore::GetVolumetricFogColorMode() const {
+        return m_Impl ? m_Impl->compositeFX.GetVolumetricFogColorMode() : 0;
+    }
+
+    // ── Volumetric Clouds ──
+    void PresentationCore::SetVolumetricCloudsEnabled(bool enabled) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetVolumetricCloudsEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetVolumetricCloudsEnabled(enabled);
+    }
+    bool PresentationCore::GetVolumetricCloudsEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetVolumetricCloudsEnabled() : false;
+    }
+    void PresentationCore::SetVolumetricCloudsCoverage(float coverage) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetVolumetricCloudsCoverage(coverage);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetVolumetricCloudsCoverage(coverage);
+    }
+    float PresentationCore::GetVolumetricCloudsCoverage() const {
+        return m_Impl ? m_Impl->compositeFX.GetVolumetricCloudsCoverage() : 0.55f;
+    }
+    void PresentationCore::SetVolumetricCloudsDensity(float density) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetVolumetricCloudsDensity(density);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetVolumetricCloudsDensity(density);
+    }
+    float PresentationCore::GetVolumetricCloudsDensity() const {
+        return m_Impl ? m_Impl->compositeFX.GetVolumetricCloudsDensity() : 0.60f;
+    }
+    void PresentationCore::SetVolumetricCloudsSpeed(float speed) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetVolumetricCloudsSpeed(speed);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetVolumetricCloudsSpeed(speed);
+    }
+    float PresentationCore::GetVolumetricCloudsSpeed() const {
+        return m_Impl ? m_Impl->compositeFX.GetVolumetricCloudsSpeed() : 0.80f;
+    }
+    void PresentationCore::SetVolumetricCloudsSunIntensity(float intensity) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetVolumetricCloudsSunIntensity(intensity);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetVolumetricCloudsSunIntensity(intensity);
+    }
+    float PresentationCore::GetVolumetricCloudsSunIntensity() const {
+        return m_Impl ? m_Impl->compositeFX.GetVolumetricCloudsSunIntensity() : 0.65f;
+    }
+
+    // ── Zoned Distortion ──
+    void PresentationCore::SetZonedDistortionEnabled(bool enabled) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetZonedDistortionEnabled(enabled);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetZonedDistortionEnabled(enabled);
+    }
+    bool PresentationCore::GetZonedDistortionEnabled() const {
+        return m_Impl ? m_Impl->compositeFX.GetZonedDistortionEnabled() : false;
+    }
+    void PresentationCore::SetZonedDistortionIntensity(float intensity) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetZonedDistortionIntensity(intensity);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetZonedDistortionIntensity(intensity);
+    }
+    float PresentationCore::GetZonedDistortionIntensity() const {
+        return m_Impl ? m_Impl->compositeFX.GetZonedDistortionIntensity() : 0.45f;
+    }
+    void PresentationCore::SetZonedDistortionSpeed(float speed) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetZonedDistortionSpeed(speed);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetZonedDistortionSpeed(speed);
+    }
+    float PresentationCore::GetZonedDistortionSpeed() const {
+        return m_Impl ? m_Impl->compositeFX.GetZonedDistortionSpeed() : 1.20f;
+    }
+    void PresentationCore::SetZonedDistortionZone(int zone) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetZonedDistortionZone(zone);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetZonedDistortionZone(zone);
+    }
+    int PresentationCore::GetZonedDistortionZone() const {
+        return m_Impl ? m_Impl->compositeFX.GetZonedDistortionZone() : 0;
+    }
+    void PresentationCore::SetZonedDistortionFeather(float feather) {
+        if (!m_Impl) return;
+        m_Impl->compositeFX.SetZonedDistortionFeather(feather);
+        for (auto& [id, chain] : m_Impl->extraCompositeFX) chain->SetZonedDistortionFeather(feather);
+    }
+    float PresentationCore::GetZonedDistortionFeather() const {
+        return m_Impl ? m_Impl->compositeFX.GetZonedDistortionFeather() : 0.35f;
+    }
+
     void PresentationCore::SetProjectorPostFXViewportID(ImGuiID id) {
         m_ProjectorPostFXViewportID = id;
     }
@@ -617,10 +943,6 @@ bool PresentationCore::GetGlobalMute() const {
 
         auto chain = std::make_unique<Shaders::CompositePostChain>();
         const auto& src = m_Impl->compositeFX;
-        // Copia los 14 ajustes actuales del primario para que el monitor
-        // extra arranque con la MISMA configuracion (paridad total, ver
-        // los 14 setters de arriba, que a partir de ahora tambien escriben
-        // en este mapa para que se mantenga sincronizado).
         chain->SetCRTEnabled(src.GetCRTEnabled());
         chain->SetCRTScanlineIntensity(src.GetCRTScanlineIntensity());
         chain->SetGrainEnabled(src.GetGrainEnabled());
@@ -649,6 +971,45 @@ bool PresentationCore::GetGlobalMute() const {
         chain->SetLuminosityAmount(src.GetLuminosityAmount());
         chain->SetTAAEnabled(src.GetTAAEnabled());
         chain->SetTAAIntensity(src.GetTAAIntensity());
+        chain->SetGlitchEnabled(src.GetGlitchEnabled());
+        chain->SetGlitchIntensity(src.GetGlitchIntensity());
+        chain->SetGlitchSpeed(src.GetGlitchSpeed());
+        chain->SetGlitchMode(src.GetGlitchMode());
+        chain->SetColorGradingEnabled(src.GetColorGradingEnabled());
+        chain->SetColorGradingIntensity(src.GetColorGradingIntensity());
+        chain->SetColorGradingPreset(src.GetColorGradingPreset());
+        chain->SetPixelateEnabled(src.GetPixelateEnabled());
+        chain->SetPixelateSize(src.GetPixelateSize());
+        chain->SetPixelateColorDepth(src.GetPixelateColorDepth());
+        chain->SetRadialBlurEnabled(src.GetRadialBlurEnabled());
+        chain->SetRadialBlurIntensity(src.GetRadialBlurIntensity());
+        chain->SetWavesEnabled(src.GetWavesEnabled());
+        chain->SetWavesIntensity(src.GetWavesIntensity());
+        chain->SetWavesSpeed(src.GetWavesSpeed());
+        chain->SetWavesFrequency(src.GetWavesFrequency());
+        chain->SetMirrorEnabled(src.GetMirrorEnabled());
+        chain->SetMirrorMode(src.GetMirrorMode());
+        chain->SetThermalEnabled(src.GetThermalEnabled());
+        chain->SetThermalIntensity(src.GetThermalIntensity());
+        chain->SetThermalMode(src.GetThermalMode());
+        chain->SetHalftoneEnabled(src.GetHalftoneEnabled());
+        chain->SetHalftoneDotScale(src.GetHalftoneDotScale());
+        chain->SetHalftoneMode(src.GetHalftoneMode());
+        chain->SetVolumetricFogEnabled(src.GetVolumetricFogEnabled());
+        chain->SetVolumetricFogDensity(src.GetVolumetricFogDensity());
+        chain->SetVolumetricFogSpeed(src.GetVolumetricFogSpeed());
+        chain->SetVolumetricFogScale(src.GetVolumetricFogScale());
+        chain->SetVolumetricFogColorMode(src.GetVolumetricFogColorMode());
+        chain->SetVolumetricCloudsEnabled(src.GetVolumetricCloudsEnabled());
+        chain->SetVolumetricCloudsCoverage(src.GetVolumetricCloudsCoverage());
+        chain->SetVolumetricCloudsDensity(src.GetVolumetricCloudsDensity());
+        chain->SetVolumetricCloudsSpeed(src.GetVolumetricCloudsSpeed());
+        chain->SetVolumetricCloudsSunIntensity(src.GetVolumetricCloudsSunIntensity());
+        chain->SetZonedDistortionEnabled(src.GetZonedDistortionEnabled());
+        chain->SetZonedDistortionIntensity(src.GetZonedDistortionIntensity());
+        chain->SetZonedDistortionSpeed(src.GetZonedDistortionSpeed());
+        chain->SetZonedDistortionZone(src.GetZonedDistortionZone());
+        chain->SetZonedDistortionFeather(src.GetZonedDistortionFeather());
 
         map[id] = std::move(chain);
     }
@@ -792,7 +1153,7 @@ bool PresentationCore::GetGlobalMute() const {
         });
 
         if (ok) {
-            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             m_State.targetMonitorIndex = monitorIndex;
         }
         return ok;
@@ -829,7 +1190,7 @@ void PresentationCore::SetBgTypeLocked(PresentationState::BackgroundType newType
 
 void PresentationCore::SetBackgroundMedia(const std::string& path, bool /*isVideo*/, bool allowAudio) {
     {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_State.bgPath = path;
         SetBgTypeLocked(PresentationState::BackgroundType::Video);
         ++m_State.transitionTrigger;   // NUEVO
@@ -847,7 +1208,7 @@ bool PresentationCore::GetContentAllowsAudio() const {
 
 void PresentationCore::StopBackgroundMedia() {
     {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_State.bgPath     = "";
         SetBgTypeLocked(PresentationState::BackgroundType::SolidColor);
         m_State.bgColor[0] = 0.0f; m_State.bgColor[1] = 0.0f; m_State.bgColor[2] = 0.0f;
@@ -860,7 +1221,7 @@ void PresentationCore::StopBackgroundMedia() {
 // Ver comentario en el header (junto a la declaracion) para el porque.
 void PresentationCore::SetBackgroundAudio() {
     {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_State.bgPath = "";
         SetBgTypeLocked(PresentationState::BackgroundType::Audio);
         ++m_State.transitionTrigger;
@@ -898,7 +1259,7 @@ void PresentationCore::SetBackgroundAudio() {
         m_Impl->overlayTexW = w;
         m_Impl->overlayTexH = h;
 
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_OverlayPath = pngPath;
         m_HasOverlay  = true;
     }
@@ -911,18 +1272,18 @@ void PresentationCore::SetBackgroundAudio() {
             m_Impl->overlayTexW = 0;
             m_Impl->overlayTexH = 0;
         }
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_OverlayPath.clear();
         m_HasOverlay = false;
     }
 
     bool PresentationCore::HasOverlay() const {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         return m_HasOverlay;
     }
 
     std::string PresentationCore::GetOverlayPath() const {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         return m_OverlayPath;
     }
 
@@ -933,7 +1294,7 @@ void PresentationCore::SetBackgroundAudio() {
 
     void PresentationCore::SetOverlayClockLayer(bool hasClock, const ProyecThor::UI::OverlayLayer& layer,
                                                  int canvasW, int canvasH) {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_HasOverlayClockLayer = hasClock;
         m_OverlayClockLayer    = layer;
         m_OverlayClockCanvasW  = canvasW;
@@ -941,27 +1302,27 @@ void PresentationCore::SetBackgroundAudio() {
     }
 
     bool PresentationCore::HasOverlayClockLayer() const {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         return m_HasOverlayClockLayer;
     }
 
     ProyecThor::UI::OverlayLayer PresentationCore::GetOverlayClockLayer() const {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         return m_OverlayClockLayer;
     }
 
     int PresentationCore::GetOverlayClockCanvasW() const {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         return m_OverlayClockCanvasW;
     }
 
     int PresentationCore::GetOverlayClockCanvasH() const {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         return m_OverlayClockCanvasH;
     }
 
     void PresentationCore::SetLiveOverlayClockText(const std::string& text, const float* colorOverride) {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_LiveOverlayClockText = text;
         m_HasLiveOverlayClockColorOverride = (colorOverride != nullptr);
         if (colorOverride) {
@@ -970,17 +1331,17 @@ void PresentationCore::SetBackgroundAudio() {
     }
 
     std::string PresentationCore::GetLiveOverlayClockText() const {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         return m_LiveOverlayClockText;
     }
 
     bool PresentationCore::HasLiveOverlayClockColorOverride() const {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         return m_HasLiveOverlayClockColorOverride;
     }
 
     void PresentationCore::GetLiveOverlayClockColorOverride(float outRGBA[4]) const {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         for (int i = 0; i < 4; i++) outRGBA[i] = m_LiveOverlayClockColorOverride[i];
     }
 
@@ -993,7 +1354,7 @@ void PresentationCore::SetBackgroundAudio() {
 
     void PresentationCore::CommitNextBackgroundMedia(const std::string& path, bool /*isVideo*/, bool allowAudio) {
         {
-            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             m_State.bgPath = path;
             SetBgTypeLocked(PresentationState::BackgroundType::Video);
             ++m_State.transitionTrigger;
@@ -1015,12 +1376,27 @@ void PresentationCore::SetBackgroundAudio() {
         return m_Impl ? m_Impl->background.GetStandbyTextureID() : nullptr;
     }
 
+    void* PresentationCore::GetPreviewStandbyBackgroundTexture(int targetW, int targetH) {
+        if (!m_Impl) return nullptr;
+        void* rawTex = m_Impl->background.GetStandbyTextureID();
+        if (!rawTex) return nullptr;
+
+        GLuint raw = static_cast<GLuint>(reinterpret_cast<uintptr_t>(rawTex));
+        GLuint processed = m_Impl->compositeFX.ProcessBackgroundForPreview(raw, targetW, targetH);
+        return (void*)(uintptr_t)processed;
+    }
+
     float PresentationCore::GetBackgroundBlendProgress() const {
         return m_Impl ? m_Impl->background.GetTransitionProgress() : 1.0f;
     }
 
     bool PresentationCore::IsBackgroundStandbyReady() {
         return m_Impl && m_Impl->background.StandbyHasFrame();
+    }
+
+    int PresentationCore::GetBackgroundTransitionType() const {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        return m_State.transitionType;
     }
 
     void PresentationCore::SetLoadingLogoPath(const std::string& path) {
@@ -1114,7 +1490,7 @@ void PresentationCore::SetBackgroundAudio() {
 
 void PresentationCore::SetLayer0_Color(float r, float g, float b) {
     {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_State.bgColor[0] = r; m_State.bgColor[1] = g; m_State.bgColor[2] = b;
         SetBgTypeLocked(PresentationState::BackgroundType::SolidColor);
         m_State.bgPath     = "";
@@ -1138,31 +1514,31 @@ void PresentationCore::SetBackgroundBlendDuration(float seconds) {
                                        std::string& activeFontName);
 
     void PresentationCore::UpdateLyricsBoxStyle(const TextBoxStyle& box) {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         ApplyLyricsBoxToState(box, m_State, m_ActiveFontName);
         ++m_StreamVersion;
     }
 
     void PresentationCore::UpdateIndexBoxStyle(const TextBoxStyle& box, bool enabled) {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_State.indexBox     = box;
         m_State.indexEnabled = enabled;
         ++m_StreamVersion;
     }
 
     void PresentationCore::SetCurrentRef(const std::string& ref) {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_State.currentRef = ref;
         ++m_StreamVersion;
     }
 
     TextEffectsData PresentationCore::GetTextEffects() const {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         return m_State.effects;
     }
 
 void PresentationCore::SetLayer2_Text(const std::string& text) {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     m_State.currentText = text;
     m_State.showText    = !text.empty();
     // Limpia la referencia biblica: solo BibleView/SyncServer la vuelven a
@@ -1175,7 +1551,7 @@ void PresentationCore::SetLayer2_Text(const std::string& text) {
 }
 
 void PresentationCore::ClearLayer2() {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     m_State.currentText = "";
     m_State.currentRef  = "";
     m_State.showText    = false;
@@ -1185,27 +1561,27 @@ void PresentationCore::ClearLayer2() {
 }
 
 void PresentationCore::SetClockStyleCue(const std::string& styleName) {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     m_PendingClockStyleCue = styleName;
     m_HasClockStyleCue     = true;
 }
 
 std::string PresentationCore::ConsumeClockStyleCue() {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     if (!m_HasClockStyleCue) return {};
     m_HasClockStyleCue = false;
     return m_PendingClockStyleCue;
 }
 
 void PresentationCore::SetPendingTransitionOverride(const std::string& name, float duration) {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     m_PendingTransitionName     = name;
     m_PendingTransitionDuration = duration;
     m_HasTransitionOverride     = true;
 }
 
 bool PresentationCore::ConsumePendingTransitionOverride(std::string& outName, float& outDuration) {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     if (!m_HasTransitionOverride) return false;
     m_HasTransitionOverride = false;
     outName     = m_PendingTransitionName;
@@ -1214,13 +1590,13 @@ bool PresentationCore::ConsumePendingTransitionOverride(std::string& outName, fl
 }
 
 void PresentationCore::RequestSongEditorOpen(const std::string& filename) {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     m_PendingSongEditorOpenFile = filename;
     m_HasSongEditorOpenRequest  = true;
 }
 
 bool PresentationCore::ConsumeSongEditorOpenRequest(std::string& outFilename) {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     if (!m_HasSongEditorOpenRequest) return false;
     m_HasSongEditorOpenRequest = false;
     outFilename = m_PendingSongEditorOpenFile;
@@ -1228,7 +1604,7 @@ bool PresentationCore::ConsumeSongEditorOpenRequest(std::string& outFilename) {
 }
 
 void PresentationCore::SetNextText(const std::string& text) {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     m_State.nextText = text;
     ++m_StreamVersion;
 }
@@ -1236,7 +1612,7 @@ void PresentationCore::SetNextText(const std::string& text) {
     void PresentationCore::SetProjecting(bool projecting) {
         int monitorIndex;
         {
-            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             m_State.isProjecting = projecting;
             ++m_StreamVersion;
             monitorIndex = m_State.targetMonitorIndex;
@@ -1253,12 +1629,12 @@ void PresentationCore::SetNextText(const std::string& text) {
     }
 
     bool PresentationCore::IsProjecting() const {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         return m_State.isProjecting;
     }
 
     void PresentationCore::SetTargetMonitor(int index) {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_State.targetMonitorIndex = index;
         // Refresca los monitores adicionales desde Settings en el mismo
         // golpe -- este es el unico punto donde arranca la proyeccion
@@ -1269,7 +1645,7 @@ void PresentationCore::SetNextText(const std::string& text) {
     }
 
     void PresentationCore::SetStaging(bool active, int monitorIndex) {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_State.isStaging = active;
         if (monitorIndex >= 0)
             m_State.stageMonitorIndex = monitorIndex;
@@ -1280,7 +1656,7 @@ void PresentationCore::SetNextText(const std::string& text) {
     }
 
     bool PresentationCore::IsStaging() const {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         return m_State.isStaging;
     }
 
@@ -1301,13 +1677,13 @@ void PresentationCore::SetNextText(const std::string& text) {
     }
 
     float PresentationCore::GetLivePosition() {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         return m_State.livePosition;
     }
 
     void PresentationCore::SetLivePosition(float pos) {
         {
-            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             m_State.livePosition = pos;
         }
         if (m_Impl) {
@@ -1318,18 +1694,18 @@ void PresentationCore::SetNextText(const std::string& text) {
     }
 
     int PresentationCore::GetLiveVolume() {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         return m_State.liveVolume;
     }
 
     bool PresentationCore::GetLiveMute() {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         return m_State.liveMuted;
     }
 
     void PresentationCore::SetLiveVolume(int volume) {
         {
-            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             m_State.liveVolume = volume;
         }
         if (m_Impl)
@@ -1338,7 +1714,7 @@ void PresentationCore::SetNextText(const std::string& text) {
 
     void PresentationCore::SetLiveMute(bool mute) {
         {
-            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             m_State.liveMuted = mute;
         }
         if (m_Impl)
@@ -1361,19 +1737,40 @@ void PresentationCore::SetNextText(const std::string& text) {
     }
 
     bool PresentationCore::GetLiveLoop() {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         return m_State.liveLoop;
     }
 
     void PresentationCore::SetLiveLoop(bool loop) {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_State.liveLoop = loop;
     }
 void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     m_State.transitionType     = type;
     m_State.transitionDuration = std::max(0.05f, durationSeconds);
 }
+    static const ImWchar kProjectionGlyphRanges[] = {
+        0x0020, 0x00FF, // Basic Latin + Latin Supplement
+        0x0100, 0x024F, // Latin Extended-A & B
+        0x0370, 0x03FF, // Greek
+        0x0400, 0x052F, // Cyrillic
+        0x2000, 0x206F, // General Punctuation
+        0x20A0, 0x20CF, // Currency Symbols
+        0x2100, 0x214F, // Letterlike Symbols
+        0x2190, 0x21FF, // Arrows
+        0x2200, 0x22FF, // Math Operators
+        0x25A0, 0x25FF, // Geometric Shapes
+        0x2600, 0x26FF, // Misc Symbols
+        0x2700, 0x27BF, // Dingbats
+        0x2B00, 0x2BFF, // Misc Symbols and Arrows
+        0x1F300, 0x1F5FF, // Pictographs
+        0x1F600, 0x1F64F, // Emoticons
+        0x1F680, 0x1F6FF, // Transport
+        0x1F900, 0x1F9FF, // Supplemental
+        0
+    };
+
     void PresentationCore::LoadFontsIntoImGui() {
         ImGuiIO& io = ImGui::GetIO();
         m_ImGuiFonts["Predeterminada"] = io.Fonts->AddFontDefault();
@@ -1390,7 +1787,7 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
                     if (ext == ".ttf" || ext == ".otf" || ext == ".ttc") {
                         std::string fontName = entry.path().stem().string();
                         std::string fullPath = entry.path().string();
-                        ImFont* font = io.Fonts->AddFontFromFileTTF(fullPath.c_str(), baseFontSize);
+                        ImFont* font = io.Fonts->AddFontFromFileTTF(fullPath.c_str(), baseFontSize, nullptr, kProjectionGlyphRanges);
                         if (font)
                             m_ImGuiFonts[fontName] = font;
                     }
@@ -1414,7 +1811,7 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         std::string fontName = p.stem().string();
         if (m_ImGuiFonts.count(fontName)) return;
 
-        ImFont* font = io.Fonts->AddFontFromFileTTF(fontPath.c_str(), baseFontSize);
+        ImFont* font = io.Fonts->AddFontFromFileTTF(fontPath.c_str(), baseFontSize, nullptr, kProjectionGlyphRanges);
         if (font)
             m_ImGuiFonts[fontName] = font;
     }
@@ -1712,7 +2109,7 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         WriteBoxKeys(f, "index",  style.index);
         f << "indexEnabled=" << (style.indexEnabled ? 1 : 0) << "\n";
 
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_SavedStyles[style.name] = style;
     }
 
@@ -1722,7 +2119,7 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         std::filesystem::remove(
             std::filesystem::path(ThemesDirPath()) / (name + ".theme"), ec);
 
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_SavedStyles.erase(name);
     }
 
@@ -1742,7 +2139,7 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
     bool PresentationCore::GetSavedStyle(const std::string& name, SavedStyle& outStyle) const
     {
         {
-            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             auto it = m_SavedStyles.find(name);
             if (it != m_SavedStyles.end()) {
                 outStyle = it->second;
@@ -1791,7 +2188,7 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
     void PresentationCore::SetCategoryDefaultStyle(ItemType category, const std::string& styleName)
     {
         {
-            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             m_CategoryDefaultStyles[static_cast<int>(category)] = styleName;
         }
         SaveCategoryStyles();
@@ -1799,7 +2196,7 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
 
     std::string PresentationCore::GetCategoryDefaultStyle(ItemType category) const
     {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         auto it = m_CategoryDefaultStyles.find(static_cast<int>(category));
         if (it != m_CategoryDefaultStyles.end())
             return it->second;
@@ -1811,7 +2208,7 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         std::ifstream f(CategoryStylesFilePath());
         if (!f.is_open()) return;
 
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         std::string line;
         while (std::getline(f, line)) {
             if (!line.empty() && line.back() == '\r') line.pop_back();
@@ -1829,7 +2226,7 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         std::ofstream f(CategoryStylesFilePath());
         if (!f.is_open()) return;
 
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         for (const auto& pair : m_CategoryDefaultStyles) {
             if (!pair.second.empty())
                 f << pair.first << "=" << pair.second << "\n";
@@ -1888,7 +2285,7 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
     {
         std::string fontName;
         {
-            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             fontName = m_ActiveFontName;
         }
         return ResolveFontFilePath(fontName);
@@ -1897,7 +2294,7 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
     void PresentationCore::SetSelection(const LibrarySelection& selection, bool fromQueue)
     {
         {
-            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             m_CurrentSelection    = selection;
             m_SelectionFromQueue  = fromQueue;
         }
@@ -1907,7 +2304,7 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
 
         std::string styleName;
         {
-            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             auto it = m_CategoryDefaultStyles.find(static_cast<int>(selection.type));
             if (it == m_CategoryDefaultStyles.end() || it->second.empty())
                 return;
@@ -1918,7 +2315,7 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         if (!GetSavedStyle(styleName, s))
             return;
 
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         ApplySavedStyleToState(s, m_State, m_ActiveFontName);
         ++m_StreamVersion;
     }
@@ -1930,14 +2327,14 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         SavedStyle style;
         if (!GetSavedStyle(styleName, style)) return;
 
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         ApplySavedStyleToState(style, m_State, m_ActiveFontName);
         ++m_StreamVersion;
     }
 
     void PresentationCore::ApplyStyleSnapshot(const SavedStyle& style)
     {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         ApplySavedStyleToState(style, m_State, m_ActiveFontName);
         ++m_StreamVersion;
     }
@@ -2014,7 +2411,7 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
             float lanColorOverride[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
             {
-                std::lock_guard<std::mutex> lock(m_Mutex);
+                std::lock_guard<std::recursive_mutex> lock(m_Mutex);
                 if (st.showLanQuickNote) {
                     lanStyleName = m_LiveQuickNoteLANStyleName;
                     hasLanColorOverride = m_HasLiveQuickNoteLANColorOverride;
@@ -2054,7 +2451,7 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
                 for (int i = 0; i < 4; i++) snap.margins[i] = st.margins[i];
 
                 {
-                    std::lock_guard<std::mutex> lock(m_Mutex);
+                    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
                     snap.fontFamily = m_ActiveFontName;
                 }
 
@@ -2083,7 +2480,7 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
             if (st.showLanQuickNote) {
                 std::string lanStyleName;
                 {
-                    std::lock_guard<std::mutex> lock(m_Mutex);
+                    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
                     lanStyleName = m_LiveQuickNoteLANStyleName;
                 }
                 if (!lanStyleName.empty()) {
@@ -2094,7 +2491,7 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
                 }
             }
             if (fontName.empty()) {
-                std::lock_guard<std::mutex> lock(m_Mutex);
+                std::lock_guard<std::recursive_mutex> lock(m_Mutex);
                 fontName = m_ActiveFontName;
             }
             return ResolveFontFilePath(fontName);
@@ -2109,7 +2506,7 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
             {
                 // Ya esta corriendo (lo pudo haber arrancado el Chat) —
                 // Streaming solo se "suma" como usuario, no reinicia nada.
-                std::lock_guard<std::mutex> lk(m_Mutex);
+                std::lock_guard<std::recursive_mutex> lk(m_Mutex);
                 m_State.isStreamingNet = true;
                 m_State.networkURL     = m_NetworkServer->GetBaseURL();
                 return;
@@ -2126,14 +2523,14 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
                 return;
             }
 
-            std::lock_guard<std::mutex> lk(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lk(m_Mutex);
             m_State.isStreamingNet = true;
             m_State.networkURL     = m_NetworkServer->GetBaseURL();
         }
         else
         {
             {
-                std::lock_guard<std::mutex> lk(m_Mutex);
+                std::lock_guard<std::recursive_mutex> lk(m_Mutex);
                 m_State.isStreamingNet = false;
                 m_State.networkURL.clear();
             }
@@ -2158,7 +2555,7 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
 
     bool PresentationCore::IsStreamingNet() const
     {
-        std::lock_guard<std::mutex> lk(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lk(m_Mutex);
         return m_State.isStreamingNet;
     }
 
@@ -2171,7 +2568,7 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
                 // Ya esta corriendo (lo pudo haber arrancado Streaming) —
                 // solo conectamos el store de mensajes si todavia no estaba.
                 m_NetworkServer->SetChatStore(&m_ChatMessageStore);
-                std::lock_guard<std::mutex> lk(m_Mutex);
+                std::lock_guard<std::recursive_mutex> lk(m_Mutex);
                 m_State.isChatRunning = true;
                 m_State.chatURL       = m_NetworkServer->GetBaseURL() + "/chat";
                 return;
@@ -2188,14 +2585,14 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
                 return;
             }
 
-            std::lock_guard<std::mutex> lk(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lk(m_Mutex);
             m_State.isChatRunning = true;
             m_State.chatURL       = m_NetworkServer->GetBaseURL() + "/chat";
         }
         else
         {
             {
-                std::lock_guard<std::mutex> lk(m_Mutex);
+                std::lock_guard<std::recursive_mutex> lk(m_Mutex);
                 m_State.isChatRunning = false;
                 m_State.chatURL.clear();
             }
@@ -2212,7 +2609,7 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
 
     bool PresentationCore::IsChatRunning() const
     {
-        std::lock_guard<std::mutex> lk(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lk(m_Mutex);
         return m_State.isChatRunning;
     }
 
@@ -2301,7 +2698,7 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
 outRGB.resize(static_cast<size_t>(w) * h * 3);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
         {
-            std::lock_guard<std::mutex> lk(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lk(m_Mutex);
             glClearColor(m_State.bgColor[0], m_State.bgColor[1], m_State.bgColor[2], 1.0f);
         }
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -2374,7 +2771,7 @@ if (ptr)
         glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
         glViewport(0, 0, w, h);
         {
-            std::lock_guard<std::mutex> lk(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lk(m_Mutex);
             glClearColor(m_State.bgColor[0], m_State.bgColor[1], m_State.bgColor[2], 1.0f);
         }
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);

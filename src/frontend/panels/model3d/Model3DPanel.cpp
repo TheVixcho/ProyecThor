@@ -7,6 +7,11 @@
 #include <filesystem>
 #include <algorithm>
 
+#ifdef _WIN32
+#include <windows.h>
+#include <commdlg.h>
+#endif
+
 namespace fs = std::filesystem;
 
 namespace ProyecThor::UI {
@@ -27,7 +32,7 @@ Model3DPanel::Model3DPanel() {
 
     RefreshFolder();
 
-    // Cargar modelo inicial (Cruz 3D integrada)
+    // Cargar modelo inicial (Cubo integrado o primer modelo)
     if (!m_Assets.empty()) {
         LoadAsset(m_Assets[0]);
     }
@@ -41,6 +46,51 @@ Model3DPanel::~Model3DPanel() {
 
 void Model3DPanel::RefreshFolder() {
     m_Assets = Model3DLoader::ScanDirectory(m_Folder);
+}
+
+void Model3DPanel::ImportModelFileDialog() {
+#ifdef _WIN32
+    wchar_t filename[MAX_PATH] = {};
+    OPENFILENAMEW ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = NULL;
+    ofn.lpstrFilter = L"Modelos 3D (*.obj;*.stl;*.ply;*.gltf;*.glb)\0*.obj;*.stl;*.ply;*.gltf;*.glb\0Todos los archivos (*.*)\0*.*\0";
+    ofn.lpstrFile = filename;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
+
+    if (GetOpenFileNameW(&ofn)) {
+        fs::path srcPath(filename);
+        std::error_code ec;
+        if (!fs::exists(m_Folder, ec)) {
+            fs::create_directories(m_Folder, ec);
+        }
+
+        fs::path destPath = fs::path(m_Folder) / srcPath.filename();
+        fs::copy_file(srcPath, destPath, fs::copy_options::overwrite_existing, ec);
+
+        // Si es un archivo .gltf, buscar si hay un archivo .bin con el mismo nombre en la misma carpeta origen y copiarlo
+        if (srcPath.extension() == ".gltf") {
+            fs::path binSrc = srcPath.parent_path() / (srcPath.stem().string() + ".bin");
+            if (fs::exists(binSrc, ec)) {
+                fs::path binDest = fs::path(m_Folder) / binSrc.filename();
+                fs::copy_file(binSrc, binDest, fs::copy_options::overwrite_existing, ec);
+            }
+        }
+
+        RefreshFolder();
+
+        // Buscar y seleccionar el modelo recién importado
+        std::string targetName = destPath.stem().string();
+        for (size_t i = 0; i < m_Assets.size(); ++i) {
+            if (m_Assets[i].displayName == targetName || m_Assets[i].path == destPath.string()) {
+                m_SelectedAssetIndex = (int)i;
+                LoadAsset(m_Assets[i]);
+                break;
+            }
+        }
+    }
+#endif
 }
 
 void Model3DPanel::LoadAsset(const Model3DAsset& asset) {
@@ -102,6 +152,26 @@ void Model3DPanel::RenderTopBar() {
 
     ImGui::SameLine(0.0f, 16.0f);
 
+    // Botón de Importar Modelo 3D
+    {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.85f, 0.35f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.55f, 0.95f, 0.55f));
+        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.35f, 0.65f, 1.0f, 0.80f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.2f);
+
+        if (ImGui::Button(" ➕ Importar 3D ", ImVec2(0.0f, 26.0f))) {
+            ImportModelFileDialog();
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Importar modelo 3D desde tu equipo (.obj, .stl, .ply, .gltf, .glb)");
+        }
+
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(3);
+    }
+
+    ImGui::SameLine(0.0f, 10.0f);
+
     // Botón de Proyección en Vivo Principal
     {
         bool isLive = m_IsProjectingLive;
@@ -137,11 +207,16 @@ void Model3DPanel::RenderTopBar() {
 void Model3DPanel::RenderModelGallery(float w, float h) {
     ImGui::BeginChild("##modelGallery", ImVec2(w, h), true, ImGuiWindowFlags_None);
 
-    // Barra de carpeta y recarga
+    // Barra de carpeta y recarga + importar
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-    if (ImGui::Button("↺ Recargar##3d", ImVec2(75.0f, 22.0f))) {
+    if (ImGui::Button(" ➕ Importar ", ImVec2(80.0f, 22.0f))) {
+        ImportModelFileDialog();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("↺##3d", ImVec2(24.0f, 22.0f))) {
         RefreshFolder();
     }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Recargar lista de modelos");
     ImGui::SameLine();
     ImGui::PushStyleColor(ImGuiCol_Text, DS::TextSecondary);
     ImGui::AlignTextToFramePadding();
@@ -237,17 +312,17 @@ void Model3DPanel::RenderViewportControls(ImVec2 vpMin, ImVec2 vpMax) {
     // 2. Toolbar flotante inferior para controles 3D interactivos
     {
         float tbH = 34.0f;
-        float tbW = std::min(vpMax.x - vpMin.x - 20.0f, 540.0f);
-        ImVec2 tb0 = { vpMin.x + ((vpMax.x - vpMin.x) - tbW) * 0.5f, vpMax.y - tbH - 10.0f };
+        float tbW = std::min(vpMax.x - vpMin.x - 12.0f, 480.0f);
+        ImVec2 tb0 = { vpMin.x + ((vpMax.x - vpMin.x) - tbW) * 0.5f, vpMax.y - tbH - 8.0f };
         ImVec2 tb1 = { tb0.x + tbW, tb0.y + tbH };
 
-        dl->AddRectFilled(tb0, tb1, IM_COL32(18, 20, 26, 225), 7.0f);
-        dl->AddRect(tb0, tb1, IM_COL32(255, 255, 255, 35), 7.0f, 0, 1.0f);
+        dl->AddRectFilled(tb0, tb1, IM_COL32(18, 20, 26, 235), 7.0f);
+        dl->AddRect(tb0, tb1, IM_COL32(255, 255, 255, 40), 7.0f, 0, 1.0f);
 
-        ImGui::SetCursorScreenPos({ tb0.x + 8.0f, tb0.y + 4.0f });
+        ImGui::SetCursorScreenPos({ tb0.x + 6.0f, tb0.y + 4.0f });
 
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, 0.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(5.0f, 0.0f));
 
         // Centrar cámara
         if (ImGui::Button("⊙ Centrar", ImVec2(0, 24.0f))) {
@@ -262,20 +337,33 @@ void Model3DPanel::RenderViewportControls(ImVec2 vpMin, ImVec2 vpMax) {
         if (ar) {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.35f, 0.45f, 0.95f, 0.60f));
         }
-        if (ImGui::Button(ar ? "⟳ Rotando" : "⟳ Auto-rotar", ImVec2(0, 24.0f))) {
+        if (ImGui::Button(ar ? "⟳ Girando" : "⟳ Giro", ImVec2(0, 24.0f))) {
             m_Config.autoRotate = !m_Config.autoRotate;
         }
         if (ar) ImGui::PopStyleColor();
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Activar giro continuo automático 360°");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Activar rotación continua automática 360°");
+
+        ImGui::SameLine();
+
+        // Invertir / Voltear Y
+        bool fy = m_Config.flipY;
+        if (fy) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.35f, 0.25f, 0.60f));
+        }
+        if (ImGui::Button("🔄 Voltear Y", ImVec2(0, 24.0f))) {
+            m_Config.flipY = !m_Config.flipY;
+        }
+        if (fy) ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Invertir orientación vertical del modelo");
 
         ImGui::SameLine();
 
         // Modo de sombreado
-        const char* shadLabels[] = { "Sombreado", "Malla (Wireframe)", "Sombreado + Malla" };
+        const char* shadLabels[] = { "Sombreado", "Malla", "Ambos" };
         int curShad = (m_Config.shading == Model3DShading::SmoothLit) ? 0 :
                       (m_Config.shading == Model3DShading::Wireframe) ? 1 : 2;
 
-        ImGui::SetNextItemWidth(130.0f);
+        ImGui::SetNextItemWidth(90.0f);
         if (ImGui::Combo("##shadingMode", &curShad, shadLabels, 3)) {
             m_Config.shading = (curShad == 0) ? Model3DShading::SmoothLit :
                                (curShad == 1) ? Model3DShading::Wireframe : Model3DShading::ShadedWithEdges;
@@ -314,7 +402,7 @@ void Model3DPanel::RenderViewportControls(ImVec2 vpMin, ImVec2 vpMax) {
 
         // Fondo transparente / Estudio
         bool isTrans = (m_Config.background == Model3DBackground::Transparent);
-        if (ImGui::Button(isTrans ? "🏁 Transparente" : "⬛ Estudio", ImVec2(0, 24.0f))) {
+        if (ImGui::Button(isTrans ? "🏁 Alpha" : "⬛ Estudio", ImVec2(0, 24.0f))) {
             m_Config.background = isTrans ? Model3DBackground::DarkStudio : Model3DBackground::Transparent;
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Alternar fondo transparente para superposición");
@@ -372,16 +460,19 @@ void Model3DPanel::Render() {
     float totalW = ImGui::GetContentRegionAvail().x;
     float totalH = ImGui::GetContentRegionAvail().y;
 
-    float galleryW = std::clamp(totalW * m_GalleryWidthFrac, 180.0f, 320.0f);
-    float viewportW = totalW - galleryW - 10.0f;
+    // Layout Vertical Nativo:
+    // Parte Superior: Visor 3D Interactivo con ancho completo
+    // Parte Inferior: Lista de Modelos 3D y botón de importación
+    float viewportH = std::clamp(totalH * 0.50f, 210.0f, 380.0f);
+    float galleryH  = std::max(120.0f, totalH - viewportH - 8.0f);
 
-    // Columna Izquierda: Galería de modelos 3D
-    RenderModelGallery(galleryW, totalH);
+    // 1. Visor 3D arriba
+    Render3DViewport(totalW, viewportH);
 
-    ImGui::SameLine(0.0f, 10.0f);
+    ImGui::Spacing();
 
-    // Columna Derecha: Visor 3D Interactivo
-    Render3DViewport(viewportW, totalH);
+    // 2. Galería abajo
+    RenderModelGallery(totalW, galleryH);
 }
 
 } // namespace ProyecThor::UI

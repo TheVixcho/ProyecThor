@@ -98,16 +98,34 @@ const AbbrevEntry kAbbrevTable[] = {
 
 constexpr int kAbbrevCount = sizeof(kAbbrevTable) / sizeof(kAbbrevTable[0]);
 
+const char* kBookShortAbbrevs[] = {
+    "Gén","Éxo","Lev","Núm","Deut",
+    "Jos","Jue","Rut","1 Sam","2 Sam","1 Rey","2 Rey",
+    "1 Cr","2 Cr","Esd","Neh","Est","Job","Sal",
+    "Prov","Ecl","Cant","Isa","Jer","Lam",
+    "Eze","Dan","Os","Joel","Amós","Abd","Jon","Miq",
+    "Nah","Hab","Sof","Hag","Zac","Mal",
+    "Mat","Mar","Luc","Juan","Hech","Rom","1 Cor",
+    "2 Cor","Gál","Ef","Fil","Col","1 Tes",
+    "2 Tes","1 Tim","2 Tim","Tito","Filem","Heb",
+    "Sant","1 Pe","2 Pe","1 Jn","2 Jn","3 Jn","Jud","Apoc"
+};
+
 bool StartsWith(const std::string& str, const std::string& prefix) {
     return prefix.size() <= str.size()
         && str.compare(0, prefix.size(), prefix) == 0;
 }
 
-} // namespace anonimo
+}
 
 const char* GetCanonicalBookName(int canonicalNumber) {
     if (canonicalNumber < 1 || canonicalNumber > kBookCount) return nullptr;
     return kBookNames[canonicalNumber - 1];
+}
+
+const char* GetBookShortAbbrev(int canonicalNumber) {
+    if (canonicalNumber < 1 || canonicalNumber > kBookCount) return nullptr;
+    return kBookShortAbbrevs[canonicalNumber - 1];
 }
 
 int GetBookCount() {
@@ -173,4 +191,4 @@ void GetSectionColor(BibleSection section, float& r, float& g, float& b) {
     }
 }
 
-} // namespace ProyecThor::UI::BibleBooks
+}

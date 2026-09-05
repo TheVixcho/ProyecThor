@@ -1,4 +1,7 @@
 #pragma once
+#ifndef PROYECTHOR_SETTINGS_SETTINGS_MANAGER_H
+#define PROYECTHOR_SETTINGS_SETTINGS_MANAGER_H
+
 #include <string>
 #include <vector>
 #include <imgui.h>
@@ -125,6 +128,59 @@ namespace ProyecThor::Settings {
         float luminosityAmount      = 1.2f;
         bool  taaEnabled            = false;
         float taaIntensity          = 0.5f;
+
+        // ── Nuevos Shaders & Efectos ──
+        bool  glitchEnabled         = false;
+        float glitchIntensity       = 0.40f;
+        float glitchSpeed           = 1.0f;
+        int   glitchMode            = 0; // 0=Sutil, 1=Cyberpunk RGB, 2=Cinta Analógica
+
+        bool  colorGradingEnabled   = false;
+        float colorGradingIntensity = 0.75f;
+        int   colorGradingPreset    = 1; // 0=Cálido, 1=Teal&Orange, 2=Cyber Neón, 3=Sepia, 4=Noir B&W, 5=Matrix, 6=Pastel
+
+        bool  pixelateEnabled       = false;
+        float pixelateSize          = 12.0f;
+        int   pixelateColorDepth    = 0; // 0=Real, 1=16-bit, 2=8-bit
+
+        bool  radialBlurEnabled     = false;
+        float radialBlurIntensity   = 0.35f;
+
+        bool  wavesEnabled          = false;
+        float wavesIntensity        = 0.35f;
+        float wavesSpeed            = 1.0f;
+        float wavesFrequency        = 8.0f;
+
+        bool  mirrorEnabled         = false;
+        int   mirrorMode            = 0; // 0=Horizontal, 1=Vertical, 2=Caleidoscopio 4x, 3=Radial 8x
+
+        bool  thermalEnabled        = false;
+        float thermalIntensity      = 0.85f;
+        int   thermalMode           = 0; // 0=Térmico, 1=Visión Nocturna, 2=Solarizado
+
+        bool  halftoneEnabled       = false;
+        float halftoneDotScale      = 10.0f;
+        int   halftoneMode          = 0; // 0=Pop-Art Color, 1=Monocromo B&W, 2=Periódico
+
+        // ── Efectos Volumétricos y por Zonas ──
+        bool  volumetricFogEnabled         = false;
+        float volumetricFogDensity         = 0.50f;
+        float volumetricFogSpeed           = 1.0f;
+        float volumetricFogScale           = 3.5f;
+        int   volumetricFogColorMode       = 0; // 0=Gris, 1=Cian, 2=Fuego, 3=Neón
+
+        bool  volumetricCloudsEnabled      = false;
+        float volumetricCloudsCoverage     = 0.55f;
+        float volumetricCloudsDensity      = 0.60f;
+        float volumetricCloudsSpeed        = 0.80f;
+        float volumetricCloudsSunIntensity = 0.65f;
+
+        bool  zonedDistortionEnabled       = false;
+        float zonedDistortionIntensity     = 0.45f;
+        float zonedDistortionSpeed         = 1.20f;
+        int   zonedDistortionZone          = 0; // 0=Inferior, 1=Superior, 2=Centro, 3=Izq, 4=Der
+        float zonedDistortionFeather       = 0.35f;
+
         // "Rellenado": llena las barras de letterbox/pillarbox con el
         // mismo fondo estirado y muy desenfocado en vez de negro. Ver
         // BackgroundLayer::GetBlurredFillTexture / UIManager.cpp.
@@ -177,6 +233,8 @@ namespace ProyecThor::Settings {
         // el menu Vista para operadores que no lo necesitan y prefieren mas
         // ancho para el video.
         bool        showViewQuickActions = true;
+        // Si es false, se inicia directo en modo Proyector tras la pantalla de carga (omite el Hub)
+        bool        openHubOnStartup     = true;
 
         // Texto de la ventana flotante de Notas (ver QuickNotes) -- se
         // guarda con debounce mientras el operador escribe y se fuerza al
@@ -189,7 +247,9 @@ namespace ProyecThor::Settings {
     // Set reducido de tokens de diseño. ApplyTheme() los expande a todos
     // los colores de ImGui, así que un solo token cambia toda la app.
     enum class ThemePreset {
-        Dark, Light, OrangeBlack, Jazz, Kofi, Deadlock, Galaxy, Mek, Custom
+        Dark, Light, OrangeBlack, Jazz, Kofi, Deadlock, Galaxy, Mek,
+        Cyberpunk, Emerald, Crimson, Midnight, Amethyst, Titanium,
+        Custom
     };
 
     const char* ThemePresetName(ThemePreset preset);
@@ -621,3 +681,5 @@ namespace ProyecThor::Settings {
     void RestartApplication();
 
 } // namespace ProyecThor::Settings
+
+#endif // PROYECTHOR_SETTINGS_SETTINGS_MANAGER_H

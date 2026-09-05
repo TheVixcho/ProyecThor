@@ -250,12 +250,14 @@ struct Model3DRenderConfig {
     float  cameraPitch     = 25.0f;  // Grados vertical (-89 .. 89)
     float  cameraDistance  = 3.2f;   // Distancia al centro
     Vec3   cameraTarget    = { 0.0f, 0.0f, 0.0f }; // Pan offset
+    bool   flipY           = false;  // Invertir orientación vertical del modelo
 
     void ResetCamera() {
         cameraYaw      = 45.0f;
         cameraPitch    = 25.0f;
         cameraDistance = 3.2f;
         cameraTarget   = { 0.0f, 0.0f, 0.0f };
+        flipY          = false;
     }
 };
 

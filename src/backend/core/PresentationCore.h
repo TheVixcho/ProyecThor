@@ -1,4 +1,6 @@
 #pragma once
+#ifndef PROYECTHOR_PRESENTATION_CORE_H
+#define PROYECTHOR_PRESENTATION_CORE_H
 #include <memory>
 #include <string>
 #include <vector>
@@ -20,6 +22,7 @@ namespace ProyecThor::UI {
     class Announcements;
     class OClock;
     class CapturePanel;
+    class LabPanel;
 }
 
 namespace ProyecThor::Core {
@@ -453,12 +456,100 @@ void SetGlobalMute(bool mute);
         void  SetLuminosityAmount(float amount);
         float GetLuminosityAmount() const;
 
-        // TAA (Temporal Anti-Aliasing simplificado, ver PostProcessorTAA.h):
-        // mezcla el frame actual con el resultado del frame anterior.
         void  SetTAAEnabled(bool enabled);
         bool  GetTAAEnabled() const;
         void  SetTAAIntensity(float intensity);
         float GetTAAIntensity() const;
+
+        void  SetGlitchEnabled(bool enabled);
+        bool  GetGlitchEnabled() const;
+        void  SetGlitchIntensity(float intensity);
+        float GetGlitchIntensity() const;
+        void  SetGlitchSpeed(float speed);
+        float GetGlitchSpeed() const;
+        void  SetGlitchMode(int mode);
+        int   GetGlitchMode() const;
+
+        void  SetColorGradingEnabled(bool enabled);
+        bool  GetColorGradingEnabled() const;
+        void  SetColorGradingIntensity(float intensity);
+        float GetColorGradingIntensity() const;
+        void  SetColorGradingPreset(int preset);
+        int   GetColorGradingPreset() const;
+
+        void  SetPixelateEnabled(bool enabled);
+        bool  GetPixelateEnabled() const;
+        void  SetPixelateSize(float size);
+        float GetPixelateSize() const;
+        void  SetPixelateColorDepth(int depth);
+        int   GetPixelateColorDepth() const;
+
+        void  SetRadialBlurEnabled(bool enabled);
+        bool  GetRadialBlurEnabled() const;
+        void  SetRadialBlurIntensity(float intensity);
+        float GetRadialBlurIntensity() const;
+
+        void  SetWavesEnabled(bool enabled);
+        bool  GetWavesEnabled() const;
+        void  SetWavesIntensity(float intensity);
+        float GetWavesIntensity() const;
+        void  SetWavesSpeed(float speed);
+        float GetWavesSpeed() const;
+        void  SetWavesFrequency(float freq);
+        float GetWavesFrequency() const;
+
+        void  SetMirrorEnabled(bool enabled);
+        bool  GetMirrorEnabled() const;
+        void  SetMirrorMode(int mode);
+        int   GetMirrorMode() const;
+
+        void  SetThermalEnabled(bool enabled);
+        bool  GetThermalEnabled() const;
+        void  SetThermalIntensity(float intensity);
+        float GetThermalIntensity() const;
+        void  SetThermalMode(int mode);
+        int   GetThermalMode() const;
+
+        void  SetHalftoneEnabled(bool enabled);
+        bool  GetHalftoneEnabled() const;
+        void  SetHalftoneDotScale(float scale);
+        float GetHalftoneDotScale() const;
+        void  SetHalftoneMode(int mode);
+        int   GetHalftoneMode() const;
+
+        // ── Efectos Volumétricos y por Zonas ────────────────────────────────
+        void  SetVolumetricFogEnabled(bool enabled);
+        bool  GetVolumetricFogEnabled() const;
+        void  SetVolumetricFogDensity(float density);
+        float GetVolumetricFogDensity() const;
+        void  SetVolumetricFogSpeed(float speed);
+        float GetVolumetricFogSpeed() const;
+        void  SetVolumetricFogScale(float scale);
+        float GetVolumetricFogScale() const;
+        void  SetVolumetricFogColorMode(int mode);
+        int   GetVolumetricFogColorMode() const;
+
+        void  SetVolumetricCloudsEnabled(bool enabled);
+        bool  GetVolumetricCloudsEnabled() const;
+        void  SetVolumetricCloudsCoverage(float coverage);
+        float GetVolumetricCloudsCoverage() const;
+        void  SetVolumetricCloudsDensity(float density);
+        float GetVolumetricCloudsDensity() const;
+        void  SetVolumetricCloudsSpeed(float speed);
+        float GetVolumetricCloudsSpeed() const;
+        void  SetVolumetricCloudsSunIntensity(float intensity);
+        float GetVolumetricCloudsSunIntensity() const;
+
+        void  SetZonedDistortionEnabled(bool enabled);
+        bool  GetZonedDistortionEnabled() const;
+        void  SetZonedDistortionIntensity(float intensity);
+        float GetZonedDistortionIntensity() const;
+        void  SetZonedDistortionSpeed(float speed);
+        float GetZonedDistortionSpeed() const;
+        void  SetZonedDistortionZone(int zone);
+        int   GetZonedDistortionZone() const;
+        void  SetZonedDistortionFeather(float feather);
+        float GetZonedDistortionFeather() const;
 
         // Usado por UIManager (justo tras ImGui::Begin("ProjectorLive",...))
         // para informar, cada frame, cual ImGuiID es esa viewport, y por el
@@ -543,6 +634,10 @@ void SetGlobalMute(bool mute);
         // SetClockStyleCue/ConsumeClockStyleCue arriba.
         void        RequestSongEditorOpen(const std::string& filename);
         bool        ConsumeSongEditorOpenRequest(std::string& outFilename);
+
+        // Búsqueda de canciones activa (para resaltar estrofas/letras coincidentes en tiempo real)
+        void        SetSongSearchQuery(const std::string& query) { std::lock_guard<std::recursive_mutex> lock(m_Mutex); m_SongSearchQuery = query; }
+        std::string GetSongSearchQuery() const { std::lock_guard<std::recursive_mutex> lock(m_Mutex); return m_SongSearchQuery; }
 
         void*          GetPreviewTexture();
         VLCBasePlayer* GetPreviewPlayer();
@@ -782,6 +877,12 @@ void SetGlobalMute(bool mute);
         void   SetLive3DModelTexture(void* texID) { m_Live3DModelTexture = texID; }
         void*  GetLive3DModelTexture() const { return m_Live3DModelTexture; }
 
+        // ── Proyección de Laboratorio Matemático (GeoGebra Lab) ─────────────
+        void                       SetLabPanelRef(ProyecThor::UI::LabPanel* p) { m_LabPanelRef = p; }
+        ProyecThor::UI::LabPanel*  GetLabPanelRef() const { return m_LabPanelRef; }
+        void                       SetLiveLabActive(bool active) { m_LiveLabActive = active; }
+        bool                       IsLiveLabActive() const { return m_LiveLabActive; }
+
         // ── Preload adelantado (ver BackgroundLayer::Prefetch/CommitPrefetch) ──
         // Usado por la cola del Monitor para cargar el SIGUIENTE clip en
         // segundo plano mientras el actual sigue reproduciendose, sin
@@ -804,8 +905,10 @@ void SetGlobalMute(bool mute);
         // logica de CUANDO blendear, solo el COMO (ImGui::AddImage con tint
         // alpha en vez de BlitTexture con glBlendFunc).
         void*  GetStandbyBackgroundTexture();
+        void*  GetPreviewStandbyBackgroundTexture(int targetW, int targetH);
         float  GetBackgroundBlendProgress() const;
         bool   IsBackgroundStandbyReady();
+        int    GetBackgroundTransitionType() const;
 
         // ── Logo / pantalla de carga PUBLICA (ver Ajustes > Proyeccion) ────
         // A diferencia de lo anterior, esto SI se muestra en la salida real
@@ -867,7 +970,7 @@ bool m_GlobalMuted = false;
         bool        m_HasLiveQuickNoteLANColorOverride = false;
         float       m_LiveQuickNoteLANColorOverride[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
-        mutable std::mutex m_Mutex;
+        mutable std::recursive_mutex m_Mutex;
 
         // Ver PushRemoteClockTitle/DrainRemoteClockTitles -- guardado bajo
         // el mismo m_Mutex de arriba, nada especial.
@@ -944,9 +1047,12 @@ bool m_GlobalMuted = false;
         ProyecThor::UI::Announcements* m_AnnouncementsRef = nullptr;
         ProyecThor::UI::OClock*        m_OClockRef        = nullptr;
         ProyecThor::UI::CapturePanel*  m_CapturePanelRef  = nullptr;
+        ProyecThor::UI::LabPanel*      m_LabPanelRef      = nullptr;
 
         std::atomic<bool>              m_Live3DModelActive{ false };
         void*                          m_Live3DModelTexture = nullptr;
+
+        std::atomic<bool>              m_LiveLabActive{ false };
 
         // Unico lugar que escribe m_State.bgType: si se esta dejando Audio
         // por otra cosa, apaga el boton "En vivo" del panel de audio. Debe
@@ -959,6 +1065,9 @@ bool m_GlobalMuted = false;
         std::atomic<bool>     m_FrameProviderActive { false };
 
         std::atomic<OutputContentMode> m_LanContentMode { OutputContentMode::Live };
+        std::string                    m_SongSearchQuery;
     };
 
 } // namespace ProyecThor::Core
+
+#endif // PROYECTHOR_PRESENTATION_CORE_H

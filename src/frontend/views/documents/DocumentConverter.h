@@ -19,7 +19,6 @@ namespace ProyecThor::UI {
         std::vector<std::string> pagePaths;
     };
 
-    // Callback para progreso: recibe (paginaActual, totalPaginas)
     using ProgressCallback = std::function<void(int, int)>;
 
     class DocumentConverter {
@@ -27,8 +26,6 @@ namespace ProyecThor::UI {
         DocumentConverter() = default;
         ~DocumentConverter() = default;
 
-        // Convierte el archivo en paginas PNG dentro de cacheDir.
-        // Si ya fue convertido antes (cache valida), devuelve las rutas directamente.
         ConversionResult Convert(
             const std::string&   filePath,
             const std::string&   cacheDir,
@@ -36,7 +33,6 @@ namespace ProyecThor::UI {
             ProgressCallback     onProgress     = nullptr
         );
 
-        // Limpia la cache de un documento especifico
         void ClearCache(const std::string& filePath, const std::string& cacheDir);
 
         static DocumentType DetectType(const std::string& filePath);
@@ -56,11 +52,10 @@ namespace ProyecThor::UI {
             ProgressCallback   onProgress
         );
 
-        // Genera un nombre de directorio de cache unico basado en la ruta y fecha de modificacion
         std::string BuildCacheKey(const std::string& filePath);
 
-        // Busca el ejecutable de LibreOffice en el sistema
         std::string FindLibreOfficeBinary();
     };
 
-} // namespace ProyecThor::UI
+}
+

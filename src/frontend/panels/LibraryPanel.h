@@ -15,6 +15,7 @@
 #include "overlay/OverlayLibraryTab.h"
 #include "WebBrowserPanel.h"
 #include "model3d/Model3DPanel.h"
+#include "lab/LabPanel.h"
 #include <memory>
 
 namespace ProyecThor::UI { class UIManager; class MonitorView; }
@@ -36,7 +37,9 @@ enum class LibraryCategory {
     Multimedia
 };
 
-// Grupo aparte, abajo del todo en el sidebar izquierdo (ver LibrarySidebar.cpp),
+// ── Modos extra del sidebar de Biblioteca ────────────────────────────────────
+// Items que antes vivian en secciones dedicadas del workspace o en paneles
+// flotantes y que el operador pidió tener directamente en el rail izquierdo,
 // separado de las categorias de contenido de arriba por una linea. No toca
 // LibraryCategory/m_CurrentCategory -- es un modo de vista independiente.
 enum class LibrarySideMode {
@@ -57,7 +60,8 @@ enum class LibrarySideMode {
     Web        = 5, // "Web" — navegador embebido generico (ver WebBrowserPanel),
                      // con "Enviar a Público" para mostrar cualquier pagina en
                      // la salida real, no solo contenido de la Biblioteca.
-    Model3D    = 6, // "3D" — visor y catálogo de modelos y recursos 3D (OBJ, STL, PLY)
+    Model3D    = 6, // "3D" — visor y catálogo de modelos y recursos 3D (OBJ, STL, PLY, GLTF, GLB)
+    Lab        = 7, // "Lab" — laboratorio matemático de fórmulas y graficador de funciones en vivo
 };
 
 class LibraryPanel : public IPanel {
@@ -151,6 +155,9 @@ private:
 
     // ── Grupo "3D" del sidebar (ver LibrarySideMode::Model3D) ────────────
     std::unique_ptr<Model3DPanel>    m_Model3DPanel;
+
+    // ── Grupo "Lab" del sidebar (ver LibrarySideMode::Lab) ────────────────
+    std::unique_ptr<LabPanel>         m_LabPanel;
 
     // ── Render (conversor de formato) ─────────────────────────────────────
     struct ConvertibleItem { std::string filename; bool isVideo; };

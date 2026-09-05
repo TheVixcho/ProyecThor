@@ -33,6 +33,7 @@ private:
     void RenderNovedadesPanel();
     void RenderUpdateDetailModal();
     void RenderDownloadSubtitlesPanel();
+    void RenderTutorialModal();
 
     void UpdateAnimations(float dt);
 
@@ -52,11 +53,17 @@ private:
     bool  m_NovedadesOpen         = false;
     float m_NovedadesAnim         = 0.0f;
 
+    // --- Modal de Tutorial / Tour Guiado Profesional (Estilo Adobe) ---
+    bool  m_TutorialOpen          = false;
+    int   m_TutorialStep          = 0;
+    float m_TutorialAnim          = 0.0f;
+
     // --- Modal universal de detalle de actualizacion -- compartido entre
     // el hero de Novedades ("Ver todo el detalle") y su lista de historial ---
     bool  m_IsUpdateModalOpen     = false;
-    int   m_SelectedUpdateVer     = 15; // id de kUpdateRegistry; arranca en la mas reciente
+    int   m_SelectedUpdateVer     = 18; // id de kUpdateRegistry; arranca en la version 1.0.0 estable
     float m_UpdateModalAnim       = 0.0f;
+    bool  m_ShowBetaHistory       = false; // oculto por defecto para versiones pre-1.0 (beta)
 
     // --- "Descargar subtitulos" -- utilidad independiente de la Biblioteca:
     // baja los subtitulos de una URL (mismo fetch que "Importar desde URL"

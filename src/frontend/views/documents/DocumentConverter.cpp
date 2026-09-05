@@ -11,16 +11,11 @@
 #include <iomanip>
 #include <vector>
 
-// stb_image_write para guardar PNG sin dependencias adicionales
 #include "stb_image_write.h"
 
 namespace fs = std::filesystem;
 
 namespace ProyecThor::UI {
-
-    // -------------------------------------------------------------------------
-    // RAII wrapper para inicializar/destruir PDFium una sola vez por proceso
-    // -------------------------------------------------------------------------
 
     namespace {
         struct PDFiumLibrary {
@@ -28,16 +23,11 @@ namespace ProyecThor::UI {
             ~PDFiumLibrary() { FPDF_DestroyLibrary(); }
         };
 
-        // Se inicializa la primera vez que se usa ConvertPDF
         PDFiumLibrary& GetPDFiumLibrary() {
             static PDFiumLibrary lib;
             return lib;
         }
-    } // anonymous namespace
-
-    // -------------------------------------------------------------------------
-    // Deteccion de tipo por extension
-    // -------------------------------------------------------------------------
+    }
 
     DocumentType DocumentConverter::DetectType(const std::string& filePath) {
         std::string ext = fs::path(filePath).extension().string();
@@ -51,10 +41,6 @@ namespace ProyecThor::UI {
         return DocumentType::Unknown;
     }
 
-    // -------------------------------------------------------------------------
-    // Genera una clave de cache: hash simple basado en ruta + tamanio + fecha
-    // -------------------------------------------------------------------------
-
     std::string DocumentConverter::BuildCacheKey(const std::string& filePath) {
         std::error_code ec;
         auto lastWrite = fs::last_write_time(filePath, ec);
@@ -64,7 +50,6 @@ namespace ProyecThor::UI {
         oss << filePath << "_" << fileSize << "_"
             << lastWrite.time_since_epoch().count();
 
-        // Hash djb2
         std::string raw = oss.str();
         uint64_t hash = 5381;
         for (unsigned char c : raw) {
@@ -76,10 +61,6 @@ namespace ProyecThor::UI {
         return result.str();
     }
 
-    // -------------------------------------------------------------------------
-    // Limpia la cache de un documento
-    // -------------------------------------------------------------------------
-
     void DocumentConverter::ClearCache(const std::string& filePath, const std::string& cacheDir) {
         std::string key      = BuildCacheKey(filePath);
         fs::path    cacheKey = fs::path(cacheDir) / key;
@@ -89,10 +70,6 @@ namespace ProyecThor::UI {
             fs::remove_all(cacheKey, ec);
         }
     }
-
-    // -------------------------------------------------------------------------
-    // Punto de entrada principal
-    // -------------------------------------------------------------------------
 
     ConversionResult DocumentConverter::Convert(
         const std::string& filePath,
@@ -163,10 +140,6 @@ namespace ProyecThor::UI {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Conversion PDF con PDFium
-    // -------------------------------------------------------------------------
-
     ConversionResult DocumentConverter::ConvertPDF(
         const std::string& filePath,
         const std::string& outputDir,
@@ -175,7 +148,6 @@ namespace ProyecThor::UI {
     {
         ConversionResult result;
 
-        // Aseguramos que PDFium este inicializado
         GetPDFiumLibrary();
 
         FPDF_DOCUMENT doc = FPDF_LoadDocument(filePath.c_str(), nullptr);
@@ -195,7 +167,6 @@ namespace ProyecThor::UI {
             return result;
         }
 
-        // Factor de escala: PDFium trabaja en puntos (72 ppp), escalamos al DPI deseado
         const float scale = static_cast<float>(dpi) / 72.0f;
 
         for (int i = 0; i < totalPages; i++) {
@@ -211,32 +182,29 @@ namespace ProyecThor::UI {
             int pageW = static_cast<int>(FPDF_GetPageWidth(page)  * scale);
             int pageH = static_cast<int>(FPDF_GetPageHeight(page) * scale);
 
-            // PDFium renderiza en formato BGRA (4 bytes por pixel)
             std::vector<unsigned char> buffer(pageW * pageH * 4, 0xFF);
 
             FPDF_BITMAP bitmap = FPDFBitmap_CreateEx(
                 pageW, pageH,
                 FPDFBitmap_BGRA,
                 buffer.data(),
-                pageW * 4  // stride en bytes
+                pageW * 4
             );
 
-            // Fondo blanco
             FPDFBitmap_FillRect(bitmap, 0, 0, pageW, pageH, 0xFFFFFFFF);
 
             FPDF_RenderPageBitmap(
                 bitmap, page,
                 0, 0, pageW, pageH,
-                0,           // rotacion (0 = sin rotar)
-                FPDF_ANNOT   // renderiza tambien anotaciones
+                0,
+                FPDF_ANNOT
             );
 
             FPDFBitmap_Destroy(bitmap);
             FPDF_ClosePage(page);
 
-            // Convertimos BGRA -> RGBA para stb_image_write
             for (int px = 0; px < pageW * pageH; px++) {
-                std::swap(buffer[px * 4 + 0], buffer[px * 4 + 2]); // B <-> R
+                std::swap(buffer[px * 4 + 0], buffer[px * 4 + 2]);
             }
 
             std::ostringstream oss;
@@ -258,10 +226,6 @@ namespace ProyecThor::UI {
         return result;
     }
 
-    // -------------------------------------------------------------------------
-    // Busca el binario de LibreOffice en rutas comunes
-    // -------------------------------------------------------------------------
-
     std::string DocumentConverter::FindLibreOfficeBinary() {
         const std::vector<std::string> candidates = {
             "soffice",
@@ -282,10 +246,6 @@ namespace ProyecThor::UI {
 
         return "";
     }
-
-    // -------------------------------------------------------------------------
-    // Conversion PPTX: LibreOffice headless -> PDF temporal -> PDFium
-    // -------------------------------------------------------------------------
 
     ConversionResult DocumentConverter::ConvertPPTX(
         const std::string& filePath,
@@ -329,14 +289,12 @@ namespace ProyecThor::UI {
             return result;
         }
 
-        // Renderizamos el PDF temporal con PDFium
         ConversionResult pdfResult = ConvertPDF(pdfPath, outputDir, dpi, onProgress);
 
-        // Eliminamos el PDF temporal
         std::error_code ec;
         fs::remove(pdfPath, ec);
 
         return pdfResult;
     }
 
-} // namespace ProyecThor::UI
+}

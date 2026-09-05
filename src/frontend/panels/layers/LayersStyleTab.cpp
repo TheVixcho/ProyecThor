@@ -1,7 +1,7 @@
 #include "LayersStyleTab.h"
 #include "LayersTheme.h"
-#include "../../backend/core/PresentationCore.h"
-#include "../../backend/core/FileDeletionManager.h"
+#include "backend/core/PresentationCore.h"
+#include "backend/core/FileDeletionManager.h"
 #include "frontend/ui/UIManager.h"
 #include "frontend/ui/IconRail.h"
 #include <imgui.h>

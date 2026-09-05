@@ -169,23 +169,32 @@ bool Model3DLoader::LoadOBJ(const std::string& filePath, Model3DMesh& outMesh) {
             std::vector<uint32_t> faceIndices;
             std::string vertToken;
 
+            auto SafeInt = [](const std::string& str) -> int {
+                if (str.empty()) return 0;
+                try {
+                    return std::stoi(str);
+                } catch (...) {
+                    return 0;
+                }
+            };
+
             while (ss >> vertToken) {
                 int pIdx = 0, uvIdx = 0, nIdx = 0;
                 // Parse v, v/vt, v//vn, v/vt/vn
                 size_t s1 = vertToken.find('/');
                 if (s1 == std::string::npos) {
-                    pIdx = std::stoi(vertToken);
+                    pIdx = SafeInt(vertToken);
                 } else {
-                    pIdx = std::stoi(vertToken.substr(0, s1));
+                    pIdx = SafeInt(vertToken.substr(0, s1));
                     size_t s2 = vertToken.find('/', s1 + 1);
                     if (s2 == std::string::npos) {
                         std::string t = vertToken.substr(s1 + 1);
-                        if (!t.empty()) uvIdx = std::stoi(t);
+                        if (!t.empty()) uvIdx = SafeInt(t);
                     } else {
                         std::string t1 = vertToken.substr(s1 + 1, s2 - s1 - 1);
                         std::string t2 = vertToken.substr(s2 + 1);
-                        if (!t1.empty()) uvIdx = std::stoi(t1);
-                        if (!t2.empty()) nIdx = std::stoi(t2);
+                        if (!t1.empty()) uvIdx = SafeInt(t1);
+                        if (!t2.empty()) nIdx = SafeInt(t2);
                     }
                 }
 
@@ -562,12 +571,7 @@ Model3DMesh Model3DLoader::CreatePrimitive(const std::string& primitiveName) {
 
 std::vector<std::string> Model3DLoader::GetAvailablePrimitives() {
     return {
-        "Cruz 3D",
-        "Cubo",
-        "Esfera",
-        "Cilindro",
-        "Torus / Anillo",
-        "Pirámide"
+        "Cubo"
     };
 }
 

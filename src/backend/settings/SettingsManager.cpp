@@ -164,6 +164,12 @@ const char* ThemePresetName(ThemePreset preset) {
         case ThemePreset::Deadlock:    return "Deadlock";
         case ThemePreset::Galaxy:      return "Galaxia";
         case ThemePreset::Mek:         return "Mek";
+        case ThemePreset::Cyberpunk:   return "Cyberpunk Neón Pro";
+        case ThemePreset::Emerald:     return "Emerald Studio Pro";
+        case ThemePreset::Crimson:     return "Crimson Velvet Pro";
+        case ThemePreset::Midnight:    return "Midnight Blue Pro";
+        case ThemePreset::Amethyst:    return "Amethyst Violet Pro";
+        case ThemePreset::Titanium:    return "Titanium Silver Pro";
         default:                       return "Personalizado";
     }
 }
@@ -177,6 +183,12 @@ ThemePreset ThemePresetFromString(const std::string& s) {
     if (s == "deadlock")    return ThemePreset::Deadlock;
     if (s == "galaxy")      return ThemePreset::Galaxy;
     if (s == "mek")         return ThemePreset::Mek;
+    if (s == "cyberpunk")   return ThemePreset::Cyberpunk;
+    if (s == "emerald")     return ThemePreset::Emerald;
+    if (s == "crimson")     return ThemePreset::Crimson;
+    if (s == "midnight")    return ThemePreset::Midnight;
+    if (s == "amethyst")    return ThemePreset::Amethyst;
+    if (s == "titanium")    return ThemePreset::Titanium;
     return ThemePreset::Custom;
 }
 
@@ -190,6 +202,12 @@ static std::string ThemePresetToKey(ThemePreset preset) {
         case ThemePreset::Deadlock:    return "deadlock";
         case ThemePreset::Galaxy:      return "galaxy";
         case ThemePreset::Mek:         return "mek";
+        case ThemePreset::Cyberpunk:   return "cyberpunk";
+        case ThemePreset::Emerald:     return "emerald";
+        case ThemePreset::Crimson:     return "crimson";
+        case ThemePreset::Midnight:    return "midnight";
+        case ThemePreset::Amethyst:    return "amethyst";
+        case ThemePreset::Titanium:    return "titanium";
         default:                       return "custom";
     }
 }
@@ -413,6 +431,132 @@ ThemeSettings MakeThemePreset(ThemePreset preset) {
         break;
     }
 
+    case ThemePreset::Cyberpunk: {
+        t.base[0]=0.043f; t.base[1]=0.047f; t.base[2]=0.086f; t.base[3]=1.0f;
+        t.surface0[0]=0.071f; t.surface0[1]=0.075f; t.surface0[2]=0.141f; t.surface0[3]=1.0f;
+        t.surface1[0]=0.102f; t.surface1[1]=0.110f; t.surface1[2]=0.200f; t.surface1[3]=1.0f;
+        t.surface2[0]=0.141f; t.surface2[1]=0.149f; t.surface2[2]=0.271f; t.surface2[3]=1.0f;
+        t.surface3[0]=0.180f; t.surface3[1]=0.192f; t.surface3[2]=0.349f; t.surface3[3]=1.0f;
+        t.accent[0]=0.000f; t.accent[1]=0.960f; t.accent[2]=1.000f; t.accent[3]=1.0f; // Neon Cyan
+        t.accentLight[0]=1.000f; t.accentLight[1]=0.000f; t.accentLight[2]=0.500f; t.accentLight[3]=1.0f; // Neon Magenta
+        t.accentDim[0]=0.000f; t.accentDim[1]=0.545f; t.accentDim[2]=0.600f; t.accentDim[3]=1.0f;
+        t.accentFaint[0]=0.000f; t.accentFaint[1]=0.960f; t.accentFaint[2]=1.000f; t.accentFaint[3]=0.18f;
+        t.border[0]=0.000f; t.border[1]=0.960f; t.border[2]=1.000f; t.border[3]=0.25f;
+        t.borderFaint[0]=1.000f; t.borderFaint[1]=0.000f; t.borderFaint[2]=0.500f; t.borderFaint[3]=0.08f;
+        t.textPrimary[0]=0.900f; t.textPrimary[1]=1.000f; t.textPrimary[2]=1.000f; t.textPrimary[3]=1.0f;
+        t.textDim[0]=0.480f; t.textDim[1]=0.600f; t.textDim[2]=0.670f; t.textDim[3]=1.0f;
+        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.28f;
+        t.danger[0]=1.000f; t.danger[1]=0.000f; t.danger[2]=0.333f; t.danger[3]=1.0f;
+        t.success[0]=0.000f; t.success[1]=1.000f; t.success[2]=0.615f; t.success[3]=1.0f;
+        t.windowRounding=10.0f; t.frameRounding=6.0f; t.scrollbarSize=7.0f;
+        break;
+    }
+
+    case ThemePreset::Emerald: {
+        t.base[0]=0.027f; t.base[1]=0.063f; t.base[2]=0.051f; t.base[3]=1.0f;
+        t.surface0[0]=0.047f; t.surface0[1]=0.094f; t.surface0[2]=0.078f; t.surface0[3]=1.0f;
+        t.surface1[0]=0.071f; t.surface1[1]=0.141f; t.surface1[2]=0.118f; t.surface1[3]=1.0f;
+        t.surface2[0]=0.102f; t.surface2[1]=0.188f; t.surface2[2]=0.157f; t.surface2[3]=1.0f;
+        t.surface3[0]=0.133f; t.surface3[1]=0.251f; t.surface3[2]=0.212f; t.surface3[3]=1.0f;
+        t.accent[0]=0.063f; t.accent[1]=0.725f; t.accent[2]=0.506f; t.accent[3]=1.0f; // Emerald
+        t.accentLight[0]=0.204f; t.accentLight[1]=0.827f; t.accentLight[2]=0.600f; t.accentLight[3]=1.0f;
+        t.accentDim[0]=0.020f; t.accentDim[1]=0.380f; t.accentDim[2]=0.260f; t.accentDim[3]=1.0f;
+        t.accentFaint[0]=0.063f; t.accentFaint[1]=0.725f; t.accentFaint[2]=0.506f; t.accentFaint[3]=0.16f;
+        t.border[0]=0.063f; t.border[1]=0.725f; t.border[2]=0.506f; t.border[3]=0.20f;
+        t.borderFaint[0]=1; t.borderFaint[1]=1; t.borderFaint[2]=1; t.borderFaint[3]=0.05f;
+        t.textPrimary[0]=0.900f; t.textPrimary[1]=0.970f; t.textPrimary[2]=0.940f; t.textPrimary[3]=1.0f;
+        t.textDim[0]=0.430f; t.textDim[1]=0.610f; t.textDim[2]=0.530f; t.textDim[3]=1.0f;
+        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.26f;
+        t.danger[0]=0.900f; t.danger[1]=0.250f; t.danger[2]=0.250f; t.danger[3]=1.0f;
+        t.success[0]=0.100f; t.success[1]=0.850f; t.success[2]=0.550f; t.success[3]=1.0f;
+        t.windowRounding=12.0f; t.frameRounding=7.0f; t.scrollbarSize=8.0f;
+        break;
+    }
+
+    case ThemePreset::Crimson: {
+        t.base[0]=0.059f; t.base[1]=0.024f; t.base[2]=0.031f; t.base[3]=1.0f;
+        t.surface0[0]=0.090f; t.surface0[1]=0.039f; t.surface0[2]=0.055f; t.surface0[3]=1.0f;
+        t.surface1[0]=0.133f; t.surface1[1]=0.063f; t.surface1[2]=0.082f; t.surface1[3]=1.0f;
+        t.surface2[0]=0.180f; t.surface2[1]=0.086f; t.surface2[2]=0.110f; t.surface2[3]=1.0f;
+        t.surface3[0]=0.239f; t.surface3[1]=0.110f; t.surface3[2]=0.145f; t.surface3[3]=1.0f;
+        t.accent[0]=0.937f; t.accent[1]=0.267f; t.accent[2]=0.267f; t.accent[3]=1.0f; // Crimson
+        t.accentLight[0]=0.973f; t.accentLight[1]=0.443f; t.accentLight[2]=0.443f; t.accentLight[3]=1.0f;
+        t.accentDim[0]=0.498f; t.accentDim[1]=0.114f; t.accentDim[2]=0.114f; t.accentDim[3]=1.0f;
+        t.accentFaint[0]=0.937f; t.accentFaint[1]=0.267f; t.accentFaint[2]=0.267f; t.accentFaint[3]=0.16f;
+        t.border[0]=0.937f; t.border[1]=0.267f; t.border[2]=0.267f; t.border[3]=0.22f;
+        t.borderFaint[0]=1; t.borderFaint[1]=1; t.borderFaint[2]=1; t.borderFaint[3]=0.05f;
+        t.textPrimary[0]=1.000f; t.textPrimary[1]=0.900f; t.textPrimary[2]=0.900f; t.textPrimary[3]=1.0f;
+        t.textDim[0]=0.650f; t.textDim[1]=0.420f; t.textDim[2]=0.450f; t.textDim[3]=1.0f;
+        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.26f;
+        t.danger[0]=0.950f; t.danger[1]=0.200f; t.danger[2]=0.200f; t.danger[3]=1.0f;
+        t.success[0]=0.300f; t.success[1]=0.800f; t.success[2]=0.450f; t.success[3]=1.0f;
+        t.windowRounding=10.0f; t.frameRounding=6.0f; t.scrollbarSize=7.0f;
+        break;
+    }
+
+    case ThemePreset::Midnight: {
+        t.base[0]=0.020f; t.base[1]=0.031f; t.base[2]=0.067f; t.base[3]=1.0f;
+        t.surface0[0]=0.039f; t.surface0[1]=0.059f; t.surface0[2]=0.122f; t.surface0[3]=1.0f;
+        t.surface1[0]=0.063f; t.surface1[1]=0.090f; t.surface1[2]=0.180f; t.surface1[3]=1.0f;
+        t.surface2[0]=0.094f; t.surface2[1]=0.133f; t.surface2[2]=0.247f; t.surface2[3]=1.0f;
+        t.surface3[0]=0.129f; t.surface3[1]=0.176f; t.surface3[2]=0.322f; t.surface3[3]=1.0f;
+        t.accent[0]=0.220f; t.accent[1]=0.741f; t.accent[2]=0.973f; t.accent[3]=1.0f; // Ice Blue
+        t.accentLight[0]=0.490f; t.accentLight[1]=0.827f; t.accentLight[2]=0.988f; t.accentLight[3]=1.0f;
+        t.accentDim[0]=0.012f; t.accentDim[1]=0.412f; t.accentDim[2]=0.631f; t.accentDim[3]=1.0f;
+        t.accentFaint[0]=0.220f; t.accentFaint[1]=0.741f; t.accentFaint[2]=0.973f; t.accentFaint[3]=0.16f;
+        t.border[0]=0.220f; t.border[1]=0.741f; t.border[2]=0.973f; t.border[3]=0.20f;
+        t.borderFaint[0]=1; t.borderFaint[1]=1; t.borderFaint[2]=1; t.borderFaint[3]=0.05f;
+        t.textPrimary[0]=0.878f; t.textPrimary[1]=0.949f; t.textPrimary[2]=0.996f; t.textPrimary[3]=1.0f;
+        t.textDim[0]=0.392f; t.textDim[1]=0.455f; t.textDim[2]=0.545f; t.textDim[3]=1.0f;
+        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.26f;
+        t.danger[0]=0.900f; t.danger[1]=0.300f; t.danger[2]=0.350f; t.danger[3]=1.0f;
+        t.success[0]=0.200f; t.success[1]=0.800f; t.success[2]=0.550f; t.success[3]=1.0f;
+        t.windowRounding=14.0f; t.frameRounding=8.0f; t.scrollbarSize=8.0f;
+        break;
+    }
+
+    case ThemePreset::Amethyst: {
+        t.base[0]=0.039f; t.base[1]=0.020f; t.base[2]=0.071f; t.base[3]=1.0f;
+        t.surface0[0]=0.067f; t.surface0[1]=0.035f; t.surface0[2]=0.122f; t.surface0[3]=1.0f;
+        t.surface1[0]=0.106f; t.surface1[1]=0.059f; t.surface1[2]=0.180f; t.surface1[3]=1.0f;
+        t.surface2[0]=0.149f; t.surface2[1]=0.086f; t.surface2[2]=0.251f; t.surface2[3]=1.0f;
+        t.surface3[0]=0.200f; t.surface3[1]=0.118f; t.surface3[2]=0.329f; t.surface3[3]=1.0f;
+        t.accent[0]=0.659f; t.accent[1]=0.333f; t.accent[2]=0.969f; t.accent[3]=1.0f; // Amethyst
+        t.accentLight[0]=0.753f; t.accentLight[1]=0.518f; t.accentLight[2]=0.988f; t.accentLight[3]=1.0f;
+        t.accentDim[0]=0.345f; t.accentDim[1]=0.110f; t.accentDim[2]=0.529f; t.accentDim[3]=1.0f;
+        t.accentFaint[0]=0.659f; t.accentFaint[1]=0.333f; t.accentFaint[2]=0.969f; t.accentFaint[3]=0.16f;
+        t.border[0]=0.659f; t.border[1]=0.333f; t.border[2]=0.969f; t.border[3]=0.22f;
+        t.borderFaint[0]=1; t.borderFaint[1]=1; t.borderFaint[2]=1; t.borderFaint[3]=0.05f;
+        t.textPrimary[0]=0.953f; t.textPrimary[1]=0.910f; t.textPrimary[2]=1.000f; t.textPrimary[3]=1.0f;
+        t.textDim[0]=0.576f; t.textDim[1]=0.463f; t.textDim[2]=0.659f; t.textDim[3]=1.0f;
+        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.26f;
+        t.danger[0]=0.900f; t.danger[1]=0.300f; t.danger[2]=0.400f; t.danger[3]=1.0f;
+        t.success[0]=0.350f; t.success[1]=0.800f; t.success[2]=0.600f; t.success[3]=1.0f;
+        t.windowRounding=12.0f; t.frameRounding=8.0f; t.scrollbarSize=8.0f;
+        break;
+    }
+
+    case ThemePreset::Titanium: {
+        t.base[0]=0.055f; t.base[1]=0.059f; t.base[2]=0.071f; t.base[3]=1.0f;
+        t.surface0[0]=0.078f; t.surface0[1]=0.086f; t.surface0[2]=0.102f; t.surface0[3]=1.0f;
+        t.surface1[0]=0.106f; t.surface1[1]=0.118f; t.surface1[2]=0.141f; t.surface1[3]=1.0f;
+        t.surface2[0]=0.137f; t.surface2[1]=0.153f; t.surface2[2]=0.184f; t.surface2[3]=1.0f;
+        t.surface3[0]=0.176f; t.surface3[1]=0.196f; t.surface2[2]=0.235f; t.surface3[3]=1.0f;
+        t.accent[0]=0.580f; t.accent[1]=0.639f; t.accent[2]=0.722f; t.accent[3]=1.0f; // Platinum Titanium
+        t.accentLight[0]=0.796f; t.accentLight[1]=0.835f; t.accentLight[2]=0.882f; t.accentLight[3]=1.0f;
+        t.accentDim[0]=0.278f; t.accentDim[1]=0.333f; t.accentDim[2]=0.412f; t.accentDim[3]=1.0f;
+        t.accentFaint[0]=0.580f; t.accentFaint[1]=0.639f; t.accentFaint[2]=0.722f; t.accentFaint[3]=0.15f;
+        t.border[0]=1.000f; t.border[1]=1.000f; t.border[2]=1.000f; t.border[3]=0.10f;
+        t.borderFaint[0]=1; t.borderFaint[1]=1; t.borderFaint[2]=1; t.borderFaint[3]=0.04f;
+        t.textPrimary[0]=0.945f; t.textPrimary[1]=0.961f; t.textPrimary[2]=0.976f; t.textPrimary[3]=1.0f;
+        t.textDim[0]=0.392f; t.textDim[1]=0.455f; t.textDim[2]=0.545f; t.textDim[3]=1.0f;
+        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.25f;
+        t.danger[0]=0.850f; t.danger[1]=0.280f; t.danger[2]=0.280f; t.danger[3]=1.0f;
+        t.success[0]=0.280f; t.success[1]=0.750f; t.success[2]=0.450f; t.success[3]=1.0f;
+        t.windowRounding=8.0f; t.frameRounding=5.0f; t.scrollbarSize=7.0f;
+        break;
+    }
+
     default:
         // Cae aca solo si llega ThemePreset::Custom, que no genera colores
         // desde codigo (se cargan desde settings.json en LoadSettings).
@@ -533,6 +677,45 @@ void SettingsManager::ApplyProjection() {
     core.SetLuminosityAmount(p.luminosityAmount);
     core.SetTAAEnabled(p.taaEnabled);
     core.SetTAAIntensity(p.taaIntensity);
+    core.SetGlitchEnabled(p.glitchEnabled);
+    core.SetGlitchIntensity(p.glitchIntensity);
+    core.SetGlitchSpeed(p.glitchSpeed);
+    core.SetGlitchMode(p.glitchMode);
+    core.SetColorGradingEnabled(p.colorGradingEnabled);
+    core.SetColorGradingIntensity(p.colorGradingIntensity);
+    core.SetColorGradingPreset(p.colorGradingPreset);
+    core.SetPixelateEnabled(p.pixelateEnabled);
+    core.SetPixelateSize(p.pixelateSize);
+    core.SetPixelateColorDepth(p.pixelateColorDepth);
+    core.SetRadialBlurEnabled(p.radialBlurEnabled);
+    core.SetRadialBlurIntensity(p.radialBlurIntensity);
+    core.SetWavesEnabled(p.wavesEnabled);
+    core.SetWavesIntensity(p.wavesIntensity);
+    core.SetWavesSpeed(p.wavesSpeed);
+    core.SetWavesFrequency(p.wavesFrequency);
+    core.SetMirrorEnabled(p.mirrorEnabled);
+    core.SetMirrorMode(p.mirrorMode);
+    core.SetThermalEnabled(p.thermalEnabled);
+    core.SetThermalIntensity(p.thermalIntensity);
+    core.SetThermalMode(p.thermalMode);
+    core.SetHalftoneEnabled(p.halftoneEnabled);
+    core.SetHalftoneDotScale(p.halftoneDotScale);
+    core.SetHalftoneMode(p.halftoneMode);
+    core.SetVolumetricFogEnabled(p.volumetricFogEnabled);
+    core.SetVolumetricFogDensity(p.volumetricFogDensity);
+    core.SetVolumetricFogSpeed(p.volumetricFogSpeed);
+    core.SetVolumetricFogScale(p.volumetricFogScale);
+    core.SetVolumetricFogColorMode(p.volumetricFogColorMode);
+    core.SetVolumetricCloudsEnabled(p.volumetricCloudsEnabled);
+    core.SetVolumetricCloudsCoverage(p.volumetricCloudsCoverage);
+    core.SetVolumetricCloudsDensity(p.volumetricCloudsDensity);
+    core.SetVolumetricCloudsSpeed(p.volumetricCloudsSpeed);
+    core.SetVolumetricCloudsSunIntensity(p.volumetricCloudsSunIntensity);
+    core.SetZonedDistortionEnabled(p.zonedDistortionEnabled);
+    core.SetZonedDistortionIntensity(p.zonedDistortionIntensity);
+    core.SetZonedDistortionSpeed(p.zonedDistortionSpeed);
+    core.SetZonedDistortionZone(p.zonedDistortionZone);
+    core.SetZonedDistortionFeather(p.zonedDistortionFeather);
     core.SetFillBlurEnabled(p.fillBlurEnabled);
     core.SetFillBlurBrightness(p.fillBlurBrightness);
     core.SetVideoRenderEngine(p.videoRenderEngine);
@@ -713,6 +896,45 @@ void SettingsManager::SaveSettings() {
     j["projection"]["luminosityAmount"]     = p.luminosityAmount;
     j["projection"]["taaEnabled"]           = p.taaEnabled;
     j["projection"]["taaIntensity"]         = p.taaIntensity;
+    j["projection"]["glitchEnabled"]        = p.glitchEnabled;
+    j["projection"]["glitchIntensity"]      = p.glitchIntensity;
+    j["projection"]["glitchSpeed"]          = p.glitchSpeed;
+    j["projection"]["glitchMode"]           = p.glitchMode;
+    j["projection"]["colorGradingEnabled"]  = p.colorGradingEnabled;
+    j["projection"]["colorGradingIntensity"]= p.colorGradingIntensity;
+    j["projection"]["colorGradingPreset"]   = p.colorGradingPreset;
+    j["projection"]["pixelateEnabled"]      = p.pixelateEnabled;
+    j["projection"]["pixelateSize"]         = p.pixelateSize;
+    j["projection"]["pixelateColorDepth"]   = p.pixelateColorDepth;
+    j["projection"]["radialBlurEnabled"]    = p.radialBlurEnabled;
+    j["projection"]["radialBlurIntensity"]  = p.radialBlurIntensity;
+    j["projection"]["wavesEnabled"]         = p.wavesEnabled;
+    j["projection"]["wavesIntensity"]       = p.wavesIntensity;
+    j["projection"]["wavesSpeed"]           = p.wavesSpeed;
+    j["projection"]["wavesFrequency"]       = p.wavesFrequency;
+    j["projection"]["mirrorEnabled"]        = p.mirrorEnabled;
+    j["projection"]["mirrorMode"]           = p.mirrorMode;
+    j["projection"]["thermalEnabled"]       = p.thermalEnabled;
+    j["projection"]["thermalIntensity"]     = p.thermalIntensity;
+    j["projection"]["thermalMode"]          = p.thermalMode;
+    j["projection"]["halftoneEnabled"]      = p.halftoneEnabled;
+    j["projection"]["halftoneDotScale"]     = p.halftoneDotScale;
+    j["projection"]["halftoneMode"]         = p.halftoneMode;
+    j["projection"]["volumetricFogEnabled"]         = p.volumetricFogEnabled;
+    j["projection"]["volumetricFogDensity"]         = p.volumetricFogDensity;
+    j["projection"]["volumetricFogSpeed"]           = p.volumetricFogSpeed;
+    j["projection"]["volumetricFogScale"]           = p.volumetricFogScale;
+    j["projection"]["volumetricFogColorMode"]       = p.volumetricFogColorMode;
+    j["projection"]["volumetricCloudsEnabled"]      = p.volumetricCloudsEnabled;
+    j["projection"]["volumetricCloudsCoverage"]     = p.volumetricCloudsCoverage;
+    j["projection"]["volumetricCloudsDensity"]      = p.volumetricCloudsDensity;
+    j["projection"]["volumetricCloudsSpeed"]        = p.volumetricCloudsSpeed;
+    j["projection"]["volumetricCloudsSunIntensity"] = p.volumetricCloudsSunIntensity;
+    j["projection"]["zonedDistortionEnabled"]       = p.zonedDistortionEnabled;
+    j["projection"]["zonedDistortionIntensity"]     = p.zonedDistortionIntensity;
+    j["projection"]["zonedDistortionSpeed"]         = p.zonedDistortionSpeed;
+    j["projection"]["zonedDistortionZone"]          = p.zonedDistortionZone;
+    j["projection"]["zonedDistortionFeather"]       = p.zonedDistortionFeather;
     j["projection"]["fillBlurEnabled"]      = p.fillBlurEnabled;
     j["projection"]["fillBlurBrightness"]   = p.fillBlurBrightness;
     j["projection"]["videoRenderEngine"]    = p.videoRenderEngine;
@@ -859,6 +1081,7 @@ void SettingsManager::SaveSettings() {
     j["general"]["showRailLabels"]      = m_Settings.general.showRailLabels;
     j["general"]["showPerfPanel"]       = m_Settings.general.showPerfPanel;
     j["general"]["showViewQuickActions"]= m_Settings.general.showViewQuickActions;
+    j["general"]["openHubOnStartup"]    = m_Settings.general.openHubOnStartup;
     j["general"]["quickNotesText"]      = m_Settings.general.quickNotesText;
 
     j["audio"]["masterVolume"] = m_Settings.audio.masterVolume;
@@ -972,6 +1195,45 @@ void SettingsManager::LoadSettings() {
             p.luminosityAmount      = jp.value("luminosityAmount",      1.2f);
             p.taaEnabled            = jp.value("taaEnabled",            false);
             p.taaIntensity          = jp.value("taaIntensity",          0.5f);
+            p.glitchEnabled         = jp.value("glitchEnabled",         false);
+            p.glitchIntensity       = jp.value("glitchIntensity",       0.40f);
+            p.glitchSpeed           = jp.value("glitchSpeed",           1.0f);
+            p.glitchMode            = jp.value("glitchMode",            0);
+            p.colorGradingEnabled   = jp.value("colorGradingEnabled",   false);
+            p.colorGradingIntensity = jp.value("colorGradingIntensity", 0.75f);
+            p.colorGradingPreset    = jp.value("colorGradingPreset",    1);
+            p.pixelateEnabled       = jp.value("pixelateEnabled",       false);
+            p.pixelateSize          = jp.value("pixelateSize",          12.0f);
+            p.pixelateColorDepth    = jp.value("pixelateColorDepth",    0);
+            p.radialBlurEnabled     = jp.value("radialBlurEnabled",     false);
+            p.radialBlurIntensity   = jp.value("radialBlurIntensity",   0.35f);
+            p.wavesEnabled          = jp.value("wavesEnabled",          false);
+            p.wavesIntensity        = jp.value("wavesIntensity",        0.35f);
+            p.wavesSpeed            = jp.value("wavesSpeed",            1.0f);
+            p.wavesFrequency        = jp.value("wavesFrequency",        8.0f);
+            p.mirrorEnabled         = jp.value("mirrorEnabled",         false);
+            p.mirrorMode            = jp.value("mirrorMode",            0);
+            p.thermalEnabled        = jp.value("thermalEnabled",        false);
+            p.thermalIntensity      = jp.value("thermalIntensity",      0.85f);
+            p.thermalMode           = jp.value("thermalMode",           0);
+            p.halftoneEnabled       = jp.value("halftoneEnabled",       false);
+            p.halftoneDotScale      = jp.value("halftoneDotScale",      10.0f);
+            p.halftoneMode          = jp.value("halftoneMode",          0);
+            p.volumetricFogEnabled         = jp.value("volumetricFogEnabled",         false);
+            p.volumetricFogDensity         = jp.value("volumetricFogDensity",         0.50f);
+            p.volumetricFogSpeed           = jp.value("volumetricFogSpeed",           1.0f);
+            p.volumetricFogScale           = jp.value("volumetricFogScale",           3.5f);
+            p.volumetricFogColorMode       = jp.value("volumetricFogColorMode",       0);
+            p.volumetricCloudsEnabled      = jp.value("volumetricCloudsEnabled",      false);
+            p.volumetricCloudsCoverage     = jp.value("volumetricCloudsCoverage",     0.55f);
+            p.volumetricCloudsDensity      = jp.value("volumetricCloudsDensity",      0.60f);
+            p.volumetricCloudsSpeed        = jp.value("volumetricCloudsSpeed",        0.80f);
+            p.volumetricCloudsSunIntensity = jp.value("volumetricCloudsSunIntensity", 0.65f);
+            p.zonedDistortionEnabled       = jp.value("zonedDistortionEnabled",       false);
+            p.zonedDistortionIntensity     = jp.value("zonedDistortionIntensity",     0.45f);
+            p.zonedDistortionSpeed         = jp.value("zonedDistortionSpeed",         1.20f);
+            p.zonedDistortionZone          = jp.value("zonedDistortionZone",          0);
+            p.zonedDistortionFeather       = jp.value("zonedDistortionFeather",       0.35f);
             p.fillBlurEnabled       = jp.value("fillBlurEnabled",       false);
             p.fillBlurBrightness    = jp.value("fillBlurBrightness",    0.6f);
             p.videoRenderEngine     = jp.value("videoRenderEngine",     1);
@@ -1192,6 +1454,7 @@ void SettingsManager::LoadSettings() {
             m_Settings.general.showRailLabels       = jg.value("showRailLabels",      true);
             m_Settings.general.showPerfPanel        = jg.value("showPerfPanel",       false);
             m_Settings.general.showViewQuickActions = jg.value("showViewQuickActions", true);
+            m_Settings.general.openHubOnStartup     = jg.value("openHubOnStartup",     true);
             m_Settings.general.quickNotesText       = jg.value("quickNotesText",       "");
         }
 

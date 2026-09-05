@@ -9,14 +9,14 @@
 namespace ProyecThor::UI {
 
     struct ImageAdjustments {
-        float brightness  =  0.0f;   // -1.0 .. +1.0
-        float contrast    =  1.0f;   //  0.0 .. +3.0
-        float saturation  =  1.0f;   //  0.0 .. +3.0
-        float hue         =  0.0f;   // -180 .. +180  (grados)
-        float temperature =  0.0f;   // -1.0 .. +1.0  (frio/calido)
-        float sharpness   =  0.0f;   //  0.0 .. +1.0
-        float gamma       =  1.0f;   //  0.1 .. +3.0
-        float vignette    =  0.0f;   //  0.0 .. +1.0
+        float brightness  =  0.0f;
+        float contrast    =  1.0f;
+        float saturation  =  1.0f;
+        float hue         =  0.0f;
+        float temperature =  0.0f;
+        float sharpness   =  0.0f;
+        float gamma       =  1.0f;
+        float vignette    =  0.0f;
     };
 
     class ImageView {
@@ -44,7 +44,6 @@ namespace ProyecThor::UI {
         int    m_Width       = 0;
         int    m_Height      = 0;
 
-        // Shader pipeline
         GLuint m_ShaderProgram = 0;
         GLuint m_VAO           = 0;
         GLuint m_VBO           = 0;
@@ -53,7 +52,6 @@ namespace ProyecThor::UI {
         int    m_FBOWidth      = 0;
         int    m_FBOHeight     = 0;
 
-        // Uniform locations (cacheados)
         GLint m_uTexture     = -1;
         GLint m_uBrightness  = -1;
         GLint m_uContrast    = -1;
@@ -69,4 +67,4 @@ namespace ProyecThor::UI {
         bool m_ShaderReady = false;
     };
 
-} // namespace ProyecThor::UI
+}

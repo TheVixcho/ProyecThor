@@ -16,7 +16,7 @@ struct QuickNoteItem {
     std::string id;
     std::string title;
     std::string content;
-    std::string category;     // "General", "Urgente", "Anuncio", "Culto", "Otro"
+    std::string category;
     std::string styleName;
     std::string updatedAt;
     bool        isFavorite = false;
@@ -62,21 +62,19 @@ private:
     QuickNoteTransmitMode m_PrevTransmitMode = QuickNoteTransmitMode::Off;
     std::string m_StyleName;
 
-    // ── Biblioteca de Notas ────────────────────────────────────────────
     std::vector<QuickNoteItem> m_SavedNotes;
     QuickNotesTab              m_CurrentTab = QuickNotesTab::LiveEditor;
     char                       m_SearchFilter[128]{};
     std::string                m_SelectedCategoryFilter = "Todos";
 
-    // Modal de guardado en biblioteca
     bool                       m_ShowSaveModal = false;
     char                       m_SaveTitleBuf[128]{};
-    int                        m_SaveCategoryIdx = 0; // 0=Anuncios, 1=Avisos, 2=Urgente, 3=Culto, 4=General, 5=Personalizado
+    int                        m_SaveCategoryIdx = 0;
     char                       m_SaveCustomCategoryBuf[64]{};
 
-    // Notificación flotante de feedback (ej: "Nota cargada", "Guardada en biblioteca")
     std::string                m_FeedbackMessage;
     double                     m_FeedbackTime = 0.0;
 };
 
-} // namespace ProyecThor::UI
+}
+

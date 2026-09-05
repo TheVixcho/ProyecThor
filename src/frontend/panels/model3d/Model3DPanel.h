@@ -28,6 +28,9 @@ public:
     // Carga un modelo por ruta o nombre integrado
     void LoadAsset(const Model3DAsset& asset);
 
+    // Abre diálogo del sistema para importar modelos 3D
+    void ImportModelFileDialog();
+
 private:
     void RenderTopBar();
     void RenderModelGallery(float w, float h);

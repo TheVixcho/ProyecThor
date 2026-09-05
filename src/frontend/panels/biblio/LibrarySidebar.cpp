@@ -31,6 +31,7 @@ static constexpr int kSideMode_Render     = 3;
 static constexpr int kSideMode_Overlay    = 4;
 static constexpr int kSideMode_Web        = 5;
 static constexpr int kSideMode_Model3D    = 6;
+static constexpr int kSideMode_Lab        = 7;
 
 namespace ProyecThor::Library {
 
@@ -235,6 +236,7 @@ void RenderCategoryButtons(LibraryContext& ctx)
         { "Overlay",  ProyecThor::UI::AppIcons::DrawIcon_Overlay,    kSideMode_Overlay   },
         { "Web",      ProyecThor::UI::AppIcons::DrawIcon_Globe,      kSideMode_Web       },
         { "3D",       ProyecThor::UI::AppIcons::DrawIcon_Cube3D,     kSideMode_Model3D   },
+        { "Lab",      ProyecThor::UI::AppIcons::DrawIcon_Formula,    kSideMode_Lab       },
     };
 
     for (const auto& sd : k_SideItems)

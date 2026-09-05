@@ -533,27 +533,163 @@ static void RenderPaneHeader(const char* label, int count)
     ImGui::Spacing();
 }
 // =============================================================================
+//  Detalle y Análisis de Coincidencias de Búsqueda de Canciones
+// =============================================================================
+enum class SongMatchKind {
+    None,
+    Title,
+    Author,
+    Tag,
+    Verse
+};
+
+struct SongMatchDetail {
+    SongMatchKind kind        = SongMatchKind::None;
+    int           stanzaIndex = -1;
+    int           lineIndex   = -1;
+    std::string   snippet;
+    std::string   matchParam;
+};
+
+// Encuentra qué parte de la canción coincide específicamente con la búsqueda
+static SongMatchDetail AnalyzeSongMatch(const std::string& filename, const std::string& queryLower, LibraryContext& ctx)
+{
+    SongMatchDetail detail;
+    if (queryLower.empty()) return detail;
+
+    // 1. Título
+    std::string title = GetSongDisplayName(filename);
+    std::string titleLo = title;
+    std::transform(titleLo.begin(), titleLo.end(), titleLo.begin(), [](unsigned char c){ return (char)::tolower(c); });
+    if (titleLo.find(queryLower) != std::string::npos) {
+        detail.kind = SongMatchKind::Title;
+        detail.snippet = title;
+        return detail;
+    }
+
+    // 2. Autor
+    std::string author = GetSongAuthor(filename);
+    if (!author.empty()) {
+        std::string authorLo = author;
+        std::transform(authorLo.begin(), authorLo.end(), authorLo.begin(), [](unsigned char c){ return (char)::tolower(c); });
+        if (authorLo.find(queryLower) != std::string::npos) {
+            detail.kind = SongMatchKind::Author;
+            detail.matchParam = author;
+            detail.snippet = author;
+            return detail;
+        }
+    }
+
+    // 3. Etiquetas (Tags)
+    auto tags = ctx.getSongTags(filename);
+    for (const auto& tag : tags) {
+        std::string tagLo = tag;
+        std::transform(tagLo.begin(), tagLo.end(), tagLo.begin(), [](unsigned char c){ return (char)::tolower(c); });
+        if (tagLo.find(queryLower) != std::string::npos) {
+            detail.kind = SongMatchKind::Tag;
+            detail.matchParam = tag;
+            detail.snippet = tag;
+            return detail;
+        }
+    }
+
+    // 4. Letra / Estrofas (Verses)
+    auto verses = ctx.loadSongVerses(filename);
+    for (size_t vi = 0; vi < verses.size(); ++vi) {
+        const std::string& stanza = verses[vi];
+        std::string stanzaLo = stanza;
+        std::transform(stanzaLo.begin(), stanzaLo.end(), stanzaLo.begin(), [](unsigned char c){ return (char)::tolower(c); });
+        if (stanzaLo.find(queryLower) != std::string::npos) {
+            detail.kind = SongMatchKind::Verse;
+            detail.stanzaIndex = (int)vi;
+
+            std::stringstream ss(stanza);
+            std::string line;
+            int li = 0;
+            while (std::getline(ss, line)) {
+                if (!line.empty() && line.back() == '\r') line.pop_back();
+                std::string lineLo = line;
+                std::transform(lineLo.begin(), lineLo.end(), lineLo.begin(), [](unsigned char c){ return (char)::tolower(c); });
+                if (lineLo.find(queryLower) != std::string::npos) {
+                    detail.lineIndex = li;
+                    size_t start = line.find_first_not_of(" \t");
+                    if (start != std::string::npos) line = line.substr(start);
+                    detail.snippet = line;
+                    break;
+                }
+                li++;
+            }
+            if (detail.snippet.empty()) {
+                detail.snippet = stanza.substr(0, std::min<size_t>(60, stanza.size()));
+            }
+            return detail;
+        }
+    }
+
+    return detail;
+}
+
+// Dibuja un texto resaltando la porcion que coincide con query
+static void DrawHighlightedText(ImDrawList* dl, ImFont* font, float fontSize,
+                                ImVec2 pos, const std::string& text, const std::string& query,
+                                ImU32 normalCol, ImU32 highlightCol, ImU32 highlightBgCol)
+{
+    if (query.empty() || text.empty()) {
+        dl->AddText(font, fontSize, pos, normalCol, text.c_str());
+        return;
+    }
+
+    std::string textLo = text;
+    std::string qLo    = query;
+    std::transform(textLo.begin(), textLo.end(), textLo.begin(), [](unsigned char c){ return (char)::tolower(c); });
+    std::transform(qLo.begin(),    qLo.end(),    qLo.begin(),    [](unsigned char c){ return (char)::tolower(c); });
+
+    size_t matchPos = textLo.find(qLo);
+    if (matchPos == std::string::npos) {
+        dl->AddText(font, fontSize, pos, normalCol, text.c_str());
+        return;
+    }
+
+    std::string before  = text.substr(0, matchPos);
+    std::string matched = text.substr(matchPos, query.size());
+    std::string after   = text.substr(matchPos + query.size());
+
+    float curX = pos.x;
+    if (!before.empty()) {
+        dl->AddText(font, fontSize, ImVec2(curX, pos.y), normalCol, before.c_str());
+        curX += font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, before.c_str()).x;
+    }
+
+    if (!matched.empty()) {
+        ImVec2 mSz = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, matched.c_str());
+        if (highlightBgCol != 0) {
+            dl->AddRectFilled(ImVec2(curX - 2.0f, pos.y - 1.0f),
+                              ImVec2(curX + mSz.x + 2.0f, pos.y + fontSize + 1.0f),
+                              highlightBgCol, 2.5f);
+        }
+        dl->AddText(font, fontSize, ImVec2(curX, pos.y), highlightCol, matched.c_str());
+        curX += mSz.x;
+    }
+
+    if (!after.empty()) {
+        dl->AddText(font, fontSize, ImVec2(curX, pos.y), normalCol, after.c_str());
+    }
+}
+
+// =============================================================================
 //  SongListRow
 //  Fila de lista para canciones, igual a DS::GlassListRow pero con soporte
-//  para pintar el fondo con el color de la etiqueta asignada a la cancion.
-//  Esto es lo que reemplaza a la vieja pestaña "Etiquetas": ahora la
-//  etiqueta se ve DIRECTAMENTE en la lista de canciones, sin tener que
-//  cambiar de pestaña para diferenciarlas.
+//  para pintar el fondo con el color de la etiqueta asignada a la cancion y
+//  resaltar detalles de coincidencia específicos en búsquedas.
 // =============================================================================
-// Pequeño helper porque DS::RadiusSmall * 0.5f se repite; evita magic number
-// suelto en la funcion de abajo.
 static inline float RadiusSmallLocal() { return DS::RadiusSmall * 0.5f; }
 
-// trailingReserve: pixeles a dejar libres a la derecha de la fila SIN que
-// el area clickeable de seleccion los cubra (para poder poner un control
-// propio ahi encima, ej. el icono de creditos de Biblias — mismo criterio
-// que "selectW" en RenderPlaylistsSection). El fondo (tinte/selección/hover)
-// sigue pintando el ancho COMPLETO de la fila, solo se achica el
-// InvisibleButton de seleccion.
 static bool SongListRow(const char* label, bool selected,
                         ImVec4 tagColor, bool hasTag,
                         float indent = 14.0f, float height = DS::RowHeight,
-                        float trailingReserve = 0.0f)
+                        float trailingReserve = 0.0f,
+                        const SongMatchDetail* match = nullptr,
+                        const std::string& query = "")
 {
     ImVec2 cursor = ImGui::GetCursorScreenPos();
     float  rowW   = ImGui::GetContentRegionAvail().x;
@@ -569,49 +705,101 @@ static bool SongListRow(const char* label, bool selected,
     ImVec2 rMax = ImVec2(cursor.x + rowW, cursor.y + height);
 
     // ── Tinte de etiqueta (si tiene) ────────────────────────────────────────
-    // Se dibuja PRIMERO, como base, para que la seleccion/hover puedan
-    // superponerse encima sin perder la referencia de color.
     if (hasTag) {
         float alpha = selected ? 0.38f : (hovered ? 0.30f : 0.20f);
         ImU32 tagBg = ImGui::ColorConvertFloat4ToU32(
             ImVec4(tagColor.x, tagColor.y, tagColor.z, alpha));
         dl->AddRectFilled(rMin, rMax, tagBg, RadiusSmallLocal());
 
-        // Barra lateral con el color solido de la etiqueta: se nota incluso
-        // cuando el fondo de seleccion/hover queda encima.
+        // Barra lateral con el color solido de la etiqueta
         dl->AddRectFilled(rMin, ImVec2(rMin.x + 3.0f, rMax.y),
                           ImGui::ColorConvertFloat4ToU32(tagColor), 1.5f);
     }
 
-    // ── Fondo de seleccion / hover (igual que GlassListRow) ─────────────────
+    // ── Fondo de seleccion / hover ─────────────────────────────────────────
     if (selected) {
-        // Plano: un solo tono en vez del degrade de 4 colores ("liquid glass").
         dl->AddRectFilled(rMin, rMax, IM_COL32(99, 112, 255, 42));
-
         dl->AddRectFilled(rMin, ImVec2(rMin.x + 3.0f, rMax.y), DS::RowSelectedBar, 1.5f);
-
         dl->AddLine(
             ImVec2(rMin.x + 4.0f, rMax.y - 0.5f),
             ImVec2(rMax.x,        rMax.y - 0.5f),
             IM_COL32(99, 112, 255, 40), 1.0f);
     } else if (hovered && !hasTag) {
-        // Si ya hay un tinte de etiqueta, el hover no dibuja encima (para no
-        // ensuciar el color); el resaltado ya se nota por el aumento de
-        // alpha del tinte de arriba.
         dl->AddRectFilled(rMin, rMax, DS::RowHoverFill, DS::RadiusSmall * 0.5f);
         dl->AddRect(rMin, rMax, IM_COL32(255, 255, 255, 18), DS::RadiusSmall * 0.5f, 0, 0.5f);
     }
 
-    // ── Texto ────────────────────────────────────────────────────────────────
+    // ── Texto de la fila ──────────────────────────────────────────────────
     ImFont* font   = ImGui::GetFont();
     float fontSize = ImGui::GetFontSize();
-    ImVec2 textSz  = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, label);
 
-    float textX = rMin.x + indent;
-    float textY = rMin.y + std::floor((height - textSz.y) * 0.5f);
+    bool hasMatchSnippet = (match != nullptr && match->kind != SongMatchKind::None && !query.empty());
 
-    ImU32 textCol = selected ? DS::TextPrimary : DS::TextSecondary;
-    dl->AddText(ImVec2(textX, textY), textCol, label);
+    if (!hasMatchSnippet) {
+        // Fila simple de 1 línea
+        ImVec2 textSz  = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, label);
+        float textX = rMin.x + indent;
+        float textY = rMin.y + std::floor((height - textSz.y) * 0.5f);
+        ImU32 textCol = selected ? DS::TextPrimary : DS::TextSecondary;
+        dl->AddText(ImVec2(textX, textY), textCol, label);
+    } else {
+        // Fila de 2 líneas enriquecida con indicador específico de la coincidencia
+        float textX = rMin.x + indent;
+        float line1Y = rMin.y + 4.0f;
+        ImU32 textCol = selected ? DS::TextPrimary : DS::TextSecondary;
+
+        // Fila 1: Título / Autor
+        DrawHighlightedText(dl, font, fontSize, ImVec2(textX, line1Y), label, query,
+                            textCol, IM_COL32(255, 230, 110, 255), IM_COL32(235, 175, 40, 50));
+
+        // Fila 2: Badge indicador + Fragmento específico coincidente
+        float line2Y = rMin.y + 24.0f;
+
+        char badgeBuf[48] = "";
+        ImU32 badgeBg = IM_COL32(90, 170, 245, 45);
+        ImU32 badgeBord = IM_COL32(90, 170, 245, 130);
+        ImU32 badgeTextCol = IM_COL32(140, 205, 255, 255);
+
+        if (match->kind == SongMatchKind::Verse) {
+            snprintf(badgeBuf, sizeof(badgeBuf), "Estrofa %d", match->stanzaIndex + 1);
+            badgeBg = IM_COL32(90, 170, 245, 45);
+            badgeBord = IM_COL32(90, 170, 245, 130);
+            badgeTextCol = IM_COL32(140, 205, 255, 255);
+        } else if (match->kind == SongMatchKind::Author) {
+            snprintf(badgeBuf, sizeof(badgeBuf), "Autor");
+            badgeBg = IM_COL32(180, 120, 245, 45);
+            badgeBord = IM_COL32(180, 120, 245, 130);
+            badgeTextCol = IM_COL32(215, 170, 255, 255);
+        } else if (match->kind == SongMatchKind::Tag) {
+            snprintf(badgeBuf, sizeof(badgeBuf), "Etiqueta");
+            badgeBg = IM_COL32(80, 200, 140, 45);
+            badgeBord = IM_COL32(80, 200, 140, 130);
+            badgeTextCol = IM_COL32(120, 240, 180, 255);
+        } else if (match->kind == SongMatchKind::Title) {
+            snprintf(badgeBuf, sizeof(badgeBuf), "Título");
+            badgeBg = IM_COL32(235, 180, 80, 45);
+            badgeBord = IM_COL32(235, 180, 80, 130);
+            badgeTextCol = IM_COL32(255, 215, 130, 255);
+        }
+
+        float curX = textX;
+        if (badgeBuf[0] != '\0') {
+            ImVec2 bSz = ImGui::CalcTextSize(badgeBuf);
+            float padX = 5.0f, padY = 1.0f;
+            ImVec2 bMin(curX, line2Y - 1.0f);
+            ImVec2 bMax(curX + bSz.x + padX * 2.0f, line2Y + bSz.y + padY * 2.0f);
+            dl->AddRectFilled(bMin, bMax, badgeBg, 3.0f);
+            dl->AddRect(bMin, bMax, badgeBord, 3.0f, 0, 1.0f);
+            dl->AddText(ImVec2(curX + padX, line2Y + padY), badgeTextCol, badgeBuf);
+            curX = bMax.x + 6.0f;
+        }
+
+        if (!match->snippet.empty()) {
+            std::string snip = "\"" + match->snippet + "\"";
+            DrawHighlightedText(dl, font, fontSize * 0.92f, ImVec2(curX, line2Y), snip, query,
+                                IM_COL32(200, 205, 215, 210), IM_COL32(255, 230, 110, 255), IM_COL32(235, 175, 40, 50));
+        }
+    }
 
     return clicked;
 }
@@ -995,23 +1183,15 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
         auto currentSongs = ctx.loadPlaylistSongs(openPlaylist);
 
         std::vector<std::string> matches;
+        std::unordered_map<std::string, SongMatchDetail> modalMatchMap;
         matches.reserve(ctx.items.size());
         for (const auto& item : ctx.items)
         {
             if (!q.empty())
             {
-                std::string title = GetSongDisplayName(item);
-                std::transform(title.begin(), title.end(), title.begin(), [](unsigned char c){ return (char)::tolower(c); });
-
-                bool match = title.find(q) != std::string::npos;
-
-                if (!match) {
-                    std::string author = GetSongAuthor(item);
-                    std::transform(author.begin(), author.end(), author.begin(), [](unsigned char c){ return (char)::tolower(c); });
-                    match = author.find(q) != std::string::npos;
-                }
-
-                if (!match) continue;
+                SongMatchDetail match = AnalyzeSongMatch(item, q, ctx);
+                if (match.kind == SongMatchKind::None) continue;
+                modalMatchMap[item] = match;
             }
             matches.push_back(item);
         }
@@ -1036,10 +1216,11 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
 
         if (ImGui::BeginChild("AddSongsList", { 0.f, -50.f }))
         {
-            const float rowH        = 38.0f;
             const float actionZoneW = 96.0f;
             const ImVec2 addBtnSize(26.f, 26.f);
             const float lineH       = ImGui::GetTextLineHeight();
+            ImFont* font            = ImGui::GetFont();
+            float fontSize          = ImGui::GetFontSize();
 
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.f, 3.f));
 
@@ -1048,6 +1229,14 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
                 ImGui::PushID(item.c_str());
 
                 bool already = std::find(currentSongs.begin(), currentSongs.end(), item) != currentSongs.end();
+
+                const SongMatchDetail* mDetail = nullptr;
+                if (!q.empty()) {
+                    auto mIt = modalMatchMap.find(item);
+                    if (mIt != modalMatchMap.end()) mDetail = &mIt->second;
+                }
+                const bool hasMatchDetail = (mDetail != nullptr && mDetail->kind != SongMatchKind::None);
+                const float rowH = hasMatchDetail ? 46.0f : 38.0f;
 
                 ImVec2 p_min  = ImGui::GetCursorScreenPos();
                 float  rowW   = ImGui::GetContentRegionAvail().x;
@@ -1071,18 +1260,75 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
                 std::string author = GetSongAuthor(item);
 
                 dl->PushClipRect(p_min, { p_min.x + clickW - 8.f, p_max.y }, true);
-                if (author.empty())
+                if (!hasMatchDetail)
                 {
-                    ImVec2 titleSz = ImGui::CalcTextSize(title.c_str());
-                    dl->AddText({ p_min.x + 12.f, p_min.y + (rowH - titleSz.y) * 0.5f },
-                                DS::TextPrimary, title.c_str());
+                    if (author.empty())
+                    {
+                        ImVec2 titleSz = ImGui::CalcTextSize(title.c_str());
+                        dl->AddText({ p_min.x + 12.f, p_min.y + (rowH - titleSz.y) * 0.5f },
+                                    DS::TextPrimary, title.c_str());
+                    }
+                    else
+                    {
+                        dl->AddText({ p_min.x + 12.f, p_min.y + rowH * 0.5f - lineH - 1.0f },
+                                    DS::TextPrimary, title.c_str());
+                        dl->AddText({ p_min.x + 12.f, p_min.y + rowH * 0.5f + 1.0f },
+                                    DS::TextSecondary, author.c_str());
+                    }
                 }
                 else
                 {
-                    dl->AddText({ p_min.x + 12.f, p_min.y + rowH * 0.5f - lineH - 1.0f },
-                                DS::TextPrimary, title.c_str());
-                    dl->AddText({ p_min.x + 12.f, p_min.y + rowH * 0.5f + 1.0f },
-                                DS::TextSecondary, author.c_str());
+                    // Fila 1: Título y Autor resaltados
+                    std::string dispLine = author.empty() ? title : (title + "  —  " + author);
+                    DrawHighlightedText(dl, font, fontSize, ImVec2(p_min.x + 12.f, p_min.y + 4.0f),
+                                        dispLine, q, DS::TextPrimary, IM_COL32(255, 230, 110, 255), IM_COL32(235, 175, 40, 50));
+
+                    // Fila 2: Badge indicador + fragmento específico
+                    float line2Y = p_min.y + 24.0f;
+                    char badgeBuf[48] = "";
+                    ImU32 badgeBg = IM_COL32(90, 170, 245, 45);
+                    ImU32 badgeBord = IM_COL32(90, 170, 245, 130);
+                    ImU32 badgeTextCol = IM_COL32(140, 205, 255, 255);
+
+                    if (mDetail->kind == SongMatchKind::Verse) {
+                        snprintf(badgeBuf, sizeof(badgeBuf), "Estrofa %d", mDetail->stanzaIndex + 1);
+                        badgeBg = IM_COL32(90, 170, 245, 45);
+                        badgeBord = IM_COL32(90, 170, 245, 130);
+                        badgeTextCol = IM_COL32(140, 205, 255, 255);
+                    } else if (mDetail->kind == SongMatchKind::Author) {
+                        snprintf(badgeBuf, sizeof(badgeBuf), "Autor");
+                        badgeBg = IM_COL32(180, 120, 245, 45);
+                        badgeBord = IM_COL32(180, 120, 245, 130);
+                        badgeTextCol = IM_COL32(215, 170, 255, 255);
+                    } else if (mDetail->kind == SongMatchKind::Tag) {
+                        snprintf(badgeBuf, sizeof(badgeBuf), "Etiqueta");
+                        badgeBg = IM_COL32(80, 200, 140, 45);
+                        badgeBord = IM_COL32(80, 200, 140, 130);
+                        badgeTextCol = IM_COL32(120, 240, 180, 255);
+                    } else if (mDetail->kind == SongMatchKind::Title) {
+                        snprintf(badgeBuf, sizeof(badgeBuf), "Título");
+                        badgeBg = IM_COL32(235, 180, 80, 45);
+                        badgeBord = IM_COL32(235, 180, 80, 130);
+                        badgeTextCol = IM_COL32(255, 215, 130, 255);
+                    }
+
+                    float curX = p_min.x + 12.f;
+                    if (badgeBuf[0] != '\0') {
+                        ImVec2 bSz = ImGui::CalcTextSize(badgeBuf);
+                        float padX = 5.0f, padY = 1.0f;
+                        ImVec2 bMin(curX, line2Y - 1.0f);
+                        ImVec2 bMax(curX + bSz.x + padX * 2.0f, line2Y + bSz.y + padY * 2.0f);
+                        dl->AddRectFilled(bMin, bMax, badgeBg, 3.0f);
+                        dl->AddRect(bMin, bMax, badgeBord, 3.0f, 0, 1.0f);
+                        dl->AddText(ImVec2(curX + padX, line2Y + padY), badgeTextCol, badgeBuf);
+                        curX = bMax.x + 6.0f;
+                    }
+
+                    if (!mDetail->snippet.empty()) {
+                        std::string snip = "\"" + mDetail->snippet + "\"";
+                        DrawHighlightedText(dl, font, fontSize * 0.92f, ImVec2(curX, line2Y), snip, q,
+                                            IM_COL32(200, 205, 215, 210), IM_COL32(255, 230, 110, 255), IM_COL32(235, 175, 40, 50));
+                    }
                 }
                 dl->PopClipRect();
 
@@ -1148,6 +1394,7 @@ static void RenderItemsListPane(LibraryContext& ctx)
     const float reservedH = btnRowH + itemSpY * 2.0f + 10.0f;
 
     static std::vector<std::string> filteredItems;
+    static std::unordered_map<std::string, SongMatchDetail> s_SongMatchMap;
     static std::string lastSearch;
 
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.f, 0.f, 0.f, 0.f));
@@ -1169,35 +1416,27 @@ static void RenderItemsListPane(LibraryContext& ctx)
         const bool shouldRebuild = (cur != lastSearch) || ForceListUpdate();
         if (shouldRebuild) {
             filteredItems.clear();
+            s_SongMatchMap.clear();
+
+            if (ctx.currentCategoryInt == kCat_Songs) {
+                Core::PresentationCore::Get().SetSongSearchQuery(cur);
+            }
+
             for (const auto& item : ctx.items) {
                 bool match = true;
                 if (!cur.empty()) {
-                    std::string lo = item;
-                    std::transform(lo.begin(), lo.end(), lo.begin(), [](unsigned char c){ return (char)::tolower(c); });
-                    match = lo.find(cur) != std::string::npos;
-                    if (!match && ctx.currentCategoryInt == kCat_Songs) {
-                        std::string title = GetSongDisplayName(item);
-                        std::transform(title.begin(), title.end(), title.begin(), [](unsigned char c){ return (char)::tolower(c); });
-                        if (title.find(cur) != std::string::npos) match = true;
-                    }
-                    if (!match && ctx.currentCategoryInt == kCat_Songs) {
-                        std::string author = GetSongAuthor(item);
-                        std::transform(author.begin(), author.end(), author.begin(), [](unsigned char c){ return (char)::tolower(c); });
-                        if (author.find(cur) != std::string::npos) match = true;
-                    }
-                    if (!match && ctx.currentCategoryInt == kCat_Songs) {
-                        for (const auto& t : ctx.getSongTags(item)) {
-                            std::string tl = t;
-                            std::transform(tl.begin(), tl.end(), tl.begin(), [](unsigned char c){ return (char)::tolower(c); });
-                            if (tl.find(cur) != std::string::npos) { match = true; break; }
+                    if (ctx.currentCategoryInt == kCat_Songs) {
+                        SongMatchDetail detail = AnalyzeSongMatch(item, cur, ctx);
+                        if (detail.kind != SongMatchKind::None) {
+                            match = true;
+                            s_SongMatchMap[item] = detail;
+                        } else {
+                            match = false;
                         }
-                    }
-                    if (!match && ctx.currentCategoryInt == kCat_Songs) {
-                        for (const auto& v : ctx.loadSongVerses(item)) {
-                            std::string vl = v;
-                            std::transform(vl.begin(), vl.end(), vl.begin(), [](unsigned char c){ return (char)::tolower(c); });
-                            if (vl.find(cur) != std::string::npos) { match = true; break; }
-                        }
+                    } else {
+                        std::string lo = item;
+                        std::transform(lo.begin(), lo.end(), lo.begin(), [](unsigned char c){ return (char)::tolower(c); });
+                        match = lo.find(cur) != std::string::npos;
                     }
                 }
 
@@ -1220,9 +1459,6 @@ static void RenderItemsListPane(LibraryContext& ctx)
         }
 
         // ── Navegacion con flechas arriba/abajo ──────────────────────────────
-        // Se activa solo cuando la ventana raiz del panel de Biblioteca tiene
-        // el foco y no hay ningun campo de texto activo (buscador, renombrar,
-        // etc.), para no robarle las flechas a esos inputs.
         static int s_PendingScrollIdx = -1;
         if (!filteredItems.empty() &&
             ImGui::IsWindowFocused(ImGuiFocusedFlags_RootWindow) &&
@@ -1282,9 +1518,17 @@ static void RenderItemsListPane(LibraryContext& ctx)
                 }
             }
 
+            const SongMatchDetail* matchPtr = nullptr;
+            if (ctx.currentCategoryInt == kCat_Songs && !cur.empty()) {
+                auto mIt = s_SongMatchMap.find(filteredItems[n]);
+                if (mIt != s_SongMatchMap.end()) matchPtr = &mIt->second;
+            }
+            const float rowHeight = (matchPtr != nullptr && matchPtr->kind != SongMatchKind::None)
+                ? (DS::RowHeight + 16.0f) : DS::RowHeight;
+
             ImGui::PushID(n);
             bool clicked = SongListRow(disp.c_str(), sel, tagColor, hasTag,
-                                       14.0f, DS::RowHeight, 0.0f);
+                                       14.0f, rowHeight, 0.0f, matchPtr, cur);
 
             if (ImGui::BeginPopupContextItem("song_ctx", ImGuiPopupFlags_MouseButtonRight)) {
                 if (ctx.currentCategoryInt == kCat_Songs) {

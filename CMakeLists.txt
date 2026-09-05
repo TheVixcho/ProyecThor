@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.11)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 project(ProyecThor
-    VERSION 0.7.1
+    VERSION 1.0.0
     LANGUAGES C CXX
 )
 
@@ -41,10 +41,10 @@ if(NOT DEFINED PROYECTHOR_BUILD_NUMBER)
 endif()
 
 # ── SUFIJO DE VERSION (pre-release) ──────────────────────────────────────────
-# Vacio = release estable ("0.7.0"). Para una beta/rc que todavia no es la
+# Vacio = release estable ("1.0.0"). Para una beta/rc que todavia no es la
 # version final, pasar -DPROYECTHOR_VERSION_SUFFIX=-beta.2 al configurar (o
 # cambiar el default de aca a mano). IMPORTANTE: volver a "" ANTES de compilar
-# la 0.7.0 estable de verdad, sino queda marcada como beta para siempre.
+# la 1.0.0 estable de verdad, sino queda marcada como beta para siempre.
 # project(VERSION ...) arriba no puede llevar el sufijo (CMake solo acepta
 # numeros en esa directiva), por eso se maneja aparte y se concatena a mano en
 # Version.h.in. El comparador de versiones del updater (IsNewer, ver
@@ -78,6 +78,8 @@ FetchContent_Declare(
     GIT_TAG 0.9.9.8
 )
 FetchContent_MakeAvailable(glm)
+
+add_compile_definitions(IMGUI_USE_WCHAR32)
 
 # ── 2. RUTAS DE LIBRERIAS ────────────────────────────────────────────────────
 set(IMGUI_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/src/external/imgui-docking")
@@ -127,6 +129,7 @@ file(GLOB PREVIEW_MON_SOURCES       CONFIGURE_DEPENDS "src/frontend/panels/stb_i
 file(GLOB FRONTEND_BIBLIO_SOURCES   CONFIGURE_DEPENDS "src/frontend/panels/biblio/*.cpp")
 file(GLOB FRONTEND_HOME_SOURCES     CONFIGURE_DEPENDS "src/frontend/panels/home/*.cpp")
 file(GLOB FRONTEND_MODEL3D_SOURCES  CONFIGURE_DEPENDS "src/frontend/panels/model3d/*.cpp")
+file(GLOB FRONTEND_LAB_SOURCES      CONFIGURE_DEPENDS "src/frontend/panels/lab/*.cpp")
 # -- RAIZ src/ (main.cpp y similares) --
 file(GLOB ROOT_SOURCES              CONFIGURE_DEPENDS "src/*.cpp")
 
@@ -169,6 +172,7 @@ if(WIN32)
         ${FRONTEND_BIBLIO_SOURCES}
         ${FRONTEND_HOME_SOURCES}
         ${FRONTEND_MODEL3D_SOURCES}
+        ${FRONTEND_LAB_SOURCES}
         ${ROOT_SOURCES}
         ${FRONTEND_UI_BIN_SOURCES}
         ${BACKEND_CORE_SOURCES}
@@ -202,6 +206,7 @@ else()
         ${FRONTEND_BIBLIO_SOURCES}
         ${FRONTEND_HOME_SOURCES}
         ${FRONTEND_MODEL3D_SOURCES}
+        ${FRONTEND_LAB_SOURCES}
         ${ROOT_SOURCES}
         ${FRONTEND_UI_BIN_SOURCES}
         ${BACKEND_CORE_SOURCES}

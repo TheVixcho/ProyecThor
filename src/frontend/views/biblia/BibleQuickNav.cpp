@@ -5,13 +5,10 @@
 #include "frontend/ui/DesignSystem.h"
 #include "ControlWidgets.h"
 #include <cctype>
-#include <algorithm> // Requerido para std::clamp
+#include <algorithm>
 
 namespace ProyecThor::UI {
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Helpers (Declarados al inicio para evitar errores de ámbito)
-// ─────────────────────────────────────────────────────────────────────────────
 namespace {
 
 void DrawHint(const std::string& text) {
@@ -26,18 +23,14 @@ void DrawHintIcon(const char* iconName, const std::string& text) {
         float sz = ImGui::GetTextLineHeight();
         ImGui::Image((ImTextureID)it->second.textureID, ImVec2(sz, sz),
                      ImVec2(0, 0), ImVec2(1, 1),
-                     ToVec4(DS::TextHint),                // tint_col
-                     ImVec4(0.0f, 0.0f, 0.0f, 0.0f));     // border_col (transparent = no border)
+                     ToVec4(DS::TextHint),
+                     ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
         ImGui::SameLine(0.0f, 6.0f);
     }
     DrawHint(text);
 }
 
-} // namespace anonimo
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Open / Close
-// ─────────────────────────────────────────────────────────────────────────────
+}
 
 void BibleQuickNav::Open() {
     m_Open          = true;
@@ -57,7 +50,7 @@ void BibleQuickNav::Open() {
 
 void BibleQuickNav::Close() {
     m_Open         = false;
-    m_ClosingUntil = ImGui::GetTime() + 0.12; // debe coincidir con kFadeOutDuration en Render()
+    m_ClosingUntil = ImGui::GetTime() + 0.12;
 }
 
 void BibleQuickNav::Render(const BibleData& bible) {
@@ -74,17 +67,15 @@ void BibleQuickNav::Render(const BibleData& bible) {
         progress = (m_OpenSince < 0.0) ? 1.0f
                  : static_cast<float>(std::clamp(elapsed / kFadeInDuration, 0.0, 1.0));
     } else {
-        if (now >= m_ClosingUntil) return; // ya cerrado del todo
+        if (now >= m_ClosingUntil) return;
         double remaining = m_ClosingUntil - now;
         progress = static_cast<float>(std::clamp(remaining / kFadeOutDuration, 0.0, 1.0));
     }
 
-    // Ease-out simple para que no se sienta lineal
     float eased = progress * (2.0f - progress);
 
     ImGuiViewport* vp = ImGui::GetMainViewport();
 
-    // Fondo semitransparente
     ImGui::SetNextWindowPos(vp->Pos);
     ImGui::SetNextWindowSize(vp->Size);
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.55f * eased));
@@ -96,9 +87,9 @@ void BibleQuickNav::Render(const BibleData& bible) {
     ImGui::PopStyleColor();
 
     ImVec2 cardSize    = ImVec2(440.0f, 260.0f);
-    float  slideOffset = (1.0f - eased) * 14.0f; // entra/sale deslizando 14px
+    float  slideOffset = (1.0f - eased) * 14.0f;
     ImVec2 center      = vp->GetCenter();
-    
+
     ImGui::SetNextWindowPos(ImVec2(center.x, center.y + slideOffset), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(cardSize, ImGuiCond_Always);
 
@@ -124,7 +115,6 @@ m_CardMax = ImVec2(m_CardMin.x + winSize.x, m_CardMin.y + winSize.y);
     ImVec2 winSize = ImGui::GetWindowSize();
     m_CardMax = ImVec2(m_CardMin.x + winSize.x, m_CardMin.y + winSize.y);
 }
-    // ── Cabecera: breadcrumb con lo ya confirmado ─────────────────────
     if (m_Resolution.hasBook) {
         std::string crumb = bible.books[m_Resolution.bookIdx].name;
         if (m_Resolution.hasChapter)
@@ -204,13 +194,9 @@ m_CardMax = ImVec2(m_CardMin.x + winSize.x, m_CardMin.y + winSize.y);
     : "Enter: confirmar    Backspace (vacio): paso anterior    Ctrl+F: cerrar");
 
     ImGui::End();
-    ImGui::PopStyleVar(4); // Rounding, Padding, BorderSize, Alpha
+    ImGui::PopStyleVar(4);
     ImGui::PopStyleColor(2);
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  RefreshBookCandidates
-// ─────────────────────────────────────────────────────────────────────────────
 
 void BibleQuickNav::RefreshBookCandidates(const BibleData& bible) {
     m_BookCandidates.clear();
@@ -221,10 +207,6 @@ void BibleQuickNav::RefreshBookCandidates(const BibleData& bible) {
 
     m_BookCandidates = BibleBooks::FindBookCandidates(norm);
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Confirmacion de cada paso
-// ─────────────────────────────────────────────────────────────────────────────
 
 void BibleQuickNav::ConfirmBookStep(const BibleData& bible) {
     if (m_BookCandidates.empty()) {
@@ -317,10 +299,6 @@ bool BibleQuickNav::ConfirmVerseStep(const BibleData& bible) {
     return false;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  GoBackStep
-// ─────────────────────────────────────────────────────────────────────────────
-
 void BibleQuickNav::GoBackStep(const BibleData& bible) {
     switch (m_Step) {
         case QuickNavStep::Chapter:
@@ -344,9 +322,6 @@ void BibleQuickNav::GoBackStep(const BibleData& bible) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Update
-// ─────────────────────────────────────────────────────────────────────────────
 bool BibleQuickNav::Update(const BibleData& bible) {
     ImGuiIO& io = ImGui::GetIO();
     bool hotkeyPressed = io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false);
@@ -357,8 +332,6 @@ bool BibleQuickNav::Update(const BibleData& bible) {
         return false;
     }
 
-    // Si este es el mismo frame en que se abrio, ignoramos el toggle de
-    // cierre: es el mismo Ctrl+F que lo abrio, no debe volver a cerrarlo.
     bool justOpenedThisFrame = (ImGui::GetFrameCount() == m_OpenedFrame);
 
     bool clickOutside = false;
@@ -430,4 +403,4 @@ bool BibleQuickNav::Update(const BibleData& bible) {
     return false;
 }
 
-} // namespace ProyecThor::UI
+}

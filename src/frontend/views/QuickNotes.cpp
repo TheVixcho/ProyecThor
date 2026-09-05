@@ -49,11 +49,11 @@ static std::string GetCurrentTimestampString() {
 }
 
 static ImU32 GetCategoryColor(const std::string& cat) {
-    if (cat == "Anuncios" || cat == "Anuncio") return IM_COL32(50, 180, 240, 255);   // Azul / Cian
-    if (cat == "Avisos"   || cat == "Aviso")   return IM_COL32(82, 224, 160, 255);   // Verde menta
-    if (cat == "Urgente")                      return IM_COL32(240, 80, 90, 255);    // Rojo
-    if (cat == "Culto")                        return IM_COL32(245, 180, 50, 255);   // Ámbar
-    return IM_COL32(160, 165, 180, 255);                                            // Gris / General
+    if (cat == "Anuncios" || cat == "Anuncio") return IM_COL32(50, 180, 240, 255);
+    if (cat == "Avisos"   || cat == "Aviso")   return IM_COL32(82, 224, 160, 255);
+    if (cat == "Urgente")                      return IM_COL32(240, 80, 90, 255);
+    if (cat == "Culto")                        return IM_COL32(245, 180, 50, 255);
+    return IM_COL32(160, 165, 180, 255);
 }
 
 static int CountWords(const char* str) {
@@ -267,7 +267,6 @@ void QuickNotes::RenderHeaderBar() {
 
     ImGui::BeginGroup();
 
-    // Título principal
     ImGui::SetWindowFontScale(1.15f);
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextPrimary));
     ImGui::TextUnformatted("Notas Rápidas");
@@ -276,7 +275,6 @@ void QuickNotes::RenderHeaderBar() {
 
     ImGui::SameLine(0.0f, 12.0f);
 
-    // Indicador Live con pulso
     if (isLive) {
         float pulse = 0.5f + 0.5f * sinf(static_cast<float>(ImGui::GetTime() * 5.0));
         ImVec4 dotCol = ImVec4(0.32f + pulse * 0.1f, 0.88f, 0.62f, 1.0f);
@@ -310,7 +308,6 @@ void QuickNotes::RenderHeaderBar() {
 
     ImGui::EndGroup();
 
-    // Selector de pestañas a la derecha
     const float tabW = 125.0f;
     const float tabH = 28.0f;
     const float totalTabsW = tabW * 2.0f + 6.0f;
@@ -443,7 +440,6 @@ void QuickNotes::RenderTransmitCards() {
 void QuickNotes::RenderLiveEditorTab() {
     bool isLive = (m_TransmitMode != QuickNoteTransmitMode::Off);
 
-    // ── Barra de herramientas rápida ─────────────────────────────────────
     {
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, 4.0f));
@@ -510,7 +506,6 @@ void QuickNotes::RenderLiveEditorTab() {
 
     ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
-    // ── Caja de Entrada de Texto con borde reactivo ──────────────────────
     ImVec4 baseInputBg = ImGui::ColorConvertU32ToFloat4(DS::GlassFillBot);
     ImVec4 inputBg = isLive ? Brighten(baseInputBg, 0.04f) : baseInputBg;
 
@@ -532,11 +527,10 @@ void QuickNotes::RenderLiveEditorTab() {
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(4);
 
-    // ── Estadísticas de texto e info ─────────────────────────────────────
     {
         size_t len = std::strlen(m_TextBuffer.data());
         int words = CountWords(m_TextBuffer.data());
-        int readTimeSec = std::max(1, static_cast<int>(words / 3.0f)); // aprox 180 palabras por minuto
+        int readTimeSec = std::max(1, static_cast<int>(words / 3.0f));
 
         char statsBuf[128];
         std::snprintf(statsBuf, sizeof(statsBuf), "%zu caracteres  •  %d palabras  •  ~%ds lectura",
@@ -559,7 +553,6 @@ void QuickNotes::RenderLiveEditorTab() {
     DS::GlassSeparator();
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
-    // ── Selector de Estilo y Tarjetas de Transmisión ─────────────────────
     RenderStyleSelector();
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
@@ -568,13 +561,11 @@ void QuickNotes::RenderLiveEditorTab() {
 
     ImGui::Dummy(ImVec2(0.0f, 10.0f));
 
-    // ── Botones de Acción Rápida (Transmitir / Ocultar) ───────────────────
     {
         const float availW = ImGui::GetContentRegionAvail().x;
         const float btnW = (availW - 10.0f) * 0.5f;
         const float btnH = 38.0f;
 
-        // Botón Transmitir / Actualizar
         if (isLive) {
             if (DS::GlassButton("Actualizar en Pantalla (F5)", ImVec2(btnW, btnH), DS::SuccessColor)) {
                 SyncTransmission();
@@ -592,7 +583,6 @@ void QuickNotes::RenderLiveEditorTab() {
 
         ImGui::SameLine(0.0f, 10.0f);
 
-        // Botón Ocultar de Pantalla
         if (DS::GlassButton("Ocultar de Pantalla (Esc)", ImVec2(btnW, btnH), DS::DangerColor)) {
             ClearFromCore();
             m_FeedbackMessage = "Nota oculta de la pantalla";
@@ -608,7 +598,6 @@ void QuickNotes::RenderLiveEditorTab() {
 }
 
 void QuickNotes::RenderLibraryTab() {
-    // ── Fila de Búsqueda y Botón Nueva Nota ──────────────────────────────
     {
         ImGui::PushStyleColor(ImGuiCol_FrameBg, ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
@@ -623,7 +612,6 @@ void QuickNotes::RenderLibraryTab() {
 
         ImGui::SameLine(0.0f, 8.0f);
 
-        // Botón Nueva Nota
         if (DS::GlassButton("+ Nueva Nota", ImVec2(newBtnW, 28.0f), DS::AccentColor)) {
             m_TextBuffer.fill('\0');
             m_CurrentTab = QuickNotesTab::LiveEditor;
@@ -633,7 +621,6 @@ void QuickNotes::RenderLibraryTab() {
 
     ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
-    // ── Filtros por Categoría ────────────────────────────────────────────
     {
         const std::vector<std::string> categories = { "Todos", "Favoritos", "Anuncios", "Avisos", "Urgente", "Culto", "General" };
 
@@ -666,14 +653,12 @@ void QuickNotes::RenderLibraryTab() {
     DS::GlassSeparator();
     ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
-    // ── Lista de Tarjetas de Notas ───────────────────────────────────────
     float listH = ImGui::GetContentRegionAvail().y - 10.0f;
     ImGui::BeginChild("##qnCardsList", ImVec2(0.0f, listH), false);
 
     std::string searchLower = m_SearchFilter;
     std::transform(searchLower.begin(), searchLower.end(), searchLower.begin(), ::tolower);
 
-    // Filtrar y ordenar (Favoritos primero)
     std::vector<QuickNoteItem> filtered;
     for (const auto& note : m_SavedNotes) {
         if (m_SelectedCategoryFilter == "Favoritos" && !note.isFavorite) continue;
@@ -730,16 +715,13 @@ void QuickNotes::RenderLibraryTab() {
             dl->AddRectFilled(pMin, pMax, DS::GlassFillBot, DS::RadiusMedium);
             dl->AddRect(pMin, pMax, DS::GlassBorder, DS::RadiusMedium);
 
-            // Borde lateral con color de categoría
             ImU32 catCol = GetCategoryColor(note.category);
             dl->AddRectFilled(pMin, ImVec2(pMin.x + 4.0f, pMax.y), catCol, DS::RadiusMedium, ImDrawFlags_RoundCornersLeft);
 
             ImGui::SetCursorPos(ImVec2(ImGui::GetCursorPosX() + 12.0f, ImGui::GetCursorPosY() + 8.0f));
             ImGui::BeginGroup();
 
-            // Fila 1: Badge de Categoría + Título + Botón Favorito
             {
-                // Pill de Categoría
                 ImVec2 catSz = ImGui::CalcTextSize(note.category.c_str());
                 ImVec2 catPos = ImGui::GetCursorScreenPos();
                 dl->AddRectFilled(ImVec2(catPos.x, catPos.y - 1.0f), ImVec2(catPos.x + catSz.x + 10.0f, catPos.y + catSz.y + 3.0f),
@@ -754,14 +736,12 @@ void QuickNotes::RenderLibraryTab() {
 
                 ImGui::SameLine(0.0f, 10.0f);
 
-                // Título en negrita
                 ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextPrimary));
                 ImGui::SetWindowFontScale(1.05f);
                 ImGui::TextUnformatted(note.title.c_str());
                 ImGui::SetWindowFontScale(1.0f);
                 ImGui::PopStyleColor();
 
-                // Botón de Favorito
                 ImGui::SameLine(cardW - 44.0f);
                 if (note.isFavorite) {
                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.65f, 0.50f, 0.10f, 0.8f));
@@ -778,7 +758,6 @@ void QuickNotes::RenderLibraryTab() {
                 ImGui::PopStyleColor(2);
             }
 
-            // Fila 2: Snippet de contenido
             {
                 ImGui::Dummy(ImVec2(0.0f, 2.0f));
                 ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
@@ -793,7 +772,6 @@ void QuickNotes::RenderLibraryTab() {
                 ImGui::PopStyleColor();
             }
 
-            // Fila 3: Botones de Acción
             {
                 ImGui::Dummy(ImVec2(0.0f, 2.0f));
 
@@ -810,14 +788,12 @@ void QuickNotes::RenderLibraryTab() {
 
                 ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
 
-                // Cargar en editor
                 if (ImGui::Button("Cargar", ImVec2(60.0f, 22.0f))) {
                     LoadFromLibrary(note, false);
                 }
 
                 ImGui::SameLine(0.0f, 4.0f);
 
-                // Proyectar ahora
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.35f, 0.85f));
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.65f, 0.45f, 0.95f));
                 if (ImGui::Button("Proyectar", ImVec2(74.0f, 22.0f))) {
@@ -827,7 +803,6 @@ void QuickNotes::RenderLibraryTab() {
 
                 ImGui::SameLine(0.0f, 4.0f);
 
-                // Enviar a Banner de Anuncios
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.35f, 0.55f, 0.85f));
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.45f, 0.70f, 0.95f));
                 if (ImGui::Button("+ Banner", ImVec2(66.0f, 22.0f))) {
@@ -841,7 +816,6 @@ void QuickNotes::RenderLibraryTab() {
 
                 ImGui::SameLine(0.0f, 4.0f);
 
-                // Borrar
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.35f, 0.15f, 0.15f, 0.7f));
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.55f, 0.2f, 0.2f, 0.9f));
                 if (ImGui::Button("Borrar", ImVec2(48.0f, 22.0f))) {
@@ -947,9 +921,7 @@ void QuickNotes::RenderSaveModal() {
 }
 
 void QuickNotes::Render() {
-    // Atajos de teclado globales dentro de la ventana
     if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) {
-        // F5 o Ctrl+Enter: Enviar a pantalla
         if ((ImGui::IsKeyPressed(ImGuiKey_F5) || (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Enter)))
             && m_TransmitMode == QuickNoteTransmitMode::Off)
         {
@@ -959,7 +931,6 @@ void QuickNotes::Render() {
             m_FeedbackTime = ImGui::GetTime();
         }
 
-        // Escape: Ocultar si está en vivo
         if (ImGui::IsKeyPressed(ImGuiKey_Escape) && m_TransmitMode != QuickNoteTransmitMode::Off) {
             ClearFromCore();
             m_FeedbackMessage = "Nota oculta de la pantalla";
@@ -983,7 +954,6 @@ void QuickNotes::Render() {
         RenderSaveModal();
     }
 
-    // Feedback Toast flotante
     if (!m_FeedbackMessage.empty() && (ImGui::GetTime() - m_FeedbackTime) < 2.5) {
         float alpha = 1.0f;
         double elapsed = ImGui::GetTime() - m_FeedbackTime;
@@ -1008,5 +978,5 @@ void QuickNotes::Render() {
     }
 }
 
-} // namespace ProyecThor::UI
+}
 

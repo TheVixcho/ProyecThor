@@ -10,6 +10,7 @@
 #include "backend/core/PresentationCore.h"
 #include "backend/core/FileDeletionManager.h"
 #include "backend/settings/SettingsManager.h"
+#include "frontend/views/Audio.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -455,6 +456,7 @@ static void RenderMMRow(const MMItem& item, int rowIdx) {
     std::string disp   = StripExtension(item.filename);
 
     bool clicked = DS::GlassListRow(disp.c_str(), sel, indent);
+    bool hovered = ImGui::IsItemHovered();
 
     ImDrawList* dl     = ImGui::GetWindowDrawList();
     float       thumbY = rowPos.y + (DS::RowHeight - thumbSz) * 0.5f;
@@ -472,6 +474,17 @@ static void RenderMMRow(const MMItem& item, int rowIdx) {
     }
 
     if (clicked) SelectMMItem(item);
+    if (hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+        SelectMMItem(item);
+        if (item.type == Core::ItemType::Audio) {
+            if (auto* ap = UI::AudioPanel::GetActiveInstance()) {
+                ap->PlayFileLive(item.filename);
+            }
+        } else {
+            Core::PresentationCore::Get().SetBackgroundMedia(ItemFullPath(item), item.type == Core::ItemType::Video, /*allowAudio=*/true);
+            Core::PresentationCore::Get().SetProjecting(true);
+        }
+    }
 
     RenderMMDragSource(item, disp);
     RenderMMContextMenu(item, ("##ctx_mm" + std::to_string(rowIdx)).c_str());
@@ -540,9 +553,21 @@ static void RenderMMCard(const MMItem& item, int cardIdx, float W, float H, int 
     ImVec2 ns = ImGui::CalcTextSize(dn.c_str());
     dl->AddText({p0.x + (W - ns.x) * 0.5f, p1.y - 21.0f}, DS::TextPrimary, dn.c_str());
 
-    ImGui::InvisibleButton(("##mmcard" + std::to_string(cardIdx)).c_str(), {W, H});
-    if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+    bool cardClicked = ImGui::InvisibleButton(("##mmcard" + std::to_string(cardIdx)).c_str(), {W, H});
+    bool cardHovered = ImGui::IsItemHovered();
+    if (cardClicked)
         SelectMMItem(item);
+    if (cardHovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+        SelectMMItem(item);
+        if (item.type == Core::ItemType::Audio) {
+            if (auto* ap = UI::AudioPanel::GetActiveInstance()) {
+                ap->PlayFileLive(item.filename);
+            }
+        } else {
+            Core::PresentationCore::Get().SetBackgroundMedia(ItemFullPath(item), item.type == Core::ItemType::Video, /*allowAudio=*/true);
+            Core::PresentationCore::Get().SetProjecting(true);
+        }
+    }
 
     RenderMMDragSource(item, disp);
     RenderMMContextMenu(item, ("##ctx_mmc" + std::to_string(cardIdx)).c_str());

@@ -1,4 +1,3 @@
-// AudioWaveform.cpp
 
 #include "AudioWaveform.h"
 #include <cmath>
@@ -73,7 +72,6 @@ void WaveformRenderer::DrawProjector(ImDrawList*               dl,
     {
         float amp = std::max(0.03f, bars[i]);
 
-        // Pulso adicional en modo proyector para que se vea desde lejos
         float pulse    = 1.0f + 0.08f * std::sin(time * 3.0f + i * 0.4f);
         float barHeight = std::min(amp * maxH * pulse, maxH);
 
@@ -85,7 +83,6 @@ void WaveformRenderer::DrawProjector(ImDrawList*               dl,
         float r, g, b;
         HsvToRgbW(hue, 0.75f, brightness, r, g, b);
 
-        // Degradado: base mas oscura, punta brillante
         ImU32 colTop = IM_COL32(static_cast<int>(r * 255),
                                   static_cast<int>(g * 255),
                                   static_cast<int>(b * 255), 230);
@@ -93,12 +90,10 @@ void WaveformRenderer::DrawProjector(ImDrawList*               dl,
                                   static_cast<int>(g * 160),
                                   static_cast<int>(b * 160), 140);
 
-        // Barra con degradado vertical
         dl->AddRectFilledMultiColor(
             ImVec2(bx, by0), ImVec2(bx + barW, by1),
             colTop, colTop, colBot, colBot);
 
-        // Brillo en la punta superior
         float tipH = std::min(4.0f, barHeight * 0.08f);
         if (tipH > 1.0f) {
             dl->AddRectFilled(
@@ -109,4 +104,4 @@ void WaveformRenderer::DrawProjector(ImDrawList*               dl,
     }
 }
 
-} // namespace ProyecThor::Audio
+}

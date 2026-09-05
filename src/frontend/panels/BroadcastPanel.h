@@ -43,6 +43,9 @@ public:
     // StreamingPanel::Update()/TeamChatPanel::Update().
     void Update();
 
+    bool IsStreaming() const { return m_Encoder.IsStreaming(); }
+    void RenderStudioWindow(bool* pOpen);
+
     void RenderCaptureSection();
     void RenderLayerSection();
     void RenderStartSection();

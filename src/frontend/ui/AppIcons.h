@@ -219,4 +219,29 @@ inline void DrawIcon_Cube3D(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
     dl->AddQuad(center, midR, botR, bot, col, thick);
 }
 
+// Lab — Laboratorio Matemático, gráficas y fórmulas f(x)
+inline void DrawIcon_Formula(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = std::max(1.2f, sz * 0.07f);
+    // Ejes cartesianos (X e Y)
+    dl->AddLine(IcPt(o, sz, 0.16f, 0.84f), IcPt(o, sz, 0.88f, 0.84f), col, thick);
+    dl->AddLine(IcPt(o, sz, 0.20f, 0.16f), IcPt(o, sz, 0.20f, 0.88f), col, thick);
+
+    // Curva de función suave f(x) estilo sin/parábola
+    const int pts = 14;
+    ImVec2 prevPt;
+    for (int i = 0; i <= pts; ++i) {
+        float t = (float)i / (float)pts;
+        float px = 0.20f + t * 0.64f;
+        float py = 0.72f - 0.44f * std::sin(t * 3.14159f * 0.9f);
+        ImVec2 pt = IcPt(o, sz, px, py);
+        if (i > 0) {
+            dl->AddLine(prevPt, pt, col, thick * 1.3f);
+        }
+        prevPt = pt;
+    }
+    // Punto de vértice / evaluación
+    dl->AddCircleFilled(IcPt(o, sz, 0.52f, 0.28f), sz * 0.07f, col, 10);
+}
+
 } // namespace ProyecThor::UI::AppIcons

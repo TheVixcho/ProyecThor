@@ -22,7 +22,8 @@ enum class TransitionType
     UncoverLeft,    // El anterior sale hacia la izquierda revelando el nuevo
     UncoverRight,   // El anterior sale hacia la derecha revelando el nuevo
     UncoverUp,      // El anterior sale hacia arriba revelando el nuevo
-    UncoverDown     // El anterior sale hacia abajo revelando el nuevo
+    UncoverDown,    // El anterior sale hacia abajo revelando el nuevo
+    Iris            // Apertura de Círculo estilo Teatro / Cine (Spotlight Iris In)
 };
 
 // Nombre estable (no traducido, no cambia si se retocan las etiquetas de
@@ -63,14 +64,14 @@ public:
     float GetIncomingOffsetX()  const;
     float GetIncomingOffsetY()  const;
 
-    // Opacidad (Alpha) para Fade/ZoomIn/ZoomOut. Salida y entrada son
+    // Opacidad (Alpha) para Fade/ZoomIn/ZoomOut/Iris. Salida y entrada son
     // SECUENCIALES (ver GetOutgoingLocalT/GetIncomingLocalT), no un
     // crossfade simultaneo: evita el parpadeo raro cuando el texto
     // saliente y el entrante son identicos (misma estrofa repetida).
     float GetOutgoingAlpha()    const;
     float GetIncomingAlpha()    const;
 
-    // Escala para los efectos de Zoom. Sincronizada con las mismas mitades
+    // Escala para los efectos de Zoom/Iris. Sincronizada con las mismas mitades
     // que el alpha (via GetOutgoingLocalT/GetIncomingLocalT), para que el
     // "punch" del zoom termine justo cuando el texto se vuelve invisible,
     // en vez de seguir escalando fuera de su ventana visible.
@@ -87,15 +88,15 @@ public:
     TransitionType GetCurrentType() const { return m_SelectedType; }
 
     // A que capa afecta la transicion actual -- ver comentario en
-    // RenderContent(). Letras=true/Fondos=false por defecto preserva el
-    // comportamiento de siempre (texto animado, fondo con su crossfade fijo).
+    // RenderContent(). Letras=true/Fondos=true por defecto asegura que
+    // tanto el fondo como las letras transicionen con la animacion elegida.
     bool AffectsBackground() const { return m_AffectsBackground; }
     void SetAffectsBackground(bool v) { m_AffectsBackground = v; }
     bool AffectsLyrics() const { return m_AffectsLyrics; }
     void SetAffectsLyrics(bool v) { m_AffectsLyrics = v; }
 
 private:
-    bool m_AffectsBackground = false;
+    bool m_AffectsBackground = true;
     bool m_AffectsLyrics     = true;
 
     // ── Progreso local por mitad (solo para tipos secuenciales: Fade/Zoom) ──

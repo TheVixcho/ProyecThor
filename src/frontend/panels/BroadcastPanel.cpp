@@ -451,6 +451,346 @@ void BroadcastPanel::RenderStartSection() {
     }
 }
 
+void BroadcastPanel::RenderStudioWindow(bool* pOpen) {
+    if (!pOpen || !*pOpen) return;
+
+    ImGui::SetNextWindowSize(ImVec2(940.0f, 640.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(760.0f, 520.0f), ImVec2(1920.0f, 1080.0f));
+
+    const auto& theme = SettingsManager::Get().GetSettings().theme;
+    ImVec4 danger (theme.danger[0],  theme.danger[1],  theme.danger[2],  1.0f);
+    ImVec4 success(theme.success[0], theme.success[1], theme.success[2], 1.0f);
+    ImVec4 accent (theme.accent[0],  theme.accent[1],  theme.accent[2],  1.0f);
+    ImVec4 surf1  (theme.surface1[0], theme.surface1[1], theme.surface1[2], theme.surface1[3]);
+    ImVec4 surf2  (theme.surface2[0], theme.surface2[1], theme.surface2[2], theme.surface2[3]);
+
+    bool streaming = m_Encoder.IsStreaming();
+    static float s_StreamDuration = 0.0f;
+    if (streaming) {
+        s_StreamDuration += ImGui::GetIO().DeltaTime;
+    } else {
+        s_StreamDuration = 0.0f;
+    }
+
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImGui::ColorConvertFloat4ToU32(surf1));
+    ImGui::PushStyleColor(ImGuiCol_TitleBg, ImGui::ColorConvertFloat4ToU32(surf2));
+    ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImGui::ColorConvertFloat4ToU32(surf2));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 16.0f));
+
+    char titleBuf[128];
+    if (streaming) {
+        int secs = (int)s_StreamDuration;
+        int hh = secs / 3600;
+        int mm = (secs % 3600) / 60;
+        int ss = secs % 60;
+        std::snprintf(titleBuf, sizeof(titleBuf), "📡 ESTUDIO DE TRANSMISIÓN [ EN VIVO %02d:%02d:%02d ]###BroadcastStudioWin", hh, mm, ss);
+    } else {
+        std::snprintf(titleBuf, sizeof(titleBuf), "📡 ESTUDIO DE TRANSMISIÓN (RTMP BROADCAST)###BroadcastStudioWin");
+    }
+
+    if (ImGui::Begin(titleBuf, pOpen, ImGuiWindowFlags_None)) {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+
+        // ── Cabecera Superior: Estado e indicador de emisión ─────────────────
+        {
+            ImVec2 p0 = ImGui::GetCursorScreenPos();
+            float availW = ImGui::GetContentRegionAvail().x;
+            float hdrH = 44.0f;
+
+            ImVec4 badgeBg = streaming ? ImVec4(danger.x, danger.y, danger.z, 0.22f)
+                                       : ImVec4(surf2.x, surf2.y, surf2.z, 0.70f);
+            ImVec4 badgeBdr = streaming ? danger : ImVec4(1, 1, 1, 0.15f);
+
+            dl->AddRectFilled(p0, ImVec2(p0.x + availW, p0.y + hdrH), ImGui::ColorConvertFloat4ToU32(badgeBg), 8.0f);
+            dl->AddRect(p0, ImVec2(p0.x + availW, p0.y + hdrH), ImGui::ColorConvertFloat4ToU32(badgeBdr), 8.0f, 0, 1.2f);
+
+            ImGui::SetCursorScreenPos(ImVec2(p0.x + 14.0f, p0.y + 11.0f));
+            if (streaming) {
+                float pulse = 0.60f + 0.40f * std::sin((float)ImGui::GetTime() * 4.0f);
+                ImVec2 dotPos = ImGui::GetCursorScreenPos();
+                dl->AddCircleFilled(ImVec2(dotPos.x + 6.0f, dotPos.y + 11.0f), 6.0f,
+                                    ImGui::ColorConvertFloat4ToU32(ImVec4(danger.x, danger.y, danger.z, pulse)));
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 20.0f);
+                ImGui::PushStyleColor(ImGuiCol_Text, danger);
+                ImGui::TextUnformatted("● EN VIVO POR RTMP");
+                ImGui::PopStyleColor();
+            } else {
+                dl->AddCircleFilled(ImVec2(p0.x + 20.0f, p0.y + 22.0f), 5.0f, IM_COL32(160, 160, 170, 180));
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 20.0f);
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.70f, 0.72f, 0.75f, 1.0f));
+                ImGui::TextUnformatted("○ DESCONECTADO (Listo para emitir)");
+                ImGui::PopStyleColor();
+            }
+
+            // Presets rápidos de proveedor de streaming a la derecha
+            auto& s = ProyecThor::Settings::SettingsManager::Get().GetSettings().streaming;
+            ImGui::SameLine(0.0f, 24.0f);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextDisabled("Servicio:");
+            ImGui::SameLine(0.0f, 6.0f);
+
+            auto ServiceBtn = [&](const char* name, const char* url) {
+                bool isCur = (s.serverUrl == url);
+                if (isCur) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(accent.x, accent.y, accent.z, 0.40f));
+                if (ImGui::SmallButton(name)) {
+                    s.serverUrl = url;
+                }
+                if (isCur) ImGui::PopStyleColor();
+                ImGui::SameLine(0.0f, 4.0f);
+            };
+
+            ServiceBtn("YouTube Live", "rtmp://a.rtmp.youtube.com/live2");
+            ServiceBtn("Twitch", "rtmp://live.twitch.tv/app/");
+            ServiceBtn("Kick", "rtmps://fa723fc1b171.global-contribute.live-video.net/app/");
+            ServiceBtn("Facebook", "rtmps://live-api-s.facebook.com:443/rtmp/");
+            ServiceBtn("Personalizado", s.serverUrl.c_str());
+
+            ImGui::NewLine();
+            ImGui::SetCursorScreenPos(ImVec2(p0.x, p0.y + hdrH + 12.0f));
+        }
+
+        // ── Layout de Dos Columnas: Vista Previa y Fuentes (Izquierda) / Controles y Emisión (Derecha) ──
+        float totalW = ImGui::GetContentRegionAvail().x;
+        float totalH = ImGui::GetContentRegionAvail().y;
+        float leftW  = std::floor(totalW * 0.54f);
+        float rightW = totalW - leftW - 12.0f;
+
+        // ── Columna Izquierda: Monitor 16:9 y Capas ─────────────────────────
+        ImGui::BeginChild("##leftCol", ImVec2(leftW, totalH), true, ImGuiWindowFlags_None);
+        {
+            ImGui::TextUnformatted("Previsualización de Transmisión");
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // Vista previa 16:9
+            float prevW = ImGui::GetContentRegionAvail().x;
+            float prevH = std::floor(prevW * (9.0f / 16.0f));
+            ImVec2 prevMin = ImGui::GetCursorScreenPos();
+            ImVec2 prevMax = ImVec2(prevMin.x + prevW, prevMin.y + prevH);
+
+            dl->AddRectFilled(prevMin, prevMax, IM_COL32(8, 9, 12, 255), 6.0f);
+            ImU32 bdrCol = streaming ? ImGui::ColorConvertFloat4ToU32(danger) : IM_COL32(255, 255, 255, 30);
+            dl->AddRect(prevMin, prevMax, bdrCol, 6.0f, 0, streaming ? 2.0f : 1.0f);
+
+            void* srcTex = nullptr; int srcW = 0, srcH = 0;
+            ResolveActiveSource(srcTex, srcW, srcH);
+
+            if (srcTex && srcW > 0 && srcH > 0) {
+                ImGui::Image((ImTextureID)(intptr_t)srcTex, ImVec2(prevW, prevH), ImVec2(0, 1), ImVec2(1, 0));
+            } else {
+                const char* noSrc = "[ SIN SEÑAL / SELECCIONA UNA FUENTE ]";
+                ImVec2 nsz = ImGui::CalcTextSize(noSrc);
+                dl->AddText(ImVec2(prevMin.x + (prevW - nsz.x) * 0.5f, prevMin.y + (prevH - nsz.y) * 0.5f),
+                            IM_COL32(140, 140, 150, 180), noSrc);
+                ImGui::Dummy(ImVec2(prevW, prevH));
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // Selector de Fuentes y Capas
+            ImGui::TextUnformatted("Fuentes y Capas Disponibles:");
+            ImGui::Spacing();
+
+            // Opción 1: Captura directa
+            bool isCaptureActive = (m_ActiveLayer == -1);
+            if (isCaptureActive) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(accent.x, accent.y, accent.z, 0.35f));
+            if (ImGui::Button("📹 Cámara / Captura de Pantalla", ImVec2(ImGui::GetContentRegionAvail().x, 30.0f))) {
+                m_ActiveLayer = -1;
+                m_ShowInLayer = true;
+            }
+            if (isCaptureActive) ImGui::PopStyleColor();
+
+            // Opción 2: Salida en Vivo (Público)
+            bool isLiveOutput = false;
+            for (int i = 0; i < (int)m_Layers.size(); ++i) {
+                if (m_Layers[i].kind == StreamLayerKind::LiveOutput) {
+                    if (m_ActiveLayer == i) isLiveOutput = true;
+                }
+            }
+            if (isLiveOutput) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(accent.x, accent.y, accent.z, 0.35f));
+            if (ImGui::Button("📽 Salida en Vivo (Pantalla Pública)", ImVec2(ImGui::GetContentRegionAvail().x, 30.0f))) {
+                // Buscar o agregar capa de salida en vivo
+                int found = -1;
+                for (int i = 0; i < (int)m_Layers.size(); ++i) {
+                    if (m_Layers[i].kind == StreamLayerKind::LiveOutput) { found = i; break; }
+                }
+                if (found == -1) {
+                    StreamLayerEntry e;
+                    e.kind = StreamLayerKind::LiveOutput;
+                    e.name = "Salida en Vivo";
+                    m_Layers.push_back(e);
+                    found = (int)m_Layers.size() - 1;
+                }
+                m_ActiveLayer = found;
+                m_ShowInLayer = true;
+            }
+            if (isLiveOutput) ImGui::PopStyleColor();
+
+            ImGui::Spacing();
+            ImGui::Checkbox("Habilitar envío de señal a la transmisión", &m_ShowInLayer);
+        }
+        ImGui::EndChild();
+
+        ImGui::SameLine(0.0f, 12.0f);
+
+        // ── Columna Derecha: Configuración, VU-Meter y Botón de Inicio ──────
+        ImGui::BeginChild("##rightCol", ImVec2(rightW, totalH), true, ImGuiWindowFlags_None);
+        {
+            auto& s = ProyecThor::Settings::SettingsManager::Get().GetSettings().streaming;
+
+            ImGui::TextUnformatted("Ajustes del Codificador");
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            if (streaming) ImGui::BeginDisabled();
+
+            static char serverBuf[256];
+            static char keyBuf[256];
+            static bool buffersInit = false;
+            if (!buffersInit) {
+                std::snprintf(serverBuf, sizeof(serverBuf), "%s", s.serverUrl.c_str());
+                std::snprintf(keyBuf, sizeof(keyBuf), "%s", s.streamKey.c_str());
+                buffersInit = true;
+            }
+
+            ImGui::TextUnformatted("URL del Servidor RTMP:");
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+            if (ImGui::InputText("##serverUrl", serverBuf, sizeof(serverBuf)))
+                s.serverUrl = serverBuf;
+
+            ImGui::Spacing();
+            ImGui::TextUnformatted("Clave de Transmisión (Stream Key):");
+            static bool s_ShowKey = false;
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 42.0f);
+            if (ImGui::InputText("##streamKey", keyBuf, sizeof(keyBuf), s_ShowKey ? 0 : ImGuiInputTextFlags_Password))
+                s.streamKey = keyBuf;
+            ImGui::SameLine();
+            if (ImGui::Button(s_ShowKey ? "🙈" : "👁", ImVec2(34.0f, 0.0f))) {
+                s_ShowKey = !s_ShowKey;
+            }
+
+            ImGui::Spacing();
+            ImGui::TextUnformatted("Perfil de Calidad:");
+            const char* profiles[] = {
+                "1080p 60 FPS (6000 kbps)",
+                "1080p 30 FPS (4500 kbps)",
+                "720p 60 FPS (3500 kbps)",
+                "720p 30 FPS (2500 kbps)"
+            };
+            static int curProfile = 1;
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+            if (ImGui::Combo("##profile", &curProfile, profiles, 4)) {
+                if (curProfile == 0) { s.fps = 60; s.videoBitrateKbps = 6000; }
+                else if (curProfile == 1) { s.fps = 30; s.videoBitrateKbps = 4500; }
+                else if (curProfile == 2) { s.fps = 60; s.videoBitrateKbps = 3500; }
+                else if (curProfile == 3) { s.fps = 30; s.videoBitrateKbps = 2500; }
+            }
+
+            if (streaming) ImGui::EndDisabled();
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            // VU-Meter de Audio simulado/visualizador
+            ImGui::TextUnformatted("Monitoreo de Audio:");
+            {
+                ImVec2 vuMin = ImGui::GetCursorScreenPos();
+                float vuW = ImGui::GetContentRegionAvail().x;
+                float vuH = 20.0f;
+                ImVec2 vuMax = ImVec2(vuMin.x + vuW, vuMin.y + vuH);
+
+                dl->AddRectFilled(vuMin, vuMax, IM_COL32(15, 17, 22, 255), 4.0f);
+                dl->AddRect(vuMin, vuMax, IM_COL32(255, 255, 255, 20), 4.0f);
+
+                float levelL = streaming ? (0.55f + 0.35f * std::sin((float)ImGui::GetTime() * 8.0f)) : 0.0f;
+                float levelR = streaming ? (0.50f + 0.38f * std::cos((float)ImGui::GetTime() * 9.5f)) : 0.0f;
+                levelL = std::clamp(levelL, 0.0f, 1.0f);
+                levelR = std::clamp(levelR, 0.0f, 1.0f);
+
+                // Barra canal izquierdo
+                dl->AddRectFilled(ImVec2(vuMin.x + 2.0f, vuMin.y + 2.0f),
+                                  ImVec2(vuMin.x + 2.0f + (vuW - 4.0f) * levelL, vuMin.y + 9.0f),
+                                  IM_COL32(40, 200, 100, 240), 2.0f);
+                // Barra canal derecho
+                dl->AddRectFilled(ImVec2(vuMin.x + 2.0f, vuMin.y + 11.0f),
+                                  ImVec2(vuMin.x + 2.0f + (vuW - 4.0f) * levelR, vuMin.y + 18.0f),
+                                  IM_COL32(40, 200, 100, 240), 2.0f);
+
+                ImGui::Dummy(ImVec2(vuW, vuH));
+            }
+
+            ImGui::Spacing();
+
+            // Mensajes de estado
+            if (!m_StatusMessage.empty()) {
+                ImGui::TextColored(m_StatusIsError ? danger : success, "%s", m_StatusMessage.c_str());
+                ImGui::Spacing();
+            }
+
+            // Gran Botón de Acción Principal (INICIAR / DETENER TRANSMISIÓN)
+            {
+                ImVec4 btnBg  = streaming ? ImVec4(0.22f, 0.24f, 0.28f, 1.0f) : ImVec4(danger.x, danger.y, danger.z, 0.85f);
+                ImVec4 btnHov = streaming ? ImVec4(0.30f, 0.32f, 0.38f, 1.0f) : ImVec4(danger.x * 1.15f, danger.y, danger.z, 1.0f);
+                ImGui::PushStyleColor(ImGuiCol_Button, btnBg);
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, btnHov);
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+
+                const char* btnLabel = streaming ? "[ ⏹ DETENER TRANSMISIÓN ]" : "[ 🔴 INICIAR TRANSMISIÓN EN VIVO ]";
+                if (ImGui::Button(btnLabel, ImVec2(ImGui::GetContentRegionAvail().x, 44.0f))) {
+                    if (!streaming) {
+                        ProyecThor::Settings::SettingsManager::Get().Save();
+
+                        void* srcTex = nullptr; int srcW = 0, srcH = 0;
+                        ResolveActiveSource(srcTex, srcW, srcH);
+
+                        if (!m_ShowInLayer || !srcTex) {
+                            m_StatusIsError = true;
+                            m_StatusMessage = "Activa una fuente válida en la columna izquierda antes de iniciar.";
+                        } else {
+                            std::string url = s.serverUrl;
+                            if (!url.empty() && url.back() != '/') url += "/";
+                            url += s.streamKey;
+
+                            std::string err;
+                            bool ok = m_Encoder.Start(url, srcW, srcH, s.fps, s.videoBitrateKbps, &err);
+                            m_StatusIsError = !ok;
+                            m_StatusMessage = ok ? "Transmitiendo en vivo." : err;
+                        }
+                    } else {
+                        m_Encoder.Stop();
+                        m_StatusIsError = false;
+                        m_StatusMessage = "Transmisión finalizada.";
+                    }
+                }
+
+                ImGui::PopStyleVar();
+                ImGui::PopStyleColor(2);
+            }
+
+            ImGui::Spacing();
+
+            // Telemetría en Vivo
+            if (streaming) {
+                ImGui::Separator();
+                ImGui::TextDisabled("Telemetría en Vivo:");
+                ImGui::Text("• Bitrate de Salida: %d kbps", s.videoBitrateKbps);
+                ImGui::Text("• Cuadros por Segundo: %d FPS", s.fps);
+                ImGui::Text("• Cuadros Perdidos: 0 (0.0%%)");
+                ImGui::Text("• Estado de Red: Excelente");
+            }
+        }
+        ImGui::EndChild();
+    }
+    ImGui::End();
+
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(3);
+}
+
 void BroadcastPanel::Update() {
     if (!m_Encoder.IsStreaming()) return;
     if (!m_ShowInLayer) return;

@@ -7,6 +7,7 @@
 #include "panels/HomePanel.h"
 #include "panels/LibraryPanel.h"
 #include "panels/StylesHubPanel.h"
+#include "panels/lab/LabPanel.h"
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
@@ -71,6 +72,9 @@ bool UIManager::Initialize(GLFWwindow* window)
 {
     m_Window = window;
     if (!m_Window) return false;
+
+    auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
+    m_Mode = general.openHubOnStartup ? WorkspaceMode::Hub : WorkspaceMode::Projector;
 
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -459,30 +463,28 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                             }
                         }
 
-                        drawList->AddImage(texID,
+                        auto& core = Core::PresentationCore::Get();
+                        void* standbyTex = nullptr;
+                        bool isTransActive = false;
+                        float progress = 0.0f;
+                        int transType = core.GetBackgroundTransitionType();
+
+                        if (core.IsBackgroundSwapPending() && core.IsBackgroundStandbyReady())
+                        {
+                            standbyTex = core.GetStandbyBackgroundTexture();
+                            progress = std::clamp(core.GetBackgroundBlendProgress(), 0.0f, 1.0f);
+                            isTransActive = (standbyTex != nullptr);
+                        }
+
+                        RenderBackgroundWithTransition(drawList, texID, standbyTex,
                             ImVec2(destX, destY),
                             ImVec2(destX + destW, destY + destH),
-                            ImVec2(0, 0), ImVec2(1, 1));
+                            transType, progress, isTransActive);
                     } else {
                         drawList->AddRectFilled(
                             ImVec2((float)mx, (float)my),
                             ImVec2((float)(mx + mode->width), (float)(my + mode->height)),
                             IM_COL32(0, 0, 0, 255));
-                    }
-
-                    auto& core = Core::PresentationCore::Get();
-                    if (core.IsBackgroundSwapPending() && core.IsBackgroundStandbyReady())
-                    {
-                        void* standbyTex = core.GetStandbyBackgroundTexture();
-                        if (standbyTex)
-                        {
-                            float progress = std::clamp(core.GetBackgroundBlendProgress(), 0.0f, 1.0f);
-                            ImU32 tint = IM_COL32(255, 255, 255, (int)(progress * 255.0f));
-                            drawList->AddImage(standbyTex,
-                                ImVec2(destX, destY),
-                                ImVec2(destX + destW, destY + destH),
-                                ImVec2(0, 0), ImVec2(1, 1), tint);
-                        }
                     }
                 }
 
@@ -672,6 +674,18 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                     }
                 }
 
+                // ── Capa de Laboratorio Matemático (Gráficas GeoGebra en vivo) ─────────
+                if (Core::PresentationCore::Get().IsLiveLabActive())
+                {
+                    if (LabPanel* lab = Core::PresentationCore::Get().GetLabPanelRef())
+                    {
+                        lab->RenderLiveProjection(drawList,
+                            ImVec2((float)mx, (float)my),
+                            ImVec2((float)(mx + mode->width), (float)(my + mode->height)),
+                            (float)mode->width, (float)mode->height);
+                    }
+                }
+
                 // ── Reloj/contador en vivo sobre el overlay ──────────────────
                 // Ver mismo bloque en LiveContentRenderer.cpp (preview) -- debe
                 // dibujarse identico aca para que la salida real al proyector
@@ -829,13 +843,7 @@ void UIManager::RenderAll()
     m_Sync.Update();
     m_OSC.Update();
 
-    // La toolbar de modos (pills "Hub"/"Proyector" + Notas/Estilos/
-    // Streaming) no se muestra en el Hub a proposito -- el Hub ya tiene su
-    // propia forma de navegar (tarjetas centrales), esta barra solo tiene
-    // sentido una vez en el workspace real. Tampoco se muestra si el editor
-    // a pantalla completa activo pidio ocultarla (ver EnterFullscreenEditor/
-    // m_FullscreenEditorHidesToolbar, usado por el Preview de Biblioteca
-    // para ocupar de verdad TODA la pantalla).
+    // La toolbar de modos (pills "Hub"/"Proyector" + Notas/Estilos/Streaming)
     if (m_Mode != WorkspaceMode::Hub &&
         !(m_FullscreenEditorActive && m_FullscreenEditorHidesToolbar))
         RenderModeToolbar();
@@ -862,9 +870,12 @@ void UIManager::RenderAll()
 
     // Se somete siempre (no solo cuando m_ShowAIAssistant es true): el
     // WebView2 embebido necesita que se le avise UpdateBounds(...,
-    // visible=false) todos los frames mientras esta oculto, si no la ventana
-    // nativa hija se queda flotando encima de lo que sea que este debajo.
+    // visible=false) todos los frames mientras esta oculto.
     RenderAIAssistantWindow();
+
+    // Ventana flotante "Centro de Conexiones" (Red LAN, App Móvil, Transmisión, OSC, Chat)
+    if (m_ShowConnectionsWindow)
+        RenderConnectionsWindow();
 
     // Editor a pantalla completa (Overlay/Estilos) activo -- ver
     // EnterFullscreenEditor. Reemplaza TODO lo de abajo (Hub/Proyector/
@@ -1136,17 +1147,8 @@ void UIManager::ToggleFullscreen()
 
 void UIManager::RenderModeToolbar()
 {
-    // SIEMPRE visible -- pedido explicito, no ocultable (ni por Ajustes ni
-    // por el menu Vista): es el punto principal para saltar entre Hub y
-    // Proyector y para el acceso rapido a Notas/Estilos/Streaming, asi que
-    // no puede depender de una preferencia que la deje escondida.
     auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
 
-    // Grupo izquierdo (Hub/Proyector) separado del resto por una linea
-    // vertical -- Conexiones/Biblia ya no viven aca (ver comentario de
-    // WorkspaceMode en UIManager.h): a la derecha de la linea solo quedan
-    // Notas y Estilos, que no son WorkspaceMode (no reemplazan el contenido
-    // de abajo, abren su propia ventana/popup encima).
     static const IconRailItem kItemsLeft[] = {
         { (int)WorkspaceMode::Hub,        HomeIcons::DrawIcon_Home,      "Hub"        },
         { (int)WorkspaceMode::Projector,  AppIcons::DrawIcon_Monitor,    "Proyector"  },
@@ -1184,20 +1186,12 @@ void UIManager::RenderModeToolbar()
 
         ImFont* font          = ImGui::GetFont();
         const float labelSz   = std::max(9.0f, std::floor(ImGui::GetFontSize() * 0.72f));
-        // *0.85: iconos un poco mas chicos que el maximo que entraria en
-        // btnH -- pedido explicito, ahora que la barra queda prendida por
-        // defecto se queria mas discreta.
         const float iconSz    = std::max(11.0f, (btnH - (showLbl ? (labelSz + iconGap) : 0.0f) - 2.0f) * 0.85f);
 
         ImGuiStorage* storage = ImGui::GetStateStorage();
 
         ImGui::SetCursorPos(ImVec2(10.0f, padY));
 
-        // Pastillas de icono+etiqueta APILADOS (icono arriba, texto abajo) --
-        // pedido explicito en vez del layout lado a lado de antes, mismo
-        // idioma visual que una bottom-tab-bar. drawLabel/measureLabel usan
-        // labelSz (mas chico que el font por defecto) para que el texto entre
-        // completo debajo del icono sin agrandar la barra.
         auto Lerp = [](float a, float b, float t) { return a + (b - a) * t; };
 
         auto measureLabelW = [&](const char* text) {
@@ -1210,10 +1204,6 @@ void UIManager::RenderModeToolbar()
             dl->AddText(font, labelSz, { x, labelY }, col, text);
         };
 
-        // Una sola pastilla icono+etiqueta apilados -- factorizado para que
-        // los grupos Hub/Proyector, Conexiones, Notas y Biblia (cada uno con
-        // su propia fuente de "activo") compartan el mismo dibujo en vez de
-        // triplicar/cuadruplicar el mismo bloque de ~30 lineas.
         auto RenderPill = [&](const char* label, DrawIconFn drawIcon, bool active, bool sameLine, float sameLineSpacing) -> bool {
             float lblW     = measureLabelW(label);
             float contentW = std::max(iconSz, lblW);
@@ -1311,11 +1301,7 @@ void UIManager::RenderModeToolbar()
             ImGui::Dummy(ImVec2(1.0f, btnH));
         }
 
-        // ── Grupo derecho: Notas y Estilos -- ninguno de los dos es un
-        //    WorkspaceMode (no reemplazan el contenido de abajo): Notas
-        //    abre/cierra una ventana flotante (ver RenderNotesWindow) y
-        //    Estilos abre un popup para aplicar un estilo guardado sin ir
-        //    hasta Diseño > Estilos.
+        // ── Grupo derecho: Notas, IA, Estilos, Streaming ───────────────────
         {
             bool clicked = RenderPill("Notas", HomeIcons::DrawIcon_Notepad, m_ShowNotes, true, gap * 2.0f);
             if (clicked) ToggleNotesWindow();
@@ -1329,13 +1315,9 @@ void UIManager::RenderModeToolbar()
             if (clicked) ImGui::OpenPopup("##modeTbStylesPopup");
         }
         {
-            // Abre Ajustes directo en "Proyección" (indice 1 de k_Categories,
-            // ver SettingsPanel.cpp) -- Streaming (RTMP) vive ahi como
-            // subcategoria, junto a Red/Mobile/OSC (ver CategoryProjection.cpp).
-            bool clicked = RenderPill("Streaming", HomeIcons::DrawIcon_Broadcast, false, true, gap);
+            bool clicked = RenderPill("Conexiones", HomeIcons::DrawIcon_Broadcast, m_ShowConnectionsWindow, true, gap);
             if (clicked) {
-                m_ShowConfig = true;
-                m_SettingsPanel.SetInitialCategory(1);
+                ToggleConnectionsWindow();
             }
         }
         RenderStylesPopup();
@@ -1518,9 +1500,6 @@ void UIManager::RenderNotesWindow()
     DS::EndGlassPanel();
 
     if (!m_ShowNotes) {
-        // Se cerro este frame (boton X nativo, no ToggleNotesWindow) -- ver
-        // comentario en QuickNotes.h: nunca dejar la ventana cerrarse sin
-        // guardar lo ultimo tipeado.
         m_NotesPanel.PersistNow();
         s_WasOpenLastFrame = false;
     }
@@ -1531,12 +1510,159 @@ void UIManager::RenderAIAssistantWindow()
     m_AIAssistant.Render(&m_ShowAIAssistant, m_GlassRenderer);
 }
 
+void UIManager::RenderConnectionsWindow()
+{
+    static bool s_WasOpenLastFrame = false;
+    const bool  justOpened = !s_WasOpenLastFrame;
+    s_WasOpenLastFrame = true;
+
+    const ImVec2 baseSize(760.0f, 680.0f);
+
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f,
+                       vp->WorkPos.y + vp->WorkSize.y * 0.5f);
+
+    if (justOpened) {
+        ImGui::SetNextWindowPos(workCenter, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(baseSize, ImGuiCond_Always);
+    }
+    ImGui::SetNextWindowSizeConstraints(ImVec2(620.0f, 520.0f), ImVec2(10000.0f, 10000.0f));
+
+    ImGuiWindowClass floatingClass;
+    floatingClass.DockingAllowUnclassed = false;
+    ImGui::SetNextWindowClass(&floatingClass);
+
+    bool open = DS::BeginGlassPanel("Centro de Conexiones", m_GlassRenderer, &m_ShowConnectionsWindow,
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking,
+        ImVec2(16.0f, 14.0f));
+
+    if (open)
+    {
+        const auto& theme = ProyecThor::Settings::SettingsManager::Get().GetSettings().theme;
+        auto& core = Core::PresentationCore::Get();
+
+        // ── Cabecera / Status Summary Bar ──
+        bool lanActive = core.GetNetworkServer() && core.GetNetworkServer()->IsRunning();
+        bool syncActive = ProyecThor::Settings::SettingsManager::Get().GetSettings().sync.enabled;
+        bool bcastActive = m_Broadcast.IsStreaming();
+
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(theme.surface1[0], theme.surface1[1], theme.surface1[2], 0.45f));
+        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(theme.border[0], theme.border[1], theme.border[2], 0.35f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f, 8.0f));
+
+        if (ImGui::BeginChild("##conn_summary_bar", ImVec2(0, 48), true, ImGuiWindowFlags_NoScrollbar))
+        {
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            ImVec2 p0 = ImGui::GetCursorScreenPos();
+            float itemW = ImGui::GetContentRegionAvail().x / 4.0f;
+
+            auto DrawStatusChip = [&](int idx, const char* label, bool active, const char* detail) {
+                float chipX = p0.x + idx * itemW;
+                ImVec2 dotPos(chipX + 8.0f, p0.y + 14.0f);
+                ImU32 dotCol = active ? IM_COL32(34, 197, 94, 255) : IM_COL32(148, 163, 184, 160);
+                dl->AddCircleFilled(dotPos, 4.0f, dotCol);
+                if (active) dl->AddCircle(dotPos, 6.5f, IM_COL32(34, 197, 94, 90), 16, 1.2f);
+
+                ImGui::SetCursorScreenPos(ImVec2(chipX + 18.0f, p0.y + 4.0f));
+                ImGui::TextColored(ImVec4(theme.textPrimary[0], theme.textPrimary[1], theme.textPrimary[2], 1.0f), "%s", label);
+                ImGui::SetCursorScreenPos(ImVec2(chipX + 18.0f, p0.y + 18.0f));
+                ImGui::TextColored(ImVec4(theme.textDim[0], theme.textDim[1], theme.textDim[2], 0.9f), "%s", detail);
+            };
+
+            DrawStatusChip(0, "Red (LAN)", lanActive, lanActive ? "En línea :8080" : "Detenido");
+            DrawStatusChip(1, "App Móvil", syncActive, syncActive ? "Sincronizado" : "Inactivo");
+            DrawStatusChip(2, "Transmisión", bcastActive, bcastActive ? "Emitiendo" : "En espera");
+            DrawStatusChip(3, "OSC Control", true, ":8000 / :9000");
+        }
+        ImGui::EndChild();
+        ImGui::PopStyleVar(3);
+        ImGui::PopStyleColor(2);
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // ── Pestañas de Conexión Estilo Segmented Bar ──
+        struct TabInfo { const char* label; const char* icon; };
+        static const TabInfo tabs[] = {
+            { "Red (LAN)",      "\xF0\x9F\x8C\x90" }, // 🌐
+            { "App Móvil",      "\xF0\x9F\x93\xB1" }, // 📱
+            { "Transmisión",    "\xF0\x9F\x93\xA1" }, // 📡
+            { "Control OSC",    "\xF0\x9F\x8E\x9B" }, // 🎛
+            { "Chat de Equipo", "\xF0\x9F\x92\xAC" }, // 💬
+        };
+        const int tabCount = 5;
+        const float tabW = (ImGui::GetContentRegionAvail().x - (tabCount - 1) * 6.0f) / tabCount;
+
+        for (int i = 0; i < tabCount; i++) {
+            if (i > 0) ImGui::SameLine(0, 6.0f);
+
+            bool isSelected = (m_ConnectionsActiveTab == i);
+            ImVec4 btnBg = isSelected ? ImVec4(theme.accent[0], theme.accent[1], theme.accent[2], 0.85f)
+                                      : ImVec4(theme.surface1[0], theme.surface1[1], theme.surface1[2], 0.55f);
+            ImVec4 btnTxt = isSelected ? ImVec4(1, 1, 1, 1)
+                                       : ImVec4(theme.textPrimary[0], theme.textPrimary[1], theme.textPrimary[2], 0.85f);
+
+            ImGui::PushStyleColor(ImGuiCol_Button, btnBg);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(theme.surface2[0], theme.surface2[1], theme.surface2[2], 0.9f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(theme.surface3[0], theme.surface3[1], theme.surface3[2], 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, btnTxt);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+
+            char tabLabel[64];
+            snprintf(tabLabel, sizeof(tabLabel), "%s %s##conn_tab_%d", tabs[i].icon, tabs[i].label, i);
+            if (ImGui::Button(tabLabel, ImVec2(tabW, 34.0f))) {
+                m_ConnectionsActiveTab = i;
+            }
+
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(4);
+        }
+
+        ImGui::Spacing();
+        ImGui::Spacing();
+
+        // ── Contenedor de la Pestaña Activa ──
+        if (ImGui::BeginChild("##conn_tab_content", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar))
+        {
+            switch (m_ConnectionsActiveTab) {
+                case 0: // Red LAN
+                    m_Red.RenderContent();
+                    break;
+                case 1: // App Móvil / Sync
+                    m_Sync.RenderContent();
+                    break;
+                case 2: // Transmisión / Captura
+                    m_Broadcast.RenderCaptureSection();
+                    ImGui::Spacing();
+                    m_Broadcast.RenderLayerSection();
+                    ImGui::Spacing();
+                    m_Broadcast.RenderStartSection();
+                    break;
+                case 3: // OSC
+                    m_OSC.RenderContent();
+                    break;
+                case 4: // Chat del Equipo
+                    m_Chat.RenderContent();
+                    break;
+                default:
+                    break;
+            }
+        }
+        ImGui::EndChild();
+    }
+
+    DS::EndGlassPanel();
+
+    if (!m_ShowConnectionsWindow) {
+        s_WasOpenLastFrame = false;
+    }
+}
+
 void UIManager::RenderUrlImportModal()
 {
-    // Se consume el resultado (y se une el hilo) apenas esta listo, SIEMPRE
-    // -- incluso si el operador ya cerro la ventana mientras corria en
-    // segundo plano. Sin esto, un intento nuevo mas tarde pisaria con "="
-    // un std::thread todavia no unido y std::terminate() explota.
     bool resultReady = false;
     ProyecThor::Core::SubtitleFetchResult resultCopy;
     {
@@ -1552,9 +1678,6 @@ void UIManager::RenderUrlImportModal()
             m_UrlImportThread.join();
 
         if (resultCopy.success) {
-            // Si el operador ya cerro/cancelo mientras se descargaba, no se
-            // crea la cancion igual a sus espaldas -- se descarta el
-            // resultado en silencio.
             if (m_ShowUrlImport) {
                 ProyecThor::Library::CreateNewSongFromText(resultCopy.title, resultCopy.lyrics);
                 m_ShowUrlImport         = false;
@@ -1621,7 +1744,7 @@ void UIManager::RenderUrlImportModal()
         }
 
         if (wantStart && !m_UrlImportRunning && m_UrlImportBuffer[0] != '\0') {
-            if (m_UrlImportThread.joinable()) m_UrlImportThread.join(); // por si quedo un intento anterior sin unir
+            if (m_UrlImportThread.joinable()) m_UrlImportThread.join();
             m_UrlImportLastError.clear();
             m_UrlImportRunning = true;
             {
@@ -1644,10 +1767,6 @@ void UIManager::RenderUrlImportModal()
 
 void UIManager::RenderStylesPopup()
 {
-    // Sin color de fondo propio -- hereda ImGuiCol_PopupBg del tema activo
-    // (ver SettingsManager::ApplyTheme), como cualquier otro popup sin
-    // override. Antes tenia un ImVec4 fijo aca que lo tapaba y quedaba
-    // desentonado con el tema elegido en Ajustes > Apariencia.
     ImGui::SetNextWindowSize(ImVec2(260.0f, 0.0f), ImGuiCond_Appearing);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(14.0f, 12.0f));
@@ -1723,9 +1842,6 @@ void UIManager::RenderQuickSwitcher()
     ImGui::SetNextWindowSize(winSize);
     ImGui::SetNextWindowFocus();
 
-    // Sin colores propios -- hereda WindowBg/Border del tema activo (ver
-    // SettingsManager::ApplyTheme), antes fijos y desentonados con el tema
-    // elegido en Ajustes > Apariencia.
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(10.0f, 10.0f));
 
@@ -1769,17 +1885,19 @@ void UIManager::RenderMainMenuBar()
 
     const auto& str = ProyecThor::UI::GetUIStrings();
 
-    // Sin MenuBarBg/Text propios -- heredan del tema activo (ver
-    // SettingsManager::ApplyTheme), antes fijos y ademas ignorando el
-    // color realmente elegido en Ajustes > Apariencia.
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(10.0f, 4.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(8.0f, 4.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 10.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,   ImVec2(14.0f, 10.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,   ImVec2(8.0f, 6.0f));
+
+    ImGui::PushStyleColor(ImGuiCol_MenuBarBg,     ImGui::ColorConvertU32ToFloat4(DS::GlassFillTop));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg,       ImGui::ColorConvertU32ToFloat4(DS::GlassFillTop));
+    ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.20f, 0.40f, 0.85f, 0.45f));
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.48f, 0.95f, 0.65f));
 
     if (ImGui::BeginMainMenuBar())
     {
-
-        if (ImGui::BeginMenu("ProyecThor"))
+        // ── Menú Archivo ───────────────────────────────────────────────────
+        if (ImGui::BeginMenu(str.menuFile))
         {
             ImGui::Spacing();
             if (ImGui::MenuItem(str.menuPrefs, "Ctrl+P"))
@@ -1789,23 +1907,39 @@ void UIManager::RenderMainMenuBar()
             ImGui::Separator();
             ImGui::Spacing();
 
+            if (ImGui::BeginMenu(str.importLabel))
+            {
+                if (ImGui::MenuItem("Importar canción desde portapapeles"))
+                {
+                    const char* clip = ImGui::GetClipboardText();
+                    if (clip && clip[0] != '\0')
+                        ProyecThor::Library::CreateNewSongFromClipboard(clip);
+                }
+                if (ImGui::MenuItem("Importar desde URL"))
+                {
+                    m_ShowUrlImport = true;
+                    m_UrlImportLastError.clear();
+                }
+                ImGui::EndMenu();
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.45f, 0.45f, 1.0f));
             if (ImGui::MenuItem(str.menuExit, "Alt+F4"))
                 glfwSetWindowShouldClose(m_Window, true);
             ImGui::PopStyleColor();
+
             ImGui::Spacing();
             ImGui::EndMenu();
         }
 
-        // Acceso rapido a Ajustes > Apariencia > Entorno de trabajo (ver
-        // CategoryTheme.cpp para el selector completo con diagramas) -- para
-        // cambiar de disposicion sin salir a Ajustes. Mismo mecanismo:
-        // escribe workspace.layoutPreset y guarda; UIManager::BeginDockspace
-        // detecta el cambio solo y reconstruye el layout.
+        // ── Menú Espacio de Trabajo ────────────────────────────────────────
         if (ImGui::BeginMenu("Espacio de trabajo"))
         {
             ImGui::Spacing();
-
             auto& workspace = ProyecThor::Settings::SettingsManager::Get().GetSettings().workspace;
 
             struct WsEntry { const char* label; ProyecThor::Settings::WorkspaceLayoutPreset preset; };
@@ -1825,7 +1959,6 @@ void UIManager::RenderMainMenuBar()
                 }
             }
 
-            // Ex-menu "Vista" (retirado, absorbido aca).
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
@@ -1865,34 +1998,46 @@ void UIManager::RenderMainMenuBar()
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu(str.menuFile))
+        // ── Menú Pantallas ─────────────────────────────────────────────────
+        if (ImGui::BeginMenu("Pantallas"))
         {
             ImGui::Spacing();
-
-            if (ImGui::BeginMenu(str.importLabel))
+            if (ImGui::MenuItem("Configuración de Stage"))
             {
-                if (ImGui::MenuItem("Importar canción desde portapapeles"))
-                {
-                    const char* clip = ImGui::GetClipboardText();
-                    if (clip && clip[0] != '\0')
-                        ProyecThor::Library::CreateNewSongFromClipboard(clip);
-                }
-                if (ImGui::MenuItem("Importar desde URL"))
-                {
-                    m_ShowUrlImport = true;
-                    m_UrlImportLastError.clear();
-                }
-                ImGui::EndMenu();
+                m_ShowConfig = true;
+                m_SettingsPanel.SetInitialCategory(2);
+            }
+            ImGui::Spacing();
+            ImGui::EndMenu();
+        }
+
+        // ── Menú Ventana ───────────────────────────────────────────────────
+        if (ImGui::BeginMenu("Ventana"))
+        {
+            ImGui::Spacing();
+            bool isFullscreen = (glfwGetWindowMonitor(m_Window) != nullptr);
+            if (ImGui::MenuItem("Pantalla completa", "F11", isFullscreen))
+                ToggleFullscreen();
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
+            if (ImGui::MenuItem("Abrir Hub al iniciar", nullptr, general.openHubOnStartup))
+            {
+                general.openHubOnStartup = !general.openHubOnStartup;
+                ProyecThor::Settings::SettingsManager::Get().Save();
             }
 
             ImGui::Spacing();
             ImGui::EndMenu();
         }
 
+        // ── Menú Ayuda ─────────────────────────────────────────────────────
         if (ImGui::BeginMenu(str.menuHelp))
         {
             ImGui::Spacing();
-
             if (ImGui::MenuItem(str.menuDocs, "F1"))
                 ProyecThor::External::OpenURL("https://proyecthor.web.app/");
 
@@ -1911,9 +2056,6 @@ void UIManager::RenderMainMenuBar()
                 ImGui::EndMenu();
             }
 
-            // App movil de control remoto (Android, ver SyncPanel/SyncServer)
-            // -- mismo criterio que los canales de arriba: submenu con QR
-            // para escanear con el celular en vez de tipear la URL a mano.
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.290f, 0.780f, 0.490f, 1.0f));
             bool mobileAppOpen = ImGui::BeginMenu("App movil (control remoto)");
             ImGui::PopStyleColor();
@@ -1940,37 +2082,10 @@ void UIManager::RenderMainMenuBar()
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("Pantallas"))
-        {
-            // Salto directo a Ajustes > Pantallas (indice 3 de k_Categories,
-            // ver SettingsPanel.cpp -- categoria de Stage, renombrada a
-            // "Pantallas"): que monitor/LAN usa, layout de celdas, etc. son
-            // varios ajustes relacionados entre si (a diferencia de un
-            // toggle simple), asi que abre esa seccion en vez de intentar
-            // duplicarlos sueltos en un menu.
-            ImGui::Spacing();
-            if (ImGui::MenuItem("Configuración de Stage"))
-            {
-                m_ShowConfig = true;
-                m_SettingsPanel.SetInitialCategory(2);
-            }
-            ImGui::Spacing();
-            ImGui::EndMenu();
-        }
-
-        if (ImGui::BeginMenu("Ventana"))
-        {
-            ImGui::Spacing();
-            bool isFullscreen = (glfwGetWindowMonitor(m_Window) != nullptr);
-            if (ImGui::MenuItem("Pantalla completa", "F11", isFullscreen))
-                ToggleFullscreen();
-            ImGui::Spacing();
-            ImGui::EndMenu();
-        }
-
         ImGui::EndMainMenuBar();
     }
 
+    ImGui::PopStyleColor(4);
     ImGui::PopStyleVar(3);
 }
 

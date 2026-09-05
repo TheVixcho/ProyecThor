@@ -203,16 +203,12 @@ bool MonitorView::DrawIconButton(const char* iconName, float size,
                                   ImVec4 bgCol, ImVec4 hov, ImVec4 act,
                                   ImVec2 btnSize, bool isActiveState)
 {
-    ImTextureID tex = (ImTextureID)0;
-    auto it = StyleGeneralApp::Icons.find(iconName);
-    if (it != StyleGeneralApp::Icons.end() && it->second.textureID)
-        tex = (ImTextureID)(intptr_t)it->second.textureID;
-
     ImVec4 finalBg = isActiveState ? act : bgCol;
 
     ImGui::PushStyleColor(ImGuiCol_Button,        finalBg);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hov);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  act);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
 
     bool pressed = ImGui::Button("", btnSize);
     bool isHeld  = ImGui::IsItemActive();
@@ -220,17 +216,50 @@ bool MonitorView::DrawIconButton(const char* iconName, float size,
     ImVec2 p = ImGui::GetItemRectMin();
     ImVec2 s = ImGui::GetItemRectSize();
 
-    float offsetY = isHeld ? 2.0f : 0.0f;
-    ImU32 tintCol = isHeld
-        ? ImGui::GetColorU32(ImVec4(0.8f, 0.8f, 0.8f, 1.0f))
-        : ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+    float offsetY = isHeld ? 1.5f : 0.0f;
+    ImVec2 center = { p.x + s.x * 0.5f, p.y + s.y * 0.5f + offsetY };
 
-    ImGui::GetWindowDrawList()->AddImage(
-        tex,
-        { p.x + (s.x - size) * 0.5f, p.y + (s.y - size) * 0.5f + offsetY },
-        { p.x + (s.x + size) * 0.5f, p.y + (s.y + size) * 0.5f + offsetY },
-        ImVec2(0, 0), ImVec2(1, 1), tintCol);
+    const float luma = 0.299f * finalBg.x + 0.587f * finalBg.y + 0.114f * finalBg.z;
+    const ImU32 tintCol = (luma > 0.55f) ? IM_COL32(20, 20, 24, 255) : IM_COL32(245, 245, 250, 255);
 
+    const char* symbolGlyph = nullptr;
+    std::string iName = iconName ? iconName : "";
+    if (iName == "skip_prev")       symbolGlyph = "\xE2\x8F\xAE"; // ⏮
+    else if (iName == "replay_10")  symbolGlyph = "\xE2\x8F\xAA"; // ⏪
+    else if (iName == "play")       symbolGlyph = "\xE2\x96\xB6"; // ▶
+    else if (iName == "pause")      symbolGlyph = "\xE2\x8F\xB8"; // ⏸
+    else if (iName == "forward_10") symbolGlyph = "\xE2\x8F\xA9"; // ⏩
+    else if (iName == "stop")       symbolGlyph = "\xE2\x8F\xB9"; // ⏹
+    else if (iName == "arrow_forward") symbolGlyph = "\xF0\x9F\x9A\x80"; // 🚀
+    else if (iName == "repeat")     symbolGlyph = "\xF0\x9F\x94\x81"; // 🔁
+    else if (iName == "volume_up")  symbolGlyph = "\xF0\x9F\x94\x8A"; // 🔊
+    else if (iName == "no_sound")   symbolGlyph = "\xF0\x9F\x94\x87"; // 🔇
+
+    if (symbolGlyph)
+    {
+        ImFont* font = ImGui::GetFont();
+        float fontSz = size * 1.05f;
+        ImVec2 glyphSz = font->CalcTextSizeA(fontSz, FLT_MAX, 0.0f, symbolGlyph);
+        ImVec2 glyphPos = { center.x - glyphSz.x * 0.5f, center.y - glyphSz.y * 0.5f };
+        ImGui::GetWindowDrawList()->AddText(font, fontSz, glyphPos, tintCol, symbolGlyph);
+    }
+    else
+    {
+        ImTextureID tex = (ImTextureID)0;
+        auto it = StyleGeneralApp::Icons.find(iconName);
+        if (it != StyleGeneralApp::Icons.end() && it->second.textureID)
+            tex = (ImTextureID)(intptr_t)it->second.textureID;
+
+        if (tex) {
+            ImGui::GetWindowDrawList()->AddImage(
+                tex,
+                { center.x - size * 0.5f, center.y - size * 0.5f },
+                { center.x + size * 0.5f, center.y + size * 0.5f },
+                ImVec2(0, 0), ImVec2(1, 1), tintCol);
+        }
+    }
+
+    ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
     return pressed;
 }

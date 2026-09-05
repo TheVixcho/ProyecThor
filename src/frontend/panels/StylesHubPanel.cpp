@@ -35,7 +35,7 @@ void StylesHubPanel::RenderTransitionQuickBar()
 
     TransitionType current  = m_TransitionsRef->GetCurrentType();
     float          duration = m_TransitionsRef->GetDuration();
-    bool           isAdvanced = current != TransitionType::None && current != TransitionType::Fade;
+    bool           isAdvanced = current != TransitionType::None && current != TransitionType::Fade && current != TransitionType::Iris;
 
     ImGui::PushStyleColor(ImGuiCol_Text, DS::AccentColor);
     ImGui::TextUnformatted("TRANSICIÓN RÁPIDA");
@@ -43,7 +43,10 @@ void StylesHubPanel::RenderTransitionQuickBar()
     ImGui::Separator();
     ImGui::Spacing();
 
-    // 3 Mode selection pills
+    // 4 Mode selection pills
+    float availW = ImGui::GetContentRegionAvail().x;
+    float pillW = std::max(60.0f, (availW - 18.0f) / 4.0f);
+
     auto RenderTransOption = [&](const char* label, bool active, TransitionType type, bool isAdv) {
         ImVec4 bg = active ? ImVec4(kAccentV.x, kAccentV.y, kAccentV.z, 0.22f) : ImVec4(1,1,1,0.06f);
         ImVec4 bdr = active ? kAccentV : ImVec4(1,1,1,0.12f);
@@ -54,7 +57,7 @@ void StylesHubPanel::RenderTransitionQuickBar()
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
 
-        if (ImGui::Button(label, ImVec2(94.0f, 28.0f))) {
+        if (ImGui::Button(label, ImVec2(pillW, 28.0f))) {
             if (isAdv) {
                 ImGui::OpenPopup("##transAdvancedPopup");
             } else {
@@ -70,7 +73,9 @@ void StylesHubPanel::RenderTransitionQuickBar()
     ImGui::SameLine(0.0f, 6.0f);
     RenderTransOption("Disolver", current == TransitionType::Fade, TransitionType::Fade, false);
     ImGui::SameLine(0.0f, 6.0f);
-    RenderTransOption("Avanzado...", isAdvanced, TransitionType::None, true);
+    RenderTransOption("🎭 Teatro", current == TransitionType::Iris, TransitionType::Iris, false);
+    ImGui::SameLine(0.0f, 6.0f);
+    RenderTransOption("Más...", isAdvanced, TransitionType::None, true);
 
     ImGui::Spacing();
     ImGui::Separator();
@@ -160,7 +165,8 @@ void StylesHubPanel::RenderTransitionRailButton()
 
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
         const char* typeName = (current == TransitionType::None) ? "Sin transición" :
-                               (current == TransitionType::Fade) ? "Disolver" : "Avanzada";
+                               (current == TransitionType::Fade) ? "Disolver" :
+                               (current == TransitionType::Iris) ? "Teatro (Iris)" : "Avanzada";
         ImGui::SetTooltip("Transición rápida: %s (%.2fs)", typeName, duration);
     }
 

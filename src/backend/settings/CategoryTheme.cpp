@@ -454,22 +454,22 @@ void SettingsPanel::RenderCategoryTheme() {
     if (SectionTitle("Temas predeterminados", "Temas")) {
         struct PresetEntry { const char* label; ThemePreset preset; };
         static const PresetEntry presets[] = {
-            { "Oscuro",           ThemePreset::Dark        },
-            { "Claro",            ThemePreset::Light       },
-            { "Naranja y Negro",  ThemePreset::OrangeBlack },
-            { "Jazz",             ThemePreset::Jazz        },
-            { "Ko-fi",            ThemePreset::Kofi        },
-            { "Verde",            ThemePreset::Deadlock    },
-            { "Galaxia",          ThemePreset::Galaxy      },
-            { "Mek",              ThemePreset::Mek         },
+            { "Oscuro",              ThemePreset::Dark        },
+            { "Claro",               ThemePreset::Light       },
+            { "Naranja y Negro",     ThemePreset::OrangeBlack },
+            { "Jazz",                ThemePreset::Jazz        },
+            { "Ko-fi",               ThemePreset::Kofi        },
+            { "Deadlock",            ThemePreset::Deadlock    },
+            { "Galaxia",             ThemePreset::Galaxy      },
+            { "Mek (Catppuccin)",    ThemePreset::Mek         },
+            { "Cyberpunk Pro",       ThemePreset::Cyberpunk   },
+            { "Emerald Studio Pro",  ThemePreset::Emerald     },
+            { "Crimson Velvet Pro",  ThemePreset::Crimson     },
+            { "Midnight Blue Pro",   ThemePreset::Midnight    },
+            { "Amethyst Violet Pro", ThemePreset::Amethyst    },
+            { "Titanium Silver Pro", ThemePreset::Titanium    },
         };
 
-        // Tarjetas mas grandes (kSwatchCardW/H, ver PresetSwatch) para
-        // aprovechar el ancho real de la isla de contenido en vez de dejar
-        // un puñado de cuadraditos de 52px perdidos arriba de una pagina
-        // vacia -- pedido explicito de "grid con mas tamaño". El "Preset
-        // activo: X" que iba despues de la grilla se saca por completo: el
-        // check + anillo animado de la tarjeta seleccionada ya lo dice.
         const float colW = kSwatchCardW + 24.0f, rowH = kSwatchCardH + 40.0f, gap = 16.0f;
         const int   count  = (int)(sizeof(presets) / sizeof(presets[0]));
         const int   perRow = std::max(1, (int)((ImGui::GetContentRegionAvail().x + gap) / (colW + gap)));

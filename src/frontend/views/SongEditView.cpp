@@ -19,14 +19,6 @@ namespace DS = ProyecThor::UI::DS;
 
 namespace ProyecThor::UI {
 
-// =============================================================================
-//  InputText/InputTextMultiline atados a std::string, via
-//  ImGuiInputTextFlags_CallbackResize — mismo idioma que misc/cpp/
-//  imgui_stdlib.h (no vendorizado en este proyecto, asi que se replica aca en
-//  lugar de agregar esa dependencia solo para esto). Reemplaza los buffers
-//  fijos char[8192]/char[16384] de los editores viejos (RenderSongEditor/
-//  SongView::RenderEditorModal), que este editor unificado no usa mas.
-// =============================================================================
 namespace {
 
 struct StdStringCbData { std::string* str; };
@@ -65,9 +57,6 @@ std::string TrimLine(const std::string& s)
     return s.substr(start, end - start + 1);
 }
 
-// Lineas de UNA diapositiva ya agrupada — mismo shape que splitLines en
-// SongView.cpp. Tambien sirve como split generico de un texto completo
-// (no descarta lineas en blanco), reusado por las excepciones de abajo.
 std::vector<std::string> SplitSlideLines(const std::string& stanza)
 {
     std::vector<std::string> lines;
@@ -96,11 +85,6 @@ std::string CollapseSpaces(const std::string& s)
     return out;
 }
 
-// Aplica <transformLine> a cada linea NO vacia de <text>. Las lineas que
-// ya eran blancas (separadores reales de estrofa) se preservan tal cual;
-// las que dejan de tener contenido DESPUES de la transformacion se
-// eliminan por completo (no se convierten en un salto de estrofa nuevo
-// que no existia). Colapsa blancos consecutivos que puedan quedar.
 std::string TransformLinesPreservingStanzas(
     const std::string& text,
     const std::function<std::string(const std::string&)>& transformLine)
@@ -110,12 +94,12 @@ std::string TransformLinesPreservingStanzas(
     for (const auto& raw : lines) {
         if (TrimLine(raw).empty()) { outLines.push_back(""); continue; }
         std::string transformed = TrimLine(transformLine(raw));
-        if (transformed.empty()) continue; // la linea se cae entera
+        if (transformed.empty()) continue;
         outLines.push_back(transformed);
     }
 
     std::string result;
-    bool prevBlank = true; // evita una linea en blanco al principio
+    bool prevBlank = true;
     for (size_t i = 0; i < outLines.size(); ++i) {
         bool isBlank = outLines[i].empty();
         if (isBlank && prevBlank) continue;
@@ -127,8 +111,6 @@ std::string TransformLinesPreservingStanzas(
     return result;
 }
 
-// Excepcion: quitar todo el texto entre parentesis (soporta anidados con
-// un contador de profundidad) de una linea.
 std::string StripParenthesesLine(const std::string& line)
 {
     std::string stripped;
@@ -141,9 +123,6 @@ std::string StripParenthesesLine(const std::string& line)
     return CollapseSpaces(stripped);
 }
 
-// Excepción: quitar marcadores "//" (y espacios pegados) de una linea —
-// convencion usada por algunos para marcar "repetir" que a veces la gente
-// prefiere no ver proyectada literalmente.
 std::string StripSlashMarkersLine(const std::string& line)
 {
     std::string out;
@@ -159,8 +138,6 @@ std::string StripSlashMarkersLine(const std::string& line)
     return CollapseSpaces(out);
 }
 
-// Divide en estrofas (parrafos separados por linea en blanco), cada una
-// como un solo string con sus lineas unidas por '\n' (sin trailing '\n').
 std::vector<std::string> SplitIntoParagraphs(const std::string& text)
 {
     std::vector<std::string> paragraphs;
@@ -191,8 +168,6 @@ std::vector<std::string> SplitIntoParagraphs(const std::string& text)
     return paragraphs;
 }
 
-// Excepcion: elimina estrofas repetidas exactas (comparando sin importar
-// mayusculas ni espacios de borde), conservando solo la primera aparicion.
 std::string RemoveDuplicateVerses(const std::string& text)
 {
     auto paragraphs = SplitIntoParagraphs(text);
@@ -215,11 +190,8 @@ std::string RemoveDuplicateVerses(const std::string& text)
     return result;
 }
 
-} // namespace
+}
 
-// =============================================================================
-//  Open
-// =============================================================================
 void SongEditView::Open(const std::string& filename)
 {
     m_Filename = filename;
@@ -241,11 +213,6 @@ void SongEditView::Open(const std::string& filename)
     m_Current.title        = !meta.title.empty() ? meta.title : Library::StripExtension(filename);
     m_Current.author       = !meta.artistAuthor.empty() ? meta.artistAuthor : Library::GetSongAuthor(filename);
 
-    // Migracion de sidecars viejos ".autor.txt" (de versiones anteriores al
-    // rework del editor, ver SongView.cpp original) — si no hay autor en
-    // songs_authors.ini todavia, pero existe el sidecar legado, se migra el
-    // valor y se borra el sidecar para que no siga apareciendo como cancion
-    // fantasma en el listado.
     if (m_Current.author.empty()) {
         std::filesystem::path legacyPath(m_FilePath);
         legacyPath.replace_extension(".autor.txt");
@@ -284,18 +251,10 @@ void SongEditView::Open(const std::string& filename)
     m_JustSaved = false;
 }
 
-// =============================================================================
-//  FlushIfDirty
-// =============================================================================
 void SongEditView::FlushIfDirty()
 {
     if (!m_Dirty) return;
 
-    // Cancion recien creada (todavia "Nueva cancion.txt"/"Cancion pegada.txt")
-    // a la que el usuario ya le puso Titulo propio: renombra el archivo (y
-    // migra sus sidecars) para que el nombre en disco coincida, en vez de
-    // dejarlo para siempre con el nombre generico (ver src/notes.txt). No-op
-    // para canciones que ya tenian nombre de archivo propio.
     m_Filename = Library::RenameNewSongToTitleIfApplicable(m_Filename, m_Current.title);
     m_FilePath = Library::GetAssetsPath() + "/songs/" + m_Filename;
 
@@ -327,9 +286,6 @@ void SongEditView::FlushIfDirty()
     m_JustSavedAt = ImGui::GetTime();
 }
 
-// =============================================================================
-//  Undo / Redo (un solo paso — ver comentario en SongEditView.h)
-// =============================================================================
 void SongEditView::PushUndoSnapshot()
 {
     m_Undo    = m_Current;
@@ -363,24 +319,11 @@ void SongEditView::MarkDirty()
     m_LastEditTime = ImGui::GetTime();
 }
 
-// =============================================================================
-//  ComputePreviewSlides — mismo algoritmo que LoadSongVerses (en disco), pero
-//  sobre el buffer EN MEMORIA + el linesPerSlide actual, para que el preview
-//  de la derecha sea fiel mientras se edita (antes de que el autoguardado
-//  vuelque a disco).
-// =============================================================================
 std::vector<std::string> SongEditView::ComputePreviewSlides() const
 {
     return Library::GroupLyricsIntoSlides(m_Current.lyrics, m_Current.linesPerSlide);
 }
 
-// =============================================================================
-//  RenderTopBar — una sola fila FINA, solo iconos (calcada de la barra de
-//  Holyrics): Volver, Undo, Redo, Lineas-por-diapositiva (icono que abre un
-//  popup chico con 1/2/3, no tres botones siempre visibles), y un punto de
-//  estado de guardado en vez de texto permanente. Sin bloques de texto ni
-//  controles sueltos — cualquier detalle vive en el tooltip del icono.
-// =============================================================================
 void SongEditView::RenderTopBar(bool& outWantsBack)
 {
     outWantsBack = false;
@@ -391,13 +334,13 @@ void SongEditView::RenderTopBar(bool& outWantsBack)
 
     ImGui::SameLine(0.0f, 10.0f);
     ImGui::BeginDisabled(!m_HasUndo);
-    if (DS::GlassIconButton("undo", "arrow_back", "\xE2\x86\xB6" /* ↶ */, "Deshacer", ImVec2(btnW, DS::ButtonHeight)))
+    if (DS::GlassIconButton("undo", "arrow_back", "\xE2\x86\xB6" , "Deshacer", ImVec2(btnW, DS::ButtonHeight)))
         Undo();
     ImGui::EndDisabled();
 
     ImGui::SameLine();
     ImGui::BeginDisabled(!m_HasRedo);
-    if (DS::GlassIconButton("redo", "arrow_forward", "\xE2\x86\xB7" /* ↷ */, "Rehacer", ImVec2(btnW, DS::ButtonHeight)))
+    if (DS::GlassIconButton("redo", "arrow_forward", "\xE2\x86\xB7" , "Rehacer", ImVec2(btnW, DS::ButtonHeight)))
         Redo();
     ImGui::EndDisabled();
 
@@ -405,11 +348,6 @@ void SongEditView::RenderTopBar(bool& outWantsBack)
     if (DS::GlassIconButton("exceptions", "cards_star", "#", "Excepciones", ImVec2(btnW, DS::ButtonHeight)))
         ImGui::OpenPopup("Excepciones##exceptionsModal");
 
-    // Modal (no un popup chico anclado al icono): siempre queda adelante,
-    // centrado y con tamano fijo grande, para que no se "pierda" y sea
-    // obvio que hay que elegir una opción o cerrar con "Listo" — un popup
-    // comun se podia cerrar sin querer con un click afuera y quedaba muy
-    // chico/discreto para una accion que reescribe la letra.
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(520.0f, 560.0f), ImGuiCond_Appearing);
@@ -432,7 +370,6 @@ void SongEditView::RenderTopBar(bool& outWantsBack)
         ImGui::Spacing();
         ImGui::Spacing();
 
-        // ── Lineas por diapositiva ───────────────────────────────────────
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
         ImGui::TextUnformatted("Lineas por diapositiva");
         ImGui::PopStyleColor();
@@ -456,14 +393,6 @@ void SongEditView::RenderTopBar(bool& outWantsBack)
             if (n > 1) ImGui::SameLine(0.0f, gap);
             ImGui::PushID(n);
             if (ImGui::Button(labels[n - 1], ImVec2(btnW2, 56.0f))) {
-                // El "filtro" no es un modo pegajoso: transforma la letra
-                // UNA VEZ, insertando las lineas en blanco reales donde
-                // corresponde. Parte SIEMPRE de baseLyrics (la letra sin
-                // cortes), no de m_Current.lyrics — asi elegir 1, despues 2
-                // y despues 3 siempre da el resultado correcto en vez de
-                // re-cortar un texto que ya tenia lineas en blanco
-                // insertadas por una aplicacion anterior (lo que antes
-                // impedia UNIR lineas ya separadas).
                 PushUndoSnapshot();
                 std::vector<std::string> slides = Library::GroupLyricsIntoSlides(m_Current.baseLyrics, n);
                 std::string newLyrics;
@@ -472,7 +401,7 @@ void SongEditView::RenderTopBar(bool& outWantsBack)
                     if (i + 1 < slides.size()) newLyrics += "\n";
                 }
                 m_Current.lyrics       = newLyrics;
-                m_Current.linesPerSlide = 0; // ya quedo reflejado de verdad en el texto
+                m_Current.linesPerSlide = 0;
                 MarkDirty();
             }
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
@@ -488,7 +417,6 @@ void SongEditView::RenderTopBar(bool& outWantsBack)
         ImGui::PopStyleColor();
         ImGui::Spacing();
 
-        // ── Otras excepciones (opcionales, desactivadas por defecto) ────
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
         ImGui::TextUnformatted("Otras excepciones");
         ImGui::PopStyleColor();
@@ -550,7 +478,6 @@ void SongEditView::RenderTopBar(bool& outWantsBack)
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(2);
 
-    // ── Nombre de archivo + punto de estado de guardado, a la derecha ───────
     std::string statusTip = "Guardado";
     ImU32 dotCol = 0;
     if (m_Dirty) { dotCol = DS::TextHint; statusTip = "Guardando..."; }
@@ -586,14 +513,6 @@ void SongEditView::RenderTopBar(bool& outWantsBack)
     ImGui::Spacing();
 }
 
-// =============================================================================
-//  RenderLeftPane — el panel donde se escribe es lo mas importante de la
-//  pantalla, asi que solo Titulo/Autor quedan siempre a la vista; el resto
-//  de los metadatos (Nota/Derechos de autor/Extra) vive detras de un icono
-//  de informacion que abre un popup chico, para no restarle espacio vertical
-//  a la letra. No hay un icono "info" propio todavia en assets/icons/ui —
-//  se usa el glifo "i" (ASCII, siempre renderiza) hasta que se agregue uno.
-// =============================================================================
 void SongEditView::RenderLeftPane(float width)
 {
     ImGui::BeginChild("##editLeft", ImVec2(width, 0.0f), false);
@@ -663,9 +582,6 @@ void SongEditView::RenderLeftPane(float width)
                           ImGuiInputTextFlags_AllowTabInput);
     if (ImGui::IsItemActivated()) PushUndoSnapshot();
     if (ImGui::IsItemEdited()) {
-        // Escritura manual: lo que el usuario tipea/pega pasa a ser la
-        // nueva letra "base" tambien, para que el filtro de lineas por
-        // diapositiva parta siempre de lo ultimo escrito a mano.
         m_Current.baseLyrics = m_Current.lyrics;
         MarkDirty();
     }
@@ -673,15 +589,6 @@ void SongEditView::RenderLeftPane(float width)
     ImGui::EndChild();
 }
 
-// =============================================================================
-//  RenderRightPane — preview en vivo (recalculado del buffer en memoria, no
-//  del disco) de como van a quedar las diapositivas. El estilo/fondo por
-//  verso individual se saco a proposito (ver comentario de la clase en
-//  SongEditView.h): ya existe un preset de estilo/fondo por CANCION ENTERA
-//  (tarjeta "Ajustes" del grid de estrofas en SongView) y tener los dos era
-//  redundante — este preview es puramente informativo, sin iconos ni
-//  overrides por tarjeta.
-// =============================================================================
 void SongEditView::RenderRightPane(float width)
 {
     ImGui::BeginChild("##editRight", ImVec2(width, 0.0f), false);
@@ -717,11 +624,6 @@ void SongEditView::RenderRightPane(float width)
         outH = lines.size() * size;
     };
 
-    // Tarjetas de tamano FIJO (16:9-ish, compactas como en el editor de
-    // referencia) — antes usaban una tabla con ImGuiTableFlags_SizingStretchSame,
-    // que las estiraba para llenar todo el ancho disponible y terminaban
-    // gigantes con solo 1-2 por fila. Ahora se acomodan en flujo (wrap), cada
-    // una a su tamano real, y el espacio sobrante simplemente queda vacio.
     float colWidth   = 190.0f * m_PreviewZoom;
     float cardHeight = 112.0f * m_PreviewZoom;
     float barH       = std::clamp(cardHeight * 0.20f, 14.0f, 22.0f);
@@ -791,11 +693,6 @@ void SongEditView::RenderRightPane(float width)
         ImVec2 numSz = ImGui::CalcTextSize(numLbl.c_str());
         dl->AddText({ p_min.x + 8.0f, barMin.y + (barH - numSz.y) * 0.5f }, IM_COL32(200, 200, 205, 220), numLbl.c_str());
 
-        // Icono de reloj: ver/cambiar/guardar la duracion de ESTA
-        // diapositiva (override manual del calculo automatico por tempo,
-        // ver ComputeVerseDurationSeconds en SongView y RenderVerseDurationPopup
-        // aca abajo). Mismo idioma que el swatch de color de SongView
-        // (icono chico clickeable en la barra inferior de la tarjeta).
         {
             float  clockSize = std::max(10.0f, barH * 0.55f);
             ImVec2 clkMin = { p_max.x - clockSize - 6.0f, barMin.y + (barH - clockSize) * 0.5f };
@@ -836,14 +733,6 @@ void SongEditView::RenderRightPane(float width)
     ImGui::EndChild();
 }
 
-// =============================================================================
-//  RenderVerseDurationPopup — contenido del popup que abre el icono de
-//  reloj de cada diapositiva (ver RenderRightPane): muestra el calculo
-//  automatico por tempo como referencia y deja escribir un override manual
-//  en milisegundos. "Guardar" persiste via MarkDirty()+FlushIfDirty() (el
-//  autoguardado normal del editor); "Usar calculo automático" borra el
-//  override para volver al valor derivado del tempo.
-// =============================================================================
 void SongEditView::RenderVerseDurationPopup(const std::vector<std::string>& slides)
 {
     if (m_OpenDurationPopupRequest) {
@@ -911,9 +800,6 @@ void SongEditView::RenderVerseDurationPopup(const std::vector<std::string>& slid
     ImGui::PopStyleColor(2);
 }
 
-// =============================================================================
-//  Render
-// =============================================================================
 bool SongEditView::Render()
 {
     bool wantsBack = false;
@@ -938,4 +824,5 @@ bool SongEditView::Render()
     return true;
 }
 
-} // namespace ProyecThor::UI
+}
+

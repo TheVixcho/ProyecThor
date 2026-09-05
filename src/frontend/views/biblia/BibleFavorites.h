@@ -18,4 +18,5 @@ void ToggleFavorite(const std::string& bible, int bookNum, int chapterNum, int v
                      const std::string& text);
 std::vector<FavoriteVerse> GetAll();
 
-} // namespace ProyecThor::UI::Favorites
+}
+
