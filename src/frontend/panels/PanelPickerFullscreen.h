@@ -14,9 +14,6 @@ class UIManager;
 enum class PickerCategory {
     All = 0,
     Content,
-    Visual,
-    Audio,
-    Broadcast,
     Tools
 };
 

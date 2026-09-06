@@ -35,20 +35,6 @@ void PanelPickerFullscreen::InitItems()
     m_Items.clear();
 
     m_Items.push_back({
-        "songs",
-        "Canciones & Letras",
-        "Gestor y proyector de letras, versos, estrofas y listas de canciones",
-        "CONTENIDO",
-        PickerCategory::Content,
-        IM_COL32(34, 197, 94, 255),
-        Library::DrawIcon_Music,
-        [this]() {
-            if (m_Library) m_Library->SelectCategory(LibraryCategory::Songs);
-        },
-        "canciones letras musica worship alabanza versos estrofas acordes playlists"
-    });
-
-    m_Items.push_back({
         "multimedia",
         "Multimedia & Fondos",
         "Biblioteca de videos en loop, animaciones, imágenes y fondos",
@@ -60,6 +46,20 @@ void PanelPickerFullscreen::InitItems()
             if (m_Library) m_Library->SelectCategory(LibraryCategory::Multimedia);
         },
         "multimedia videos imagenes fotos fondos loops backgrounds clips"
+    });
+
+    m_Items.push_back({
+        "songs",
+        "Canciones & Letras",
+        "Gestor y proyector de letras, versos, estrofas y listas de canciones",
+        "CONTENIDO",
+        PickerCategory::Content,
+        IM_COL32(34, 197, 94, 255),
+        Library::DrawIcon_Music,
+        [this]() {
+            if (m_Library) m_Library->SelectCategory(LibraryCategory::Songs);
+        },
+        "canciones letras musica worship alabanza versos estrofas acordes playlists"
     });
 
     m_Items.push_back({
@@ -91,11 +91,25 @@ void PanelPickerFullscreen::InitItems()
     });
 
     m_Items.push_back({
+        "render",
+        "Conversor de Medios (Render)",
+        "Conversión y compresión acelerada por hardware con FFmpeg",
+        "HERRAMIENTAS",
+        PickerCategory::Tools,
+        IM_COL32(236, 72, 153, 255),
+        AppIcons::DrawIcon_Swap,
+        [this]() {
+            if (m_Library) m_Library->SelectSideMode(LibrarySideMode::Render);
+        },
+        "render conversor video audio codec ffmpeg compresor exportar formato"
+    });
+
+    m_Items.push_back({
         "overlay",
         "Overlays Gráficos",
         "Diseñador de capas, tercios inferiores, zócalos y marquesinas",
-        "PRODUCCIÓN",
-        PickerCategory::Visual,
+        "HERRAMIENTAS",
+        PickerCategory::Tools,
         IM_COL32(59, 130, 246, 255),
         AppIcons::DrawIcon_Overlay,
         [this]() {
@@ -108,8 +122,8 @@ void PanelPickerFullscreen::InitItems()
         "web",
         "Navegador Web & HTML",
         "Navegador en vivo y montaje de proyectos HTML locales sin servidor",
-        "PRODUCCIÓN",
-        PickerCategory::Visual,
+        "HERRAMIENTAS",
+        PickerCategory::Tools,
         IM_COL32(99, 102, 241, 255),
         AppIcons::DrawIcon_Globe,
         [this]() {
@@ -122,8 +136,8 @@ void PanelPickerFullscreen::InitItems()
         "model3d",
         "Modelos & Recursos 3D",
         "Visor 3D interactivo y catálogo de mallas OBJ, STL, PLY, GLTF y GLB",
-        "PRODUCCIÓN",
-        PickerCategory::Visual,
+        "HERRAMIENTAS",
+        PickerCategory::Tools,
         IM_COL32(139, 92, 246, 255),
         AppIcons::DrawIcon_Cube3D,
         [this]() {
@@ -136,168 +150,14 @@ void PanelPickerFullscreen::InitItems()
         "lab",
         "Laboratorio Matemático",
         "Graficador de funciones matemáticas, fórmulas y curvas en vivo",
-        "PRODUCCIÓN",
-        PickerCategory::Visual,
+        "HERRAMIENTAS",
+        PickerCategory::Tools,
         IM_COL32(168, 85, 247, 255),
         AppIcons::DrawIcon_Formula,
         [this]() {
             if (m_Library) m_Library->SelectSideMode(LibrarySideMode::Lab);
         },
         "lab matematicas formulas funciones graficas calculo fx curvas"
-    });
-
-    m_Items.push_back({
-        "render",
-        "Conversor de Medios (Render)",
-        "Conversión y compresión acelerada por hardware con FFmpeg",
-        "PRODUCCIÓN",
-        PickerCategory::Visual,
-        IM_COL32(236, 72, 153, 255),
-        AppIcons::DrawIcon_Swap,
-        [this]() {
-            if (m_Library) m_Library->SelectSideMode(LibrarySideMode::Render);
-        },
-        "render conversor video audio codec ffmpeg compresor exportar formato"
-    });
-
-    m_Items.push_back({
-        "audio",
-        "Audio DAW Multipista",
-        "Reproductor, secuenciador, mezcla por canales y efectos de audio",
-        "AUDIO",
-        PickerCategory::Audio,
-        IM_COL32(217, 70, 239, 255),
-        AppIcons::DrawIcon_Mixer,
-        [this]() {
-            if (m_Library) m_Library->SelectCategory(LibraryCategory::Audio);
-        },
-        "audio daw mixer multipista pistas secuenciador sonido fader volumen"
-    });
-
-    m_Items.push_back({
-        "clock",
-        "Reloj & Broadcast Timer",
-        "Reloj broadcast, cuenta regresiva y cronómetro sincronizado por LAN",
-        "ESCENARIO",
-        PickerCategory::Audio,
-        IM_COL32(244, 63, 94, 255),
-        AppIcons::DrawIcon_Monitor,
-        [this]() {
-            if (m_Library) m_Library->SelectCategory(LibraryCategory::Multimedia);
-        },
-        "reloj cronometro timer countdown tiempo broadcast horario hora"
-    });
-
-    m_Items.push_back({
-        "stage",
-        "Stage Display (Retorno)",
-        "Pantalla dedicada para músicos y oradores con acordes y letras",
-        "ESCENARIO",
-        PickerCategory::Audio,
-        IM_COL32(239, 68, 68, 255),
-        AppIcons::DrawIcon_Monitor,
-        [this]() {
-            if (m_UIManager) m_UIManager->ToggleStageQuick(true);
-        },
-        "stage retorno musicos orador pantalla acordes teleprompter cantante"
-    });
-
-    m_Items.push_back({
-        "broadcast",
-        "Transmisión en Vivo (RTMP)",
-        "Emisión directa hacia YouTube, Facebook, Twitch y servidores RTMP",
-        "TRANSMISIÓN",
-        PickerCategory::Broadcast,
-        IM_COL32(249, 115, 22, 255),
-        AppIcons::DrawIcon_Antenna,
-        [this]() {
-            if (m_UIManager) m_UIManager->ToggleConnectionsWindow();
-        },
-        "streaming rtmp emision vivo broadcast youtube twitch transmision"
-    });
-
-    m_Items.push_back({
-        "capture",
-        "Captura de Video & NDI",
-        "Entrada en vivo de tarjetas capturadoras HDMI/USB y webcams",
-        "TRANSMISIÓN",
-        PickerCategory::Broadcast,
-        IM_COL32(245, 158, 11, 255),
-        AppIcons::DrawIcon_Monitor,
-        [this]() {
-            if (m_UIManager) m_UIManager->ToggleConnectionsWindow();
-        },
-        "captura video ndi camara webcam hdmi entrada feed live senal"
-    });
-
-    m_Items.push_back({
-        "sync",
-        "Sincronización LAN & Móvil",
-        "Servidor local y control remoto para apps móviles y terminales",
-        "CONEXIÓN",
-        PickerCategory::Broadcast,
-        IM_COL32(234, 179, 8, 255),
-        AppIcons::DrawIcon_Antenna,
-        [this]() {
-            if (m_UIManager) m_UIManager->ToggleConnectionsWindow();
-        },
-        "lan red sync sincronizacion movil app tablet android ios wifi control"
-    });
-
-    m_Items.push_back({
-        "osc",
-        "Control OSC & MIDI",
-        "Protocolo Open Sound Control para consolas de audio y automatización",
-        "CONEXIÓN",
-        PickerCategory::Broadcast,
-        IM_COL32(132, 204, 22, 255),
-        AppIcons::DrawIcon_Antenna,
-        [this]() {
-            if (m_UIManager) m_UIManager->ToggleConnectionsWindow();
-        },
-        "osc midi consola audio automatizacion behringer wing x32 triggers"
-    });
-
-    m_Items.push_back({
-        "styles",
-        "Hub de Estilos & Canva",
-        "Tipografías, sombras, fondos, degradados y estilos visuales",
-        "ASISTENCIA",
-        PickerCategory::Tools,
-        IM_COL32(56, 189, 248, 255),
-        AppIcons::DrawIcon_Palette,
-        [this]() {
-            Core::PresentationCore::Get().ApplyStyleByName("");
-        },
-        "estilos fuentes canva diseno tipografia colores sombras apariencia temas"
-    });
-
-    m_Items.push_back({
-        "ai",
-        "Asistente de IA",
-        "Inteligencia artificial para bosquejos, búsqueda y asistencia general",
-        "ASISTENCIA",
-        PickerCategory::Tools,
-        IM_COL32(167, 139, 250, 255),
-        AppIcons::DrawIcon_Shader,
-        [this]() {
-            if (m_UIManager) m_UIManager->ToggleAIAssistant();
-        },
-        "ia ai asistente inteligencia artificial bosquejos predicacion chat copilot"
-    });
-
-    m_Items.push_back({
-        "notes",
-        "Notas Rápidas",
-        "Bloc de notas flotante y recordatorios rápidos para el operador",
-        "ASISTENCIA",
-        PickerCategory::Tools,
-        IM_COL32(251, 146, 60, 255),
-        AppIcons::DrawIcon_TextAa,
-        [this]() {
-            if (m_UIManager) m_UIManager->ToggleNotesWindow();
-        },
-        "notas bloc apuntes texto recordatorios operador quicknotes libreta"
     });
 }
 
@@ -377,8 +237,8 @@ void PanelPickerFullscreen::Render()
 
     ImVec2 titlePos = ImVec2(winPos.x + padX, winPos.y + 16.0f);
     AppIcons::DrawIcon_Grid(dl, titlePos, 22.0f, IM_COL32(0, 200, 255, 255));
-    dl->AddText(ImVec2(titlePos.x + 30.0f, titlePos.y + 2.0f), IM_COL32(240, 245, 255, 255), "SELECTOR DE PANELES & PLUGINS");
-    dl->AddText(ImVec2(titlePos.x + 30.0f, titlePos.y + 22.0f), IM_COL32(130, 140, 160, 255), "F8 · Haz clic en cualquier tarjeta para abrir su panel o herramienta");
+    dl->AddText(ImVec2(titlePos.x + 30.0f, titlePos.y + 2.0f), IM_COL32(240, 245, 255, 255), "PANELES & HERRAMIENTAS");
+    dl->AddText(ImVec2(titlePos.x + 30.0f, titlePos.y + 22.0f), IM_COL32(130, 140, 160, 255), "F8 · Barra lateral izquierda");
 
     float searchW = std::clamp(winSize.x * 0.34f, 260.0f, 440.0f);
     ImVec2 searchPos = ImVec2(winPos.x + (winSize.x - searchW) * 0.5f, winPos.y + 18.0f);
@@ -395,7 +255,7 @@ void PanelPickerFullscreen::Render()
         m_JustOpened = false;
     }
 
-    ImGui::InputTextWithHint("##pickerSearch", "Buscar paneles o herramientas... (ej: audio, web, biblia)", m_SearchBuffer, sizeof(m_SearchBuffer));
+    ImGui::InputTextWithHint("##pickerSearch", "Buscar en la barra lateral...", m_SearchBuffer, sizeof(m_SearchBuffer));
     ImGui::PopStyleColor(3);
     ImGui::PopStyleVar(2);
     ImGui::PopItemWidth();
@@ -429,17 +289,14 @@ void PanelPickerFullscreen::Render()
     static const CatFilter kFilters[] = {
         { PickerCategory::All,       "Todos" },
         { PickerCategory::Content,   "Contenido" },
-        { PickerCategory::Visual,    "Visual & Producción" },
-        { PickerCategory::Audio,     "Audio & Escenario" },
-        { PickerCategory::Broadcast, "Transmisión & Conexión" },
-        { PickerCategory::Tools,     "Asistencia & Diseño" },
+        { PickerCategory::Tools,     "Herramientas" },
     };
 
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 16.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(14.0f, 6.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 0.0f));
 
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < 3; ++i) {
         bool selected = (m_SelectedCategory == kFilters[i].cat);
         if (selected) {
             ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(0, 168, 255, 230));
@@ -464,11 +321,11 @@ void PanelPickerFullscreen::Render()
     ImGui::NewLine();
     ImGui::PopStyleVar(3);
 
-    float cardsStartY = filterBarY + 44.0f;
+    float cardsStartY = (filterBarY - winPos.y) + 44.0f;
     float contentW = winSize.x - padX * 2.0f;
-    float contentH = winSize.y - (cardsStartY - winPos.y) - 16.0f;
+    float contentH = winSize.y - cardsStartY - 16.0f;
 
-    ImGui::SetCursorScreenPos(ImVec2(winPos.x + padX, cardsStartY));
+    ImGui::SetCursorPos(ImVec2(padX, cardsStartY));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGui::BeginChild("##pickerCardsRegion", ImVec2(contentW, contentH), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
     ImGui::PopStyleVar();
@@ -486,9 +343,9 @@ void PanelPickerFullscreen::Render()
 
     if (visibleItems.empty()) {
         ImGui::Dummy(ImVec2(contentW, 60.0f));
-        float textW = ImGui::CalcTextSize("No se encontraron herramientas o paneles coincidentes").x;
+        float textW = ImGui::CalcTextSize("No se encontraron herramientas coincidentes").x;
         ImGui::SetCursorPosX((contentW - textW) * 0.5f);
-        ImGui::TextColored(ImVec4(0.6f, 0.65f, 0.75f, 1.0f), "No se encontraron herramientas o paneles coincidentes");
+        ImGui::TextColored(ImVec4(0.6f, 0.65f, 0.75f, 1.0f), "No se encontraron herramientas coincidentes");
 
         if (m_SearchBuffer[0] != '\0') {
             ImGui::Dummy(ImVec2(contentW, 12.0f));
@@ -512,9 +369,15 @@ void PanelPickerFullscreen::Render()
             const auto* it = visibleItems[i];
             int colIdx = static_cast<int>(i % cols);
 
-            ImVec2 cardMin = ImGui::GetCursorScreenPos();
-            ImVec2 cardMax = ImVec2(cardMin.x + cardW, cardMin.y + cardH);
-            bool hovered = ImGui::IsMouseHoveringRect(cardMin, cardMax, false);
+            std::string btnId = "##cardBtn_" + it->id;
+            bool clicked = ImGui::InvisibleButton(btnId.c_str(), ImVec2(cardW, cardH));
+            if (clicked) {
+                clickedItem = it;
+            }
+
+            ImVec2 cardMin = ImGui::GetItemRectMin();
+            ImVec2 cardMax = ImGui::GetItemRectMax();
+            bool hovered = ImGui::IsItemHovered();
 
             ImU32 bgCol = hovered ? IM_COL32(28, 34, 50, 245) : IM_COL32(18, 22, 32, 220);
             ImU32 borderCol = hovered ? it->badgeColor : IM_COL32(40, 46, 66, 170);
@@ -551,16 +414,10 @@ void PanelPickerFullscreen::Render()
                 dl->AddText(actPos, it->badgeColor, actionHint);
             }
 
-            std::string btnId = "##cardBtn_" + it->id;
-            ImGui::SetCursorScreenPos(cardMin);
-            if (ImGui::InvisibleButton(btnId.c_str(), ImVec2(cardW, cardH))) {
-                clickedItem = it;
-            }
-
             if (colIdx < cols - 1 && i + 1 < visibleItems.size()) {
                 ImGui::SameLine(0.0f, kCardSpacingX);
-            } else {
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + kCardSpacingY);
+            } else if (i + 1 < visibleItems.size()) {
+                ImGui::Dummy(ImVec2(0.0f, kCardSpacingY));
             }
         }
 
@@ -581,5 +438,3 @@ void PanelPickerFullscreen::Render()
 }
 
 }
-
-
