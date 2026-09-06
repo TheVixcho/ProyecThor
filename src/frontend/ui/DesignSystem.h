@@ -77,7 +77,7 @@ bool GlassListRow(const char* label, bool selected, float indent = 14.0f, float 
 void GlassSeparator(float thickness = 1.0f);
 void GlassSectionHeader(const char* label);
 
-// Slider "estilo HTML": track fino + thumb circular, con una leve animacion
+// Slider "estilo HTML": track fino + thumb circular, con una leve animación
 // de crecimiento en hover/drag (ver GetStateStorage()->GetFloatRef, mismo
 // patron que LPHoverLerp en LayersTheme.h). Reemplaza el look de barra
 // gruesa rellena por defecto de ImGui::SliderFloat en toda la app.

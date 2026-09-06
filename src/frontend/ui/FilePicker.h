@@ -13,6 +13,7 @@ std::string PickImageOrVideoFile();
 // pantalla de carga (Ajustes > Proyeccion), donde un video no tendria
 // sentido.
 std::string PickImageFile();
+std::string PickHtmlFile();
 
 // Elegir una CARPETA (no un archivo) -- usado para fijar una carpeta de
 // salida fija en el conversor de Render (ver LibraryPanel::
@@ -27,8 +28,13 @@ std::string PickFolder(const std::string& title = "Elegir carpeta");
 // conversor de Render. IFileSaveDialog en Windows, zenity --file-selection
 // --save / kdialog --getsavefilename en Linux (Wayland incluido, mismo
 // motivo que PickFolder). `defaultPath` sugiere carpeta+nombre inicial
-// (con extension). Devuelve "" si cancela.
+// (con extensión). Devuelve "" si cancela.
 std::string PickSaveVideoPath(const std::string& defaultPath);
+
+// Mismo patron que PickSaveVideoPath pero filtrado a texto plano (.txt) --
+// usado por "Descargar subtitulos" del Hub (ver SubtitleImporter.h),
+// donde el resultado es un .txt suelto y no una cancion de Biblioteca.
+std::string PickSaveTextPath(const std::string& defaultPath);
 
 // Extension-sniffing simple para decidir si un path va por el pipeline de
 // video o de imagen (mismo criterio que BackgroundLayer).

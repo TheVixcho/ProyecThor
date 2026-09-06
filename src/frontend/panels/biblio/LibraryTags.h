@@ -26,7 +26,7 @@ void SaveSongTagGroups(const std::vector<SongTagGroup>& groups);
 
 // Crea el grupo si "group.id" no existe, o lo actualiza si ya existe.
 // Pensado para el panel de Ajustes, donde cada edicion (color, nombre) se
-// persiste al instante sin pasar por el boton global "Guardar ajustes".
+// persiste al instante sin pasar por el botón global "Guardar ajustes".
 void SaveSongTagGroup(const SongTagGroup& group);
 
 void DeleteSongTagGroup(const std::string& id);

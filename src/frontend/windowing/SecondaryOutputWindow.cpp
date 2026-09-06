@@ -47,7 +47,7 @@ namespace ProyecThor::Core {
             const char* desc = nullptr;
             int code = glfwGetError(&desc);
             std::cerr << "[SecondaryOutputWindow] glfwCreateWindow fallo ('" << title
-                      << "'). Codigo: " << code << " Desc: " << (desc ? desc : "N/A") << "\n";
+                      << "'). Código: " << code << " Desc: " << (desc ? desc : "N/A") << "\n";
             glfwDefaultWindowHints();
             return false;
         }
@@ -60,6 +60,7 @@ namespace ProyecThor::Core {
         glfwMakeContextCurrent(backup);
 
         glfwShowWindow(m_Window);
+        glfwSetInputMode(m_Window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
         m_MonitorIndex = monitorIndex;
 
         glfwDefaultWindowHints();

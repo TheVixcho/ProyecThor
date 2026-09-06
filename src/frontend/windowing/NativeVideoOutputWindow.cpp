@@ -95,7 +95,7 @@ void* NativeVideoOutputWindow::CreateHidden(int monitorIndex)
         if (!m_Window) {
             const char* desc = nullptr;
             int code = glfwGetError(&desc);
-            std::cerr << "[NativeVideoOutputWindow] glfwCreateWindow fallo. Codigo: "
+            std::cerr << "[NativeVideoOutputWindow] glfwCreateWindow fallo. Código: "
                       << code << " Desc: " << (desc ? desc : "N/A") << "\n";
             return nullptr;
         }

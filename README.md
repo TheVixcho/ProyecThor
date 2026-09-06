@@ -137,9 +137,20 @@ ProyecThor is built on the shoulders of several open-source libraries and SDKs, 
 | nlohmann/json | MIT | [github.com/nlohmann/json](https://github.com/nlohmann/json) |
 | stb_image | Public Domain / MIT | [github.com/nothings/stb](https://github.com/nothings/stb) |
 
+ProyecThor also bundles two command-line tools, invoked as separate child processes (not linked into the app) for a couple of features:
+
+| Tool | License | Link | Used for |
+| :--- | :--- | :--- | :--- |
+| FFmpeg (`ffmpeg.exe`, Windows builds) | GPL v3 (essentials build, includes libx264) | [ffmpeg.org](https://ffmpeg.org) | Streaming/RTMP encoding and Biblioteca > Render (format conversion). |
+| yt-dlp (`yt-dlp.exe`, Windows builds) | The Unlicense (public domain) | [github.com/yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) | Resolving playable stream URLs and Archivo > Importar > Importar desde URL (subtitle-as-lyrics import). |
+
 Some of these dependencies (notably LibVLC and TagLib, both under LGPL 2.1) carry additional obligations beyond the permissive licenses above, especially regarding static linking. TagLib is linked statically in ProyecThor; its source (v1.13.1) is available at [github.com/taglib/taglib/releases/tag/v1.13.1](https://github.com/taglib/taglib/releases/tag/v1.13.1).
 
 **Anyone modifying, building, or redistributing ProyecThor should read [`THIRD-PARTY-NOTICES.md`](./THIRD-PARTY-NOTICES.md) before making changes that affect these SDKs.**
+
+### Acknowledgments
+
+The "Importar desde URL" subtitle-as-lyrics feature (Archivo > Importar) follows the same yt-dlp track-selection approach (manual captions preferred over auto-generated, `tlang=` auto-translations filtered out) as [SudoMeke/subtitle-grabber](https://github.com/SudoMeke/subtitle-grabber), a Python CLI tool for downloading YouTube subtitles. ProyecThor's implementation is an independent C++ port, not a copy of its code.
 
 ---
 

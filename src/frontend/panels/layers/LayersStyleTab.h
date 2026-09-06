@@ -10,7 +10,7 @@ namespace ProyecThor::UI {
 class UIManager;
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  LayersStyleTab — toda la logica del tab "Estilos de Letra"
+//  LayersStyleTab — toda la lógica del tab "Estilos de Letra"
 // ─────────────────────────────────────────────────────────────────────────────
 class LayersStyleTab {
 public:
@@ -18,7 +18,7 @@ public:
     ~LayersStyleTab() = default;
 
     // El editor de estilos se abre a pantalla completa (ver
-    // UIManager::EnterFullscreenEditor) -- sin esto, el boton "Nuevo estilo"/
+    // UIManager::EnterFullscreenEditor) -- sin esto, el botón "Nuevo estilo"/
     // "Editar" simplemente no hace nada.
     void SetUIManager(UIManager* uiManager) { m_UIManager = uiManager; }
 
@@ -48,7 +48,11 @@ private:
     void OpenStyleEditorFullscreen(bool isNew, const std::string& name, const StyleData& data);
 
     // ── Render helpers ────────────────────────────────────────────────────────
-    void RenderTopBar();     // toolbar compacta (icon-only): nuevo / recargar fuentes / zoom / grid-lista
+    // Riel angosto a la izquierda (icon-only, apilado vertical): grid/lista,
+    // zoom +/-, recargar fuentes, nuevo estilo, ajustes rapidos -- antes era
+    // una barra horizontal arriba de la galeria, le robaba alto util a las
+    // tarjetas de tema. Ver Render().
+    void RenderLeftRail();
     void RenderThemeGrid();
     void RenderQuickAdjust();
     // Ajustes rapidos ya no vive fijo debajo de la galeria: ahora es un

@@ -34,6 +34,7 @@ const char* TransitionTypeToName(TransitionType t)
         case TransitionType::UncoverRight: return "UncoverRight";
         case TransitionType::UncoverUp:    return "UncoverUp";
         case TransitionType::UncoverDown:  return "UncoverDown";
+        case TransitionType::Iris:         return "Iris";
     }
     return "None";
 }
@@ -55,6 +56,7 @@ TransitionType TransitionTypeFromName(const std::string& name)
     if (name == "UncoverRight") return TransitionType::UncoverRight;
     if (name == "UncoverUp")    return TransitionType::UncoverUp;
     if (name == "UncoverDown")  return TransitionType::UncoverDown;
+    if (name == "Iris")         return TransitionType::Iris;
     return TransitionType::None;
 }
 
@@ -219,6 +221,7 @@ float TransitionPanel::GetOutgoingAlpha() const
         case TransitionType::Fade:
         case TransitionType::ZoomIn:
         case TransitionType::ZoomOut:
+        case TransitionType::Iris:
             return 1.0f - GetOutgoingLocalT();
         default:
             return 1.0f;
@@ -231,6 +234,7 @@ float TransitionPanel::GetIncomingAlpha() const
         case TransitionType::Fade:
         case TransitionType::ZoomIn:
         case TransitionType::ZoomOut:
+        case TransitionType::Iris:
             return GetIncomingLocalT();
         default:
             return 1.0f;
@@ -247,6 +251,8 @@ float TransitionPanel::GetOutgoingScale() const
             return 1.0f + (GetOutgoingLocalT() * 0.5f); // Se agranda mientras desaparece
         case TransitionType::ZoomOut:
             return 1.0f - (GetOutgoingLocalT() * 0.5f); // Se achica mientras desaparece
+        case TransitionType::Iris:
+            return 1.0f;
         default:
             return 1.0f;
     }
@@ -259,6 +265,8 @@ float TransitionPanel::GetIncomingScale() const
             return 0.5f + (GetIncomingLocalT() * 0.5f); // Viene desde atrás (pequeño a normal)
         case TransitionType::ZoomOut:
             return 1.5f - (GetIncomingLocalT() * 0.5f); // Viene desde adelante (grande a normal)
+        case TransitionType::Iris:
+            return 0.2f + (GetIncomingLocalT() * 0.8f); // Revelado expansivo desde el centro
         default:
             return 1.0f;
     }
@@ -310,29 +318,30 @@ void TransitionPanel::RenderContent()
     ImGui::Spacing();
 
     static const TransitionCategory categories[] = {
-        { "Básicas", {
-            { TransitionType::None,    "Sin transición", "El texto cambia instantáneamente." },
-            { TransitionType::Fade,    "Disolver",       "Sale por completo, luego entra el nuevo." },
-            { TransitionType::ZoomIn,  "Zoom In",        "El texto aparece desde el fondo." },
-            { TransitionType::ZoomOut, "Zoom Out",       "El texto aparece desde el frente." }
+        { "Básicas & Teatro", {
+            { TransitionType::Iris,    "🎭 Teatro (Iris)", "Círculo expansivo desde el centro estilo teatro/cine." },
+            { TransitionType::Fade,    "Disolver",        "Sale por completo, luego entra el nuevo." },
+            { TransitionType::ZoomIn,  "Zoom In",         "El texto/fondo aparece desde el fondo." },
+            { TransitionType::ZoomOut, "Zoom Out",        "El texto/fondo aparece desde el frente." },
+            { TransitionType::None,    "Sin transición",  "El contenido cambia instantáneamente." }
         }},
         { "Barridos", {
-            { TransitionType::SlideLeft,  "← Barrido Izq", "El texto nuevo empuja al anterior hacia la izq." },
-            { TransitionType::SlideRight, "Barrido Der →", "El texto nuevo empuja al anterior hacia la der." },
-            { TransitionType::SlideUp,    "↑ Barrido Arr", "El texto nuevo empuja al anterior hacia arriba." },
-            { TransitionType::SlideDown,  "↓ Barrido Aba", "El texto nuevo empuja al anterior hacia abajo." }
+            { TransitionType::SlideLeft,  "← Barrido Izq", "El nuevo empuja al anterior hacia la izq." },
+            { TransitionType::SlideRight, "Barrido Der →", "El nuevo empuja al anterior hacia la der." },
+            { TransitionType::SlideUp,    "↑ Barrido Arr", "El nuevo empuja al anterior hacia arriba." },
+            { TransitionType::SlideDown,  "↓ Barrido Aba", "El nuevo empuja al anterior hacia abajo." }
         }},
         { "Cubrir", {
-            { TransitionType::CoverLeft,  "← Cubrir Izq",  "El texto nuevo entra sobre el actual." },
-            { TransitionType::CoverRight, "Cubrir Der →",  "El texto nuevo entra sobre el actual." },
-            { TransitionType::CoverUp,    "↑ Cubrir Arr",  "El texto nuevo entra desde abajo cubriendo." },
-            { TransitionType::CoverDown,  "↓ Cubrir Aba",  "El texto nuevo entra desde arriba cubriendo." }
+            { TransitionType::CoverLeft,  "← Cubrir Izq",  "El nuevo entra sobre el actual hacia la izq." },
+            { TransitionType::CoverRight, "Cubrir Der →",  "El nuevo entra sobre el actual hacia la der." },
+            { TransitionType::CoverUp,    "↑ Cubrir Arr",  "El nuevo entra desde abajo cubriendo." },
+            { TransitionType::CoverDown,  "↓ Cubrir Aba",  "El nuevo entra desde arriba cubriendo." }
         }},
         { "Descubrir", {
-            { TransitionType::UncoverLeft,  "← Revelar Izq", "El texto actual sale revelando el nuevo." },
-            { TransitionType::UncoverRight, "Revelar Der →", "El texto actual sale revelando el nuevo." },
-            { TransitionType::UncoverUp,    "↑ Revelar Arr", "El texto actual sale revelando el nuevo." },
-            { TransitionType::UncoverDown,  "↓ Revelar Aba", "El texto actual sale revelando el nuevo." }
+            { TransitionType::UncoverLeft,  "← Revelar Izq", "El actual sale revelando el nuevo hacia la izq." },
+            { TransitionType::UncoverRight, "Revelar Der →", "El actual sale revelando el nuevo hacia la der." },
+            { TransitionType::UncoverUp,    "↑ Revelar Arr", "El actual sale revelando el nuevo hacia arriba." },
+            { TransitionType::UncoverDown,  "↓ Revelar Aba", "El actual sale revelando el nuevo hacia abajo." }
         }}
     };
     constexpr int kCategoryCount = sizeof(categories) / sizeof(categories[0]);
@@ -447,7 +456,7 @@ void TransitionPanel::RenderContent()
         }
 
         // Sin +gap al final: el gap va SOLO entre filas, no despues de la
-        // ultima. Antes "rows * (kCardH + gap)" reservaba un gap extra de
+        // última. Antes "rows * (kCardH + gap)" reservaba un gap extra de
         // mas (8px) que quedaba como hueco muerto entre la grilla y la
         // seccion de Duracion, sin ningun elemento que lo llenara.
         float gridH = rows * kCardH + std::max(0, rows - 1) * gap;
@@ -476,7 +485,7 @@ void TransitionPanel::RenderContent()
 
         // Barra de progreso dibujada a mano, pegada directo al slider (sin
         // Spacing() intermedio) para que se lea como una sola unidad
-        // "duracion + su barra", no como dos bloques separados.
+        // "duración + su barra", no como dos bloques separados.
         {
             float barH = 6.0f;
             float w    = ImGui::GetContentRegionAvail().x;
@@ -500,6 +509,31 @@ void TransitionPanel::RenderContent()
         }
     }
 
+    // ── Alcance: a que capa afecta esta transicion ───────────────────────
+    // El fondo (imagen/video) tiene su propio crossfade de alpha automatico
+    // (ver BackgroundLayer) -- si "Afecta a Fondos" esta activo, ese
+    // crossfade pasa a usar la duracion de arriba en vez de su default fijo
+    // (0.2s). "Afecta a Letras" controla si el texto anima con el tipo/
+    // duracion de arriba o cambia al instante (igual que elegir "Sin
+    // transición").
+    {
+        ImGui::Spacing();
+        ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(1.0f, 1.0f, 1.0f, 0.06f));
+        ImGui::Separator();
+        ImGui::PopStyleColor();
+        ImGui::Spacing();
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(kTextDim));
+        ImGui::TextUnformatted("Afecta a");
+        ImGui::PopStyleColor();
+
+        ImGui::PushStyleColor(ImGuiCol_CheckMark, ImGui::ColorConvertU32ToFloat4(kAccent));
+        ImGui::Checkbox("Fondos", &m_AffectsBackground);
+        ImGui::SameLine(0.0f, 20.0f);
+        ImGui::Checkbox("Letras", &m_AffectsLyrics);
+        ImGui::PopStyleColor();
+    }
+
     // ── Pie de página / Ayuda ────────────────────────────────────────────
     ImGui::Spacing();
     ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(1.0f, 1.0f, 1.0f, 0.06f));
@@ -512,4 +546,4 @@ void TransitionPanel::RenderContent()
     ImGui::PopStyleColor();
 }
 
-} // namespace ProyecThor::UI
+} // namespace ProyecThor::UI

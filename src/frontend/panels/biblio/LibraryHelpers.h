@@ -13,6 +13,8 @@
 #include <cstdlib>
 #endif
 
+#include "backend/core/AppPaths.h"
+
 namespace fs = std::filesystem;
 
 namespace ProyecThor::Library {
@@ -121,30 +123,13 @@ inline std::string NormalizeToUtf8(const std::string& raw)
 }
 
 // =============================================================================
-//  Ruta de assets (singleton estatico)
+//  Ruta de assets -- delega en ProyecThor::GetAssetsPath() (AppPaths.h) en
+//  vez de recalcular %APPDATA%/etc. por su cuenta, asi respeta la carpeta de
+//  datos elegida en Ajustes > Actualizaciones > "Carpeta de datos".
 // =============================================================================
 inline const std::string& GetAssetsPath()
 {
-    static std::string s_path;
-    if (!s_path.empty()) return s_path;
-
-#ifdef _WIN32
-    wchar_t buf[MAX_PATH] = {};
-    if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr,
-                                   SHGFP_TYPE_CURRENT, buf)))
-        s_path = WideToUtf8(buf) + "\\ProyecThor\\assets";
-    else
-        s_path = "assets";
-#else
-    const char* home = std::getenv("HOME");
-    if (home) {
-        s_path = std::string(home) + "/.local/share/ProyecThor/assets";
-        std::filesystem::create_directories(s_path);
-    } else {
-        s_path = "assets";
-    }
-#endif
-    return s_path;
+    return ProyecThor::GetAssetsPath();
 }
 
 inline fs::path U8Path(const std::string& utf8)
@@ -202,6 +187,21 @@ inline ImVec4 LerpColor(ImVec4 a, ImVec4 b, float t)
 inline bool& ForceListUpdate()
 {
     static bool s_flag = true;
+    return s_flag;
+}
+
+// =============================================================================
+//  Flag global de reescaneo completo de la lista (ctx.items) desde disco
+// =============================================================================
+// A diferencia de ForceListUpdate() (que solo reordena/refiltra lo YA
+// cargado en ctx.items), esta pide un reescaneo real del directorio via
+// LibraryPanel::RefreshList() — necesario cuando un archivo cambio de
+// nombre en disco desde un lugar sin acceso directo a LibraryContext (ver
+// SongEditView::FlushIfDirty / RenameNewSongToTitleIfApplicable). La
+// consume LibraryPanel::Render() en cada frame.
+inline bool& ForceLibraryRescan()
+{
+    static bool s_flag = false;
     return s_flag;
 }
 

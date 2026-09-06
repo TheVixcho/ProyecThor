@@ -10,7 +10,7 @@
 # antes de ejecutar, .desktop + icono, VLC/PDFium vendorizados) -- no hace
 # falta duplicar nada de eso aca, "cmake --install" alcanza.
 pkgname=proyecthor-git
-pkgver=0.5.1.r0.g0000000
+pkgver=0.6.0.r0.g0000000
 pkgrel=1
 pkgdesc="Motor de proyeccion profesional para iglesias, teatros y eventos en vivo (VLC + OpenGL + ImGui) -- build desde la rama beta"
 arch=('x86_64')
@@ -51,7 +51,7 @@ sha256sums=('SKIP')
 pkgver() {
   cd "$srcdir/$pkgname"
   git describe --long --tags 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' \
-    || printf "0.5.1.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+    || printf "0.6.0.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
 }
 
 build() {

@@ -3,6 +3,10 @@
 #include <vector>
 #include <memory>
 #include <functional>
+#include <thread>
+#include <mutex>
+#include <optional>
+#include <string>
 #include <GLFW/glfw3.h>
 #include "IPanel.h"
 #include "../toolbar/ConfigPanel.h"
@@ -17,9 +21,14 @@
 #include "panels/BroadcastPanel.h"
 #include "panels/SyncPanel.h"
 #include "panels/OSCPanel.h"
+#include "panels/AIAssistantPanel.h"
 #include "frontend/views/QuickNotes.h"
+#include "backend/core/SubtitleImporter.h"
+#include "backend/core/PresentationCore.h"
 
 namespace ProyecThor::UI {
+
+class LibraryPanel;
 
 enum class ActiveLeftPanel {
     Library,
@@ -61,6 +70,15 @@ uint64_t m_LastTransitionTrigger = 0;
 
     GlassRenderer& GetGlassRenderer() { return m_GlassRenderer; }
 
+    // true si ESE panel (por su GetName(): "Library"/"Diseño"/"Vista en
+    // Vivo"/"Home") esta lo bastante colapsado (Alt Gr + 1..4) como para
+    // que el panel mismo deba omitir dibujar su ventana/toolbar este frame.
+    // Cada panel la consulta desde su propio Render() -- DESPUES de correr
+    // cualquier "pump incondicional" propio (ver LibraryPanel::m_OClock.
+    // Update() / HomePanel::m_MonitorView.Update()), nunca antes: esos
+    // pumps deben seguir corriendo aunque el panel este oculto.
+    bool IsPanelCollapsedForRender(const std::string& name) const;
+
     // Antes enfocaba "Control" (eliminado) al resetear el layout; ahora
     // enfoca "Vista en Vivo", que es el panel principal de ese dock.
     bool m_FocusViewNextFrame = false;
@@ -70,21 +88,52 @@ uint64_t m_LastTransitionTrigger = 0;
 
     void OpenHub();
 
-    // ── Editor a pantalla completa (Overlay/Estilos) ──────────────────────
-    // Permite a un panel (editor de Overlays, editor de Estilos) tomar TODA
-    // el area de "main" por un frame, ocultando Biblioteca/Home/Diseño/etc.
-    // La toolbar superior (RenderModeToolbar) sigue dibujandose siempre --
-    // eso es una regla aparte, no se toca aca. El llamador es dueño del
-    // ciclo de vida: entra al abrir el editor, sale al Guardar/Cancelar.
-    void EnterFullscreenEditor(std::function<void()> renderFn) {
-        m_FullscreenEditorActive   = true;
-        m_FullscreenEditorRenderFn = std::move(renderFn);
+    // "Biblioteca" (Settings::WorkspaceLayoutPreset::Library) es un preset
+    // MAS de Entorno de trabajo (ver BuildWorkspaceLayoutLibrary), igual que
+    // Clasico/Simple/Transmision -- se elige desde Ajustes > Apariencia o el
+    // menu Espacio de trabajo y se GUARDA (persiste entre sesiones, como
+    // los demas). Debe llamarse SetLibraryPanelRef() una vez al armar los
+    // paneles (ver main.cpp, mismo momento que SetAudioPanelRef) para que
+    // RenderAll() pueda avisarle a Biblioteca que se restrinja a Medios
+    // mientras ese preset este activo.
+    void SetLibraryPanelRef(LibraryPanel* p) { m_LibraryPanelRef = p; }
+    LibraryPanel* GetLibraryPanelRef() const { return m_LibraryPanelRef; }
+
+    // ── Pantalla completa del SISTEMA OPERATIVO (F11) ─────────────────────
+    // Publicos (antes privados) para que el Preview a pantalla completa
+    // (ver MonitorView::RequestPreviewFullscreen) pueda activarla el mismo,
+    // como si el operador hubiera apretado F11 -- pedido explicito.
+    void ToggleFullscreen();
+    bool IsWindowFullscreen() const { return m_Window && glfwGetWindowMonitor(m_Window) != nullptr; }
+
+    // Usado por "Abrir con ProyecThor" (ver main.cpp): activa el preset
+    // "Biblioteca" SOLO en memoria para esta sesion (nunca llama Save()),
+    // sin pisar el preset que el usuario tiene guardado de verdad -- la
+    // proxima vez que abra la app normalmente, LoadSettings() vuelve a leer
+    // su preferencia real del disco.
+    void EnterLibraryWorkspaceMode();
+
+    // ── Editor a pantalla completa (Overlay/Estilos/Preview) ──────────────
+    // Permite a un panel (editor de Overlays, editor de Estilos, Preview de
+    // Biblioteca) tomar TODA el area de "main" por un frame, ocultando
+    // Biblioteca/Home/Diseño/etc. La toolbar superior (RenderModeToolbar)
+    // sigue dibujandose siempre por default -- eso es la regla para
+    // Overlay/Estilos, que la necesitan visible. hideToolbar=true (pedido
+    // explicito para el Preview de Biblioteca) la oculta tambien, para un
+    // "de verdad toda la pantalla" real. El llamador es dueño del ciclo de
+    // vida: entra al abrir el editor, sale al Guardar/Cancelar/Cerrar.
+    void EnterFullscreenEditor(std::function<void()> renderFn, bool hideToolbar = false) {
+        m_FullscreenEditorActive       = true;
+        m_FullscreenEditorRenderFn     = std::move(renderFn);
+        m_FullscreenEditorHidesToolbar = hideToolbar;
     }
     void ExitFullscreenEditor() {
-        m_FullscreenEditorActive = false;
-        m_FullscreenEditorRenderFn = nullptr;
+        m_FullscreenEditorActive       = false;
+        m_FullscreenEditorRenderFn     = nullptr;
+        m_FullscreenEditorHidesToolbar = false;
     }
     bool IsFullscreenEditorActive() const { return m_FullscreenEditorActive; }
+    bool FullscreenEditorHidesToolbar() const { return m_FullscreenEditorHidesToolbar; }
 
     // Red (LAN)/Chat/Streaming viven aca (no en Yggdrasil ni en Biblioteca/
     // Herramientas) para que Update() corra SIEMPRE, sin importar el
@@ -92,7 +141,7 @@ uint64_t m_LastTransitionTrigger = 0;
     // solo porque el operador esta mirando Proyector. Yggdrasil,
     // LibraryPanel (grupo "Red") y ViewPanel (popup "Chat", ver
     // RenderChatPopup) reciben un puntero a la MISMA instancia (ver
-    // main.cpp), asi que aparecen "en varias partes" pero comparten un
+    // main.cpp), así que aparecen "en varias partes" pero comparten un
     // unico servidor de verdad.
     StreamingPanel& GetRedPanel()      { return m_Red; }
     TeamChatPanel&  GetChatPanel()     { return m_Chat; }
@@ -100,9 +149,28 @@ uint64_t m_LastTransitionTrigger = 0;
     SyncPanel&      GetSyncPanel()      { return m_Sync; }
     OSCPanel&       GetOSCPanel()       { return m_OSC; }
 
+    void ToggleNotesWindow();
+    void ToggleAIAssistant() { m_ShowAIAssistant = !m_ShowAIAssistant; }
+    void ToggleConnectionsWindow() { m_ShowConnectionsWindow = !m_ShowConnectionsWindow; }
+    void ToggleStageQuick(bool active);
+
 private:
     void BeginDockspace();
     void EndDockspace();
+
+    // Los 3 ordenamientos de Ajustes > Apariencia > Entorno de trabajo (ver
+    // Settings::WorkspaceLayoutPreset) -- cada uno arma su propio arbol de
+    // DockBuilder y puebla m_PanelCollapse[0..3] (Biblioteca/Diseño/Vista en
+    // Vivo/Home, mismo orden que Alt Gr+1..4) con el nodo CONTENEDOR de cada
+    // panel y el eje que le corresponde colapsar en ESE layout -- el mismo
+    // panel puede colapsar por ancho en un preset y por alto en otro, segun
+    // como quede orientado el split. Llamadas solo dentro del bloque de
+    // reconstruccion de BeginDockspace (dockspace_id ya reseteado/limpio).
+    void BuildWorkspaceLayoutClassic(ImGuiID dockspace_id);
+    void BuildWorkspaceLayoutSimple(ImGuiID dockspace_id);
+    void BuildWorkspaceLayoutBroadcast(ImGuiID dockspace_id);
+    void BuildWorkspaceLayoutLibrary(ImGuiID dockspace_id);
+    void BuildWorkspaceLayoutVideo(ImGuiID dockspace_id);
 
     // Ventanas nativas de salida real ("ProjectorLive"/"StageLive") -- se
     // llama SIEMPRE, una vez por frame, sin importar si el operador esta
@@ -113,31 +181,66 @@ private:
     // someterlas) apenas se abria un editor a pantalla completa o se volvia
     // al Hub mientras se estaba proyectando/haciendo Stage — ver RenderAll().
     void RenderLiveOutputWindows();
+
+    // Contenido de UNA salida de proyector (fondo/letras/overlay/reloj/
+    // anuncios/captura), extraido de RenderLiveOutputWindows para poder
+    // repetirlo en cada monitor extra elegido en Ajustes > Proyeccion
+    // (ver PresentationState::extraTargetMonitors). isPrimary=true es
+    // EXACTAMENTE el comportamiento de siempre (registra el viewport de
+    // post-FX principal); isPrimary=false registra/usa una instancia de
+    // post-FX propia para ese monitor (ver PresentationCore::
+    // RegisterExtraProjectorViewport) y agrega su ImGuiID a
+    // activeExtraViewportIds para que se pueda podar al final del frame.
+    void RenderProjectorOutput(const char* windowName, int mx, int my,
+                                const GLFWvidmode* mode,
+                                const Core::PresentationState& state,
+                                bool isPrimary,
+                                std::vector<ImGuiID>* activeExtraViewportIds);
+
+    // Idem para Stage -- mas simple, sin post-FX (Stage nunca lo tuvo).
+    void RenderStageOutput(const char* windowName, int smx, int smy,
+                            const GLFWvidmode* stageMode);
+
     void ApplyProfessionalTheme();
     void RenderMainMenuBar();
     void RenderModeToolbar();
     void RenderQuickSwitcher();
 
-    // Puntos "Publico"/"Stage" + "Borrar Todo" — antes vivian en ViewPanel
+    // Puntos "Público"/"Stage" + "Borrar Todo" — antes vivian en ViewPanel
     // (arriba del video), pedido explicito de subirlos a la toolbar
     // superior (lado derecho) para liberarle mas espacio a "Vista en Vivo".
     void RenderModeToolbarStatusActions(float winW, float railH);
     void ToggleAudience(bool active);
-    void ToggleStageQuick(bool active);
 
     // Ventana flotante de Notas -- boton propio en RenderModeToolbar (junto
-    // a los 5 modos), abre una ventana centrada tipo "Preferencias" (ver
-    // Settings::SettingsPanel::Render) con QuickNotes adentro, en vez de
-    // vivir dockeada en Home o en un panel propio.
+    // a los 5 modos) y atajo global Shift+Z, abre una ventana centrada tipo
+    // "Preferencias" (ver Settings::SettingsPanel::Render) con QuickNotes
+    // adentro, en vez de vivir dockeada en Home o en un panel propio. Se
+    // somete desde el bloque "siempre" de RenderAll() (junto a
+    // RenderUrlImportModal), asi queda disponible tanto en el Hub como en
+    // el Proyector y nunca se interrumpe solo porque se esta proyectando.
     void         RenderNotesWindow();
     bool         m_ShowNotes = false;
     QuickNotes   m_NotesPanel;
 
-    // Popup de acceso rapido a "Estilos" -- boton propio en RenderModeToolbar
-    // (junto a Notas), lista los estilos guardados (Diseño > Estilos, ver
-    // Core::PresentationCore::GetSavedStyleNames/ApplyStyleByName) para
-    // aplicar uno sin salir de donde este el operador.
+    void            RenderAIAssistantWindow();
+    bool            m_ShowAIAssistant = false;
+    AIAssistantPanel m_AIAssistant;
+
+    void        RenderUrlImportModal();
+    bool        m_ShowUrlImport        = false;
+    bool        m_UrlImportRunning     = false;
+    char        m_UrlImportBuffer[512] = {};
+    std::string m_UrlImportLastError;
+    std::thread m_UrlImportThread;
+    std::mutex  m_UrlImportMutex;
+    std::optional<ProyecThor::Core::SubtitleFetchResult> m_UrlImportResult;
+
     void RenderStylesPopup();
+
+    void RenderConnectionsWindow();
+    bool m_ShowConnectionsWindow = false;
+    int  m_ConnectionsActiveTab   = 0;
 
     // Ver comentario de los getters (GetRedPanel/GetChatPanel/GetBroadcastPanel/GetOSCPanel).
     StreamingPanel m_Red;
@@ -157,24 +260,55 @@ private:
     std::string                          m_OutgoingText;
     float                                m_TransitionLastTime   = 0.0f;
     bool                                 m_ResetLayout          = true;
+
+    // Cache del ultimo Ajustes > Apariencia > Entorno de trabajo aplicado
+    // (ver Settings::WorkspaceLayoutPreset) -- BeginDockspace() lo compara
+    // contra el valor actual cada frame y dispara m_ResetLayout solo si
+    // cambio, sin que la pagina de Ajustes necesite conocer a UIManager.
+    // -1 = todavia no se aplico ninguno (fuerza el reset en el primer frame).
+    int                                  m_LastWorkspacePreset  = -1;
     GlassRenderer                        m_GlassRenderer;
 
     // ── Pantalla completa (menu Ventana) ────────────────────────────────────
     // Geometria de la ventana ANTES de pasar a pantalla completa, para poder
     // restaurarla al salir (glfwSetWindowMonitor no la recuerda solo).
     int  m_WindowedX = 0, m_WindowedY = 0, m_WindowedW = 1280, m_WindowedH = 800;
-    void ToggleFullscreen();
 
     Hub           m_Hub;
     WorkspaceMode m_Mode = WorkspaceMode::Hub;
+
+    // Ver LibraryPanel::SetMediaOnlyMode -- se sincroniza cada frame en
+    // RenderAll() segun si el preset activo (Settings::WorkspaceSettings::
+    // layoutPreset) es Library, no hace falta guardar estado propio aca.
+    LibraryPanel* m_LibraryPanelRef = nullptr;
 
     // Selector rapido (Alt+Espacio) — ver RenderQuickSwitcher.
     bool m_QuickSwitchOpen  = false;
     int  m_QuickSwitchIndex = 0;
 
+    // ── Colapso animado de paneles (Alt Gr + 1/2/3/4, reset con Alt Gr + 0) ──
+    // Cada entrada colapsa/expande el NODO CONTENEDOR del split (dock_left/
+    // dock_main_top/dock_right/dock_main_bottom, no la ventana individual)
+    // para que el resto del layout recupere el espacio -- ver
+    // UpdatePanelCollapseAnim() en UIManager.cpp. Orden fijo: 0=Biblioteca,
+    // 1=Diseño, 2=Vista en Vivo, 3=Home (mismo orden que las teclas 1-4).
+    struct PanelCollapseState {
+        ImGuiID nodeId       = 0;
+        ImVec2  expandedSize = ImVec2(0.0f, 0.0f); // capturado al (re)construir el layout
+        bool    axisIsWidth  = true;  // true: colapsa ancho (split izq/der), false: alto (arriba/abajo)
+        bool    collapsed    = false;
+        float   animT        = 0.0f;  // 0 = expandido, 1 = colapsado
+    };
+    static constexpr int kCollapsiblePanelCount = 4;
+    PanelCollapseState m_PanelCollapse[kCollapsiblePanelCount];
+    void UpdatePanelCollapseAnim();
+    void TogglePanelCollapse(int index);
+    void ResetPanelCollapse();
+
     // Ver EnterFullscreenEditor/ExitFullscreenEditor.
-    bool                   m_FullscreenEditorActive = false;
+    bool                   m_FullscreenEditorActive       = false;
     std::function<void()>  m_FullscreenEditorRenderFn;
+    bool                   m_FullscreenEditorHidesToolbar = false;
 };
 
 } // namespace ProyecThor::UI

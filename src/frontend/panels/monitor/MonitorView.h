@@ -7,9 +7,12 @@
 #include "frontend/views/ImageView.h"
 #include "frontend/ui/SpinningDisc.h"
 #include "backend/media/VLCBasePlayer.h"
+#include "backend/shaders/PostProcessorFSR.h"
 #include "MonitorQueueEngine.h"
 
 namespace ProyecThor::UI {
+
+class UIManager;
 
 class MonitorView {
 public:
@@ -17,6 +20,12 @@ public:
     ~MonitorView() = default;
 
     void Render(Core::VLCBasePlayer* player);
+
+    // Necesario para el boton de pantalla completa del Preview (ver
+    // RequestPreviewFullscreen -> UIManager::EnterFullscreenEditor). Mismo
+    // patron que LibraryPanel::SetUIManager -- se llama una vez al armar
+    // los paneles (ver HomePanel::Render()).
+    void SetUIManager(UIManager* mgr) { m_UIManagerRef = mgr; }
 
     // Avanza la cola (detecta fin de clip real via VLC y pasa al siguiente
     // item) sin importar si este panel esta visible. IMPORTANTE: debe
@@ -41,6 +50,24 @@ private:
     void RenderPreviewControls(Core::VLCBasePlayer* player, float w);
     void RenderQueue(float totalW);
 
+    // Timeline + botones de transporte (skip/replay/play-pause/forward/stop)
+    // -- compartido entre RenderPreviewControls (barra acoplada normal) y
+    // RenderFullscreenToolbar (barra flotante auto-oculta), antes duplicado
+    // en los dos lugares.
+    void RenderTransportRow(Core::VLCBasePlayer* player, float innerW);
+
+    // Boton mute/unmute del audio de Preview -- ver m_PreviewAudioEnabled.
+    void RenderPreviewAudioToggle(Core::VLCBasePlayer* player, float btnSize);
+
+    // ── Pantalla completa del Preview ────────────────────────────────────
+    void RequestPreviewFullscreen(Core::VLCBasePlayer* player);
+    void RenderPreviewFullscreenContent(Core::VLCBasePlayer* player);
+    void RenderFullscreenToolbar(Core::VLCBasePlayer* player, ImVec2 avail);
+    // Unico punto de salida (boton "X" y Esc lo llaman a este) -- ademas de
+    // ExitFullscreenEditor(), restaura la ventana del sistema operativo si
+    // fue ESTE flujo el que la puso en fullscreen (ver m_EnteredOSFullscreen).
+    void ExitPreviewFullscreen();
+
     bool DrawIconButton(const char* iconName, float size,
                         ImVec4 bgCol, ImVec4 hov, ImVec4 act,
                         ImVec2 btnSize, bool isActiveState = false);
@@ -63,6 +90,39 @@ private:
     bool  m_LiveMuted      = false;
     float m_LiveVolume     = 0.8f;
 
+    UIManager* m_UIManagerRef = nullptr;
+
+    // Audio del Preview -- APAGADO por default: el player de Preview es
+    // forceSilent=true de fabrica (ver VLCBasePlayer/PresentationCoreImpl),
+    // pensado para nunca duplicar lo que ya suena en vivo. Este toggle es
+    // la UNICA forma de que el operador lo escuche a proposito (ver
+    // RenderPreviewAudioToggle) -- se apaga solo (m_PreviewAudioEnabled se
+    // queda en su valor pero el player vuelve a forceSilent) cada vez que
+    // se reconstruye este objeto (recarga de la app), nunca a mitad de
+    // sesion sin que el operador lo pida.
+    bool m_PreviewAudioEnabled = false;
+
+    // Nivel de volumen del Preview (0.0-1.0) -- solo tiene efecto audible
+    // mientras m_PreviewAudioEnabled esta activo (ver RenderPreviewAudioToggle/
+    // RenderFullscreenToolbar). Slider propio pedido explicito para la
+    // vista de pantalla completa.
+    float m_PreviewVolume = 0.8f;
+
+    // FSR (EASU+RCAS) para el Preview a pantalla completa -- APAGADO por
+    // default (opt-in, ver "Opciones de reproduccion" en
+    // RenderFullscreenToolbar): reescala el video fuente (normalmente mas
+    // chico que la pantalla) al tamaño real de pantalla completa en vez de
+    // que ImGui lo estire liso, mismo pipeline EASU+RCAS de AMD que ya usa
+    // BackgroundLayer para el video en vivo (ver PostProcessorFSR.h).
+    bool                        m_PreviewFSREnabled = false;
+    Shaders::PostProcessorFSR   m_PreviewFSR;
+
+    // true si RequestPreviewFullscreen fue quien puso la ventana del
+    // sistema operativo en fullscreen (F11) -- si el operador YA estaba en
+    // fullscreen de antes (lo puso el mismo con F11), ExitPreviewFullscreen
+    // no la toca al salir, para no sacarlo de un estado que eligio aparte.
+    bool m_EnteredOSFullscreen = false;
+
     // ── Cola (logica real en MonitorQueueEngine) ────────────────────────────
     MonitorQueueEngine m_QueueEngine;
     int m_DragSrcIndex = -1; // solo feedback visual mientras se arrastra
@@ -82,6 +142,12 @@ private:
     float m_EqBandAmps[kEqBands] = { 0.0f };
     bool  m_ShowEqPopup = false;
     void  RenderEqualizerPopup();
+
+    // ── HUD flotante auto-oculto sobre Preview y Cola Plegable ─────────────
+    float m_HudAlpha        = 1.0f;
+    float m_HudIdleTimer    = 0.0f;
+    bool  m_QueueCollapsed  = false;
+    float m_QueueAnimW      = 0.0f;
 };
 
 } // namespace ProyecThor::UI

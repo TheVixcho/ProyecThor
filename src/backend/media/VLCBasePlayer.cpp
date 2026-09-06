@@ -250,6 +250,60 @@ static void vlc_audio_destroy_device(VLCAudioCtx* ctx)
     CloseWaveOutDeviceLocked(ctx);
 }
 
+static void vlc_audio_pause(void* opaque, int64_t /*pts*/)
+{
+    auto* ctx = static_cast<VLCAudioCtx*>(opaque);
+    std::lock_guard<std::mutex> lock(ctx->deviceMutex);
+    if (ctx->hWaveOut)
+        waveOutPause(ctx->hWaveOut);
+}
+
+static void vlc_audio_resume(void* opaque, int64_t /*pts*/)
+{
+    auto* ctx = static_cast<VLCAudioCtx*>(opaque);
+    std::lock_guard<std::mutex> lock(ctx->deviceMutex);
+    if (ctx->hWaveOut)
+        waveOutRestart(ctx->hWaveOut);
+}
+
+static void vlc_audio_flush(void* opaque, int64_t /*pts*/)
+{
+    auto* ctx = static_cast<VLCAudioCtx*>(opaque);
+    std::lock_guard<std::mutex> lock(ctx->deviceMutex);
+    if (ctx->hWaveOut)
+    {
+        waveOutReset(ctx->hWaveOut);
+        for (int i = 0; i < VLCAudioCtx::NUM_BUFFERS; ++i)
+        {
+            ctx->waveHeaders[i].dwFlags &= ~WHDR_INQUEUE;
+        }
+        ctx->currentHeader = 0;
+    }
+}
+
+static void vlc_audio_drain(void* opaque)
+{
+    auto* ctx = static_cast<VLCAudioCtx*>(opaque);
+    for (int i = 0; i < 100; ++i)
+    {
+        bool anyInQueue = false;
+        {
+            std::lock_guard<std::mutex> lock(ctx->deviceMutex);
+            if (!ctx->hWaveOut) break;
+            for (int b = 0; b < VLCAudioCtx::NUM_BUFFERS; ++b)
+            {
+                if (ctx->waveHeaders[b].dwFlags & WHDR_INQUEUE)
+                {
+                    anyInQueue = true;
+                    break;
+                }
+            }
+        }
+        if (!anyInQueue) break;
+        Sleep(5);
+    }
+}
+
 static void vlc_audio_play(void* opaque, const void* samples, unsigned count, int64_t /*pts*/)
 {
     auto* ctx = static_cast<VLCAudioCtx*>(opaque);
@@ -259,16 +313,25 @@ static void vlc_audio_play(void* opaque, const void* samples, unsigned count, in
 
     if (!ctx->volumeMultiplier || !ctx->muted) return;
 
-    // El dispositivo puede estar cerrado momentaneamente si SetAudioDevice()
-    // lo esta reabriendo desde el hilo de UI. En ese caso descartamos este
-    // bloque de samples: preferible perder unos milisegundos de audio a
-    // bloquear el hilo interno de audio de libVLC esperando el lock.
-    std::unique_lock<std::mutex> devLock(ctx->deviceMutex, std::try_to_lock);
-    if (!devLock.owns_lock() || !ctx->hWaveOut) return;
+    if (!ctx->deviceInitialized) return;
 
-    // forceSilent manda por encima de cualquier otro estado: si este
-    // player nacio silenciado (preview), el volumen efectivo es siempre 0,
-    // sin importar lo que diga m_Muted/m_VolumeMultiplier.
+    // Esperar a que el buffer actual esté disponible sin descartar muestras
+    while (true)
+    {
+        {
+            std::lock_guard<std::mutex> lock(ctx->deviceMutex);
+            if (!ctx->hWaveOut || !ctx->deviceInitialized)
+                return;
+            WAVEHDR& checkHdr = ctx->waveHeaders[ctx->currentHeader];
+            if (!(checkHdr.dwFlags & WHDR_INQUEUE))
+                break;
+        }
+        Sleep(1);
+    }
+
+    std::unique_lock<std::mutex> devLock(ctx->deviceMutex);
+    if (!ctx->hWaveOut || !ctx->deviceInitialized) return;
+
     bool isForceSilent = ctx->forceSilent && ctx->forceSilent->load(std::memory_order_relaxed);
     bool isMuted        = isForceSilent || ctx->muted->load(std::memory_order_relaxed);
     float vol            = isMuted ? 0.0f : ctx->volumeMultiplier->load(std::memory_order_relaxed);
@@ -278,9 +341,6 @@ static void vlc_audio_play(void* opaque, const void* samples, unsigned count, in
     float maxR = 0.0f;
 
     WAVEHDR& hdr = ctx->waveHeaders[ctx->currentHeader];
-    while (hdr.dwFlags & WHDR_INQUEUE)
-        Sleep(1);
-
     int16_t* pOut = reinterpret_cast<int16_t*>(hdr.lpData);
 
     for (unsigned i = 0; i < count; ++i)
@@ -501,7 +561,8 @@ void VLCBasePlayer::CreatePersistentPlayer()
     // para poder elegir el dispositivo de salida explicitamente).
     libvlc_audio_set_format_callbacks(m_MediaPlayer, vlc_audio_setup, vlc_audio_cleanup);
     libvlc_audio_set_callbacks(m_MediaPlayer, vlc_audio_play,
-                               nullptr, nullptr, nullptr, nullptr, aCtx);
+                               vlc_audio_pause, vlc_audio_resume,
+                               vlc_audio_flush, vlc_audio_drain, aCtx);
 #else
     // En Linux NO registramos callbacks de audio: dejamos que libVLC use
     // su salida nativa (PulseAudio/ALSA autodetectado), que es la unica
@@ -730,7 +791,10 @@ void VLCBasePlayer::Stop()
 
     std::lock_guard<std::mutex> lock(m_MediaSwapMutex);
     if (m_MediaPlayer)
+    {
         libvlc_media_player_stop(m_MediaPlayer);
+        libvlc_media_player_set_media(m_MediaPlayer, nullptr);
+    }
 }
 
 bool VLCBasePlayer::ConsumeEndReached()
@@ -751,7 +815,16 @@ void VLCBasePlayer::SetMute(bool mute)
               << ") -> effectiveMute=" << (effectiveMute ? "true" : "false") << "\n";
 
     m_Muted.store(effectiveMute, std::memory_order_relaxed);
-#ifndef _WIN32
+#ifdef _WIN32
+    if (effectiveMute && m_AudioCtx)
+    {
+        auto* ctx = static_cast<VLCAudioCtx*>(m_AudioCtx);
+        std::lock_guard<std::mutex> lock(ctx->deviceMutex);
+        if (ctx->hWaveOut) {
+            waveOutReset(ctx->hWaveOut);
+        }
+    }
+#else
     if (m_MediaPlayer)
     {
         libvlc_audio_set_mute(m_MediaPlayer, effectiveMute ? 1 : 0);
@@ -773,7 +846,16 @@ void VLCBasePlayer::SetAudioActive(bool active)
               << ") -> effectiveActive=" << (effectiveActive ? "true" : "false") << "\n";
 
     m_AudioActive.store(effectiveActive, std::memory_order_relaxed);
-#ifndef _WIN32
+#ifdef _WIN32
+    if (!effectiveActive && m_AudioCtx)
+    {
+        auto* ctx = static_cast<VLCAudioCtx*>(m_AudioCtx);
+        std::lock_guard<std::mutex> lock(ctx->deviceMutex);
+        if (ctx->hWaveOut) {
+            waveOutReset(ctx->hWaveOut);
+        }
+    }
+#else
     if (m_MediaPlayer)
     {
         bool shouldMute = !effectiveActive || m_Muted.load(std::memory_order_relaxed);

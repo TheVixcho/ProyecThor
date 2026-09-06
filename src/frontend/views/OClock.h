@@ -5,36 +5,18 @@
 
 namespace ProyecThor::UI {
 
-class GlassRenderer; // fwd decl (ver GlassRenderer.h)
+class GlassRenderer;
 
-// Modo de transmisión a LAN del contador. La pantalla principal YA NO es un
-// modo explicito aca: el reloj aparece en pantalla automaticamente cuando el
-// overlay activo tiene un cuadro de reloj (ver OverlayCanvasEditor, capa
-// Clock) -- el operador lo controla eligiendo/editando el overlay activo,
-// no desde este panel. Lo unico que sigue siendo un interruptor real es la
-// transmision a dispositivos en red (celulares/tablets), que no pasa por el
-// sistema de overlays.
-//   Off -> no transmite a la red.
-//   LAN -> transmite a los dispositivos conectados por red.
 enum class OClockTransmitMode {
     Off,
     LAN
 };
 
-// Sentido del conteo (solo aplica en OClockMode::Timer).
-//   CountUp   -> cronómetro clásico: 00:00 -> objetivo (y sigue ascendiendo en overtime).
-//   CountDown -> cuenta regresiva: objetivo -> 00:00 (y sigue ascendiendo el excedente, con signo "-").
-// El cruce de "final" (m_IsOvertime) es el mismo evento en ambos casos: elapsed >= target.
-// Lo unico que cambia es como se formatea el numero en pantalla.
 enum class OClockDirection {
     CountUp,
     CountDown
 };
 
-// Modo de operacion general del widget.
-//   Timer     -> cronometro/cuenta regresiva con objetivo (comportamiento original).
-//   WallClock -> muestra la hora actual del dispositivo (reloj de pared), sin
-//                objetivo ni concepto de overtime.
 enum class OClockMode {
     Timer,
     WallClock
@@ -44,33 +26,17 @@ class OClock {
 public:
     OClock();
 
-    // Recalcula el tiempo interno (si esta en modo Timer y corriendo) y
-    // sincroniza la transmision hacia el proyector/LAN via SyncTransmission().
-    //
-    // IMPORTANTE: esto debe llamarse UNA VEZ POR FRAME desde el tick global
-    // de la aplicacion (junto a las demas actualizaciones "de fondo", ej.
-    // PresentationCore::Get().Update()), SIN IMPORTAR si la pestaña/panel de
-    // OClock esta actualmente visible o no. Render() tambien lo llama
-    // internamente para que el numero mostrado en pantalla este siempre
-    // fresco mientras el panel esta abierto, pero eso NO alcanza por si
-    // solo: si esta llamada global falta, la transmision hacia el publico
-    // se congela apenas el usuario cambia de pestaña, aunque el tiempo
-    // interno siga corriendo bien.
     void Update();
 
     void Render(GlassRenderer& glass);
 
-    // ── API publica para paneles externos (ej. ViewPanel > "Limpiar reloj") ──
-    // true mientras este transmitiendo a LAN (ver m_TransmitMode) —
-    // independiente de si el cronometro esta corriendo o en pausa (concepto
-    // distinto, ver m_IsRunning) y del reloj en overlay (que no tiene on/off
-    // propio, ver comentario de OClockTransmitMode).
     bool IsLive() const { return m_TransmitMode != OClockTransmitMode::Off; }
 
-    // Apaga la transmision a LAN (m_TransmitMode = Off). La proxima Update()
-    // ya limpia el quick note de LAN via el diff wasLAN que hace
-    // SyncTransmission — no hace falta tocar nada mas aca.
     void StopTransmitting() { m_TransmitMode = OClockTransmitMode::Off; }
+
+    void AddExtraTime(int seconds);
+    void SetTitle(const std::string& title);
+    void ClearTitle();
 
 private:
     void Start(int minutes, int seconds);
@@ -79,22 +45,24 @@ private:
     void ApplyPreset(int minutes);
 
     std::string GetFormattedTime() const;
-    float       GetProgressRatio() const; // 0..1 hasta el objetivo (clamped). Solo Timer.
+    float       GetProgressRatio() const;
     void        SyncTransmission(const std::string& timeStr);
-    void        RenderStyleSelector();
-    void        RenderModeSelector();
-    void        RenderDirectionSelector();
-    void        RenderWallClockOptions();
-    void        RenderTitleSection();
 
-    // ── Título / mensaje sobre el reloj ──────────────────────────────────
+    void        RenderDisplayCard(float w, const std::string& timeStr);
+    void        RenderTransportControls(float w);
+    void        RenderModeSelector(float w);
+    void        RenderTimeConfig(float w);
+    void        RenderDirectionSelector(float w);
+    void        RenderWallClockOptions(float w);
+    void        RenderTitleSection(float w);
+    void        RenderOutputsSection(float w);
+    void        RenderStyleSelector();
+
     std::string GetCurrentTitle() const;
     void        AdvanceTitle();
 
-    // ── Modo de operacion ─────────────────────────────────────────────────
     OClockMode m_Mode = OClockMode::Timer;
 
-    // ── Lógica de tiempo (cuenta con objetivo, ascendente o descendente) ──
     bool m_IsRunning  = false;
     bool m_IsOvertime = false;
     std::chrono::steady_clock::time_point m_StartTime;
@@ -104,32 +72,25 @@ private:
 
     OClockDirection m_Direction = OClockDirection::CountUp;
 
-    // ── Inputs de usuario (modo Timer) ───────────────────────────────────
     int m_InputMin = 5;
     int m_InputSec = 0;
 
-    // ── Opciones de formato (modo WallClock) ─────────────────────────────
     bool m_WallClock24h        = true;
     bool m_WallClockShowSeconds = true;
 
-    // ── Opciones de visualización (modo Timer) ───────────────────────────
     bool m_ShowProgressBar = true;
-    bool m_ShowSignPrefix  = false; // "+45:01" (CountUp) o "-00:15" (CountDown) durante overtime
+    bool m_ShowSignPrefix  = false;
 
-    // ── Transmisión ──────────────────────────────────────────────────────
     OClockTransmitMode m_TransmitMode     = OClockTransmitMode::Off;
     OClockTransmitMode m_PrevTransmitMode = OClockTransmitMode::Off;
 
-    // ── Estilos definidos por el usuario ─────────────────────────────────
-    std::string m_StyleName;       // estilo normal (mientras corre / antes del final)
-    std::string m_FinalStyleName;  // estilo aplicado al llegar al final (overtime).
-                                    // Si esta vacio, se usa el estilo normal + color
-                                    // de peligro forzado (comportamiento clasico).
+    std::string m_StyleName;
+    std::string m_FinalStyleName;
 
-    // ── Título / mensaje editable, avanzable manualmente ─────────────────
     std::vector<std::string> m_Titles;
-    int  m_TitleIndex = -1;             // -1 = sin título activo
+    int  m_TitleIndex = -1;
     char m_TitleInputBuf[128] = "";
 };
 
-} // namespace ProyecThor::UI
+}
+

@@ -7,9 +7,12 @@
 #include <filesystem>
 #include <cstdlib>
 #include <vector>
+#include <algorithm>
 #ifndef _WIN32
 #include <pwd.h>
 #include <unistd.h>
+#include <cstdio>
+#include <array>
 #else
 #include <windows.h>
 #endif
@@ -160,6 +163,13 @@ const char* ThemePresetName(ThemePreset preset) {
         case ThemePreset::Kofi:        return "Ko-fi";
         case ThemePreset::Deadlock:    return "Deadlock";
         case ThemePreset::Galaxy:      return "Galaxia";
+        case ThemePreset::Mek:         return "Mek";
+        case ThemePreset::Cyberpunk:   return "Cyberpunk Neón Pro";
+        case ThemePreset::Emerald:     return "Emerald Studio Pro";
+        case ThemePreset::Crimson:     return "Crimson Velvet Pro";
+        case ThemePreset::Midnight:    return "Midnight Blue Pro";
+        case ThemePreset::Amethyst:    return "Amethyst Violet Pro";
+        case ThemePreset::Titanium:    return "Titanium Silver Pro";
         default:                       return "Personalizado";
     }
 }
@@ -172,6 +182,13 @@ ThemePreset ThemePresetFromString(const std::string& s) {
     if (s == "kofi")        return ThemePreset::Kofi;
     if (s == "deadlock")    return ThemePreset::Deadlock;
     if (s == "galaxy")      return ThemePreset::Galaxy;
+    if (s == "mek")         return ThemePreset::Mek;
+    if (s == "cyberpunk")   return ThemePreset::Cyberpunk;
+    if (s == "emerald")     return ThemePreset::Emerald;
+    if (s == "crimson")     return ThemePreset::Crimson;
+    if (s == "midnight")    return ThemePreset::Midnight;
+    if (s == "amethyst")    return ThemePreset::Amethyst;
+    if (s == "titanium")    return ThemePreset::Titanium;
     return ThemePreset::Custom;
 }
 
@@ -184,7 +201,46 @@ static std::string ThemePresetToKey(ThemePreset preset) {
         case ThemePreset::Kofi:        return "kofi";
         case ThemePreset::Deadlock:    return "deadlock";
         case ThemePreset::Galaxy:      return "galaxy";
+        case ThemePreset::Mek:         return "mek";
+        case ThemePreset::Cyberpunk:   return "cyberpunk";
+        case ThemePreset::Emerald:     return "emerald";
+        case ThemePreset::Crimson:     return "crimson";
+        case ThemePreset::Midnight:    return "midnight";
+        case ThemePreset::Amethyst:    return "amethyst";
+        case ThemePreset::Titanium:    return "titanium";
         default:                       return "custom";
+    }
+}
+
+const char* WorkspaceLayoutPresetName(WorkspaceLayoutPreset preset) {
+    switch (preset) {
+        case WorkspaceLayoutPreset::Simple:    return "Simple";
+        case WorkspaceLayoutPreset::Broadcast: return "Transmisión";
+        case WorkspaceLayoutPreset::Library:   return "Biblioteca";
+        case WorkspaceLayoutPreset::Video:     return "Producción";
+        default:                               return "Clásico";
+    }
+}
+
+WorkspaceLayoutPreset WorkspaceLayoutPresetFromString(const std::string& s) {
+    if (s == "simple")    return WorkspaceLayoutPreset::Simple;
+    if (s == "broadcast") return WorkspaceLayoutPreset::Broadcast;
+    if (s == "library")   return WorkspaceLayoutPreset::Library;
+    // "audio"/"image" (ex-presets, absorbidos por "video"/Producción, ver
+    // SettingsManager.h) siguen mapeando aca por si quedo guardado en un
+    // settings.json viejo -- mejor caer en Producción (lo mas parecido a
+    // lo que el usuario tenia elegido) que en Clasico.
+    if (s == "video" || s == "audio" || s == "image") return WorkspaceLayoutPreset::Video;
+    return WorkspaceLayoutPreset::Classic;
+}
+
+static std::string WorkspaceLayoutPresetToKey(WorkspaceLayoutPreset preset) {
+    switch (preset) {
+        case WorkspaceLayoutPreset::Simple:    return "simple";
+        case WorkspaceLayoutPreset::Broadcast: return "broadcast";
+        case WorkspaceLayoutPreset::Library:   return "library";
+        case WorkspaceLayoutPreset::Video:     return "video";
+        default:                               return "classic";
     }
 }
 
@@ -350,6 +406,157 @@ ThemeSettings MakeThemePreset(ThemePreset preset) {
         break;
     }
 
+    case ThemePreset::Mek: {
+        // Catppuccin Mocha -- paleta por defecto de Omarchy (ver
+        // ~/.config/omarchy/current/theme/colors.toml). Progresion de
+        // superficies Base -> Surface0 -> Surface1 -> Surface2 -> Overlay0,
+        // mismo criterio de brillo creciente que el resto de los presets.
+        t.base[0]=0.118f; t.base[1]=0.118f; t.base[2]=0.180f; t.base[3]=1.0f;             // Base #1e1e2e
+        t.surface0[0]=0.192f; t.surface0[1]=0.196f; t.surface0[2]=0.267f; t.surface0[3]=1.0f; // Surface0 #313244
+        t.surface1[0]=0.271f; t.surface1[1]=0.278f; t.surface1[2]=0.353f; t.surface1[3]=1.0f; // Surface1 #45475a
+        t.surface2[0]=0.345f; t.surface2[1]=0.357f; t.surface2[2]=0.439f; t.surface2[3]=1.0f; // Surface2 #585b70
+        t.surface3[0]=0.424f; t.surface3[1]=0.439f; t.surface3[2]=0.525f; t.surface3[3]=1.0f; // Overlay0 #6c7086
+        t.accent[0]=0.537f; t.accent[1]=0.706f; t.accent[2]=0.980f; t.accent[3]=1.0f;          // Blue #89b4fa
+        t.accentLight[0]=0.706f; t.accentLight[1]=0.745f; t.accentLight[2]=0.996f; t.accentLight[3]=1.0f; // Lavender #b4befe
+        t.accentDim[0]=0.376f; t.accentDim[1]=0.494f; t.accentDim[2]=0.686f; t.accentDim[3]=1.0f;
+        t.accentFaint[0]=0.537f; t.accentFaint[1]=0.706f; t.accentFaint[2]=0.980f; t.accentFaint[3]=0.16f;
+        t.border[0]=0.537f; t.border[1]=0.706f; t.border[2]=0.980f; t.border[3]=0.18f;
+        t.borderFaint[0]=1; t.borderFaint[1]=1; t.borderFaint[2]=1; t.borderFaint[3]=0.05f;
+        t.textPrimary[0]=0.804f; t.textPrimary[1]=0.839f; t.textPrimary[2]=0.957f; t.textPrimary[3]=1.0f; // Text #cdd6f4
+        t.textDim[0]=0.651f; t.textDim[1]=0.678f; t.textDim[2]=0.784f; t.textDim[3]=1.0f;                 // Subtext0 #a6adc8
+        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.28f;
+        t.danger[0]=0.953f; t.danger[1]=0.545f; t.danger[2]=0.659f; t.danger[3]=1.0f;   // Red #f38ba8
+        t.success[0]=0.651f; t.success[1]=0.890f; t.success[2]=0.631f; t.success[3]=1.0f; // Green #a6e3a1
+        t.windowRounding=14.0f; t.frameRounding=9.0f; t.scrollbarSize=8.0f;
+        break;
+    }
+
+    case ThemePreset::Cyberpunk: {
+        t.base[0]=0.043f; t.base[1]=0.047f; t.base[2]=0.086f; t.base[3]=1.0f;
+        t.surface0[0]=0.071f; t.surface0[1]=0.075f; t.surface0[2]=0.141f; t.surface0[3]=1.0f;
+        t.surface1[0]=0.102f; t.surface1[1]=0.110f; t.surface1[2]=0.200f; t.surface1[3]=1.0f;
+        t.surface2[0]=0.141f; t.surface2[1]=0.149f; t.surface2[2]=0.271f; t.surface2[3]=1.0f;
+        t.surface3[0]=0.180f; t.surface3[1]=0.192f; t.surface3[2]=0.349f; t.surface3[3]=1.0f;
+        t.accent[0]=0.000f; t.accent[1]=0.960f; t.accent[2]=1.000f; t.accent[3]=1.0f; // Neon Cyan
+        t.accentLight[0]=1.000f; t.accentLight[1]=0.000f; t.accentLight[2]=0.500f; t.accentLight[3]=1.0f; // Neon Magenta
+        t.accentDim[0]=0.000f; t.accentDim[1]=0.545f; t.accentDim[2]=0.600f; t.accentDim[3]=1.0f;
+        t.accentFaint[0]=0.000f; t.accentFaint[1]=0.960f; t.accentFaint[2]=1.000f; t.accentFaint[3]=0.18f;
+        t.border[0]=0.000f; t.border[1]=0.960f; t.border[2]=1.000f; t.border[3]=0.25f;
+        t.borderFaint[0]=1.000f; t.borderFaint[1]=0.000f; t.borderFaint[2]=0.500f; t.borderFaint[3]=0.08f;
+        t.textPrimary[0]=0.900f; t.textPrimary[1]=1.000f; t.textPrimary[2]=1.000f; t.textPrimary[3]=1.0f;
+        t.textDim[0]=0.480f; t.textDim[1]=0.600f; t.textDim[2]=0.670f; t.textDim[3]=1.0f;
+        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.28f;
+        t.danger[0]=1.000f; t.danger[1]=0.000f; t.danger[2]=0.333f; t.danger[3]=1.0f;
+        t.success[0]=0.000f; t.success[1]=1.000f; t.success[2]=0.615f; t.success[3]=1.0f;
+        t.windowRounding=10.0f; t.frameRounding=6.0f; t.scrollbarSize=7.0f;
+        break;
+    }
+
+    case ThemePreset::Emerald: {
+        t.base[0]=0.027f; t.base[1]=0.063f; t.base[2]=0.051f; t.base[3]=1.0f;
+        t.surface0[0]=0.047f; t.surface0[1]=0.094f; t.surface0[2]=0.078f; t.surface0[3]=1.0f;
+        t.surface1[0]=0.071f; t.surface1[1]=0.141f; t.surface1[2]=0.118f; t.surface1[3]=1.0f;
+        t.surface2[0]=0.102f; t.surface2[1]=0.188f; t.surface2[2]=0.157f; t.surface2[3]=1.0f;
+        t.surface3[0]=0.133f; t.surface3[1]=0.251f; t.surface3[2]=0.212f; t.surface3[3]=1.0f;
+        t.accent[0]=0.063f; t.accent[1]=0.725f; t.accent[2]=0.506f; t.accent[3]=1.0f; // Emerald
+        t.accentLight[0]=0.204f; t.accentLight[1]=0.827f; t.accentLight[2]=0.600f; t.accentLight[3]=1.0f;
+        t.accentDim[0]=0.020f; t.accentDim[1]=0.380f; t.accentDim[2]=0.260f; t.accentDim[3]=1.0f;
+        t.accentFaint[0]=0.063f; t.accentFaint[1]=0.725f; t.accentFaint[2]=0.506f; t.accentFaint[3]=0.16f;
+        t.border[0]=0.063f; t.border[1]=0.725f; t.border[2]=0.506f; t.border[3]=0.20f;
+        t.borderFaint[0]=1; t.borderFaint[1]=1; t.borderFaint[2]=1; t.borderFaint[3]=0.05f;
+        t.textPrimary[0]=0.900f; t.textPrimary[1]=0.970f; t.textPrimary[2]=0.940f; t.textPrimary[3]=1.0f;
+        t.textDim[0]=0.430f; t.textDim[1]=0.610f; t.textDim[2]=0.530f; t.textDim[3]=1.0f;
+        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.26f;
+        t.danger[0]=0.900f; t.danger[1]=0.250f; t.danger[2]=0.250f; t.danger[3]=1.0f;
+        t.success[0]=0.100f; t.success[1]=0.850f; t.success[2]=0.550f; t.success[3]=1.0f;
+        t.windowRounding=12.0f; t.frameRounding=7.0f; t.scrollbarSize=8.0f;
+        break;
+    }
+
+    case ThemePreset::Crimson: {
+        t.base[0]=0.059f; t.base[1]=0.024f; t.base[2]=0.031f; t.base[3]=1.0f;
+        t.surface0[0]=0.090f; t.surface0[1]=0.039f; t.surface0[2]=0.055f; t.surface0[3]=1.0f;
+        t.surface1[0]=0.133f; t.surface1[1]=0.063f; t.surface1[2]=0.082f; t.surface1[3]=1.0f;
+        t.surface2[0]=0.180f; t.surface2[1]=0.086f; t.surface2[2]=0.110f; t.surface2[3]=1.0f;
+        t.surface3[0]=0.239f; t.surface3[1]=0.110f; t.surface3[2]=0.145f; t.surface3[3]=1.0f;
+        t.accent[0]=0.937f; t.accent[1]=0.267f; t.accent[2]=0.267f; t.accent[3]=1.0f; // Crimson
+        t.accentLight[0]=0.973f; t.accentLight[1]=0.443f; t.accentLight[2]=0.443f; t.accentLight[3]=1.0f;
+        t.accentDim[0]=0.498f; t.accentDim[1]=0.114f; t.accentDim[2]=0.114f; t.accentDim[3]=1.0f;
+        t.accentFaint[0]=0.937f; t.accentFaint[1]=0.267f; t.accentFaint[2]=0.267f; t.accentFaint[3]=0.16f;
+        t.border[0]=0.937f; t.border[1]=0.267f; t.border[2]=0.267f; t.border[3]=0.22f;
+        t.borderFaint[0]=1; t.borderFaint[1]=1; t.borderFaint[2]=1; t.borderFaint[3]=0.05f;
+        t.textPrimary[0]=1.000f; t.textPrimary[1]=0.900f; t.textPrimary[2]=0.900f; t.textPrimary[3]=1.0f;
+        t.textDim[0]=0.650f; t.textDim[1]=0.420f; t.textDim[2]=0.450f; t.textDim[3]=1.0f;
+        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.26f;
+        t.danger[0]=0.950f; t.danger[1]=0.200f; t.danger[2]=0.200f; t.danger[3]=1.0f;
+        t.success[0]=0.300f; t.success[1]=0.800f; t.success[2]=0.450f; t.success[3]=1.0f;
+        t.windowRounding=10.0f; t.frameRounding=6.0f; t.scrollbarSize=7.0f;
+        break;
+    }
+
+    case ThemePreset::Midnight: {
+        t.base[0]=0.020f; t.base[1]=0.031f; t.base[2]=0.067f; t.base[3]=1.0f;
+        t.surface0[0]=0.039f; t.surface0[1]=0.059f; t.surface0[2]=0.122f; t.surface0[3]=1.0f;
+        t.surface1[0]=0.063f; t.surface1[1]=0.090f; t.surface1[2]=0.180f; t.surface1[3]=1.0f;
+        t.surface2[0]=0.094f; t.surface2[1]=0.133f; t.surface2[2]=0.247f; t.surface2[3]=1.0f;
+        t.surface3[0]=0.129f; t.surface3[1]=0.176f; t.surface3[2]=0.322f; t.surface3[3]=1.0f;
+        t.accent[0]=0.220f; t.accent[1]=0.741f; t.accent[2]=0.973f; t.accent[3]=1.0f; // Ice Blue
+        t.accentLight[0]=0.490f; t.accentLight[1]=0.827f; t.accentLight[2]=0.988f; t.accentLight[3]=1.0f;
+        t.accentDim[0]=0.012f; t.accentDim[1]=0.412f; t.accentDim[2]=0.631f; t.accentDim[3]=1.0f;
+        t.accentFaint[0]=0.220f; t.accentFaint[1]=0.741f; t.accentFaint[2]=0.973f; t.accentFaint[3]=0.16f;
+        t.border[0]=0.220f; t.border[1]=0.741f; t.border[2]=0.973f; t.border[3]=0.20f;
+        t.borderFaint[0]=1; t.borderFaint[1]=1; t.borderFaint[2]=1; t.borderFaint[3]=0.05f;
+        t.textPrimary[0]=0.878f; t.textPrimary[1]=0.949f; t.textPrimary[2]=0.996f; t.textPrimary[3]=1.0f;
+        t.textDim[0]=0.392f; t.textDim[1]=0.455f; t.textDim[2]=0.545f; t.textDim[3]=1.0f;
+        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.26f;
+        t.danger[0]=0.900f; t.danger[1]=0.300f; t.danger[2]=0.350f; t.danger[3]=1.0f;
+        t.success[0]=0.200f; t.success[1]=0.800f; t.success[2]=0.550f; t.success[3]=1.0f;
+        t.windowRounding=14.0f; t.frameRounding=8.0f; t.scrollbarSize=8.0f;
+        break;
+    }
+
+    case ThemePreset::Amethyst: {
+        t.base[0]=0.039f; t.base[1]=0.020f; t.base[2]=0.071f; t.base[3]=1.0f;
+        t.surface0[0]=0.067f; t.surface0[1]=0.035f; t.surface0[2]=0.122f; t.surface0[3]=1.0f;
+        t.surface1[0]=0.106f; t.surface1[1]=0.059f; t.surface1[2]=0.180f; t.surface1[3]=1.0f;
+        t.surface2[0]=0.149f; t.surface2[1]=0.086f; t.surface2[2]=0.251f; t.surface2[3]=1.0f;
+        t.surface3[0]=0.200f; t.surface3[1]=0.118f; t.surface3[2]=0.329f; t.surface3[3]=1.0f;
+        t.accent[0]=0.659f; t.accent[1]=0.333f; t.accent[2]=0.969f; t.accent[3]=1.0f; // Amethyst
+        t.accentLight[0]=0.753f; t.accentLight[1]=0.518f; t.accentLight[2]=0.988f; t.accentLight[3]=1.0f;
+        t.accentDim[0]=0.345f; t.accentDim[1]=0.110f; t.accentDim[2]=0.529f; t.accentDim[3]=1.0f;
+        t.accentFaint[0]=0.659f; t.accentFaint[1]=0.333f; t.accentFaint[2]=0.969f; t.accentFaint[3]=0.16f;
+        t.border[0]=0.659f; t.border[1]=0.333f; t.border[2]=0.969f; t.border[3]=0.22f;
+        t.borderFaint[0]=1; t.borderFaint[1]=1; t.borderFaint[2]=1; t.borderFaint[3]=0.05f;
+        t.textPrimary[0]=0.953f; t.textPrimary[1]=0.910f; t.textPrimary[2]=1.000f; t.textPrimary[3]=1.0f;
+        t.textDim[0]=0.576f; t.textDim[1]=0.463f; t.textDim[2]=0.659f; t.textDim[3]=1.0f;
+        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.26f;
+        t.danger[0]=0.900f; t.danger[1]=0.300f; t.danger[2]=0.400f; t.danger[3]=1.0f;
+        t.success[0]=0.350f; t.success[1]=0.800f; t.success[2]=0.600f; t.success[3]=1.0f;
+        t.windowRounding=12.0f; t.frameRounding=8.0f; t.scrollbarSize=8.0f;
+        break;
+    }
+
+    case ThemePreset::Titanium: {
+        t.base[0]=0.055f; t.base[1]=0.059f; t.base[2]=0.071f; t.base[3]=1.0f;
+        t.surface0[0]=0.078f; t.surface0[1]=0.086f; t.surface0[2]=0.102f; t.surface0[3]=1.0f;
+        t.surface1[0]=0.106f; t.surface1[1]=0.118f; t.surface1[2]=0.141f; t.surface1[3]=1.0f;
+        t.surface2[0]=0.137f; t.surface2[1]=0.153f; t.surface2[2]=0.184f; t.surface2[3]=1.0f;
+        t.surface3[0]=0.176f; t.surface3[1]=0.196f; t.surface2[2]=0.235f; t.surface3[3]=1.0f;
+        t.accent[0]=0.580f; t.accent[1]=0.639f; t.accent[2]=0.722f; t.accent[3]=1.0f; // Platinum Titanium
+        t.accentLight[0]=0.796f; t.accentLight[1]=0.835f; t.accentLight[2]=0.882f; t.accentLight[3]=1.0f;
+        t.accentDim[0]=0.278f; t.accentDim[1]=0.333f; t.accentDim[2]=0.412f; t.accentDim[3]=1.0f;
+        t.accentFaint[0]=0.580f; t.accentFaint[1]=0.639f; t.accentFaint[2]=0.722f; t.accentFaint[3]=0.15f;
+        t.border[0]=1.000f; t.border[1]=1.000f; t.border[2]=1.000f; t.border[3]=0.10f;
+        t.borderFaint[0]=1; t.borderFaint[1]=1; t.borderFaint[2]=1; t.borderFaint[3]=0.04f;
+        t.textPrimary[0]=0.945f; t.textPrimary[1]=0.961f; t.textPrimary[2]=0.976f; t.textPrimary[3]=1.0f;
+        t.textDim[0]=0.392f; t.textDim[1]=0.455f; t.textDim[2]=0.545f; t.textDim[3]=1.0f;
+        t.textFaint[0]=1; t.textFaint[1]=1; t.textFaint[2]=1; t.textFaint[3]=0.25f;
+        t.danger[0]=0.850f; t.danger[1]=0.280f; t.danger[2]=0.280f; t.danger[3]=1.0f;
+        t.success[0]=0.280f; t.success[1]=0.750f; t.success[2]=0.450f; t.success[3]=1.0f;
+        t.windowRounding=8.0f; t.frameRounding=5.0f; t.scrollbarSize=7.0f;
+        break;
+    }
+
     default:
         // Cae aca solo si llega ThemePreset::Custom, que no genera colores
         // desde codigo (se cargan desde settings.json en LoadSettings).
@@ -359,6 +566,51 @@ ThemeSettings MakeThemePreset(ThemePreset preset) {
     return t;
 }
 
+#ifndef _WIN32
+// Busca la ruta absoluta de "JetBrainsMono Nerd Font" via fontconfig (mismo
+// popen+parseo defensivo que ya usa CategoryTheme::OpenFontFileDialogUnix
+// para zenity/kdialog) -- es la fuente que usa waybar en Omarchy por
+// defecto, y la idea del preset Mek es que la interfaz combine con el resto
+// del escritorio. Devuelve "" si fc-match no esta instalado o no encuentra
+// la fuente (Mek simplemente se queda con la fuente default de la app).
+static std::string ResolveWaybarFontPath() {
+    std::array<char, 512> buffer{};
+    std::string result;
+
+    FILE* pipe = popen("fc-match -f \"%{file}\" \"JetBrainsMono Nerd Font\" 2>/dev/null", "r");
+    if (!pipe) return "";
+
+    while (fgets(buffer.data(), (int)buffer.size(), pipe) != nullptr)
+        result += buffer.data();
+    pclose(pipe);
+
+    while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
+        result.pop_back();
+
+    return result;
+}
+#endif
+
+void SettingsManager::ApplyPreset(ThemePreset preset) {
+    m_Settings.theme = MakeThemePreset(preset);
+
+#ifndef _WIN32
+    // Mek: ademas de los colores de Catppuccin Mocha, usa la misma fuente
+    // que waybar (JetBrainsMono Nerd Font) si esta instalada -- coherente
+    // con el resto del escritorio Omarchy. Como la fuente se carga una sola
+    // vez al arrancar (ver main.cpp), el cambio recien se ve tras reiniciar
+    // -- mismo comportamiento que ya tiene elegir una fuente a mano en
+    // Ajustes > Apariencia.
+    if (preset == ThemePreset::Mek) {
+        std::string fontPath = ResolveWaybarFontPath();
+        if (!fontPath.empty() && IsValidFontFile(fontPath))
+            m_Settings.theme.customFontPath = fontPath;
+    }
+#endif
+
+    ApplyTheme();
+}
+
 // ── Proyección ───────────────────────────────────────────────────────────
 void SettingsManager::ApplyProjection() {
     const auto& p    = m_Settings.projection;
@@ -366,15 +618,28 @@ void SettingsManager::ApplyProjection() {
 
     core.SetTargetMonitor(p.targetMonitor);
 
-    float tc[4]      = { p.textColorR, p.textColorG, p.textColorB, p.textColorA };
-    float margins[4] = { p.marginTop,  p.marginBottom, p.marginLeft, p.marginRight };
-
-    core.UpdateTextStyle(p.textSize, tc, p.textAlignment, p.vAlignment,
-                          margins, p.autoScale, p.selectedFont);
     {
-        Core::TextEffectsData fx;
-        Core::UnpackTextEffects(p.textEffectsPacked, fx);
-        core.SetTextEffects(fx);
+        // Convierte el default plano de Ajustes > Proyeccion (margenes L,T,R,B
+        // en px @1920x1080) a la caja centro-relativa que espera
+        // UpdateLyricsBoxStyle -- de paso corrige un bug preexistente donde
+        // este armado pasaba los margenes en orden Top,Bottom,Left,Right en
+        // vez de L,T,R,B.
+        Core::TextBoxStyle box;
+        float margins[4] = { p.marginLeft, p.marginTop, p.marginRight, p.marginBottom };
+        box.sizeW = std::max(0.02f, (1920.0f - margins[0] - margins[2]) / 1920.0f);
+        box.sizeH = std::max(0.02f, (1080.0f - margins[1] - margins[3]) / 1080.0f);
+        box.posX  = margins[0] / 1920.0f + box.sizeW * 0.5f;
+        box.posY  = margins[1] / 1080.0f + box.sizeH * 0.5f;
+        box.fontName  = p.selectedFont;
+        box.color[0]  = p.textColorR; box.color[1] = p.textColorG;
+        box.color[2]  = p.textColorB; box.color[3] = p.textColorA;
+        box.textSize  = p.textSize;
+        box.hAlign    = p.textAlignment;
+        box.vAlign    = p.vAlignment;
+        box.autoScale = p.autoScale;
+        Core::UnpackTextEffects(p.textEffectsPacked, box.effects);
+
+        core.UpdateLyricsBoxStyle(box);
     }
     core.SetLayer0_Color(p.defaultBgR, p.defaultBgG, p.defaultBgB);
     core.SetLoadingLogoPath(p.loadingLogoPath);
@@ -412,6 +677,45 @@ void SettingsManager::ApplyProjection() {
     core.SetLuminosityAmount(p.luminosityAmount);
     core.SetTAAEnabled(p.taaEnabled);
     core.SetTAAIntensity(p.taaIntensity);
+    core.SetGlitchEnabled(p.glitchEnabled);
+    core.SetGlitchIntensity(p.glitchIntensity);
+    core.SetGlitchSpeed(p.glitchSpeed);
+    core.SetGlitchMode(p.glitchMode);
+    core.SetColorGradingEnabled(p.colorGradingEnabled);
+    core.SetColorGradingIntensity(p.colorGradingIntensity);
+    core.SetColorGradingPreset(p.colorGradingPreset);
+    core.SetPixelateEnabled(p.pixelateEnabled);
+    core.SetPixelateSize(p.pixelateSize);
+    core.SetPixelateColorDepth(p.pixelateColorDepth);
+    core.SetRadialBlurEnabled(p.radialBlurEnabled);
+    core.SetRadialBlurIntensity(p.radialBlurIntensity);
+    core.SetWavesEnabled(p.wavesEnabled);
+    core.SetWavesIntensity(p.wavesIntensity);
+    core.SetWavesSpeed(p.wavesSpeed);
+    core.SetWavesFrequency(p.wavesFrequency);
+    core.SetMirrorEnabled(p.mirrorEnabled);
+    core.SetMirrorMode(p.mirrorMode);
+    core.SetThermalEnabled(p.thermalEnabled);
+    core.SetThermalIntensity(p.thermalIntensity);
+    core.SetThermalMode(p.thermalMode);
+    core.SetHalftoneEnabled(p.halftoneEnabled);
+    core.SetHalftoneDotScale(p.halftoneDotScale);
+    core.SetHalftoneMode(p.halftoneMode);
+    core.SetVolumetricFogEnabled(p.volumetricFogEnabled);
+    core.SetVolumetricFogDensity(p.volumetricFogDensity);
+    core.SetVolumetricFogSpeed(p.volumetricFogSpeed);
+    core.SetVolumetricFogScale(p.volumetricFogScale);
+    core.SetVolumetricFogColorMode(p.volumetricFogColorMode);
+    core.SetVolumetricCloudsEnabled(p.volumetricCloudsEnabled);
+    core.SetVolumetricCloudsCoverage(p.volumetricCloudsCoverage);
+    core.SetVolumetricCloudsDensity(p.volumetricCloudsDensity);
+    core.SetVolumetricCloudsSpeed(p.volumetricCloudsSpeed);
+    core.SetVolumetricCloudsSunIntensity(p.volumetricCloudsSunIntensity);
+    core.SetZonedDistortionEnabled(p.zonedDistortionEnabled);
+    core.SetZonedDistortionIntensity(p.zonedDistortionIntensity);
+    core.SetZonedDistortionSpeed(p.zonedDistortionSpeed);
+    core.SetZonedDistortionZone(p.zonedDistortionZone);
+    core.SetZonedDistortionFeather(p.zonedDistortionFeather);
     core.SetFillBlurEnabled(p.fillBlurEnabled);
     core.SetFillBlurBrightness(p.fillBlurBrightness);
     core.SetVideoRenderEngine(p.videoRenderEngine);
@@ -500,8 +804,8 @@ void SettingsManager::ApplyTheme() {
     c[ImGuiCol_DragDropTarget]        = V(t.accent, 0.9f);
     c[ImGuiCol_NavHighlight]          = V(t.accent);
     c[ImGuiCol_NavWindowingHighlight] = ImVec4(1, 1, 1, 0.6f);
-    c[ImGuiCol_NavWindowingDimBg]     = ImVec4(0, 0, 0, 0.45f);
-    c[ImGuiCol_ModalWindowDimBg]      = ImVec4(0, 0, 0, 0.55f);
+    c[ImGuiCol_NavWindowingDimBg]     = ImVec4(0, 0, 0, 0.0f);
+    c[ImGuiCol_ModalWindowDimBg]      = ImVec4(0, 0, 0, 0.0f);
 
     c[ImGuiCol_Text]         = V(t.textPrimary);
     c[ImGuiCol_TextDisabled] = V(t.textFaint);
@@ -536,6 +840,7 @@ void SettingsManager::SaveSettings() {
     const auto& t = m_Settings.theme;
 
     j["projection"]["targetMonitor"] = p.targetMonitor;
+    j["projection"]["extraMonitors"] = p.extraMonitors;
     j["projection"]["textSize"]      = p.textSize;
     j["projection"]["textColorR"]    = p.textColorR;
     j["projection"]["textColorG"]    = p.textColorG;
@@ -591,6 +896,45 @@ void SettingsManager::SaveSettings() {
     j["projection"]["luminosityAmount"]     = p.luminosityAmount;
     j["projection"]["taaEnabled"]           = p.taaEnabled;
     j["projection"]["taaIntensity"]         = p.taaIntensity;
+    j["projection"]["glitchEnabled"]        = p.glitchEnabled;
+    j["projection"]["glitchIntensity"]      = p.glitchIntensity;
+    j["projection"]["glitchSpeed"]          = p.glitchSpeed;
+    j["projection"]["glitchMode"]           = p.glitchMode;
+    j["projection"]["colorGradingEnabled"]  = p.colorGradingEnabled;
+    j["projection"]["colorGradingIntensity"]= p.colorGradingIntensity;
+    j["projection"]["colorGradingPreset"]   = p.colorGradingPreset;
+    j["projection"]["pixelateEnabled"]      = p.pixelateEnabled;
+    j["projection"]["pixelateSize"]         = p.pixelateSize;
+    j["projection"]["pixelateColorDepth"]   = p.pixelateColorDepth;
+    j["projection"]["radialBlurEnabled"]    = p.radialBlurEnabled;
+    j["projection"]["radialBlurIntensity"]  = p.radialBlurIntensity;
+    j["projection"]["wavesEnabled"]         = p.wavesEnabled;
+    j["projection"]["wavesIntensity"]       = p.wavesIntensity;
+    j["projection"]["wavesSpeed"]           = p.wavesSpeed;
+    j["projection"]["wavesFrequency"]       = p.wavesFrequency;
+    j["projection"]["mirrorEnabled"]        = p.mirrorEnabled;
+    j["projection"]["mirrorMode"]           = p.mirrorMode;
+    j["projection"]["thermalEnabled"]       = p.thermalEnabled;
+    j["projection"]["thermalIntensity"]     = p.thermalIntensity;
+    j["projection"]["thermalMode"]          = p.thermalMode;
+    j["projection"]["halftoneEnabled"]      = p.halftoneEnabled;
+    j["projection"]["halftoneDotScale"]     = p.halftoneDotScale;
+    j["projection"]["halftoneMode"]         = p.halftoneMode;
+    j["projection"]["volumetricFogEnabled"]         = p.volumetricFogEnabled;
+    j["projection"]["volumetricFogDensity"]         = p.volumetricFogDensity;
+    j["projection"]["volumetricFogSpeed"]           = p.volumetricFogSpeed;
+    j["projection"]["volumetricFogScale"]           = p.volumetricFogScale;
+    j["projection"]["volumetricFogColorMode"]       = p.volumetricFogColorMode;
+    j["projection"]["volumetricCloudsEnabled"]      = p.volumetricCloudsEnabled;
+    j["projection"]["volumetricCloudsCoverage"]     = p.volumetricCloudsCoverage;
+    j["projection"]["volumetricCloudsDensity"]      = p.volumetricCloudsDensity;
+    j["projection"]["volumetricCloudsSpeed"]        = p.volumetricCloudsSpeed;
+    j["projection"]["volumetricCloudsSunIntensity"] = p.volumetricCloudsSunIntensity;
+    j["projection"]["zonedDistortionEnabled"]       = p.zonedDistortionEnabled;
+    j["projection"]["zonedDistortionIntensity"]     = p.zonedDistortionIntensity;
+    j["projection"]["zonedDistortionSpeed"]         = p.zonedDistortionSpeed;
+    j["projection"]["zonedDistortionZone"]          = p.zonedDistortionZone;
+    j["projection"]["zonedDistortionFeather"]       = p.zonedDistortionFeather;
     j["projection"]["fillBlurEnabled"]      = p.fillBlurEnabled;
     j["projection"]["fillBlurBrightness"]   = p.fillBlurBrightness;
     j["projection"]["videoRenderEngine"]    = p.videoRenderEngine;
@@ -599,6 +943,7 @@ void SettingsManager::SaveSettings() {
     j["stageDisplay"]["layoutTemplateIndex"] = sd.layoutTemplateIndex;
     for (int i = 0; i < kStageMaxCells; i++)
         j["stageDisplay"]["cellWidget"][i] = sd.cellWidget[i];
+    j["stageDisplay"]["extraMonitors"] = sd.extraMonitors;
 
     const auto& lsb = m_Settings.librarySidebar;
     for (int i = 0; i < 10; i++)
@@ -667,6 +1012,16 @@ void SettingsManager::SaveSettings() {
         for (int c = 0; c < 3; c++) jp["bgColor"][c] = p.bgColor[c];
     }
 
+    for (size_t i = 0; i < m_Settings.transitions.presets.size(); i++) {
+        const auto& tp = m_Settings.transitions.presets[i];
+        auto& jt = j["transitions"]["presets"][i];
+        jt["name"]              = tp.name;
+        jt["type"]              = tp.type;
+        jt["duration"]          = tp.duration;
+        jt["affectsBackground"] = tp.affectsBackground;
+        jt["affectsLyrics"]     = tp.affectsLyrics;
+    }
+
     j["yggdrasil"]["targetIp"]   = m_Settings.yggdrasil.targetIp;
     j["yggdrasil"]["targetPort"] = m_Settings.yggdrasil.targetPort;
     j["yggdrasil"]["listenPort"] = m_Settings.yggdrasil.listenPort;
@@ -697,6 +1052,19 @@ void SettingsManager::SaveSettings() {
     j["sync"]["port"]       = m_Settings.sync.port;
     j["sync"]["pairingPin"] = m_Settings.sync.pairingPin;
 
+    j["ai"]["enabled"] = m_Settings.ai.enabled;
+    j["ai"]["apiKey"]  = m_Settings.ai.apiKey;
+    j["ai"]["model"]   = m_Settings.ai.model;
+
+    j["storage"]["customDataRoot"] = m_Settings.storage.customDataRoot;
+    for (size_t i = 0; i < m_Settings.storage.watchedFolders.size(); i++) {
+        const auto& wf = m_Settings.storage.watchedFolders[i];
+        auto& jwf = j["storage"]["watchedFolders"][i];
+        jwf["path"]          = wf.path;
+        jwf["copyToDataDir"] = wf.copyToDataDir;
+        jwf["enabled"]       = wf.enabled;
+    }
+
     std::string langStr = "es";
     if      (m_Settings.general.language == Language::English)    langStr = "en";
     else if (m_Settings.general.language == Language::Portuguese) langStr = "pt";
@@ -713,6 +1081,8 @@ void SettingsManager::SaveSettings() {
     j["general"]["showRailLabels"]      = m_Settings.general.showRailLabels;
     j["general"]["showPerfPanel"]       = m_Settings.general.showPerfPanel;
     j["general"]["showViewQuickActions"]= m_Settings.general.showViewQuickActions;
+    j["general"]["openHubOnStartup"]    = m_Settings.general.openHubOnStartup;
+    j["general"]["quickNotesText"]      = m_Settings.general.quickNotesText;
 
     j["audio"]["masterVolume"] = m_Settings.audio.masterVolume;
     j["audio"]["muted"]        = m_Settings.audio.muted;
@@ -723,6 +1093,8 @@ void SettingsManager::SaveSettings() {
     j["updates"]["autoDownload"]   = m_Settings.updates.autoDownload;
     j["updates"]["updateChannel"]  = m_Settings.updates.updateChannel;
     j["updates"]["lastChecked"]    = m_Settings.updates.lastChecked;
+
+    j["workspace"]["layoutPreset"] = WorkspaceLayoutPresetToKey(m_Settings.workspace.layoutPreset);
 
     j["theme"]["preset"]         = ThemePresetToKey(t.preset);
     j["theme"]["windowRounding"] = t.windowRounding;
@@ -767,6 +1139,7 @@ void SettingsManager::LoadSettings() {
             auto& p = m_Settings.projection;
             const auto& jp = j["projection"];
             p.targetMonitor = jp.value("targetMonitor", -1);
+            p.extraMonitors = jp.value("extraMonitors", std::vector<int>{});
             p.textSize      = jp.value("textSize",      48.0f);
             p.textColorR    = jp.value("textColorR",    1.0f);
             p.textColorG    = jp.value("textColorG",    1.0f);
@@ -822,6 +1195,45 @@ void SettingsManager::LoadSettings() {
             p.luminosityAmount      = jp.value("luminosityAmount",      1.2f);
             p.taaEnabled            = jp.value("taaEnabled",            false);
             p.taaIntensity          = jp.value("taaIntensity",          0.5f);
+            p.glitchEnabled         = jp.value("glitchEnabled",         false);
+            p.glitchIntensity       = jp.value("glitchIntensity",       0.40f);
+            p.glitchSpeed           = jp.value("glitchSpeed",           1.0f);
+            p.glitchMode            = jp.value("glitchMode",            0);
+            p.colorGradingEnabled   = jp.value("colorGradingEnabled",   false);
+            p.colorGradingIntensity = jp.value("colorGradingIntensity", 0.75f);
+            p.colorGradingPreset    = jp.value("colorGradingPreset",    1);
+            p.pixelateEnabled       = jp.value("pixelateEnabled",       false);
+            p.pixelateSize          = jp.value("pixelateSize",          12.0f);
+            p.pixelateColorDepth    = jp.value("pixelateColorDepth",    0);
+            p.radialBlurEnabled     = jp.value("radialBlurEnabled",     false);
+            p.radialBlurIntensity   = jp.value("radialBlurIntensity",   0.35f);
+            p.wavesEnabled          = jp.value("wavesEnabled",          false);
+            p.wavesIntensity        = jp.value("wavesIntensity",        0.35f);
+            p.wavesSpeed            = jp.value("wavesSpeed",            1.0f);
+            p.wavesFrequency        = jp.value("wavesFrequency",        8.0f);
+            p.mirrorEnabled         = jp.value("mirrorEnabled",         false);
+            p.mirrorMode            = jp.value("mirrorMode",            0);
+            p.thermalEnabled        = jp.value("thermalEnabled",        false);
+            p.thermalIntensity      = jp.value("thermalIntensity",      0.85f);
+            p.thermalMode           = jp.value("thermalMode",           0);
+            p.halftoneEnabled       = jp.value("halftoneEnabled",       false);
+            p.halftoneDotScale      = jp.value("halftoneDotScale",      10.0f);
+            p.halftoneMode          = jp.value("halftoneMode",          0);
+            p.volumetricFogEnabled         = jp.value("volumetricFogEnabled",         false);
+            p.volumetricFogDensity         = jp.value("volumetricFogDensity",         0.50f);
+            p.volumetricFogSpeed           = jp.value("volumetricFogSpeed",           1.0f);
+            p.volumetricFogScale           = jp.value("volumetricFogScale",           3.5f);
+            p.volumetricFogColorMode       = jp.value("volumetricFogColorMode",       0);
+            p.volumetricCloudsEnabled      = jp.value("volumetricCloudsEnabled",      false);
+            p.volumetricCloudsCoverage     = jp.value("volumetricCloudsCoverage",     0.55f);
+            p.volumetricCloudsDensity      = jp.value("volumetricCloudsDensity",      0.60f);
+            p.volumetricCloudsSpeed        = jp.value("volumetricCloudsSpeed",        0.80f);
+            p.volumetricCloudsSunIntensity = jp.value("volumetricCloudsSunIntensity", 0.65f);
+            p.zonedDistortionEnabled       = jp.value("zonedDistortionEnabled",       false);
+            p.zonedDistortionIntensity     = jp.value("zonedDistortionIntensity",     0.45f);
+            p.zonedDistortionSpeed         = jp.value("zonedDistortionSpeed",         1.20f);
+            p.zonedDistortionZone          = jp.value("zonedDistortionZone",          0);
+            p.zonedDistortionFeather       = jp.value("zonedDistortionFeather",       0.35f);
             p.fillBlurEnabled       = jp.value("fillBlurEnabled",       false);
             p.fillBlurBrightness    = jp.value("fillBlurBrightness",    0.6f);
             p.videoRenderEngine     = jp.value("videoRenderEngine",     1);
@@ -836,6 +1248,7 @@ void SettingsManager::LoadSettings() {
                 for (int i = 0; i < kStageMaxCells && i < (int)arr.size(); i++)
                     sd.cellWidget[i] = arr[i].get<int>();
             }
+            sd.extraMonitors = jsd.value("extraMonitors", std::vector<int>{});
         }
 
         if (j.contains("librarySidebar")) {
@@ -926,6 +1339,13 @@ void SettingsManager::LoadSettings() {
             m_Settings.sync.pairingPin = jsy.value("pairingPin", "");
         }
 
+        if (j.contains("ai")) {
+            const auto& jai = j["ai"];
+            m_Settings.ai.enabled = jai.value("enabled", false);
+            m_Settings.ai.apiKey  = jai.value("apiKey", "");
+            m_Settings.ai.model   = jai.value("model", "claude-sonnet-5");
+        }
+
         if (j.contains("yggdrasil")) {
             const auto& jy = j["yggdrasil"];
             m_Settings.yggdrasil.targetIp   = jy.value("targetIp",   "127.0.0.1");
@@ -951,6 +1371,21 @@ void SettingsManager::LoadSettings() {
                     if (!b.paramName.empty() && !b.oscAddress.empty())
                         m_Settings.yggdrasil.bindings.push_back(b);
                 }
+            }
+        }
+
+        m_Settings.transitions.presets.clear();
+        if (j.contains("transitions") && j["transitions"].contains("presets") &&
+            j["transitions"]["presets"].is_array()) {
+            for (const auto& jt : j["transitions"]["presets"]) {
+                TransitionPresetSettings tp;
+                tp.name              = jt.value("name", "");
+                tp.type              = jt.value("type", 1);
+                tp.duration          = jt.value("duration", 1.0f);
+                tp.affectsBackground = jt.value("affectsBackground", false);
+                tp.affectsLyrics     = jt.value("affectsLyrics", true);
+                if (!tp.name.empty())
+                    m_Settings.transitions.presets.push_back(tp);
             }
         }
 
@@ -1019,6 +1454,8 @@ void SettingsManager::LoadSettings() {
             m_Settings.general.showRailLabels       = jg.value("showRailLabels",      true);
             m_Settings.general.showPerfPanel        = jg.value("showPerfPanel",       false);
             m_Settings.general.showViewQuickActions = jg.value("showViewQuickActions", true);
+            m_Settings.general.openHubOnStartup     = jg.value("openHubOnStartup",     true);
+            m_Settings.general.quickNotesText       = jg.value("quickNotesText",       "");
         }
 
         if (j.contains("audio")) {
@@ -1035,6 +1472,11 @@ void SettingsManager::LoadSettings() {
             m_Settings.updates.autoDownload   = ju.value("autoDownload",   false);
             m_Settings.updates.updateChannel  = ju.value("updateChannel",  "stable");
             m_Settings.updates.lastChecked    = ju.value("lastChecked",    "");
+        }
+
+        if (j.contains("workspace")) {
+            const auto& jw = j["workspace"];
+            m_Settings.workspace.layoutPreset = WorkspaceLayoutPresetFromString(jw.value("layoutPreset", "classic"));
         }
 
         if (j.contains("theme")) {
@@ -1075,6 +1517,22 @@ void SettingsManager::LoadSettings() {
             m_Settings.theme.customFontPath = jt.value("customFontPath", "");
         } else {
             m_Settings.theme = MakeThemePreset(ThemePreset::Dark);
+        }
+
+        if (j.contains("storage")) {
+            const auto& js = j["storage"];
+            m_Settings.storage.customDataRoot = js.value("customDataRoot", "");
+            m_Settings.storage.watchedFolders.clear();
+            if (js.contains("watchedFolders") && js["watchedFolders"].is_array()) {
+                for (const auto& jw : js["watchedFolders"]) {
+                    WatchedFolder wf;
+                    wf.path          = jw.value("path", "");
+                    wf.copyToDataDir = jw.value("copyToDataDir", false);
+                    wf.enabled       = jw.value("enabled", true);
+                    if (!wf.path.empty())
+                        m_Settings.storage.watchedFolders.push_back(wf);
+                }
+            }
         }
 
     } catch (const std::exception& e) {

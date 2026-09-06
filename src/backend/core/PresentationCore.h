@@ -1,4 +1,6 @@
 #pragma once
+#ifndef PROYECTHOR_PRESENTATION_CORE_H
+#define PROYECTHOR_PRESENTATION_CORE_H
 #include <memory>
 #include <string>
 #include <vector>
@@ -20,6 +22,7 @@ namespace ProyecThor::UI {
     class Announcements;
     class OClock;
     class CapturePanel;
+    class LabPanel;
 }
 
 namespace ProyecThor::Core {
@@ -27,6 +30,14 @@ namespace ProyecThor::Core {
     class VLCBasePlayer;
 
     enum class ItemType { None = -1, Video = 0, Image = 1, Song = 2, Bible = 3, Documents = 4, Audio = 5 };
+
+    // Contenido que manda la salida Inalambrica (LAN, ver NetworkStreamServer/
+    // WireNetworkServerProviders) -- a diferencia de Publico/Stage, que hoy
+    // siempre reflejan lo mismo que esta en vivo, LAN puede quedar "clavada"
+    // en otra cosa (ej. solo el reloj) mientras Publico/Stage siguen
+    // mostrando lo que este en vivo normalmente. Ver ViewPanel::RenderContent
+    // (toolbar "vaPreviewSource") para el selector.
+    enum class OutputContentMode { Live = 0, ClockOnly = 1, Blank = 2 };
 
     struct LibrarySelection {
         std::string title;
@@ -68,6 +79,58 @@ namespace ProyecThor::Core {
         bool  underlineEnabled = false;
         float underlineColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
         float underlineThickness = 0.3f; // 0..1
+
+        // Texto 3D -- copias escalonadas en diagonal detras del texto
+        // principal (extrusion "solida"), mismo truco que Sombra pero con
+        // muchos pasos en vez de uno solo. Ver DrawStyledText.
+        bool  text3dEnabled = false;
+        float text3dColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+        float text3dDepth = 0.4f; // 0..1
+
+        // Degradado de color -- interpola entre dos colores a lo largo del
+        // angulo indicado (mismo esquema angulo->direccion->proyeccion que
+        // ya usa la herramienta "Degradado" del editor de Overlays, ver
+        // OverlayCanvasEditor::ApplyGradientPreview). Reemplaza el color
+        // solido del texto cuando esta activo.
+        bool  gradientEnabled = false;
+        float gradientColorA[4] = { 1.0f, 0.35f, 0.35f, 1.0f };
+        float gradientColorB[4] = { 0.35f, 0.45f, 1.0f, 1.0f };
+        float gradientAngle = 0.0f; // grados, -180..180
+
+        // Transparencia con angulo -- degradado de OPACIDAD (no de color)
+        // a lo largo del angulo indicado, mismo esquema que el degradado de
+        // color de arriba pero modulando solo el alpha.
+        bool  opacityGradientEnabled = false;
+        float opacityGradientAngle = 0.0f; // grados, -180..180
+        float opacityGradientStrength = 0.5f; // 0..1
+    };
+
+    // TextBoxStyle -- recuadro de texto independiente (Letras o Versiculo),
+    // editable a mano en el editor visual (ver CanvaStyleEditor). posX/posY
+    // son el CENTRO del recuadro, normalizados 0..1 (misma convencion que
+    // OverlayLayer::posX/posY); sizeW/sizeH tambien normalizados 0..1.
+    // hAlign/vAlign alinean el texto DENTRO del recuadro (0 izq/arriba,
+    // 1 centro, 2 der/abajo).
+    struct TextBoxStyle {
+        float       posX          = 0.5f;
+        float       posY          = 0.5f;
+        float       sizeW         = 0.92f;
+        float       sizeH         = 0.89f;
+        std::string fontName      = "Predeterminada";
+        float       color[4]      = { 1.0f, 1.0f, 1.0f, 1.0f };
+        float       textSize      = 60.0f;
+        int         hAlign        = 1;
+        int         vAlign        = 1;
+        bool        autoScale     = true;
+        TextEffectsData effects;
+
+        // Fondo de pantalla propio del recuadro -- OPCIONAL, imagen elegida
+        // de la misma biblioteca de fondos que ya usa el resto de la app
+        // (ver ListSongBackgrounds(), carpeta assets/backgrounds). Por
+        // defecto deshabilitado (fondo transparente).
+        bool        bgMediaEnabled = false;
+        std::string bgMediaPath;
+        float       bgMediaOpacity = 1.0f;
     };
 
     struct SavedStyle {
@@ -80,6 +143,21 @@ namespace ProyecThor::Core {
         bool        autoScale     = true;
         std::string fontName      = "Predeterminada";
         TextEffectsData effects;
+
+        // Caja de Letras (ver TextBoxStyle) -- fuente real que consume
+        // DrawTextBlock/DrawPublicContent para TODO el contenido proyectado
+        // (canciones Y el cuerpo de un versiculo biblico: ambos son "texto"
+        // con el mismo diseno). Los campos planos de arriba se conservan
+        // solo como espejo de compatibilidad (StreamSnapshot/cliente
+        // remoto, ver PresentationCore::UpdateLyricsBoxStyle).
+        TextBoxStyle lyrics;
+
+        // Caja del Indice -- OPCIONAL (ver indexEnabled), muestra solo la
+        // referencia biblica (ej. "Genesis 1:1"), nunca el cuerpo del
+        // versiculo. Independiente en posicion/tamano/estilo de la caja de
+        // Letras -- el usuario la activa y la mueve a donde quiera.
+        TextBoxStyle index;
+        bool         indexEnabled = false;
     };
 
     // Empaqueta/desempaqueta TextEffectsData como una sola linea CSV para el
@@ -102,13 +180,29 @@ namespace ProyecThor::Core {
         bool isProjecting       = false;
         int  targetMonitorIndex = 0;
 
+        // Monitores de salida publica ADICIONALES (opcional) -- espejo
+        // runtime de Settings::ProjectionSettings::extraMonitors, poblado en
+        // PresentationCore::SetTargetMonitor. Todos muestran exactamente lo
+        // mismo que targetMonitorIndex -- ver UIManager::RenderProjectorOutput.
+        std::vector<int> extraTargetMonitors;
+
         // Monitor de Control (Stage Display). Independiente de isProjecting:
         // el Stage puede estar activo con o sin proyeccion publica.
         bool isStaging          = false;
         int  stageMonitorIndex  = 0;
 
+        // Idem extraTargetMonitors, para Stage -- poblado en SetStaging.
+        std::vector<int> extraStageMonitors;
+
         std::string currentText;
         bool  showText          = false;
+
+        // Referencia biblica del versiculo actual (ej. "Genesis 1:1"),
+        // SEPARADA del cuerpo (currentText) -- ver PresentationCore::
+        // SetCurrentRef. Solo se dibuja si indexEnabled es true (ver
+        // indexBox mas abajo). Vacio para cualquier contenido que no sea
+        // un versiculo biblico (SetLayer2_Text la limpia automaticamente).
+        std::string currentRef;
 
         // Texto que vendra despues del actual (siguiente estrofa/versiculo),
         // solo para el Stage Display — nunca se muestra al publico.
@@ -145,6 +239,23 @@ namespace ProyecThor::Core {
         int songVAlignment     = 1;
         int bibleTextAlignment = 1;
         int bibleVAlignment    = 1;
+
+        // Caja de Letras -- fuente real que consumen DrawTextBlock
+        // (UIManager.cpp) y DrawPublicContent (LiveContentRenderer.cpp) al
+        // proyectar currentText (canciones Y el cuerpo de un versiculo
+        // biblico, ambos con el mismo diseno). Los campos planos de arriba
+        // (textSize/textColor/textAlignment/vAlignment/margins/autoScale/
+        // selectedFont/effects) quedan como espejo de solo-lectura de
+        // lyricsBox, mantenido por PresentationCore::UpdateLyricsBoxStyle,
+        // para no romper a nada que ya los lea (Clock, QuickNotes,
+        // ViewPanel::Pad, SyncServer, StreamSnapshot/cliente remoto).
+        TextBoxStyle lyricsBox;
+
+        // Caja del Indice -- OPCIONAL, dibuja SOLO currentRef (la
+        // referencia biblica, ej. "Genesis 1:1"), nunca currentText. Se
+        // dibuja unicamente si indexEnabled es true.
+        TextBoxStyle indexBox;
+        bool         indexEnabled = false;
 
         float livePosition      = 0.0f;
         int   liveVolume        = 100;
@@ -190,6 +301,12 @@ void SetGlobalMute(bool mute);
         void  SetStretchToFill(bool stretch);
         bool  GetStretchToFill() const;
 
+        // Ver comentario de OutputContentMode arriba. Leido desde el hilo de
+        // NetworkStreamServer (SnapshotProvider) Y desde RenderProjectorToFBO
+        // (hilo de render), por eso atomic en vez de sumarlo a m_Mutex.
+        void               SetLanContentMode(OutputContentMode mode) { m_LanContentMode = mode; }
+        OutputContentMode  GetLanContentMode() const { return m_LanContentMode.load(); }
+
         // "Bucle falso" de Fondos (ver Ajustes > Proyeccion > Fondos y el
         // comentario largo en BackgroundLayer.h): reproduce hacia adelante
         // y despues "hacia atras" en vez de siempre cortar al mismo frame
@@ -203,8 +320,13 @@ void SetGlobalMute(bool mute);
         void SetTransitionConfig(int type, float durationSeconds);
         void SetBackgroundTransitionProgress(float progress);
 
+        // Duracion del crossfade de fondo (BackgroundLayer::m_BlendSeconds)
+        // -- sincronizada cada frame desde UIManager segun el preset de
+        // transicion activo (ver TransitionPanel::AffectsBackground).
+        void SetBackgroundBlendDuration(float seconds);
+
         void SetLiveQuickNote(const std::string& text, const float* colorOverride = nullptr);
-        void SetLiveQuickNoteLAN(const std::string& text, const float* colorOverride = nullptr);
+        void SetLiveQuickNoteLAN(const std::string& text, const float* colorOverride = nullptr, const std::string& styleName = "");
         void ClearQuickNoteLAN();
 
         // ── Reloj y Contadores: títulos/mensajes pedidos desde el celular ──
@@ -239,6 +361,7 @@ void SetGlobalMute(bool mute);
         float          GetFillBlurBrightness() const;
 
         VLCBasePlayer* GetBackgroundPlayer();
+        void           GetBackgroundVideoSize(int& width, int& height);
 
         void  SetFSREnabled(bool enabled);
         bool  GetFSREnabled() const;
@@ -333,12 +456,100 @@ void SetGlobalMute(bool mute);
         void  SetLuminosityAmount(float amount);
         float GetLuminosityAmount() const;
 
-        // TAA (Temporal Anti-Aliasing simplificado, ver PostProcessorTAA.h):
-        // mezcla el frame actual con el resultado del frame anterior.
         void  SetTAAEnabled(bool enabled);
         bool  GetTAAEnabled() const;
         void  SetTAAIntensity(float intensity);
         float GetTAAIntensity() const;
+
+        void  SetGlitchEnabled(bool enabled);
+        bool  GetGlitchEnabled() const;
+        void  SetGlitchIntensity(float intensity);
+        float GetGlitchIntensity() const;
+        void  SetGlitchSpeed(float speed);
+        float GetGlitchSpeed() const;
+        void  SetGlitchMode(int mode);
+        int   GetGlitchMode() const;
+
+        void  SetColorGradingEnabled(bool enabled);
+        bool  GetColorGradingEnabled() const;
+        void  SetColorGradingIntensity(float intensity);
+        float GetColorGradingIntensity() const;
+        void  SetColorGradingPreset(int preset);
+        int   GetColorGradingPreset() const;
+
+        void  SetPixelateEnabled(bool enabled);
+        bool  GetPixelateEnabled() const;
+        void  SetPixelateSize(float size);
+        float GetPixelateSize() const;
+        void  SetPixelateColorDepth(int depth);
+        int   GetPixelateColorDepth() const;
+
+        void  SetRadialBlurEnabled(bool enabled);
+        bool  GetRadialBlurEnabled() const;
+        void  SetRadialBlurIntensity(float intensity);
+        float GetRadialBlurIntensity() const;
+
+        void  SetWavesEnabled(bool enabled);
+        bool  GetWavesEnabled() const;
+        void  SetWavesIntensity(float intensity);
+        float GetWavesIntensity() const;
+        void  SetWavesSpeed(float speed);
+        float GetWavesSpeed() const;
+        void  SetWavesFrequency(float freq);
+        float GetWavesFrequency() const;
+
+        void  SetMirrorEnabled(bool enabled);
+        bool  GetMirrorEnabled() const;
+        void  SetMirrorMode(int mode);
+        int   GetMirrorMode() const;
+
+        void  SetThermalEnabled(bool enabled);
+        bool  GetThermalEnabled() const;
+        void  SetThermalIntensity(float intensity);
+        float GetThermalIntensity() const;
+        void  SetThermalMode(int mode);
+        int   GetThermalMode() const;
+
+        void  SetHalftoneEnabled(bool enabled);
+        bool  GetHalftoneEnabled() const;
+        void  SetHalftoneDotScale(float scale);
+        float GetHalftoneDotScale() const;
+        void  SetHalftoneMode(int mode);
+        int   GetHalftoneMode() const;
+
+        // ── Efectos Volumétricos y por Zonas ────────────────────────────────
+        void  SetVolumetricFogEnabled(bool enabled);
+        bool  GetVolumetricFogEnabled() const;
+        void  SetVolumetricFogDensity(float density);
+        float GetVolumetricFogDensity() const;
+        void  SetVolumetricFogSpeed(float speed);
+        float GetVolumetricFogSpeed() const;
+        void  SetVolumetricFogScale(float scale);
+        float GetVolumetricFogScale() const;
+        void  SetVolumetricFogColorMode(int mode);
+        int   GetVolumetricFogColorMode() const;
+
+        void  SetVolumetricCloudsEnabled(bool enabled);
+        bool  GetVolumetricCloudsEnabled() const;
+        void  SetVolumetricCloudsCoverage(float coverage);
+        float GetVolumetricCloudsCoverage() const;
+        void  SetVolumetricCloudsDensity(float density);
+        float GetVolumetricCloudsDensity() const;
+        void  SetVolumetricCloudsSpeed(float speed);
+        float GetVolumetricCloudsSpeed() const;
+        void  SetVolumetricCloudsSunIntensity(float intensity);
+        float GetVolumetricCloudsSunIntensity() const;
+
+        void  SetZonedDistortionEnabled(bool enabled);
+        bool  GetZonedDistortionEnabled() const;
+        void  SetZonedDistortionIntensity(float intensity);
+        float GetZonedDistortionIntensity() const;
+        void  SetZonedDistortionSpeed(float speed);
+        float GetZonedDistortionSpeed() const;
+        void  SetZonedDistortionZone(int zone);
+        int   GetZonedDistortionZone() const;
+        void  SetZonedDistortionFeather(float feather);
+        float GetZonedDistortionFeather() const;
 
         // Usado por UIManager (justo tras ImGui::Begin("ProjectorLive",...))
         // para informar, cada frame, cual ImGuiID es esa viewport, y por el
@@ -348,8 +559,34 @@ void SetGlobalMute(bool mute);
         // RenderProjectorViewportPostFX.
         void   SetProjectorPostFXViewportID(ImGuiID id);
         bool   IsProjectorPostFXViewport(ImGuiID id) const;
+
+        // HWND (como void*) de la ventana nativa real de "ProjectorLive" --
+        // resuelto a partir de m_ProjectorPostFXViewportID (ver arriba).
+        // Para consumidores que necesitan mostrar contenido nativo (ej. un
+        // navegador embebido, ver WebBrowserPanel::SendToPublic) DIRECTO
+        // sobre la salida real al publico, reparentando su propia ventana
+        // nativa a esta. nullptr si no se esta proyectando o la ventana
+        // todavia no existe este frame.
+        void* GetProjectorNativeWindow() const;
         void   RenderProjectorViewportPostFX(ImGuiViewport* viewport,
                                               void (*defaultRenderFn)(ImGuiViewport*, void*));
+
+        // ── Post-proceso para monitores de salida EXTRA (multi-monitor) ────
+        // Misma cadena de efectos que el primario (ver los 14 setters de
+        // arriba, que ahora tambien aplican a cada instancia de este mapa),
+        // pero con su PROPIA instancia de CompositePostChain por viewport
+        // extra -- reusar una sola instancia entre varios viewports en el
+        // mismo frame thrashearia su FBO interno (ver CompositePostChain::
+        // EnsureSized, detecta cambio de platformHandle y recrea el buffer).
+        void RegisterExtraProjectorViewport(ImGuiID id);
+        bool IsExtraProjectorViewport(ImGuiID id) const;
+        void RenderExtraProjectorViewportPostFX(ImGuiID id, ImGuiViewport* viewport,
+                                                 void (*defaultRenderFn)(ImGuiViewport*, void*));
+        // Borra del mapa cualquier instancia cuyo id no este en la lista
+        // (limpia memoria GPU cuando el usuario destildo un monitor extra o
+        // dejo de proyectar) -- llamar una vez por frame tras dibujar todos
+        // los extras del frame actual.
+        void PruneExtraProjectorViewports(const std::vector<ImGuiID>& stillActiveThisFrame);
 
         // fromQueue=true: la seleccion viene de MonitorQueueEngine::PlayIndex
         // (solo para mostrar el titulo del item actual de la cola), NO de un
@@ -398,6 +635,10 @@ void SetGlobalMute(bool mute);
         void        RequestSongEditorOpen(const std::string& filename);
         bool        ConsumeSongEditorOpenRequest(std::string& outFilename);
 
+        // Búsqueda de canciones activa (para resaltar estrofas/letras coincidentes en tiempo real)
+        void        SetSongSearchQuery(const std::string& query) { std::lock_guard<std::recursive_mutex> lock(m_Mutex); m_SongSearchQuery = query; }
+        std::string GetSongSearchQuery() const { std::lock_guard<std::recursive_mutex> lock(m_Mutex); return m_SongSearchQuery; }
+
         void*          GetPreviewTexture();
         VLCBasePlayer* GetPreviewPlayer();
         void           SetPreviewMedia(const std::string& path);
@@ -411,17 +652,28 @@ void SetGlobalMute(bool mute);
         // cualquier codigo de UI que reaccione a una seleccion cambiante.
         void RequestPreviewLoad(const std::string& path, bool loop, bool startMuted);
         void RequestPreviewStop();
+        void StopPreviewSync();
+        void ClearSelection();
+        void ReleasePathUsages(const std::string& path);
 
-        void UpdateTextStyle(float size, const float color[4], int align,
-                             int vAlign, const float margins[4], bool autoScale,
-                             const std::string& font);
+        // Aplica la caja de Letras: guarda state.lyricsBox TAL CUAL y
+        // ademas espeja sus campos hacia los campos planos legacy de
+        // PresentationState (textSize/textColor/textAlignment/vAlignment/
+        // margins/autoScale/selectedFont/effects) para que todo lo que ya
+        // los lee (Clock, QuickNotes, ViewPanel::Pad, SyncServer,
+        // StreamSnapshot/cliente remoto) siga funcionando sin cambios.
+        void UpdateLyricsBoxStyle(const TextBoxStyle& box);
 
-        void UpdateBibleStyle(float refSize, float verseSize, int hAlign, int vAlign);
-        void UpdateSongStyle(int hAlign, int vAlign);
+        // Aplica la caja del Indice y si esta habilitado o no. Sin espejo --
+        // el indice nunca tuvo un camino de compatibilidad separado de Letras.
+        void UpdateIndexBoxStyle(const TextBoxStyle& box, bool enabled);
 
-        // Efectos visuales del texto proyectado (ver TextEffectsData arriba
-        // y TextEffectsRenderer.h para el dibujo).
-        void SetTextEffects(const TextEffectsData& effects);
+        // Referencia biblica (ej. "Genesis 1:1"), SEPARADA del cuerpo del
+        // texto (ver SetLayer2_Text, que limpia esto automaticamente para
+        // cualquier contenido que no sea un versiculo). Solo BibleView y
+        // SyncServer (proyeccion remota de versiculos) llaman esto.
+        void SetCurrentRef(const std::string& ref);
+
         TextEffectsData GetTextEffects() const;
 
         void        SetProjecting(bool projecting);
@@ -507,6 +759,17 @@ void SetGlobalMute(bool mute);
         void ToggleNetworkStream(bool enable, int port = 8080);
         bool IsStreamingNet() const;
         bool RenderProjectorToFBO(int w, int h, std::vector<uint8_t>& outRGB);
+
+        // Renderiza el FONDO actualmente en vivo (Publico -- video/imagen/
+        // color, ver BackgroundLayer::Render) a una textura GL reusable
+        // (mismo FBO que RenderProjectorToFBO, ver EnsureFBO) y devuelve su
+        // ID directamente, sin el paso de lectura a CPU/PBO -- para
+        // consumidores que solo necesitan mostrarlo como una textura mas
+        // (ej. BroadcastPanel, capa "Vista en vivo"). Alcance igual que
+        // RenderProjectorToFBO: solo el fondo, sin texto/overlay encima.
+        // 0 si no hay contexto o el tamaño pedido es invalido.
+        unsigned int RenderPublicCompositeToTexture(int w, int h);
+
         NetworkStreamServer* GetNetworkServer() { return m_NetworkServer.get(); }
 
         // Chat y Streaming comparten el MISMO NetworkStreamServer/puerto (ver
@@ -538,6 +801,7 @@ void SetGlobalMute(bool mute);
         // allowAudio=true explicitamente (ver MonitorCenterColumn,
         // MonitorQueueEngine, LibraryVideos "Enviar al monitor").
         void SetBackgroundMedia(const std::string& path, bool isVideo, bool allowAudio = false);
+        bool GetContentAllowsAudio() const;
 
         // ── Overlay (PNG transparente) ───────────────────────────────────────
         // Capa APARTE de Layer0 (fondo) y Layer2 (texto): se dibuja ENCIMA de
@@ -607,6 +871,18 @@ void SetGlobalMute(bool mute);
         void                       SetCapturePanelRef(ProyecThor::UI::CapturePanel* c) { m_CapturePanelRef = c; }
         ProyecThor::UI::CapturePanel* GetCapturePanelRef() const { return m_CapturePanelRef; }
 
+        // ── Proyección de Modelos y Recursos 3D ─────────────────────────────
+        void   SetLive3DModelActive(bool active) { m_Live3DModelActive = active; }
+        bool   IsLive3DModelActive() const { return m_Live3DModelActive; }
+        void   SetLive3DModelTexture(void* texID) { m_Live3DModelTexture = texID; }
+        void*  GetLive3DModelTexture() const { return m_Live3DModelTexture; }
+
+        // ── Proyección de Laboratorio Matemático (GeoGebra Lab) ─────────────
+        void                       SetLabPanelRef(ProyecThor::UI::LabPanel* p) { m_LabPanelRef = p; }
+        ProyecThor::UI::LabPanel*  GetLabPanelRef() const { return m_LabPanelRef; }
+        void                       SetLiveLabActive(bool active) { m_LiveLabActive = active; }
+        bool                       IsLiveLabActive() const { return m_LiveLabActive; }
+
         // ── Preload adelantado (ver BackgroundLayer::Prefetch/CommitPrefetch) ──
         // Usado por la cola del Monitor para cargar el SIGUIENTE clip en
         // segundo plano mientras el actual sigue reproduciendose, sin
@@ -629,8 +905,10 @@ void SetGlobalMute(bool mute);
         // logica de CUANDO blendear, solo el COMO (ImGui::AddImage con tint
         // alpha en vez de BlitTexture con glBlendFunc).
         void*  GetStandbyBackgroundTexture();
+        void*  GetPreviewStandbyBackgroundTexture(int targetW, int targetH);
         float  GetBackgroundBlendProgress() const;
         bool   IsBackgroundStandbyReady();
+        int    GetBackgroundTransitionType() const;
 
         // ── Logo / pantalla de carga PUBLICA (ver Ajustes > Proyeccion) ────
         // A diferencia de lo anterior, esto SI se muestra en la salida real
@@ -641,6 +919,12 @@ void SetGlobalMute(bool mute);
         int   GetLoadingLogoWidth()  const { return m_LoadingLogoW; }
         int   GetLoadingLogoHeight() const { return m_LoadingLogoH; }
         bool  ShouldShowLoadingScreen() const;
+
+        // Textura GL del fondo de pantalla opcional de una caja (ver
+        // TextBoxStyle::bgMediaEnabled/bgMediaPath). isLyrics distingue el
+        // slot de cache a usar (Letras vs Indice). Devuelve 0 si path
+        // esta vacio o no se pudo cargar. Recarga solo si el path cambio.
+        unsigned int GetBoxBgTexture(bool isLyrics, const std::string& path);
 
     private:
         void RenderDefaultStyleCombo();
@@ -680,7 +964,13 @@ bool m_GlobalMuted = false;
         bool        m_HasLiveOverlayClockColorOverride = false;
         float       m_LiveOverlayClockColorOverride[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
-        mutable std::mutex m_Mutex;
+        // Ver SetLiveQuickNoteLAN / ClearQuickNoteLAN -- estilo y color override
+        // exclusivos para la salida LAN (reloj/contadores/notas LAN).
+        std::string m_LiveQuickNoteLANStyleName;
+        bool        m_HasLiveQuickNoteLANColorOverride = false;
+        float       m_LiveQuickNoteLANColorOverride[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+        mutable std::recursive_mutex m_Mutex;
 
         // Ver PushRemoteClockTitle/DrainRemoteClockTitles -- guardado bajo
         // el mismo m_Mutex de arriba, nada especial.
@@ -716,6 +1006,14 @@ bool m_GlobalMuted = false;
         int          m_LoadingLogoW = 0;
         int          m_LoadingLogoH = 0;
 
+        // ── Fondo de pantalla opcional por caja (Letras/Indice) ───────────
+        // Mismo patron que el logo de arriba: una sola textura por caja,
+        // recargada solo si el path cambia. Ver GetBoxBgTexture.
+        std::string  m_LyricsBgTexPath;
+        unsigned int m_LyricsBgTex = 0;
+        std::string  m_IndexBgTexPath;
+        unsigned int m_IndexBgTex = 0;
+
         int         m_ProjectorWidth  = 1920;
         int         m_ProjectorHeight = 1080;
         std::string m_ActiveFontName  = "Predeterminada";
@@ -749,6 +1047,12 @@ bool m_GlobalMuted = false;
         ProyecThor::UI::Announcements* m_AnnouncementsRef = nullptr;
         ProyecThor::UI::OClock*        m_OClockRef        = nullptr;
         ProyecThor::UI::CapturePanel*  m_CapturePanelRef  = nullptr;
+        ProyecThor::UI::LabPanel*      m_LabPanelRef      = nullptr;
+
+        std::atomic<bool>              m_Live3DModelActive{ false };
+        void*                          m_Live3DModelTexture = nullptr;
+
+        std::atomic<bool>              m_LiveLabActive{ false };
 
         // Unico lugar que escribe m_State.bgType: si se esta dejando Audio
         // por otra cosa, apaga el boton "En vivo" del panel de audio. Debe
@@ -759,6 +1063,11 @@ bool m_GlobalMuted = false;
         mutable std::mutex    m_FrameMutex;
         std::vector<uint8_t>  m_LatestFrame;
         std::atomic<bool>     m_FrameProviderActive { false };
+
+        std::atomic<OutputContentMode> m_LanContentMode { OutputContentMode::Live };
+        std::string                    m_SongSearchQuery;
     };
 
 } // namespace ProyecThor::Core
+
+#endif // PROYECTHOR_PRESENTATION_CORE_H

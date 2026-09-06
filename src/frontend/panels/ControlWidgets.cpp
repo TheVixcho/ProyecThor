@@ -344,7 +344,7 @@ void MonitorSelector(const char* idPrefix, int selected, int monitorCountOverrid
     ImVec4 arrowBg   = ToVec4(DS::BtnDefaultFill);
     ImVec4 arrowText = ToVec4(DS::TextSecondary);
 
-    if (VectorIconButton(prevId.c_str(), ControlIcons::DrawChevronLeft, "Opcion anterior",
+    if (VectorIconButton(prevId.c_str(), ControlIcons::DrawChevronLeft, "Opción anterior",
                         ImVec2(kArrowBtnSize, kArrowBtnSize),
                         arrowBg, Brighten(arrowBg, 0.05f), Brighten(arrowBg, 0.1f), arrowText))
     {
@@ -394,7 +394,7 @@ void MonitorSelector(const char* idPrefix, int selected, int monitorCountOverrid
 
     ImGui::SameLine(0.0f, 6.0f);
 
-    if (VectorIconButton(nextId.c_str(), ControlIcons::DrawChevronRight, "Opcion siguiente",
+    if (VectorIconButton(nextId.c_str(), ControlIcons::DrawChevronRight, "Opción siguiente",
                         ImVec2(kArrowBtnSize, kArrowBtnSize),
                         arrowBg, Brighten(arrowBg, 0.05f), Brighten(arrowBg, 0.1f), arrowText))
     {

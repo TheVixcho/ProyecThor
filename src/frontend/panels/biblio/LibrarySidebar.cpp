@@ -2,6 +2,7 @@
 #include "LibraryIcons.h"
 #include "LibraryStyles.h"
 #include "LibraryHelpers.h"
+#include "frontend/ui/UIStrings.h"
 #include "frontend/ui/AppIcons.h"
 #include "frontend/ui/DesignSystem.h"
 #include "backend/settings/SettingsManager.h"
@@ -28,10 +29,14 @@ static constexpr int kCat_Multimedia = 6;
 static constexpr int kSideMode_Categories = 0;
 static constexpr int kSideMode_Render     = 3;
 static constexpr int kSideMode_Overlay    = 4;
+static constexpr int kSideMode_Web        = 5;
+static constexpr int kSideMode_Model3D    = 6;
+static constexpr int kSideMode_Lab        = 7;
+static constexpr int kSideMode_Picker     = 8;
 
 namespace ProyecThor::Library {
 
-// Progreso animado (0..1) de "mostrar titulo" — misma idea que IconRail.cpp,
+// Progreso animado (0..1) de "mostrar título" — misma idea que IconRail.cpp,
 // para que este sidebar (implementacion propia, no comparte RenderIconRail)
 // se comporte igual que los otros 3 rails ante Vista > Titulos en barras.
 static float RailLabelProgress()
@@ -146,6 +151,7 @@ static bool RenderSidebarButton(ImDrawList* dl, ImGuiStorage* storage,
 
 void RenderCategoryButtons(LibraryContext& ctx)
 {
+    const auto& str = ProyecThor::UI::GetUIStrings();
 
     // El color de identidad de cada categoria (accentBar) es configurable
     // desde Ajustes > Apariencia (SettingsManager: librarySidebar.categoryColor,
@@ -156,13 +162,18 @@ void RenderCategoryButtons(LibraryContext& ctx)
         int         catInt;
         DrawFn      drawIcon;
         const char* label;
+        int         colorIndex;
     };
 
-    static const CatDef k_Cats[] = {
-        { kCat_Songs,      DrawIcon_Music,      "Letra"      },
-        { kCat_Multimedia, DrawIcon_Multimedia, "Multimedia" },
-        { kCat_Bibles,     DrawIcon_Cross,      "Biblia"     },
-        { kCat_Documents,  DrawIcon_Document,   "Doc"        },
+    // Sin "static": el label depende del idioma activo (ver GetUIStrings),
+    // que solo cambia con un reinicio de la app, pero recalcularlo por
+    // frame es gratis y evita que un CatDef "static" quede con el idioma
+    // del primer frame para siempre.
+    const CatDef k_Cats[] = {
+        { kCat_Multimedia, DrawIcon_Multimedia, str.libRailMultimedia, 1 },
+        { kCat_Songs,      DrawIcon_Music,      str.libRailSongs,      0 },
+        { kCat_Bibles,     DrawIcon_Cross,      str.libCatBible,       3 },
+        { kCat_Documents,  DrawIcon_Document,   str.libRailDocs,       4 },
     };
 
     const auto& sidebarSettings = ProyecThor::Settings::SettingsManager::Get().GetSettings().librarySidebar;
@@ -197,7 +208,7 @@ void RenderCategoryButtons(LibraryContext& ctx)
 
         bool clicked = RenderSidebarButton(dl, storage, sidebarW, btnH, iconSz, lt,
                                            cd.label, cd.drawIcon, active,
-                                           sidebarSettings.categoryColor[catIdx]);
+                                           sidebarSettings.categoryColor[cd.colorIndex]);
         if (clicked) {
             ctx.currentCategoryInt = cd.catInt;
             ctx.sideModeInt        = kSideMode_Categories;
@@ -206,39 +217,47 @@ void RenderCategoryButtons(LibraryContext& ctx)
         }
     }
 
-    // ── Divisor + grupo aparte "Render"/"Overlay" ───────────────────────────
+    // ── Grupo aparte "Render"/"Overlay" ─────────────────────────────────────
     // Mudados desde ViewToolsPanel/LibraryManagerPanel — el operador los
     // pedia junto a la biblioteca de contenido, no mezclados con las
-    // categorias de arriba, de ahi la linea separadora. No tocan
-    // ctx.currentCategoryInt/LibraryCategory: usan su propio modo
-    // (ctx.sideModeInt, ver UI::LibrarySideMode en LibraryPanel.h). Red y
-    // Mobile vivian aca tambien; se mudaron a Ajustes > Conexiones (ver
-    // CategoryConnections.cpp), junto con Streaming (RTMP) y OSC. Reloj
-    // tambien vivia aca; se saco por quedar duplicado con el toolbar inline
-    // de ViewPanel (ver InlineTool::Clock).
-    {
-        ImVec2 p = ImGui::GetCursorScreenPos();
-        dl->AddRectFilled(p, { p.x + sidebarW, p.y + 1.0f }, IM_COL32(255, 255, 255, 28));
-        ImGui::Dummy({ sidebarW, 1.0f + btnGapY });
-    }
+    // categorias de arriba. Antes llevaban una linea separadora de 1px acá
+    // -- pedido explicito de sacarla (se veia como un corte feo en el
+    // rail); el espacio extra de por si ya lee como "grupo aparte" sin
+    // necesidad de la linea. No tocan ctx.currentCategoryInt/LibraryCategory:
+    // usan su propio modo (ctx.sideModeInt, ver UI::LibrarySideMode en
+    // LibraryPanel.h). Red y Mobile vivian aca tambien; se mudaron a
+    // Ajustes > Conexiones (ver CategoryConnections.cpp), junto con
+    // Streaming (RTMP) y OSC. Reloj tambien vivia aca; se saco por quedar
+    // duplicado con el toolbar inline de ViewPanel (ver InlineTool::Clock).
+    ImGui::Dummy({ sidebarW, 8.0f });
 
     struct SideDef { const char* label; DrawFn drawIcon; int mode; };
     static const SideDef k_SideItems[] = {
         { "Render",   ProyecThor::UI::AppIcons::DrawIcon_Swap,       kSideMode_Render    },
         { "Overlay",  ProyecThor::UI::AppIcons::DrawIcon_Overlay,    kSideMode_Overlay   },
+        { "Web",      ProyecThor::UI::AppIcons::DrawIcon_Globe,      kSideMode_Web       },
+        { "3D",       ProyecThor::UI::AppIcons::DrawIcon_Cube3D,     kSideMode_Model3D   },
+        { "Lab",      ProyecThor::UI::AppIcons::DrawIcon_Formula,    kSideMode_Lab       },
+        { "Paneles",  ProyecThor::UI::AppIcons::DrawIcon_Grid,       kSideMode_Picker    },
     };
 
     for (const auto& sd : k_SideItems)
     {
         const bool active = (ctx.sideModeInt == sd.mode);
-        // Colores en los indices 8/9 de librarySidebar.categoryColor — ver
-        // SettingsManager.h (7, Reloj, quedo sin uso aca).
         int colorIdx = (sd.mode == kSideMode_Render) ? 8 : 9;
 
         bool clicked = RenderSidebarButton(dl, storage, sidebarW, btnH, iconSz, lt,
                                            sd.label, sd.drawIcon, active,
                                            sidebarSettings.categoryColor[colorIdx]);
-        if (clicked) ctx.sideModeInt = sd.mode;
+        if (clicked) {
+            if (sd.mode == kSideMode_Picker) {
+                if (ctx.openPanelPicker) {
+                    ctx.openPanelPicker();
+                }
+            } else {
+                ctx.sideModeInt = sd.mode;
+            }
+        }
     }
 
     ImGui::PopStyleVar();

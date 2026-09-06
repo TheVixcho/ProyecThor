@@ -10,148 +10,151 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <fstream>
+#include <filesystem>
 #include "settings/SettingsManager.h"
 #include "../external/tools/OpenURL.h"
 #include "Version.h"
 #include "DesignSystem.h"
 #include "HubTheme.h"
 #include "SongPlayStats.h"
+#include "FilePicker.h"
 
 extern GLuint LoadTextureFromFile(const char* filename);
 
-static void RenderSplashScreen(GLFWwindow *splashWindow, const std::string &status, float progress, GLuint logoTexture, GLuint bgTexture, ImFont *titleFont, ImFont *regularFont, ImFont *smallFont, const std::string &creditText, const ProyecThor::Settings::ThemeSettings &theme);
-
-static constexpr float HUB_SIDEBAR_W  = 280.0f;
-static constexpr float HUB_APPEAR_SPD = 3.0f;
+static constexpr float HUB_APPEAR_SPD  = 3.0f;
 
 namespace DS = ProyecThor::UI::DS;
 namespace HT = ProyecThor::UI::HubTheme;
 
 namespace ProyecThor::UI {
 
-// Reemplaza el canal alfa de un color existente, preservando su tinte
-// (RGB). Se usa para reutilizar los colores derivados del tema (HT::*)
-// con las intensidades variables que antes usaban IM_COL32 hardcodeado.
 static ImU32 ColA(ImU32 col, int alpha) {
     alpha = std::clamp(alpha, 0, 255);
+    const float styleAlpha = ImGui::GetStyle().Alpha;
+    alpha = static_cast<int>(static_cast<float>(alpha) * styleAlpha);
     return (col & 0x00FFFFFFu) | (static_cast<ImU32>(alpha) << IM_COL32_A_SHIFT);
 }
 static ImU32 ColAf(ImU32 col, float alpha01) {
     return ColA(col, static_cast<int>(std::clamp(alpha01, 0.0f, 1.0f) * 255.0f));
 }
 
-// Mismo patron que LPHoverLerp (src/frontend/panels/layers/LayersTheme.h):
-// anima un 0..1 suavizado entre frames usando el ImGuiStorage del contexto
-// actual en vez de floats miembro. No se puede incluir LayersTheme.h desde
-// frontend/ui (evita la dependencia cruzada con frontend/panels/layers,
-// mismo motivo documentado en DesignSystem.cpp), asi que se replica local.
 static float HubHoverLerp(ImGuiID id, bool hovered, float speed = 12.0f) {
     ImGuiStorage* storage = ImGui::GetStateStorage();
-    float* pT = storage->GetFloatRef(id ^ 0x48554248u, 0.0f); // salt "HUB H"
+    float* pT = storage->GetFloatRef(id ^ 0x48554248u, 0.0f);
     const float target = hovered ? 1.0f : 0.0f;
     *pT += (target - *pT) * std::min(1.0f, ImGui::GetIO().DeltaTime * speed);
     return *pT;
 }
 
-// ── Registro de versiones y portadas ────────────────────────────────────────
-//  Cada entrada define su propia imagen de portada, de forma que agregar una
-//  nueva actualizacion con una foto distinta sea tan simple como anadir una
-//  linea aqui. "id" es el mismo valor que usa el modal (selectedUpdateVer).
-// ─────────────────────────────────────────────────────────────────────────
 struct UpdateVersionInfo {
-    int         id;         // Identificador interno (coincide con selectedUpdateVer)
-    const char* version;    // "0.3.1"
-    const char* modalBadge; // Texto de insignia mostrado dentro del modal
-    const char* cardBadge;  // Texto de insignia mostrado en la tarjeta de la lista
-    const char* coverFile;  // Imagen de portada especifica de esta version
-    const char* summary;    // Resumen corto mostrado en la tarjeta
+    int         id;
+    const char* version;
+    const char* modalBadge;
+    const char* cardBadge;
+    const char* coverFile;                       
+    const char* summary;
+    bool        isBeta = false;
 };
 
 static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
     {
+        18, "1.0.0",
+        "PRIMERA VERSION ESTABLE", "VERSION 1.0 ESTABLE",
+        "bin/assets/ui/textures/iniciarpro.jpg",
+        "ProyecThor v1.0.0 - PRIMERA VERSION OFICIAL Y COMPLETAMENTE ESTABLE: Lanzamiento definitivo con arquitectura renovada, Biblia 2.0 con buscador integrado en tiempo real (estilo Canciones) y compatibilidad total con acentos y citas sin formato (ej. Jn 3 16 o Juan 3:16), corrección completa del bug de caracteres rotos (UTF-8) en nombres de libros, nueva transición de fondos estilo Teatro (Iris) con círculo expansivo y halo dorado, nuevos efectos volumétricos atmosféricos (nubes, niebla y humo por zonas acelerados por GPU), visor y catálogo 3D acelerado (.gltf, .glb, .obj, .stl, .ply), transmisión a pantalla pública de gráficas del Lab matemático estilo GeoGebra, y nuevo Tour Guiado Profesional estilo Adobe en el Hub.",
+        false
+    },
+    {
+        17, "0.7.1",
+        "ETAPA BETA", "BETA / PRE-1.0",
+        "bin/assets/ui/textures/iniciarpro.jpg",
+        "ProyecThor v0.7.1 (Beta): Nuevo visor y catalogo de recursos y modelos 3D (.gltf, .glb, .obj, .stl, .ply) con renderizado acelerado por GPU y proyeccion a pantalla en vivo, miniaturas con tipografia real en Estilos, zoom con control deslizante fluido, boton de transicion rapida renovado con centrado vectorial de precision, alineacion milimetrica en controles del monitor y optimizaciones de rendimiento en todo el sistema.",
+        true
+    },
+    {
+        16, "0.7.0",
+        "ETAPA BETA", "BETA / PRE-1.0",
+        "bin/assets/ui/textures/iniciarpro.jpg",
+        "Lanzamiento de ProyecThor v0.7.0 (Beta): Nuevo fondo dinámico con ondas topográficas fluidas y partículas astrales, HUD estilizado con tarjetas de acción, panel Web vertical integrado con envío a pantalla pública, barra de filtros multimedia con iconos vectoriales de alta precisión, importación múltiple de archivos a la vez, nueva categoría Datos en Ajustes con carpetas de importe automático, intercambio directo y Drag & Drop entre Fondos y Multimedia, biblioteca de Notas Rápidas permanente, letrero de Anuncios sincronizado, reloj LAN independiente, Asistente de IA fluido (Claude/ChatGPT/Gemini) y eliminación total de oscurecimiento en público.",
+        true
+    },
+    {
+        15, "0.7.0-beta.1",
+        "ETAPA BETA", "BETA / PRE-1.0",
+        "splash_bg6.jpg",
+        "Asistente de IA en la toolbar de abajo: modo Básica (Claude/ChatGPT/Gemini en un navegador embebido de verdad, inicia sesion normal, ProyecThor no ve tu clave) y modo Avanzada (tu propia API key de Claude, puede listar/crear/editar canciones de la Biblioteca, siempre pide confirmacion antes de guardar algo). Espacio de trabajo \"Video\" renombrado a \"Producción\": ahora un rail izquierdo estilo Biblioteca con Render (conversor de formato), Audio (DAW real: grabar microfono, cortar/mover clips en la linea de tiempo, reproducir todas las pistas juntas, exportar a WAV/MP3/AAC/OGG) y Overlays (galeria+editor). Espacio de trabajo \"Transmisión\" simplificado a solo eso con una lista de capas real. Nuevo panel \"Web\" en la Biblioteca. La Inalámbrica (LAN) ahora se puede clavar en \"Solo reloj\" o \"En blanco\" mientras Público/Stage siguen con lo que este en vivo.",
+        true
+    },
+    {
+        14, "0.6.0",
+        "ETAPA BETA", "BETA / PRE-1.0",
+        "splash_bg6.jpg",
+        "Notas Rapidas renovado: ahora guarda el texto solo mientras escribis y lo recupera al reabrir la ventana, respeta el tema activo elegido en Apariencia, y queda disponible tanto desde el Hub como proyectando sin cortarse -- atajo nuevo Shift+Z para abrirlo/cerrarlo. Atajos Alt Gr+1/2/3/4 para colapsar y expandir paneles con una animacion prolija. Seccion Multimedia renombrada a \"Medios\", con vista en cuadricula de miniaturas grandes. Nuevo entorno de trabajo \"Biblioteca\". El Preview ahora tiene un boton de pantalla completa de verdad (F11) con controles que se ocultan solos.",
+        true
+    },
+    {
+        13, "0.6.0-beta.1",
+        "ETAPA BETA", "BETA / PRE-1.0",
+        "splash_bg6.jpg",
+        "Editor de overlays completo en la app movil, panel Render renovado en Biblioteca (codecs H.264/H.265/VP9/AV1, control de compresion), soporte real para Linux/CachyOS, la app ahora respeta el escalado de pantalla de Windows (DPI), Ajustes con categoria \"Conexiones\" y el Editor de Estilos de Letra renovado por completo a pantalla completa.",
+        true
+    },
+    {
         12, "0.5.1",
-        "ACTUALIZACION", "ACTUALIZACION",
-        "splash_bg5.png",  // TODO: reemplazar por portada propia cuando este lista
-        "Reloj y Contadores ahora es solo \"Contadores\". Nuevo cuadro de reloj dentro del "
-        "editor de Overlays: lo posicionas y le das estilo una sola vez, y se reemplaza en vivo "
-        "por la hora/cronometro activo — la transmision a pantalla ahora depende de que overlay "
-        "tengas activo, en vez de un modo aparte. Overlays con reordenar capas y overlays de "
-        "reloj predeterminados listos para probar. Corregido un bug por el cual el cuadriculado "
-        "de \"sin fondo\" del editor de Overlays podia quedar horneado como fondo opaco al "
-        "guardar."
+        "ETAPA BETA", "BETA / PRE-1.0",
+        "splash_bg5.jpg",
+        "Reloj y Contadores ahora es solo \"Contadores\". Nuevo cuadro de reloj dentro del editor de Overlays: lo posicionas y le das estilo una sola vez, y se reemplaza en vivo por la hora/cronometro activo. Overlays con reordenar capas y overlays de reloj predeterminados listos para probar.",
+        true
     },
     {
         11, "0.5.0",
-        "GRAN ACTUALIZACION", "GRAN ACTUALIZACION",
-        "splash_bg5.png",  // TODO: reemplazar por portada propia cuando este lista
-        "Ajustes reorganizado por completo: cada configuracion ahora es su propia pagina, con "
-        "buscador incluido, Proyeccion y Pantallas agrupadas juntas, y Red/Mobile/Streaming/OSC "
-        "viviendo dentro de Proyeccion. Nueva opcion \"Bucle falso\" para Fondos, que reproduce "
-        "hacia adelante y hacia atras en vez de cortar siempre al mismo frame. Nueva seccion de "
-        "Overlays: crea textos, formas e imagenes en un editor a pantalla completa y proyectalos "
-        "como una capa transparente encima del fondo y la letra (antes tapaban el fondo por "
-        "error). Vista en Vivo renovada: reproductor mas simple, Overlays/Chat/Pads/Reloj ahora "
-        "se abren dentro del mismo panel en vez de ventanas flotantes sueltas. Corregidos varios "
-        "colores que quedaban fijos sin importar el tema elegido y los fondos de los paneles "
-        "ahora son solidos en vez de verse transparentes."
+        "ETAPA BETA", "BETA / PRE-1.0",
+        "splash_bg5.jpg",
+        "Ajustes reorganizado por completo: cada configuracion ahora es su propia pagina con buscador incluido. Nueva opcion \"Bucle falso\" para Fondos. Nueva seccion de Overlays con capas transparentes. Vista en Vivo renovada con botones planos y menor latencia.",
+        true
     },
     {
         10, "0.4.3",
-        "ACTUALIZACION PREELIMINAR", "ACTUALIZACION PREELIMINAR",
-        "bg_splash3.png",  // TODO: reemplazar por portada propia cuando este lista
-        "Nueva seccion Conexiones (OSC, Red, Chat y Streaming en vivo por RTMP), nueva "
-        "Biblioteca para gestionar tus archivos con conversor de formato incluido, "
-        "Biblia a pantalla completa, selector rapido (Alt+Espacio), Monitor de Vista "
-        "en Vivo mas compacto, editor de Estilos renovado, nuevo instalador para "
-        "Windows, Biblioteca con Biblias y cancion de bienvenida incluidas de entrada, "
-        "corregido el titulo de las canciones al guardarlas, y varias correcciones de "
-        "estabilidad."
+        "ETAPA BETA", "BETA / PRE-1.0",
+        "bg_splash3.jpg",
+        "Nueva seccion Conexiones (OSC, Red, Chat y Streaming en vivo por RTMP), nueva Biblioteca para gestionar tus archivos con conversor de formato incluido, Biblia a pantalla completa, selector rapido (Alt+Espacio) y nuevo instalador para Windows.",
+        true
     },
     {
         9, "0.4.2",
-        "ACTUALIZACION PREELIMINAR", "ACTUALIZACION PREELIMINAR",
-        "bg_splash3.png",  // TODO: reemplazar por portada propia cuando este lista
-        "Pads de Vista en Vivo arreglados y renovados con escenas de Captura sincronizadas, "
-        "transporte y volumen rediseñados tipo consola/MIDI, buscador de versiculos por "
-        "palabras en la Biblia, editor de Estilos acoplado dentro de Home con selector de "
-        "fuentes en grilla y nuevos efectos de texto (fondo, borde, sombra, glow, neon, "
-        "subrayado), y un monton de efectos nuevos en Shaders: NIS (NVIDIA), VHS, Cine, "
-        "Contraste, Luminosidad, Blur, Sharpen, Bloom, Aberracion cromatica y TAA."
+        "ETAPA BETA", "BETA / PRE-1.0",
+        "bg_splash3.jpg",
+        "Pads de Vista en Vivo arreglados y renovados con escenas de Captura sincronizadas, transporte y volumen rediseñados tipo consola/MIDI, buscador de versiculos por palabras en la Biblia y shaders (NIS, VHS, Cine, TAA).",
+        true
     },
     {
         8, "0.4.1",
-        "ACTUALIZACION", "ACTUALIZACION",
-        "bg_splash3.png",
-        "Nuevo panel de Shaders (FSR, CRT, grano, saturacion, vinetado y "
-        "relleno desenfocado tipo Smart TV) para el video de fondo, miniaturas "
-        "y vista en grilla/lista en Biblioteca > Videos, escenas rapidas "
-        "guardadas para Captura, fuente de interfaz personalizable, un "
-        "motor de renderizado alternativo (libvlc en ventana nativa) para "
-        "videos, editor de canciones rediseñado por completo y menu "
-        "principal reorganizado, con una correccion importante de "
-        "sincronizacion de audio/video en equipos de bajos recursos."
+        "ETAPA BETA", "BETA / PRE-1.0",
+        "bg_splash3.jpg",
+        "Nuevo panel de Shaders para el video de fondo, miniaturas y vista en grilla/lista en Biblioteca > Videos, escenas rapidas guardadas para Captura y editor de canciones rediseñado.",
+        true
     },
     {
         7, "0.4.0",
-        "GRAN ACTUALIZACION", "GRAN ACTUALIZACION",
-        "bg_splash3.png",  // TODO: reemplazar por portada propia cuando este lista
-        "Cola de videos mucho mas estable, nueva seccion de Overlays, "
-        "Vista en Vivo con acciones rapidas, panel de Rendimiento y un "
-        "rediseño mas compacto de Fondos y Estilos."
+        "ETAPA BETA", "BETA / PRE-1.0",
+        "bg_splash3.jpg",
+        "Cola de videos mucho mas estable, nueva seccion de Overlays, Vista en Vivo con acciones rapidas, panel de Rendimiento y rediseño de Fondos y Estilos.",
+        true
     },
     {
         6, "0.3.5",
-        "ACTUALIZACION PREELIMINAR", "ACTUALIZACION PREELIMINAR",
-        "splash_bg1.png",  // TODO: reemplazar por portada propia cuando este lista
-        "Version estable: Audio Rework completo, biblioteca renovada con sistema de "
-        "etiquetas, soporte oficial para Linux, estadisticas locales, atajos de "
-        "teclado globales y mejoras de estabilidad en toda la aplicacion."
+        "ETAPA BETA", "BETA / PRE-1.0",
+        "splash_bg1.jpg",
+        "Audio Rework completo, biblioteca renovada con sistema de etiquetas, soporte oficial para Linux, estadisticas locales y atajos de teclado globales.",
+        true
     },
     {
         2, "0.3.0",
-        "GRAN ACTUALIZACION", "GRAN ACTUALIZACION",
-        "splash_bg1.png",
-        "Nuevas herramientas de transmision, optimizaciones y estabilidad de red."
+        "ETAPA BETA", "BETA / PRE-1.0",
+        "splash_bg1.jpg",
+        "Nuevas herramientas de transmision, optimizaciones y estabilidad de red.",
+        true
     },
 };
 
@@ -170,25 +173,43 @@ struct GLTextureInfo {
 static GLTextureInfo GetCoverTexture(const char* filename) {
     static std::unordered_map<std::string, GLTextureInfo> s_Cache;
     auto it = s_Cache.find(filename);
-    if (it != s_Cache.end())
+    if (it != s_Cache.end() && it->second.id != 0)
         return it->second;
 
     GLTextureInfo info;
     info.id = LoadTextureFromFile(filename);
+
+    if (info.id == 0) {
+        std::vector<std::string> fallbacks = {
+            std::string("assets/") + filename,
+            std::string("bin/") + filename,
+            std::string("assets/bin/assets/ui/textures/") + filename,
+            std::string("bin/assets/ui/textures/") + filename,
+            std::string("assets/ui/textures/") + filename
+        };
+        std::string base = std::filesystem::path(filename).filename().string();
+        fallbacks.push_back(base);
+        fallbacks.push_back(std::string("assets/") + base);
+        fallbacks.push_back(std::string("bin/assets/ui/textures/") + base);
+        fallbacks.push_back(std::string("assets/bin/assets/ui/textures/") + base);
+        fallbacks.push_back(std::string("assets/ui/textures/") + base);
+
+        for (const auto& fb : fallbacks) {
+            info.id = LoadTextureFromFile(fb.c_str());
+            if (info.id != 0) break;
+        }
+    }
+
     if (info.id != 0) {
         glBindTexture(GL_TEXTURE_2D, info.id);
         glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH,  &info.width);
         glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &info.height);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
-    s_Cache.emplace(filename, info);
+    s_Cache[filename] = info;
     return info;
 }
 
-// ── Parallax de portadas ─────────────────────────────────────────────────
-//  Estado (offset/zoom) por imagen, identificado con una key propia
-//  (p.ej. "card_0.3.1", "modal_0.3.0") para poder interpolarlo suavemente
-//  cuadro a cuadro en vez de saltar de golpe.
 struct ParallaxState { float ox = 0.0f, oy = 0.0f, zoom = 1.0f; };
 
 static std::unordered_map<std::string, ParallaxState>& GetParallaxStates() {
@@ -196,17 +217,11 @@ static std::unordered_map<std::string, ParallaxState>& GetParallaxStates() {
     return s_States;
 }
 
-// Dibuja una imagen llenando por completo el rectangulo [pMin, pMax] sin
-// deformarla -- recorte tipo "cover" (como background-size:cover en CSS) --
-// con esquinas redondeadas y un efecto sutil de profundidad/parallax:
-// al pasar el mouse por encima la imagen hace un zoom leve y se desplaza
-// dentro de su propio recorte siguiendo al cursor, en vez de mostrar un
-// corte estatico y "duro" al entrar en hover.
 static void DrawCoverImageCover(ImDrawList* dl, GLuint texId, int texW, int texH,
                                  ImVec2 pMin, ImVec2 pMax,
                                  float rounding, ImDrawFlags roundFlags,
                                  const char* stateKey, float dt,
-                                 bool hovered, float maxZoom)
+                                 bool hovered, float maxZoom, float followSpeed = 9.0f)
 {
     if (texId == 0 || texW <= 0 || texH <= 0) {
         dl->AddRectFilled(pMin, pMax, ColA(HT::CardAlt, 255), rounding, roundFlags);
@@ -218,7 +233,6 @@ static void DrawCoverImageCover(ImDrawList* dl, GLuint texId, int texW, int texH
     const float boxW = std::max(1.0f, pMax.x - pMin.x);
     const float boxH = std::max(1.0f, pMax.y - pMin.y);
 
-    // Objetivo de zoom y desplazamiento segun el hover actual
     float targetZoom = hovered ? maxZoom : 1.0f;
     float targetOX   = 0.0f, targetOY = 0.0f;
     if (hovered) {
@@ -227,24 +241,19 @@ static void DrawCoverImageCover(ImDrawList* dl, GLuint texId, int texW, int texH
         targetOY = std::clamp(((mouse.y - pMin.y) / boxH) * 2.0f - 1.0f, -1.0f, 1.0f);
     }
 
-    // Interpolacion suave (tipo resorte) para que el movimiento no sea brusco
-    const float speed = 9.0f;
-    const float t = std::clamp(dt * speed, 0.0f, 1.0f);
+    const float t = std::clamp(dt * followSpeed, 0.0f, 1.0f);
     st.zoom += (targetZoom - st.zoom) * t;
     st.ox   += (targetOX   - st.ox)   * t;
     st.oy   += (targetOY   - st.oy)   * t;
 
-    // ── Recorte "cover": la imagen llena la caja completa sin deformarse ────
     const float boxAspect = boxW / boxH;
     const float imgAspect = static_cast<float>(texW) / static_cast<float>(texH);
 
     float baseUW, baseUH;
     if (imgAspect > boxAspect) {
-        // Imagen mas ancha que la caja -> se recortan los lados, se ve completa en alto
         baseUH = 1.0f;
         baseUW = boxAspect / imgAspect;
     } else {
-        // Imagen mas alta que la caja -> se recorta arriba/abajo, se ve completa en ancho
         baseUW = 1.0f;
         baseUH = imgAspect / boxAspect;
     }
@@ -253,18 +262,25 @@ static void DrawCoverImageCover(ImDrawList* dl, GLuint texId, int texW, int texH
     const float uw = baseUW / zoom;
     const float uh = baseUH / zoom;
 
-    // Margen disponible dentro de la textura para "pasear" la ventana visible
     const float marginX = std::max(0.0f, (1.0f - uw) * 0.5f);
-    const float marginY = std::max(0.0f, (1.0f - uh) * 0.5f);
+    const float marginY = std::max(0.0f, 1.0f - uh);
 
     const float centerU = 0.5f + st.ox * marginX;
-    const float centerV = 0.5f + st.oy * marginY;
+    // Anclado en la base inferior (v1 = 1.0f, v0 = 1.0f - uh) para que la imagen
+    // parta de abajo hacia arriba y no al medio.
+    float v1 = 1.0f + std::min(0.0f, st.oy) * marginY * 0.5f;
+    float v0 = v1 - uh;
+    if (v0 < 0.0f) {
+        v0 = 0.0f;
+        v1 = std::min(1.0f, uh);
+    }
 
-    const ImVec2 uv0(centerU - uw * 0.5f, centerV - uh * 0.5f);
-    const ImVec2 uv1(centerU + uw * 0.5f, centerV + uh * 0.5f);
+    const ImVec2 uv0(centerU - uw * 0.5f, v0);
+    const ImVec2 uv1(centerU + uw * 0.5f, v1);
 
+    const int imgAlpha = static_cast<int>(std::clamp(ImGui::GetStyle().Alpha, 0.0f, 1.0f) * 255.0f);
     dl->AddImageRounded((ImTextureID)(intptr_t)texId, pMin, pMax, uv0, uv1,
-        IM_COL32(255, 255, 255, 255), rounding, roundFlags);
+        IM_COL32(255, 255, 255, imgAlpha), rounding, roundFlags);
 }
 
 static float EaseOut(float t) {
@@ -272,9 +288,17 @@ static float EaseOut(float t) {
     return 1.0f - (1.0f - t) * (1.0f - t);
 }
 
+static const char* kHeroCardTextureFile   = "bin/assets/ui/textures/iniciarpro.jpg";
+static const char* kConfigCardTextureFile = "bin/assets/ui/textures/20260524_104505.jpg";
+
 Hub::Hub() : m_LastFrameTime(std::chrono::steady_clock::now()) {
     const auto& settings = ProyecThor::Settings::SettingsManager::Get().GetSettings();
     m_SelectedMonitor = settings.projection.targetMonitor;
+}
+
+Hub::~Hub() {
+    if (m_DownloadSubsThread.joinable())
+        m_DownloadSubsThread.join();
 }
 
 void Hub::ForceOpen() {
@@ -296,137 +320,302 @@ void Hub::UpdateAnimations(float dt) {
     }
 }
 
-// Carrusel de novedades — se muestra una vez por version nueva.
-void Hub::RenderWhatsNewIfNeeded() {
-    auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
-    if (general.dismissedChangelog == PROYECTHOR_VERSION_STRING) return;
+static void DrawSectionHeader(const char* title, float width) {
+    ImGui::SetWindowFontScale(1.2f);
+    ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+    ImGui::Text("%s", title);
+    ImGui::PopStyleColor();
+    ImGui::SetWindowFontScale(1.0f);
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    ImGui::GetWindowDrawList()->AddRectFilledMultiColor(
+        ImVec2(p.x, p.y + 2.0f), ImVec2(p.x + width, p.y + 3.5f),
+        ColAf(HT::AccentBlue, 0.40f), ColAf(HT::AccentSoft, 0.10f),
+        ColAf(HT::AccentSoft, 0.10f), ColAf(HT::AccentBlue, 0.40f));
+    ImGui::Dummy(ImVec2(0.0f, 13.0f));
+}
 
-    struct Slide { const char* title; const char* body; };
-    static const Slide kSlides[] = {
-        { "Bienvenido a ProyecThor v" PROYECTHOR_VERSION_STRING,
-          "Este es un resumen rapido de lo nuevo en esta version. Recorrelo con los botones o los puntos de abajo." },
-        { "Ajustes reorganizado",
-          "Cada configuracion ahora es su propia pagina, con buscador incluido. Proyeccion y Pantallas quedaron agrupadas juntas, y Red, Mobile, Streaming y OSC pasaron a vivir dentro de Proyeccion en vez de tener su propia categoria aparte." },
-        { "Fondos: bucle falso",
-          "Nueva opcion en Ajustes > Proyeccion > Fondos: el video reproduce hacia adelante y despues \"hacia atras\" en vez de cortar siempre al mismo frame, dando sensacion de bucle continuo." },
-        { "Overlays",
-          "Crea textos, formas e imagenes en un editor a pantalla completa y proyectalos como una capa transparente encima del fondo y la letra, desde Biblioteca > Overlay o directo desde Vista en Vivo." },
-        { "Vista en Vivo renovada",
-          "Reproductor mas simple: Overlays, Chat, Pads y Reloj ahora se abren dentro del mismo panel en vez de ventanas flotantes sueltas." },
-        { "Nueva seccion: Pantallas",
-          "La configuracion de Stage ahora tiene su propio menu \"Pantallas\" arriba de todo, en vez de estar mezclada con Proyeccion." },
-        { "Correcciones de tema y apariencia",
-          "Varios menus y ventanas que ignoraban el tema elegido ahora lo respetan, y los fondos de los paneles son solidos en vez de verse transparentes." },
-    };
-    constexpr int kSlideCount = (int)(sizeof(kSlides) / sizeof(kSlides[0]));
+void Hub::RenderNovedadesPanel() {
+    const float target = m_NovedadesOpen ? 1.0f : 0.0f;
+    m_NovedadesAnim += (target - m_NovedadesAnim) * std::min(1.0f, ImGui::GetIO().DeltaTime * 10.0f);
+    m_NovedadesAnim = std::clamp(m_NovedadesAnim, 0.0f, 1.0f);
+    if (m_NovedadesAnim < 0.001f) m_NovedadesAnim = 0.0f;
 
-    static int  s_Index         = 0;
-    static bool s_OpenedOnce    = false;
-    // Desmarcado por default: si el operador cierra sin marcarlo, el
-    // carrusel vuelve a aparecer en el proximo arranque (dismissedChangelog
-    // NO se persiste). Solo marcando la casilla se guarda la version actual
-    // en dismissedChangelog y deja de mostrarse.
-    static bool s_DontShowAgain = false;
-    if (!s_OpenedOnce) {
-        ImGui::OpenPopup("##WhatsNewCarousel");
-        s_OpenedOnce     = true;
-        s_Index          = 0;
-        s_DontShowAgain  = false;
-    }
+    if (!m_NovedadesOpen && m_NovedadesAnim <= 0.0f) return;
 
-    ImGuiViewport* vp      = ImGui::GetMainViewport();
-    const ImVec2   winSize = ImVec2(580.0f, 434.0f);
-    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + (vp->WorkSize.x - winSize.x) * 0.5f,
-                                    vp->WorkPos.y + (vp->WorkSize.y - winSize.y) * 0.5f));
-    ImGui::SetNextWindowSize(winSize);
+    ImGuiViewport* vp    = ImGui::GetMainViewport();
+    const float    fadeA = EaseOut(m_NovedadesAnim);
 
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 16.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(30.0f, 28.0f));
-    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.055f, 0.060f, 0.085f, 0.99f));
+    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, fadeA);
 
-    if (ImGui::BeginPopupModal("##WhatsNewCarousel", nullptr,
-                               ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove)) {
+    ImGui::SetNextWindowPos(vp->Pos);
+    ImGui::SetNextWindowSize(vp->Size);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, IM_COL32(0, 0, 0, 170));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::Begin("##NovedadesDim", nullptr,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoFocusOnAppearing |
+        ImGuiWindowFlags_NoBringToFrontOnFocus);
+    ImGui::End();
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor();
 
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.96f, 0.75f, 0.30f, 1.0f));
-        ImGui::TextUnformatted("NOVEDADES");
+    const float scale  = 0.96f + 0.04f * fadeA;
+    const float panelW = 720.0f * scale, panelH = 680.0f * scale;
+
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(panelW, panelH), ImGuiCond_Always);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ColA(HT::Card, 255));
+    ImGui::PushStyleColor(ImGuiCol_Border,   HT::Divider);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,   HT::RadiusLg);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.5f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,    ImVec2(28.0f, 24.0f));
+
+    bool vis = ImGui::Begin("##NovedadesPanel", nullptr,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+        ImGuiWindowFlags_NoResize   | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoMove);
+
+    if (vis) {
+        if (ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            m_NovedadesOpen = false;
+
+        const float headerW = ImGui::GetContentRegionAvail().x;
+
+        ImGui::SetWindowFontScale(1.3f);
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+        ImGui::TextUnformatted("Novedades");
         ImGui::PopStyleColor();
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-        ImGui::Spacing();
-
-        const Slide& slide = kSlides[s_Index];
-
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.92f, 0.93f, 0.97f, 1.0f));
-        ImGui::SetWindowFontScale(1.18f);
-        ImGui::TextWrapped("%s", slide.title);
         ImGui::SetWindowFontScale(1.0f);
-        ImGui::PopStyleColor();
-        ImGui::Spacing();
 
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.72f, 0.74f, 0.85f, 1.0f));
-        ImGui::TextWrapped("%s", slide.body);
-        ImGui::PopStyleColor();
+        ImGui::SameLine(headerW - 64.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button,        HT::Surface);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HT::SurfaceHover);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  HT::SurfaceActive);
+        ImGui::PushStyleColor(ImGuiCol_Text,          HT::TextPri);
+        if (ImGui::Button("Cerrar##novedades", ImVec2(64.0f, 28.0f)))
+            m_NovedadesOpen = false;
+        ImGui::PopStyleColor(4);
 
-        ImGui::SetCursorPosY(winSize.y - 130.0f);
-        float dotsW = kSlideCount * 16.0f;
-        ImGui::SetCursorPosX((winSize.x - dotsW) * 0.5f);
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        ImVec2      dp = ImGui::GetCursorScreenPos();
-        for (int i = 0; i < kSlideCount; i++) {
-            ImU32 col = (i == s_Index) ? IM_COL32(120, 150, 255, 255) : IM_COL32(70, 72, 90, 255);
-            dl->AddCircleFilled(ImVec2(dp.x + i * 16.0f + 5.0f, dp.y + 5.0f), 5.0f, col);
-        }
-        ImGui::Dummy(ImVec2(dotsW, 14.0f));
+        ImGui::Dummy(ImVec2(0.0f, 14.0f));
 
-        ImGui::SetCursorPosY(winSize.y - 96.0f);
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.62f, 0.64f, 0.76f, 1.0f));
-        ImGui::Checkbox("No volver a mostrar", &s_DontShowAgain);
-        ImGui::PopStyleColor();
+        const UpdateVersionInfo* latest = kUpdateRegistry.empty() ? nullptr : &kUpdateRegistry[0];
+        if (latest) {
+            const GLTextureInfo heroCover = GetCoverTexture(latest->coverFile);
+            const float heroW = headerW, heroH = 175.0f;
 
-        ImGui::SetCursorPosY(winSize.y - 60.0f);
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, HT::CardAlt);
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusLg);
+            ImGui::BeginChild("##NovedadesHero", ImVec2(heroW, heroH), false, ImGuiWindowFlags_NoScrollbar);
 
-        if (ImGui::Button("Configuracion inicial", ImVec2(170, 34))) {
-        }
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Proximamente");
+            ImDrawList* hdl  = ImGui::GetWindowDrawList();
+            const ImVec2 hMin = ImGui::GetWindowPos();
+            const ImVec2 hMax = ImVec2(hMin.x + heroW, hMin.y + heroH);
+            const bool heroHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
 
-        ImGui::SameLine();
-        if (s_Index == 0) ImGui::BeginDisabled();
-        if (ImGui::Button("< Anterior", ImVec2(100, 34))) s_Index--;
-        if (s_Index == 0) ImGui::EndDisabled();
-
-        ImGui::SameLine();
-        // "No volver a mostrar" sin marcar (default): dismissedChangelog NO
-        // se toca, asi que el carrusel vuelve a aparecer en el proximo
-        // arranque -- cerrar (con cualquiera de los dos botones) solo lo
-        // saca de la vista por esta sesion.
-        auto closeCarousel = [&]() {
-            if (s_DontShowAgain) {
-                general.dismissedChangelog = PROYECTHOR_VERSION_STRING;
-                ProyecThor::Settings::SettingsManager::Get().Save();
+            if (heroCover.id != 0) {
+                DrawCoverImageCover(hdl, heroCover.id, heroCover.width, heroCover.height,
+                    hMin, hMax, HT::RadiusLg, ImDrawFlags_RoundCornersAll,
+                    "novedades_hero", ImGui::GetIO().DeltaTime, heroHovered, 1.05f);
+            } else {
+                hdl->AddRectFilled(hMin, hMax, ColA(HT::CardAlt, 255), HT::RadiusLg);
             }
-            ImGui::CloseCurrentPopup();
+
+            hdl->AddRectFilledMultiColor(
+                ImVec2(hMin.x, hMin.y + heroH * 0.15f), hMax,
+                IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 230), IM_COL32(0, 0, 0, 230));
+
+            ImGui::SetCursorPos(ImVec2(20.0f, 18.0f));
+            ImGui::BeginGroup();
+
+            auto Pill = [&](const char* text, ImU32 bg, ImU32 fg) {
+                ImGui::SetWindowFontScale(0.80f);
+                const ImVec2 bs = ImGui::CalcTextSize(text);
+                ImGui::SetWindowFontScale(1.0f);
+                const ImVec2 pad(8.0f, 3.0f);
+                const ImVec2 bp = ImGui::GetCursorScreenPos();
+                ImGui::GetWindowDrawList()->AddRectFilled(
+                    ImVec2(bp.x - pad.x, bp.y - pad.y), ImVec2(bp.x + bs.x + pad.x, bp.y + bs.y + pad.y),
+                    bg, HT::RadiusSm);
+                ImGui::Dummy(ImVec2(pad.x, 0.0f));
+                ImGui::SameLine(0.0f, 0.0f);
+                ImGui::PushStyleColor(ImGuiCol_Text, fg);
+                ImGui::SetWindowFontScale(0.80f); ImGui::TextUnformatted(text); ImGui::SetWindowFontScale(1.0f);
+                ImGui::PopStyleColor();
+                ImGui::SameLine(0.0f, pad.x + 4.0f);
+            };
+
+            Pill(latest->modalBadge, HT::AccentBlue, HT::OnAccent);
+            Pill("VERSIÓN ACTUAL", HT::SurfaceHover, HT::TextPri);
+            ImGui::NewLine();
+
+            ImGui::Dummy(ImVec2(0.0f, 4.0f));
+            ImGui::SetWindowFontScale(1.4f);
+            ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+            ImGui::Text("Actualización v%s", latest->version);
+            ImGui::PopStyleColor();
+            ImGui::SetWindowFontScale(1.0f);
+
+            ImGui::Dummy(ImVec2(0.0f, 2.0f));
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + heroW - 220.0f);
+            ImGui::PushStyleColor(ImGuiCol_Text, ColA(HT::TextPri, 210));
+            std::string heroSummary = latest->summary;
+            if (heroSummary.size() > 220) {
+                size_t p = heroSummary.find('.', 160);
+                if (p != std::string::npos && p < 230) heroSummary = heroSummary.substr(0, p + 1);
+                else heroSummary = heroSummary.substr(0, 190) + "...";
+            }
+            ImGui::TextWrapped("%s", heroSummary.c_str());
+            ImGui::PopStyleColor();
+            ImGui::PopTextWrapPos();
+
+            ImGui::EndGroup();
+
+            ImGui::SetCursorPos(ImVec2(heroW - 190.0f, heroH - 50.0f));
+            ImGui::PushStyleColor(ImGuiCol_Button,        HT::AccentBlue);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HT::AccentSoft);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  HT::AccentBlue);
+            ImGui::PushStyleColor(ImGuiCol_Text,          HT::OnAccent);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusSm);
+            if (ImGui::Button("Ver todo el detalle >", ImVec2(170.0f, 34.0f))) {
+                m_SelectedUpdateVer = latest->id;
+                m_IsUpdateModalOpen = true;
+            }
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(4);
+
+            ImGui::EndChild();
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor();
+        }
+
+        ImGui::Dummy(ImVec2(0.0f, 18.0f));
+        DrawSectionHeader("Versión Estable Oficial", headerW);
+
+        auto RenderUpdateCard = [&](const UpdateVersionInfo& info) {
+            const GLTextureInfo cardCover = GetCoverTexture(info.coverFile);
+            const float cardH = 115.0f;
+
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, HT::CardAlt);
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusMd);
+            ImGui::BeginChild(info.version, ImVec2(headerW, cardH), false, ImGuiWindowFlags_NoScrollbar);
+
+            ImVec2 cardStartPos = ImGui::GetCursorScreenPos();
+            ImVec2 cardEndPos   = ImVec2(cardStartPos.x + headerW, cardStartPos.y + cardH);
+            const bool cardHovered = ImGui::IsMouseHoveringRect(cardStartPos, cardEndPos);
+            const float hoverT = HubHoverLerp(ImGui::GetID(info.version), cardHovered);
+
+            ImGui::SetCursorPos(ImVec2(10.0f, 10.0f));
+            ImGui::BeginGroup();
+
+            const float thumbW = 150.0f, thumbH = 95.0f;
+            if (cardCover.id != 0) {
+                const ImVec2 thumbMin = ImGui::GetCursorScreenPos();
+                const ImVec2 thumbMax = ImVec2(thumbMin.x + thumbW, thumbMin.y + thumbH);
+
+                char stateKey[96];
+                snprintf(stateKey, sizeof(stateKey), "card_%s", info.version);
+
+                DrawCoverImageCover(ImGui::GetWindowDrawList(), cardCover.id, cardCover.width, cardCover.height,
+                    thumbMin, thumbMax, HT::RadiusMd, ImDrawFlags_RoundCornersAll,
+                    stateKey, ImGui::GetIO().DeltaTime, cardHovered, 1.08f);
+
+                ImGui::Dummy(ImVec2(thumbW, thumbH));
+                ImGui::SameLine(0.0f, 14.0f);
+            }
+
+            ImGui::BeginGroup();
+            ImGui::Dummy(ImVec2(0.0f, 2.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, HT::AccentSoft);
+            ImGui::SetWindowFontScale(0.85f);
+            ImGui::TextUnformatted(info.cardBadge);
+            ImGui::SetWindowFontScale(1.0f);
+            ImGui::PopStyleColor();
+
+            ImGui::SetWindowFontScale(1.15f);
+            ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+            ImGui::Text("Versión v%s", info.version);
+            ImGui::PopStyleColor();
+            ImGui::SetWindowFontScale(1.0f);
+
+            ImGui::Dummy(ImVec2(0.0f, 4.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+            const float textMaxW = headerW - (cardCover.id != 0 ? (thumbW + 40.0f) : 30.0f);
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + textMaxW);
+
+            std::string summarySnippet = info.summary;
+            if (summarySnippet.size() > 160) {
+                size_t p = summarySnippet.find('.', 110);
+                if (p != std::string::npos && p < 170) summarySnippet = summarySnippet.substr(0, p + 1);
+                else summarySnippet = summarySnippet.substr(0, 145) + "...";
+            }
+            ImGui::TextWrapped("%s", summarySnippet.c_str());
+            ImGui::PopTextWrapPos();
+            ImGui::PopStyleColor();
+            ImGui::EndGroup();
+
+            ImGui::EndGroup();
+
+            ImGui::SetCursorScreenPos(cardStartPos);
+            if (ImGui::InvisibleButton(info.version, ImVec2(headerW, cardH))) {
+                m_SelectedUpdateVer = info.id;
+                m_IsUpdateModalOpen = true;
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+
+            ImDrawList* cardDl = ImGui::GetWindowDrawList();
+            if (hoverT > 0.001f) {
+                cardDl->AddRectFilled(cardStartPos, cardEndPos,
+                    ColAf(HT::TextPri, 0.04f * hoverT), HT::RadiusMd);
+                cardDl->AddRectFilled(cardStartPos, ImVec2(cardStartPos.x + 3.5f, cardEndPos.y),
+                    ColAf(HT::AccentBlue, hoverT), HT::RadiusMd, ImDrawFlags_RoundCornersLeft);
+            }
+
+            ImGui::EndChild();
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor();
+            ImGui::Dummy(ImVec2(0.0f, 10.0f));
         };
 
-        if (s_Index == kSlideCount - 1) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.66f, 0.40f, 1.0f));
-            if (ImGui::Button("Entendido", ImVec2(110, 34)))
-                closeCarousel();
-            ImGui::PopStyleColor();
-        } else {
-            if (ImGui::Button("Siguiente >", ImVec2(110, 34))) s_Index++;
+        const float historyH = ImGui::GetContentRegionAvail().y;
+        ImGui::BeginChild("##NovedadesHistory", ImVec2(headerW, historyH), false);
+        // Mostrar versión estable principal
+        for (const auto& info : kUpdateRegistry) {
+            if (!info.isBeta) {
+                RenderUpdateCard(info);
+            }
         }
 
-        ImGui::SameLine();
-        if (ImGui::Button("Cerrar", ImVec2(70, 34)))
-            closeCarousel();
+        // Sección separada / colapsada para versiones de la etapa Beta
+        ImGui::Dummy(ImVec2(0.0f, 10.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button, m_ShowBetaHistory ? ColA(HT::Surface, 220) : ColA(HT::CardAlt, 160));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ColA(HT::SurfaceHover, 240));
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusSm);
+        std::string toggleTxt = m_ShowBetaHistory 
+            ? "[-] Ocultar archivo de versiones anteriores (Etapa Beta)" 
+            : "[+] Ver archivo de versiones anteriores (Etapa Beta / Pre-1.0)";
+        if (ImGui::Button(toggleTxt.c_str(), ImVec2(headerW, 34.0f))) {
+            m_ShowBetaHistory = !m_ShowBetaHistory;
+        }
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(3);
 
-        ImGui::EndPopup();
+        if (m_ShowBetaHistory) {
+            ImGui::Dummy(ImVec2(0.0f, 8.0f));
+            for (const auto& info : kUpdateRegistry) {
+                if (info.isBeta) {
+                    RenderUpdateCard(info);
+                }
+            }
+        }
+        ImGui::EndChild();
     }
 
-    ImGui::PopStyleColor();
-    ImGui::PopStyleVar(2);
+    ImGui::End();
+    ImGui::PopStyleVar(4);
+    ImGui::PopStyleColor(2);
 }
 
 bool Hub::Render() {
@@ -452,10 +641,28 @@ bool Hub::Render() {
 
     UpdateAnimations(dt);
 
+    if (!m_IsUpdateModalOpen && !m_NovedadesOpen && !m_DownloadSubsOpen) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false) || ImGui::IsKeyPressed(ImGuiKey_Space, false))
+            m_LaunchRequested = true;
+        if (ImGui::IsKeyPressed(ImGuiKey_S, false) || ImGui::IsKeyPressed(ImGuiKey_C, false))
+            m_OpenSettingsRequested = true;
+    }
+
+    if (!m_IsUpdateModalOpen && !m_DownloadSubsOpen && !m_TutorialOpen && ImGui::IsKeyPressed(ImGuiKey_N, false))
+        m_NovedadesOpen = !m_NovedadesOpen;
+
+    if (!m_IsUpdateModalOpen && !m_DownloadSubsOpen && !m_NovedadesOpen && ImGui::IsKeyPressed(ImGuiKey_T, false)) {
+        m_TutorialOpen = !m_TutorialOpen;
+        if (m_TutorialOpen) m_TutorialStep = 0;
+    }
+
     ImGuiViewport* vp = ImGui::GetMainViewport();
 
-    UpdateBgParticles(dt, vp->WorkSize.x - HUB_SIDEBAR_W, vp->WorkSize.y);
-    UpdateNebulas(dt, vp->WorkSize.x - HUB_SIDEBAR_W, vp->WorkSize.y);
+    if (!m_BgParticlesInit)
+        InitBgParticles(vp->WorkSize.x, vp->WorkSize.y);
+
+    UpdateBgParticles(dt, vp->WorkSize.x, vp->WorkSize.y);
+    UpdateNebulas(dt, vp->WorkSize.x, vp->WorkSize.y);
 
     ImGui::SetNextWindowPos(vp->WorkPos);
     ImGui::SetNextWindowSize(vp->WorkSize);
@@ -471,34 +678,35 @@ bool Hub::Render() {
 
     ImGui::Begin("##HubRoot", nullptr, rootFlags);
 
-    // Fade-in real al abrir el Hub: m_AppearProgress ya se calculaba en
-    // UpdateAnimations pero antes no se usaba en ningun lado.
     const float appearA = EaseOut(m_AppearProgress);
     ImGui::PushStyleVar(ImGuiStyleVar_Alpha, appearA);
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2      wp = ImGui::GetWindowPos();
 
-    dl->AddRectFilled(wp,
-        ImVec2(wp.x + HUB_SIDEBAR_W, wp.y + vp->WorkSize.y), ColAf(HT::BgSidebar, appearA));
-    dl->AddRectFilled(
-        ImVec2(wp.x + HUB_SIDEBAR_W, wp.y),
-        ImVec2(wp.x + vp->WorkSize.x, wp.y + vp->WorkSize.y), ColAf(HT::BgMain, appearA));
+    dl->AddRectFilled(wp, ImVec2(wp.x + vp->WorkSize.x, wp.y + vp->WorkSize.y), ColAf(HT::BgMain, appearA));
+    RenderBgCanvas(dl, wp, vp->WorkSize.x, vp->WorkSize.y);
 
-    dl->AddLine(
-        ImVec2(wp.x + HUB_SIDEBAR_W, wp.y),
-        ImVec2(wp.x + HUB_SIDEBAR_W, wp.y + vp->WorkSize.y),
-        ColAf(HT::Divider, appearA), 1.0f);
+    static GLuint s_HubBgTex      = 0;
+    static bool   s_HubBgTexTried = false;
+    if (!s_HubBgTexTried) {
+        s_HubBgTexTried = true;
+        s_HubBgTex      = LoadTextureFromFile("splash_bg2.jpg");
+    }
+    if (s_HubBgTex != 0)
+        dl->AddImage((ImTextureID)(intptr_t)s_HubBgTex, wp, ImVec2(wp.x + vp->WorkSize.x, wp.y + vp->WorkSize.y),
+            ImVec2(0, 0), ImVec2(1, 1), ColAf(IM_COL32_WHITE, HT::BgImageAlpha));
 
-    RenderSidebar(HUB_SIDEBAR_W, vp->WorkSize.y);
-    ImGui::SameLine(0.0f, 0.0f);
-    RenderMainContent(vp->WorkSize.x - HUB_SIDEBAR_W, vp->WorkSize.y);
+    RenderContent(vp->WorkSize.x, vp->WorkSize.y);
 
-    ImGui::PopStyleVar(); // Alpha
+    ImGui::PopStyleVar();
     ImGui::End();
     ImGui::PopStyleVar(2);
 
-    RenderWhatsNewIfNeeded();
+    RenderNovedadesPanel();
+    RenderUpdateDetailModal();
+    RenderDownloadSubtitlesPanel();
+    RenderTutorialModal();
 
     if (m_LaunchRequested) {
         m_LaunchRequested = false;
@@ -509,150 +717,419 @@ bool Hub::Render() {
     return false;
 }
 
-void Hub::RenderSidebar(float w, float h) {
-    ImGui::BeginChild("##Sidebar", ImVec2(w, h), false);
+void Hub::RenderContent(float w, float h) {
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::BeginChild("##HubContent", ImVec2(w, h), false, ImGuiWindowFlags_NoScrollbar);
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImVec2      wp = ImGui::GetWindowPos();
 
-    ImGui::SetCursorPosY(40.0f);
-    ImGui::SetCursorPosX(30.0f);
+    // ── Dimensiones responsivas y centradas ──────────────────────────────
+    const float contentW = std::clamp(w * 0.74f, 760.0f, 980.0f);
+    const float contentX = (w - contentW) * 0.5f;
 
+    const float totalH = 580.0f;
+    const float startY = std::max(18.0f, (h - totalH) * 0.36f);
+
+    ImGui::SetCursorPos(ImVec2(contentX, startY));
+    ImGui::BeginGroup();
+
+    // Factor de respiración armónico suave (ciclo de ~3.2 segundos)
+    const float breathe = 0.5f + 0.5f * sinf(m_Time * 1.95f);
+
+    // ── 1. Cabecera con Branding y Versión ───────────────────────────────
     {
-        ImFont*     font         = ImGui::GetFont();
-        const float logoFontSize = ImGui::GetFontSize() * 1.5f;
-
-        const ImVec2 logoScreenPos = ImGui::GetCursorScreenPos();
+        ImFont* font = ImGui::GetFont();
+        const float logoFontSize = ImGui::GetFontSize() * 1.65f;
 
         const ImVec2 sizeProyec = font->CalcTextSizeA(logoFontSize, FLT_MAX, 0.0f, "Proyec");
         const ImVec2 sizeThor   = font->CalcTextSizeA(logoFontSize, FLT_MAX, 0.0f, "Thor");
+        const float  totalLogoW = sizeProyec.x + sizeThor.x;
 
+        ImGui::SetCursorPosX(contentX + (contentW - totalLogoW) * 0.5f);
+        const ImVec2 logoScreenPos = ImGui::GetCursorScreenPos();
         const ImVec2 posProyec = logoScreenPos;
         const ImVec2 posThor   = ImVec2(logoScreenPos.x + sizeProyec.x, logoScreenPos.y);
-
-        for (int ox = -3; ox <= 3; ox++) {
-            for (int oy = -3; oy <= 3; oy++) {
-                if (ox == 0 && oy == 0) continue;
-                const float dist = sqrtf(static_cast<float>(ox * ox + oy * oy));
-                if (dist > 3.5f) continue;
-                const int glowAlpha = static_cast<int>(18.0f * (1.0f - dist / 3.5f));
-                dl->AddText(font, logoFontSize,
-                    ImVec2(posThor.x + static_cast<float>(ox),
-                           posThor.y + static_cast<float>(oy)),
-                    ColA(HT::AccentSoft, glowAlpha), "Thor");
-            }
-        }
-        for (int ox = -1; ox <= 1; ox++) {
-            for (int oy = -1; oy <= 1; oy++) {
-                if (ox == 0 && oy == 0) continue;
-                dl->AddText(font, logoFontSize,
-                    ImVec2(posThor.x + static_cast<float>(ox),
-                           posThor.y + static_cast<float>(oy)),
-                    ColA(HT::AccentSoft, 35), "Thor");
-            }
-        }
 
         dl->AddText(font, logoFontSize, posProyec, HT::TextPri, "Proyec");
         dl->AddText(font, logoFontSize, posThor,   HT::AccentSoft, "Thor");
 
-        ImGui::Dummy(ImVec2(sizeProyec.x + sizeThor.x, logoFontSize));
+        ImGui::Dummy(ImVec2(totalLogoW, logoFontSize));
+
+        // Subtítulo con tag y versión
+        const std::string tagText = "Software profesional de proyección y producción multimedia";
+        const ImVec2 tagSz = ImGui::CalcTextSize(tagText.c_str());
+
+        const std::string verText = std::string("v") + PROYECTHOR_VERSION_STRING;
+        const ImVec2 verSz = ImGui::CalcTextSize(verText.c_str());
+
+        const float rowW = tagSz.x + verSz.x + 24.0f;
+        ImGui::SetCursorPosX(contentX + (contentW - rowW) * 0.5f);
+
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+        ImGui::TextUnformatted(tagText.c_str());
+        ImGui::PopStyleColor();
+
+        ImGui::SameLine(0.0f, 10.0f);
+
+        // Badge de versión limpio
+        const ImVec2 badgePos = ImGui::GetCursorScreenPos();
+        const ImVec2 badgePad(8.0f, 3.0f);
+        const ImVec2 badgeMin(badgePos.x, badgePos.y - 1.0f);
+        const ImVec2 badgeMax(badgePos.x + verSz.x + badgePad.x * 2.0f, badgePos.y + verSz.y + badgePad.y * 2.0f);
+        dl->AddRectFilled(badgeMin, badgeMax, ColA(HT::CardAlt, 230), HT::RadiusSm);
+        dl->AddRect(badgeMin, badgeMax, ColAf(HT::AccentBlue, 0.35f), HT::RadiusSm, 0, 1.0f);
+
+        ImGui::SetCursorScreenPos(ImVec2(badgePos.x + badgePad.x, badgePos.y + badgePad.y - 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::AccentSoft);
+        ImGui::TextUnformatted(verText.c_str());
+        ImGui::PopStyleColor();
     }
 
-    ImGui::SetCursorPosX(30.0f);
-    ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
-    ImGui::Text("v%s", PROYECTHOR_VERSION_STRING);
-    ImGui::PopStyleColor();
-
-    ImGui::Dummy(ImVec2(0.0f, 32.0f));
-
-    dl->AddLine(
-        ImVec2(wp.x + 20.0f, wp.y + ImGui::GetCursorPosY()),
-        ImVec2(wp.x + w - 20.0f, wp.y + ImGui::GetCursorPosY()),
-        HT::Divider, 1.0f);
-
     ImGui::Dummy(ImVec2(0.0f, 16.0f));
 
-    ImGui::SetCursorPosX(30.0f);
-    ImGui::PushStyleColor(ImGuiCol_Button,        HT::AccentBlue);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::ColorConvertFloat4ToU32(
-        ImVec4(ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).x + 0.08f,
-               ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).y + 0.08f,
-               ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).z + 0.08f, 1.0f)));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImGui::ColorConvertFloat4ToU32(
-        ImVec4(ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).x - 0.08f,
-               ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).y - 0.08f,
-               ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).z - 0.08f, 1.0f)));
-    ImGui::PushStyleColor(ImGuiCol_Text, HT::OnAccent);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusMd);
+    // ── 2. Fila Principal: 2 Tarjetas Verticales de Acción (Deadlock Hero Cards) ──
+    const float mainGap = 20.0f;
+    const float cardW   = (contentW - mainGap) * 0.5f;
+    const float cardH   = 420.0f;
 
-    if (ImGui::Button("Empezar a proyectar", ImVec2(w - 60.0f, 45.0f)))
-        m_LaunchRequested = true;
+    const ImVec2 row1Pos = ImGui::GetCursorScreenPos();
 
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor(4);
-
-    ImGui::Dummy(ImVec2(0.0f, 10.0f));
-
-    ImGui::SetCursorPosX(30.0f);
-    ImGui::PushStyleColor(ImGuiCol_Button,        HT::Surface);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HT::SurfaceHover);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  HT::SurfaceActive);
-    ImGui::PushStyleColor(ImGuiCol_Text,          HT::TextPri);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusMd);
-
-    if (ImGui::Button("Abrir configuracion", ImVec2(w - 60.0f, 36.0f)))
-        m_OpenSettingsRequested = true;
-
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor(4);
-
-    ImGui::Dummy(ImVec2(0.0f, 28.0f));
-
-    dl->AddLine(
-        ImVec2(wp.x + 20.0f, wp.y + ImGui::GetCursorPosY()),
-        ImVec2(wp.x + w - 20.0f, wp.y + ImGui::GetCursorPosY()),
-        HT::Divider, 1.0f);
-
-    ImGui::Dummy(ImVec2(0.0f, 16.0f));
-
-    ImGui::SetCursorPosX(30.0f);
-    ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
-    ImGui::TextUnformatted("Accesos rapidos");
-    ImGui::PopStyleColor();
-
-    ImGui::Dummy(ImVec2(0.0f, 8.0f));
-
-    auto QuickBtn = [&](const char* icon, const char* label, int settingsTab) {
-        ImGui::SetCursorPosX(30.0f);
-        ImGui::PushStyleColor(ImGuiCol_Button,        IM_COL32(0, 0, 0, 0));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HT::SurfaceHover);
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  HT::SurfaceActive);
-        ImGui::PushStyleColor(ImGuiCol_Text,          HT::TextPri);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusSm);
-
-        char id[64];
-        snprintf(id, sizeof(id), "%s  %s##qb%d", icon, label, settingsTab);
-
-        if (ImGui::Button(id, ImVec2(w - 60.0f, 32.0f))) {
-            m_ActiveTab             = settingsTab;
-            m_OpenSettingsRequested = true;
-        }
-
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor(4);
+    // ── Helper para dibujar brackets estilizados en las esquinas ──
+    auto DrawCornerBrackets = [&](const ImVec2& min, const ImVec2& max, ImU32 col, float len = 12.0f, float th = 1.8f) {
+        // Top-left
+        dl->AddLine(min, ImVec2(min.x + len, min.y), col, th);
+        dl->AddLine(min, ImVec2(min.x, min.y + len), col, th);
+        // Top-right
+        dl->AddLine(ImVec2(max.x, min.y), ImVec2(max.x - len, min.y), col, th);
+        dl->AddLine(ImVec2(max.x, min.y), ImVec2(max.x, min.y + len), col, th);
+        // Bottom-left
+        dl->AddLine(ImVec2(min.x, max.y), ImVec2(min.x + len, max.y), col, th);
+        dl->AddLine(ImVec2(min.x, max.y), ImVec2(min.x, max.y - len), col, th);
+        // Bottom-right
+        dl->AddLine(max, ImVec2(max.x - len, max.y), col, th);
+        dl->AddLine(max, ImVec2(max.x, max.y - len), col, th);
     };
 
-    // Indices de k_Categories en SettingsPanel.cpp (0=Apariencia,
-    // 1=Proyeccion, 2=Stage, 3=Audio, 4=Canciones, 5=Teclas, 6=Idioma,
-    // 7=Actualizaciones). "General" se quito del todo (pedido explicito, no
-    // se usaba), de ahi que ya no aparezca aca.
-    QuickBtn("", "Apariencia",      0);
-    QuickBtn("", "Proyección",      1);
-    QuickBtn("", "Stage",           2);
-    QuickBtn("", "Idioma",          6);
-    QuickBtn("", "Actualizaciones", 7);
+    // ── Card 1: Empezar a proyectar (Hero Poster con Aura Esmeralda / Cian) ──
+    {
+        const ImVec2 cMin = ImVec2(contentX + ImGui::GetWindowPos().x, row1Pos.y);
+        const ImVec2 cMax = ImVec2(cMin.x + cardW, cMin.y + cardH);
 
+        ImGui::SetCursorScreenPos(cMin);
+        ImGui::InvisibleButton("##heroBtn", ImVec2(cardW, cardH));
+        const bool hovered = ImGui::IsItemHovered();
+        if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+        if (ImGui::IsItemClicked()) m_LaunchRequested = true;
+
+        const float hoverT = HubHoverLerp(ImGui::GetID("##heroBtn"), hovered);
+
+        // Halo de respiración ambiental continuo + expansión interactiva en hover
+        const float glowIntensity = 0.09f + 0.09f * breathe + hoverT * 0.25f;
+        for (int i = 3; i >= 1; i--) {
+            const float pad = (static_cast<float>(i) * 3.5f) + (breathe * 2.0f) + (hoverT * 6.0f);
+            dl->AddRectFilled(
+                ImVec2(cMin.x - pad, cMin.y - pad),
+                ImVec2(cMax.x + pad, cMax.y + pad),
+                ColAf(HT::AccentBlue, glowIntensity * (1.0f - static_cast<float>(i - 1) / 3.0f)),
+                HT::RadiusLg + pad * 0.35f);
+        }
+
+        // Fondo con imagen y parallax
+        const GLTextureInfo heroTex = GetCoverTexture(kHeroCardTextureFile);
+        DrawCoverImageCover(dl, heroTex.id, heroTex.width, heroTex.height, cMin, cMax,
+            HT::RadiusLg, ImDrawFlags_RoundCornersAll,
+            "hub_hero_card", ImGui::GetIO().DeltaTime, hovered, 1.05f, 2.8f);
+
+        // Scrim oscuro degradado
+        dl->AddRectFilled(cMin, cMax, ColA(HT::Card, 120), HT::RadiusLg);
+        dl->AddRectFilledMultiColor(
+            ImVec2(cMin.x, cMin.y + cardH * 0.18f), cMax,
+            ColA(IM_COL32(0, 0, 0, 0), 0), ColA(IM_COL32(0, 0, 0, 0), 0),
+            ColA(HT::BgMain, 252), ColA(HT::BgMain, 252));
+
+        // Borde interactivo con cristal fino
+        const ImU32 cardBorderCol = ColAf(HT::AccentBlue, 0.25f + 0.25f * breathe + hoverT * 0.55f);
+        dl->AddRect(cMin, cMax, cardBorderCol, HT::RadiusLg, 0, hovered ? 1.8f : 1.2f);
+        DrawCornerBrackets(cMin, cMax, ColAf(HT::AccentSoft, 0.30f + hoverT * 0.60f), 14.0f, 2.0f);
+
+        // Contenido de la tarjeta (Padding 20px)
+        const float padX = 20.0f, padY = 18.0f;
+
+        // Tag superior
+        const ImVec2 tagPos(cMin.x + padX, cMin.y + padY);
+        dl->AddRectFilled(tagPos, ImVec2(tagPos.x + 136.0f, tagPos.y + 22.0f),
+            ColAf(HT::AccentBlue, 0.28f + hoverT * 0.20f), HT::RadiusSm);
+        dl->AddText(ImVec2(tagPos.x + 8.0f, tagPos.y + 3.0f),
+            HT::AccentSoft, "PROYECCIÓN EN VIVO");
+
+        // Icono Play central flotante con halo de respiración
+        const float playR = 25.0f + hoverT * 3.0f + breathe * 1.5f;
+        const ImVec2 playCenter(cMin.x + cardW * 0.5f, cMin.y + cardH * 0.38f);
+        dl->AddCircleFilled(playCenter, playR + 8.0f + breathe * 3.0f, ColAf(HT::AccentBlue, 0.14f + 0.14f * breathe + hoverT * 0.20f));
+        dl->AddCircleFilled(playCenter, playR, HT::AccentBlue);
+        const float pTriW = playR * 0.70f, pTriH = playR * 0.85f;
+        dl->AddTriangleFilled(
+            ImVec2(playCenter.x - pTriW * 0.35f, playCenter.y - pTriH * 0.5f),
+            ImVec2(playCenter.x - pTriW * 0.35f, playCenter.y + pTriH * 0.5f),
+            ImVec2(playCenter.x + pTriW * 0.65f, playCenter.y),
+            HT::OnAccent);
+
+        // Textos inferiores
+        const float textW = cardW - padX * 2.0f;
+
+        // Título
+        ImGui::SetCursorScreenPos(ImVec2(cMin.x + padX, cMin.y + cardH - 120.0f));
+        ImGui::SetWindowFontScale(1.26f);
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+        ImGui::TextUnformatted("Empezar a proyectar");
+        ImGui::PopStyleColor();
+        ImGui::SetWindowFontScale(1.0f);
+
+        // Subtítulo
+        ImGui::SetCursorScreenPos(ImVec2(cMin.x + padX, cMin.y + cardH - 90.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ColA(HT::TextPri, 195));
+        ImGui::PushTextWrapPos(cMin.x + padX + textW);
+        ImGui::TextWrapped("Canciones, Biblia, videos, fondos, notas, overlays y capturas.");
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+
+        // Botón indicador inferior
+        const ImVec2 btnMin(cMin.x + padX, cMin.y + cardH - 38.0f);
+        const ImVec2 btnMax(cMax.x - padX, cMin.y + cardH - 12.0f);
+        dl->AddRectFilled(btnMin, btnMax, ColAf(HT::AccentBlue, 0.16f + 0.10f * breathe + hoverT * 0.25f), HT::RadiusSm);
+        dl->AddRect(btnMin, btnMax, ColAf(HT::AccentBlue, 0.32f + 0.20f * breathe + hoverT * 0.45f), HT::RadiusSm, 0, 1.2f);
+        const char* hintTxt = "Abrir Proyector";
+        const ImVec2 hsz = ImGui::CalcTextSize(hintTxt);
+        dl->AddText(ImVec2(btnMin.x + (btnMax.x - btnMin.x - hsz.x) * 0.5f, btnMin.y + (btnMax.y - btnMin.y - hsz.y) * 0.5f),
+            HT::AccentSoft, hintTxt);
+    }
+
+    // ── Card 2: Ajustes y Configuración (Hero Companion con Aura Robótica) ──
+    {
+        const ImVec2 cMin = ImVec2(contentX + ImGui::GetWindowPos().x + cardW + mainGap, row1Pos.y);
+        const ImVec2 cMax = ImVec2(cMin.x + cardW, cMin.y + cardH);
+
+        ImGui::SetCursorScreenPos(cMin);
+        ImGui::InvisibleButton("##cfgCardHit", ImVec2(cardW, cardH));
+        const bool hovered = ImGui::IsItemHovered();
+        if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+        if (ImGui::IsItemClicked()) m_OpenSettingsRequested = true;
+
+        const float hoverT = HubHoverLerp(ImGui::GetID("##cfgCardHit"), hovered);
+
+        // Halo de respiración sutil ambiental
+        const float glowIntensity = 0.06f + 0.06f * breathe + hoverT * 0.20f;
+        for (int i = 3; i >= 1; i--) {
+            const float pad = (static_cast<float>(i) * 3.0f) + (breathe * 1.5f) + (hoverT * 5.0f);
+            dl->AddRectFilled(
+                ImVec2(cMin.x - pad, cMin.y - pad),
+                ImVec2(cMax.x + pad, cMax.y + pad),
+                ColAf(HT::AccentSoft, glowIntensity * (1.0f - static_cast<float>(i - 1) / 3.0f)),
+                HT::RadiusLg + pad * 0.35f);
+        }
+
+        // Fondo con imagen y parallax
+        const GLTextureInfo cfgTex = GetCoverTexture(kConfigCardTextureFile);
+        DrawCoverImageCover(dl, cfgTex.id, cfgTex.width, cfgTex.height, cMin, cMax,
+            HT::RadiusLg, ImDrawFlags_RoundCornersAll,
+            "hub_cfg_card", ImGui::GetIO().DeltaTime, hovered, 1.05f, 2.8f);
+
+        // Scrim oscuro degradado
+        dl->AddRectFilled(cMin, cMax, ColA(HT::Card, 140), HT::RadiusLg);
+        dl->AddRectFilledMultiColor(
+            ImVec2(cMin.x, cMin.y + cardH * 0.18f), cMax,
+            ColA(IM_COL32(0, 0, 0, 0), 0), ColA(IM_COL32(0, 0, 0, 0), 0),
+            ColA(HT::BgMain, 252), ColA(HT::BgMain, 252));
+
+        // Borde interactivo con cristal
+        const ImU32 cardBorderCol = ColAf(HT::AccentSoft, 0.18f + 0.18f * breathe + hoverT * 0.45f);
+        dl->AddRect(cMin, cMax, cardBorderCol, HT::RadiusLg, 0, hovered ? 1.6f : 1.2f);
+        DrawCornerBrackets(cMin, cMax, ColAf(HT::TextPri, 0.25f + hoverT * 0.50f), 14.0f, 2.0f);
+
+        // Contenido de la tarjeta (Padding 20px)
+        const float padX = 20.0f, padY = 18.0f;
+
+        // Header de la tarjeta: Tag
+        const ImVec2 tagPos(cMin.x + padX, cMin.y + padY);
+        dl->AddRectFilled(tagPos, ImVec2(tagPos.x + 110.0f, tagPos.y + 22.0f),
+            ColA(HT::Surface, 230), HT::RadiusSm);
+        dl->AddText(ImVec2(tagPos.x + 8.0f, tagPos.y + 3.0f),
+            HT::TextMuted, "CONFIGURACIÓN");
+
+        // Icono de engranaje central flotante
+        const float iconR = 25.0f + hoverT * 2.0f + breathe * 1.2f;
+        const ImVec2 iconCenter(cMin.x + cardW * 0.5f, cMin.y + cardH * 0.38f);
+        dl->AddCircleFilled(iconCenter, iconR + 8.0f + breathe * 2.0f, ColAf(HT::AccentSoft, 0.09f + 0.09f * breathe + hoverT * 0.16f));
+        dl->AddCircleFilled(iconCenter, iconR, ColA(HT::Surface, 235));
+        dl->AddCircle(iconCenter, iconR, ColAf(HT::AccentSoft, 0.28f + 0.22f * breathe), 20, 1.4f);
+        dl->AddCircle(iconCenter, iconR * 0.42f, HT::TextPri, 12, 2.0f);
+
+        // Textos inferiores
+        const float textW = cardW - padX * 2.0f;
+
+        // Título
+        ImGui::SetCursorScreenPos(ImVec2(cMin.x + padX, cMin.y + cardH - 120.0f));
+        ImGui::SetWindowFontScale(1.26f);
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+        ImGui::TextUnformatted("Ajustes del sistema");
+        ImGui::PopStyleColor();
+        ImGui::SetWindowFontScale(1.0f);
+
+        // Subtítulo
+        ImGui::SetCursorScreenPos(ImVec2(cMin.x + padX, cMin.y + cardH - 90.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ColA(HT::TextPri, 195));
+        ImGui::PushTextWrapPos(cMin.x + padX + textW);
+        ImGui::TextWrapped("Pantallas de salida, conexiones LAN, temas, shaders y atajos.");
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+
+        // Botón indicador inferior
+        const ImVec2 btnMin(cMin.x + padX, cMin.y + cardH - 38.0f);
+        const ImVec2 btnMax(cMax.x - padX, cMin.y + cardH - 12.0f);
+        dl->AddRectFilled(btnMin, btnMax, ColA(HT::Surface, hovered ? 245 : 185), HT::RadiusSm);
+        dl->AddRect(btnMin, btnMax, ColAf(HT::AccentSoft, 0.22f + 0.15f * breathe + hoverT * 0.35f), HT::RadiusSm, 0, 1.2f);
+        const char* hintTxt = "Abrir Ajustes";
+        const ImVec2 hsz = ImGui::CalcTextSize(hintTxt);
+        dl->AddText(ImVec2(btnMin.x + (btnMax.x - btnMin.x - hsz.x) * 0.5f, btnMin.y + (btnMax.y - btnMin.y - hsz.y) * 0.5f),
+            HT::TextPri, hintTxt);
+    }
+
+    ImGui::SetCursorScreenPos(ImVec2(row1Pos.x, row1Pos.y + cardH + 16.0f));
+    ImGui::Dummy(ImVec2(0.0f, 0.0f));
+
+    // ── 3. Fila de Acompañamiento: 4 Tarjetas Compactas (Estilo Adobe / Deadlock Bottom Quad) ──
+    const float quadGap = 12.0f;
+    const float quadW   = (contentW - quadGap * 3.0f) / 4.0f;
+    const float quadH   = 84.0f;
+    const ImVec2 row2Pos = ImGui::GetCursorScreenPos();
+
+    auto RenderCompanionTile = [&](const ImVec2& uMin, const char* id, const char* title,
+                                   const char* subtitle, const char* tag, bool isAccent, auto onClick)
+    {
+        const ImVec2 uMax(uMin.x + quadW, uMin.y + quadH);
+
+        ImGui::SetCursorScreenPos(uMin);
+        ImGui::InvisibleButton(id, ImVec2(quadW, quadH));
+        const bool hovered = ImGui::IsItemHovered();
+        if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+        if (ImGui::IsItemClicked()) onClick();
+
+        const float hoverT = HubHoverLerp(ImGui::GetID(id), hovered);
+
+        // Fondo del tile
+        dl->AddRectFilled(uMin, uMax, ColAf(HT::CardAlt, 0.95f), HT::RadiusMd);
+        if (hoverT > 0.001f)
+            dl->AddRectFilled(uMin, uMax, ColAf(isAccent ? HT::AccentBlue : HT::TextPri, 0.06f * hoverT), HT::RadiusMd);
+
+        // Borde interactivo con cristal suave
+        dl->AddRect(uMin, uMax,
+            hovered ? ColAf(isAccent ? HT::AccentBlue : HT::TextPri, 0.40f + hoverT * 0.35f) : ColAf(HT::Divider, 0.60f),
+            HT::RadiusMd, 0, hovered ? 1.4f : 1.0f);
+
+        // Indicador lateral izquierdo al hover
+        if (hoverT > 0.001f) {
+            dl->AddRectFilled(uMin, ImVec2(uMin.x + 3.5f, uMax.y),
+                ColAf(isAccent ? HT::AccentBlue : HT::AccentSoft, hoverT),
+                HT::RadiusMd, ImDrawFlags_RoundCornersLeft);
+        }
+
+        // Contenido
+        const float padX = 12.0f;
+        const float iconSize = 36.0f;
+        const ImVec2 iconPos(uMin.x + padX, uMin.y + (quadH - iconSize) * 0.5f);
+
+        // Icon Box
+        dl->AddRectFilled(iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize),
+            ColAf(isAccent ? HT::AccentBlue : HT::Surface, 0.30f + hoverT * 0.20f), HT::RadiusSm);
+        dl->AddRect(iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize),
+            ColAf(isAccent ? HT::AccentBlue : HT::Divider, 0.50f), HT::RadiusSm);
+
+        // Icono gráfico decorativo
+        if (isAccent) {
+            const ImVec2 ic(iconPos.x + iconSize * 0.5f, iconPos.y + iconSize * 0.5f);
+            dl->AddCircleFilled(ic, 4.5f, HT::AccentSoft);
+            dl->AddLine(ImVec2(ic.x - 7.0f, ic.y), ImVec2(ic.x + 7.0f, ic.y), HT::AccentSoft, 1.8f);
+            dl->AddLine(ImVec2(ic.x, ic.y - 7.0f), ImVec2(ic.x, ic.y + 7.0f), HT::AccentSoft, 1.8f);
+        } else {
+            const ImVec2 ic(iconPos.x + iconSize * 0.5f, iconPos.y + iconSize * 0.5f);
+            dl->AddRect(ImVec2(ic.x - 5.5f, ic.y - 6.5f), ImVec2(ic.x + 5.5f, ic.y + 6.5f), HT::TextPri, 2.0f, 0, 1.4f);
+            dl->AddLine(ImVec2(ic.x - 3.0f, ic.y - 2.0f), ImVec2(ic.x + 3.0f, ic.y - 2.0f), HT::AccentSoft, 1.4f);
+            dl->AddLine(ImVec2(ic.x - 3.0f, ic.y + 2.0f), ImVec2(ic.x + 3.0f, ic.y + 2.0f), HT::AccentSoft, 1.4f);
+        }
+
+        // Textos del tile
+        const float textStartX = iconPos.x + iconSize + 10.0f;
+        const float textMaxW   = quadW - (textStartX - uMin.x) - 10.0f;
+
+        // Fila 1: Título + Tag pill
+        ImGui::SetCursorScreenPos(ImVec2(textStartX, uMin.y + 13.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+        ImGui::SetWindowFontScale(1.00f);
+        ImGui::TextUnformatted(title);
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
+
+        if (tag && tag[0] != '\0') {
+            ImGui::SameLine(0.0f, 4.0f);
+            ImGui::PushStyleColor(ImGuiCol_Text, isAccent ? HT::AccentSoft : HT::TextMuted);
+            ImGui::SetWindowFontScale(0.74f);
+            ImGui::TextUnformatted(tag);
+            ImGui::SetWindowFontScale(1.0f);
+            ImGui::PopStyleColor();
+        }
+
+        // Fila 2: Subtítulo con wrapping
+        ImGui::SetCursorScreenPos(ImVec2(textStartX, uMin.y + 38.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+        ImGui::PushTextWrapPos(textStartX + textMaxW);
+        ImGui::TextWrapped("%s", subtitle);
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+    };
+
+    // Tile 1: Tutorial / Tour Guiado
+    RenderCompanionTile(ImVec2(contentX + ImGui::GetWindowPos().x, row2Pos.y),
+        "##utilTutorial", "Tutorial",
+        "Tour guiado y guías paso a paso.",
+        "TOUR", true, [this]() { m_TutorialOpen = true; m_TutorialStep = 0; });
+
+    // Tile 2: Novedades
+    const UpdateVersionInfo* latestVer = kUpdateRegistry.empty() ? nullptr : &kUpdateRegistry[0];
+    std::string verTag = latestVer ? (std::string("v") + latestVer->version) : "";
+    RenderCompanionTile(ImVec2(contentX + ImGui::GetWindowPos().x + quadW + quadGap, row2Pos.y),
+        "##utilNovedades", "Novedades",
+        "Registro de versiones y parches.",
+        verTag.c_str(), false, [this]() { m_NovedadesOpen = true; });
+
+    // Tile 3: Subtítulos
+    RenderCompanionTile(ImVec2(contentX + ImGui::GetWindowPos().x + (quadW + quadGap) * 2.0f, row2Pos.y),
+        "##utilSubs", "Subtítulos",
+        "Descargador de letras desde URL.",
+        "TXT", false, [this]() { m_DownloadSubsOpen = true; });
+
+    // Tile 4: Ajustes Rápidos / Pantallas
+    RenderCompanionTile(ImVec2(contentX + ImGui::GetWindowPos().x + (quadW + quadGap) * 3.0f, row2Pos.y),
+        "##utilQuickCfg", "Ajustes",
+        "Salidas, temas y red LAN.",
+        "SYS", false, [this]() { m_OpenSettingsRequested = true; });
+
+    ImGui::SetCursorScreenPos(ImVec2(row2Pos.x, row2Pos.y + quadH + 20.0f));
+    ImGui::Dummy(ImVec2(0.0f, 0.0f));
+
+    // ── 4. Footer con atajos rápidos ─────────────────────────────────────
+    {
+        const std::string footerLeft = "[ Enter ] Proyectar   •   [ T ] Tutorial   •   [ S ] Ajustes   •   [ N ] Novedades   •   [ F11 ] Pantalla completa";
+        const ImVec2 leftSz = ImGui::CalcTextSize(footerLeft.c_str());
+
+        ImGui::SetCursorPosX(contentX + (contentW - leftSz.x) * 0.5f);
+        ImGui::PushStyleColor(ImGuiCol_Text, ColA(HT::TextMuted, 160));
+        ImGui::TextUnformatted(footerLeft.c_str());
+        ImGui::PopStyleColor();
+    }
+
+    ImGui::EndGroup();
     ImGui::EndChild();
+    ImGui::PopStyleColor();
 }
 
 void Hub::InitBgParticles(float w, float h) {
@@ -666,11 +1143,11 @@ void Hub::InitBgParticles(float w, float h) {
     for (auto& p : m_BgParticles) {
         p.x      = frand(0.0f, w);
         p.y      = frand(0.0f, h);
-        p.vx     = frand(-0.18f, 0.18f);
-        p.vy     = frand(-0.18f, 0.18f);
-        p.r      = frand(0.6f, 2.2f);
+        p.vx     = frand(-0.15f, 0.15f);
+        p.vy     = frand(-0.10f, -0.38f);
+        p.r      = frand(1.2f, 3.2f);
         p.phase  = frand(0.0f, 6.28318530717958647f);
-        p.isCyan = (frand(0.0f, 1.0f) > 0.72f);
+        p.isCyan = (frand(0.0f, 1.0f) > 0.55f);
     }
 
     m_BgParticlesInit = true;
@@ -678,12 +1155,15 @@ void Hub::InitBgParticles(float w, float h) {
 
 void Hub::UpdateBgParticles(float dt, float w, float h) {
     for (auto& p : m_BgParticles) {
-        p.x += p.vx * dt * 60.0f;
+        p.x += (p.vx + sinf(m_Time * 0.8f + p.phase) * 0.12f) * dt * 60.0f;
         p.y += p.vy * dt * 60.0f;
 
         if (p.x < 0.0f) p.x += w;
         if (p.x > w)    p.x -= w;
-        if (p.y < 0.0f) p.y += h;
+        if (p.y < 0.0f) {
+            p.y += h;
+            p.x = fmodf(p.x + sinf(p.phase) * 100.0f + w, w);
+        }
         if (p.y > h)    p.y -= h;
     }
 }
@@ -716,448 +1196,337 @@ void Hub::UpdateNebulas(float dt, float w, float h) {
 }
 
 void Hub::RenderBgCanvas(ImDrawList* dl, ImVec2 origin, float w, float h) {
-    using ProyecThor::Settings::ThemePreset;
-    const bool isGalaxy = ProyecThor::Settings::SettingsManager::Get().GetSettings().theme.preset
-        == ThemePreset::Galaxy;
+    const auto& curTheme = ProyecThor::Settings::SettingsManager::Get().GetSettings().theme;
 
-    // ── Nebulosas (solo Galaxia) — se dibujan primero, detras de todo ────────
-    if (isGalaxy) {
+    // ── 1. Fondo Base del Tema ──
+    const ImU32 baseBg = ColA(HT::BgMain, 255);
+    dl->AddRectFilled(origin, ImVec2(origin.x + w, origin.y + h), baseBg);
+
+    const float t = m_Time * 0.16f;
+
+    // ── 2. Animaciones Específicas por Tema / Temas Pro ──
+    if (curTheme.preset == ProyecThor::Settings::ThemePreset::Cyberpunk) {
+        // ── Cyberpunk Neón Pro: Rejilla Perspectiva Neón + Rayos Láser Cian y Magenta ──
+        float horizonY = origin.y + h * 0.35f;
+
+        // Líneas de perspectiva que convergen al horizonte
+        int persLines = 22;
+        for (int i = 0; i <= persLines; i++) {
+            float frac = (float)i / (float)persLines;
+            float bottomX = origin.x + w * (-0.2f + frac * 1.4f);
+            float topX = origin.x + w * (0.3f + frac * 0.4f);
+            dl->AddLine(ImVec2(topX, horizonY), ImVec2(bottomX, origin.y + h),
+                        ColAf(HT::AccentBlue, 0.08f + 0.04f * sinf(m_Time * 2.0f + frac * 6.28f)), 1.2f);
+        }
+
+        // Líneas horizontales de la rejilla con espaciado exponencial
+        int gridHCount = 14;
+        for (int j = 1; j <= gridHCount; j++) {
+            float ratio = (float)j / (float)gridHCount;
+            float lineY = horizonY + (h - (horizonY - origin.y)) * (ratio * ratio);
+            float alpha = 0.04f + 0.10f * ratio;
+            dl->AddLine(ImVec2(origin.x, lineY), ImVec2(origin.x + w, lineY),
+                        ColAf((j % 2 == 0) ? HT::AccentBlue : HT::AccentSoft, alpha), 1.2f);
+        }
+
+        // Rayos de pulso láser horizontal
+        float laserY = horizonY + fmodf(m_Time * 140.0f, h - (horizonY - origin.y));
+        dl->AddLine(ImVec2(origin.x, laserY), ImVec2(origin.x + w, laserY),
+                    ColAf(HT::AccentSoft, 0.40f), 2.0f);
+    }
+    else if (curTheme.preset == ProyecThor::Settings::ThemePreset::Galaxy ||
+             curTheme.preset == ProyecThor::Settings::ThemePreset::Amethyst) {
+        // ── Galaxy & Amethyst: Nebulosas Cósmicas Flotantes y Constelaciones ──
         if (!m_NebulasInit) InitNebulas(w, h);
+        UpdateNebulas(ImGui::GetIO().DeltaTime, w, h);
 
-        ImVec4 accentV = ImGui::ColorConvertU32ToFloat4(HT::AccentBlue);
-        ImVec4 softV   = ImGui::ColorConvertU32ToFloat4(HT::AccentSoft);
-        for (int i = 0; i < NEBULA_COUNT; i++) {
-            const auto& n     = m_Nebulas[i];
-            const ImVec4& tint = (i % 2 == 0) ? accentV : softV;
-            // Varios circulos concentricos con alpha decreciente = glow suave
-            // sin textura ni assets externos (mismo truco que DrawSoftShadow).
-            for (int layer = 4; layer >= 1; layer--) {
-                float t     = (float)layer / 4.0f;
-                float rad   = n.r * t;
-                float alpha = 0.030f * (1.0f - t * 0.6f);
-                dl->AddCircleFilled(ImVec2(origin.x + n.x, origin.y + n.y), rad,
-                    ImGui::ColorConvertFloat4ToU32(ImVec4(tint.x, tint.y, tint.z, alpha)), 40);
+        for (const auto& n : m_Nebulas) {
+            ImVec2 nPos(origin.x + n.x, origin.y + n.y);
+            for (int rL = 5; rL >= 1; rL--) {
+                float rFrac = (float)rL / 5.0f;
+                float alpha = 0.045f * (1.0f - rFrac * 0.7f);
+                dl->AddCircleFilled(nPos, n.r * rFrac, ColAf(HT::AccentBlue, alpha), 24);
             }
         }
     }
+    else if (curTheme.preset == ProyecThor::Settings::ThemePreset::Emerald) {
+        // ── Emerald Studio Pro: Ondas de Gradiente Suave y Velo Orgánico ──
+        const int waveCount = 10;
+        for (int wIdx = 0; wIdx < waveCount; wIdx++) {
+            float baseRatio = (float)wIdx / (float)(waveCount - 1);
+            float baseY = h * (0.12f + baseRatio * 0.76f);
+            float freq = 0.003f + baseRatio * 0.001f;
+            float amp = 32.0f + 18.0f * sinf(t * 0.8f + baseRatio * 3.0f);
+            float speed = t * 1.2f + baseRatio * 1.8f;
+            float alpha = 0.040f + 0.035f * sinf(t + baseRatio * 2.5f);
 
-    // Grilla: solo en los temas "normales" — en Galaxia una cuadricula
-    // geometrica desentona con el look de nebulosa/estrellas.
-    if (!isGalaxy) {
-        // Tinte muy tenue del color de texto primario: se ve sutil tanto en
-        // temas oscuros (linea clara) como claros (linea oscura).
-        const ImU32 gridCol = ColA(HT::TextPri, 6);
-        for (float x = 0.0f; x < w; x += BG_GRID_SIZE)
-            dl->AddLine(ImVec2(origin.x + x, origin.y), ImVec2(origin.x + x, origin.y + h), gridCol, 0.5f);
-        for (float y = 0.0f; y < h; y += BG_GRID_SIZE)
-            dl->AddLine(ImVec2(origin.x, origin.y + y), ImVec2(origin.x + w, origin.y + y), gridCol, 0.5f);
-    }
-
-    // ── Particulas — en Galaxia se ven como estrellas: mas grandes, con mas
-    //    contraste de brillo (centelleo) y un halo suave en el pico del
-    //    "parpadeo" en vez del punto chico y parejo de las demas paletas.
-    for (const auto& p : m_BgParticles) {
-        const float sinVal = sinf(m_Time * 0.75f + p.phase);
-        const float alpha  = isGalaxy ? (0.32f + 0.34f * sinVal) : (0.18f + 0.14f * sinVal);
-        const ImU32 col    = p.isCyan
-            ? ColAf(HT::ParticleA, alpha)
-            : ColAf(HT::ParticleB, alpha);
-        const float r = isGalaxy ? p.r * 1.5f : p.r;
-        const ImVec2 pos = ImVec2(origin.x + p.x, origin.y + p.y);
-        dl->AddCircleFilled(pos, r, col, 8);
-
-        if (isGalaxy && sinVal > 0.80f) {
-            const float haloAlpha = (sinVal - 0.80f) * 0.9f;
-            dl->AddCircleFilled(pos, r * 3.2f,
-                ColAf(p.isCyan ? HT::ParticleA : HT::ParticleB, haloAlpha * 0.20f), 12);
-        }
-    }
-
-    // Lineas de conexion tipo "red/constelacion": se sacan en Galaxia (se ve
-    // mas a cableado de red que a cielo estrellado sin ellas).
-    if (!isGalaxy) {
-        for (int i = 0; i < BG_PARTICLE_COUNT; i++) {
-            for (int j = i + 1; j < BG_PARTICLE_COUNT; j++) {
-                const float dx   = m_BgParticles[i].x - m_BgParticles[j].x;
-                const float dy   = m_BgParticles[i].y - m_BgParticles[j].y;
-                const float dist = sqrtf(dx * dx + dy * dy);
-                if (dist < BG_CONNECT_DIST) {
-                    const float t       = 1.0f - (dist / BG_CONNECT_DIST);
-                    const float alpha   = t * t * 0.09f;
-                    const ImU32 lineCol = ColAf(HT::ParticleB, alpha);
-                    dl->AddLine(
-                        ImVec2(origin.x + m_BgParticles[i].x, origin.y + m_BgParticles[i].y),
-                        ImVec2(origin.x + m_BgParticles[j].x, origin.y + m_BgParticles[j].y),
-                        lineCol, 0.5f);
+            ImVec2 prevPt;
+            const int steps = 48;
+            for (int s = 0; s <= steps; s++) {
+                float px = origin.x + (w * (float)s / (float)steps);
+                float py = origin.y + baseY + sinf((px - origin.x) * freq + speed) * amp;
+                if (s > 0) {
+                    dl->AddLine(prevPt, ImVec2(px, py), ColAf(HT::AccentBlue, alpha), 1.5f);
                 }
+                prevPt = ImVec2(px, py);
             }
         }
+    }
+    else if (curTheme.preset == ProyecThor::Settings::ThemePreset::Crimson) {
+        // ── Crimson Velvet Pro: Nodos de Energía Radiante y Chispas Ascendentes ──
+        const ImVec2 centerC(origin.x + w * 0.50f, origin.y + h * 0.50f);
+        for (int r = 1; r <= 6; r++) {
+            float rad = (float)r * 110.0f + fmodf(m_Time * 22.0f, 110.0f);
+            float a   = std::max(0.0f, 0.055f * (1.0f - rad / 800.0f));
+            dl->AddCircle(centerC, rad, ColAf(HT::AccentBlue, a), 64, 1.4f);
+        }
+    }
+    else {
+        // ── Temas Clásicos / Deadlock / Dark / Mek / Titanium / Midnight: Ondas Topográficas Fluidas y Nodos ──
+        const ImVec2 centerL(origin.x + w * 0.18f, origin.y + h * 0.38f);
+        const ImVec2 centerR(origin.x + w * 0.82f, origin.y + h * 0.52f);
+
+        for (int r = 1; r <= 8; r++) {
+            const float radL = (static_cast<float>(r) * 85.0f) + fmodf(m_Time * 14.0f, 85.0f);
+            const float aL   = std::max(0.0f, 0.045f * (1.0f - radL / 720.0f));
+            dl->AddCircle(centerL, radL, ColAf(HT::AccentBlue, aL), 64, 1.1f);
+
+            const float radR = (static_cast<float>(r) * 95.0f) + fmodf(m_Time * 11.0f + 45.0f, 95.0f);
+            const float aR   = std::max(0.0f, 0.040f * (1.0f - radR / 780.0f));
+            dl->AddCircle(centerR, radR, ColAf(HT::AccentSoft, aR), 64, 1.1f);
+        }
+
+        const int waveCount = 14;
+        for (int wIdx = 0; wIdx < waveCount; wIdx++) {
+            const float baseRatio = static_cast<float>(wIdx) / static_cast<float>(waveCount - 1);
+            const float baseY = h * (0.06f + baseRatio * 0.88f);
+            const float freq1 = 0.0022f + baseRatio * 0.0010f;
+            const float freq2 = 0.0048f - baseRatio * 0.0012f;
+            const float amp1  = 26.0f + 16.0f * sinf(t * 0.7f + baseRatio * 2.8f);
+            const float amp2  = 14.0f + 9.0f * cosf(t * 1.1f - baseRatio * 1.9f);
+            const float speed = t * 1.4f + baseRatio * 1.5f;
+
+            const float alpha = 0.035f + 0.030f * sinf(t * 0.8f + baseRatio * 3.0f);
+            const ImU32 waveCol = ColAf((wIdx % 2 == 0) ? HT::AccentBlue : HT::AccentSoft, alpha);
+
+            ImVec2 prevPt;
+            const int steps = 54;
+            for (int s = 0; s <= steps; s++) {
+                const float px = origin.x + (w * static_cast<float>(s) / static_cast<float>(steps));
+                const float py = origin.y + baseY
+                    + sinf((px - origin.x) * freq1 + speed) * amp1
+                    + cosf((px - origin.x) * freq2 - speed * 0.65f) * amp2
+                    + sinf(((px - origin.x) + baseY) * 0.003f + t * 0.5f) * 12.0f;
+
+                if (s > 0) {
+                    dl->AddLine(prevPt, ImVec2(px, py), waveCol, 1.2f);
+                }
+                prevPt = ImVec2(px, py);
+            }
+        }
+    }
+
+    // ── 3. Partículas / Luciérnagas / Chispas Luminosas en Suspensión ──
+    for (const auto& p : m_BgParticles) {
+        const float sinVal = sinf(m_Time * 1.1f + p.phase);
+        const float alpha  = 0.28f + 0.26f * sinVal;
+        const ImU32 particleTint = p.isCyan ? HT::ParticleA : HT::ParticleB;
+        const ImU32 col    = ColAf(particleTint, alpha);
+        const ImVec2 pos = ImVec2(origin.x + p.x, origin.y + p.y);
+
+        // Halos de resplandor multicapa
+        for (int layer = 3; layer >= 1; layer--) {
+            const float layerT = static_cast<float>(layer) / 3.0f;
+            const float haloR  = p.r * (1.8f + layerT * 2.5f);
+            const float haloA  = alpha * 0.18f * (1.0f - layerT * 0.7f);
+            dl->AddCircleFilled(pos, haloR, ColAf(particleTint, haloA), 12);
+        }
+        dl->AddCircleFilled(pos, p.r, col, 10);
     }
 }
 
-void Hub::RenderMainContent(float w, float h) {
-    static GLuint bgTex             = 0;
-    static bool   texLoaded         = false;
-    static bool   isUpdateModalOpen = false;
-    static int    selectedUpdateVer = 12; // id de kUpdateRegistry (12 = v0.5.1, la mas reciente)
-
-    if (!texLoaded) {
-        bgTex     = LoadTextureFromFile("splash_bg2.png");
-        texLoaded = true;
-    }
-
-    if (!m_BgParticlesInit)
-        InitBgParticles(w, h);
-
-    // dt propio para las animaciones de parallax de esta funcion (no depende
-    // de m_Time para poder reutilizar el helper de forma autonoma).
-    float parallaxDt;
+void Hub::RenderDownloadSubtitlesPanel() {
+    bool resultReady = false;
+    ProyecThor::Core::SubtitleFetchResult resultCopy;
     {
-        static std::chrono::steady_clock::time_point s_LastParallaxT = std::chrono::steady_clock::now();
-        const auto now = std::chrono::steady_clock::now();
-        parallaxDt = std::chrono::duration<float>(now - s_LastParallaxT).count();
-        s_LastParallaxT = now;
-        parallaxDt = std::clamp(parallaxDt, 0.0f, 0.05f);
+        std::lock_guard<std::mutex> lk(m_DownloadSubsMutex);
+        if (m_DownloadSubsResult.has_value() && !m_DownloadSubsRunning) {
+            resultCopy  = *m_DownloadSubsResult;
+            resultReady = true;
+            m_DownloadSubsResult.reset();
+        }
     }
+    if (resultReady) {
+        if (m_DownloadSubsThread.joinable())
+            m_DownloadSubsThread.join();
 
-    ImGui::BeginChild("##MainContent", ImVec2(w, h), false);
-
-    {
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        ImVec2      wp = ImGui::GetWindowPos();
-        RenderBgCanvas(dl, wp, w, h);
-        if (bgTex != 0)
-            dl->AddImage((ImTextureID)(intptr_t)bgTex, wp, ImVec2(wp.x + w, wp.y + h),
-                ImVec2(0,0), ImVec2(1,1), ColAf(IM_COL32_WHITE, HT::BgImageAlpha));
-    }
-
-    const float marginX       = 50.0f;
-    const float marginTop     = 40.0f;
-    const float spacingX      = 40.0f;
-    const float totalWidth    = w - (marginX * 2.0f);
-    const float leftColWidth  = totalWidth * 0.55f;
-    const float rightColWidth = totalWidth * 0.45f - spacingX;
-
-    ImGui::SetCursorPos(ImVec2(marginX, marginTop));
-
-    // Encabezado de seccion con una linea sutil debajo (mismo estilo "Cat()"
-    // que ya usa el modal de actualizacion), para dar jerarquia visual
-    // consistente entre ambas columnas.
-    auto SectionHeader = [&](const char* title, float width) {
-        ImGui::SetWindowFontScale(1.3f);
-        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
-        ImGui::Text("%s", title);
-        ImGui::PopStyleColor();
-        ImGui::SetWindowFontScale(1.0f);
-        const ImVec2 p = ImGui::GetCursorScreenPos();
-        ImGui::GetWindowDrawList()->AddLine(ImVec2(p.x, p.y + 2.0f), ImVec2(p.x + width, p.y + 2.0f), HT::BorderFaint);
-        ImGui::Dummy(ImVec2(0.0f, 13.0f));
-    };
-
-    // ── Columna izquierda ─────────────────────────────────────────────────────
-    ImGui::BeginGroup();
-
-    SectionHeader("Actualizaciones", leftColWidth);
-
-    // Altura del bloque de acciones que va debajo de la lista (boton "Buscar
-    // actualizaciones" + "Foro / Soporte"), para poder descontarla del calculo
-    // del scroll y que este siempre termine justo antes de dichos botones.
-    const float actionsRowH   = 36.0f;
-    const float gapBeforeList = ImGui::GetCursorPosY(); // lo ya consumido: titulo + dummy
-    const float gapAfterList  = 15.0f;                  // Dummy entre la lista y los botones
-    const float bottomMargin  = 55.0f;                  // espacio final, grande, tras los botones
-
-    // Alto restante disponible para la lista scrolleable: ocupa todo lo que
-    // sobra hasta el final del panel, dejando lugar para los botones de abajo
-    // y un margen inferior comodo.
-    const float updatesListH = std::max(
-        220.0f,
-        h - marginTop - gapBeforeList - gapAfterList - actionsRowH - bottomMargin
-    );
-
-    // Contenedor scrolleable para la lista de actualizaciones
-    ImGui::BeginChild("##UpdatesList", ImVec2(leftColWidth, updatesListH), false);
-
-    // Función auxiliar para dibujar tarjetas de actualización.
-    // Cada tarjeta usa la portada especifica de su propia entrada en el registro,
-    // con recorte tipo "cover" + parallax al hover y esquinas redondeadas.
-    auto RenderUpdateCard = [&](const UpdateVersionInfo& info) {
-        const GLTextureInfo cardCover = GetCoverTexture(info.coverFile);
-
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, HT::CardAlt);
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusMd);
-        ImGui::BeginChild(info.version, ImVec2(leftColWidth, 140.0f), false, ImGuiWindowFlags_NoScrollbar);
-
-        ImVec2 cardStartPos = ImGui::GetCursorScreenPos();
-        ImVec2 cardEndPos   = ImVec2(cardStartPos.x + leftColWidth, cardStartPos.y + 140.0f);
-        const bool cardHovered = ImGui::IsMouseHoveringRect(cardStartPos, cardEndPos);
-        const float hoverT = HubHoverLerp(ImGui::GetID(info.version), cardHovered);
-
-        ImGui::SetCursorPos(ImVec2(10.0f, 10.0f));
-        ImGui::BeginGroup();
-
-        const float thumbW = 180.0f, thumbH = 120.0f;
-        if (cardCover.id != 0) {
-            const ImVec2 thumbMin = ImGui::GetCursorScreenPos();
-            const ImVec2 thumbMax = ImVec2(thumbMin.x + thumbW, thumbMin.y + thumbH);
-
-            char stateKey[96];
-            snprintf(stateKey, sizeof(stateKey), "card_%s", info.version);
-
-            DrawCoverImageCover(ImGui::GetWindowDrawList(), cardCover.id, cardCover.width, cardCover.height,
-                thumbMin, thumbMax, HT::RadiusMd, ImDrawFlags_RoundCornersAll,
-                stateKey, parallaxDt, cardHovered, 1.10f);
-
-            ImGui::Dummy(ImVec2(thumbW, thumbH));
-            ImGui::SameLine(0.0f, 15.0f);
-        }
-
-        ImGui::BeginGroup();
-        ImGui::Dummy(ImVec2(0.0f, 5.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
-        ImGui::Text("%s", info.cardBadge);
-        ImGui::PopStyleColor();
-        ImGui::SetWindowFontScale(1.1f);
-        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
-        ImGui::Text("Version v%s", info.version);
-        ImGui::PopStyleColor();
-        ImGui::SetWindowFontScale(1.0f);
-        ImGui::Dummy(ImVec2(0.0f, 8.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
-        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + leftColWidth - (cardCover.id != 0 ? 220.0f : 30.0f));
-        ImGui::TextWrapped("%s", info.summary);
-        ImGui::PopTextWrapPos();
-        ImGui::PopStyleColor();
-        ImGui::EndGroup();
-
-        ImGui::EndGroup();
-
-        ImGui::SetCursorScreenPos(cardStartPos);
-        if (ImGui::InvisibleButton(info.version, ImVec2(leftColWidth, 140.0f))) {
-            selectedUpdateVer = info.id;
-            isUpdateModalOpen = true;
-        }
-        if (ImGui::IsItemHovered())
-            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-
-        // Realce de hover suavizado (en vez de un rect plano on/off): fondo
-        // tenue + barra de acento a la izquierda que crece con hoverT.
-        ImDrawList* cardDl = ImGui::GetWindowDrawList();
-        if (hoverT > 0.001f) {
-            cardDl->AddRectFilled(cardStartPos, cardEndPos,
-                ColAf(HT::TextPri, 0.05f * hoverT), HT::RadiusMd);
-            cardDl->AddRectFilled(cardStartPos, ImVec2(cardStartPos.x + 3.0f, cardEndPos.y),
-                ColAf(HT::AccentBlue, hoverT), HT::RadiusMd, ImDrawFlags_RoundCornersLeft);
-        }
-
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor();
-        ImGui::Dummy(ImVec2(0.0f, 15.0f)); // Espacio entre tarjetas
-    };
-
-    // Renderizamos una tarjeta por cada version registrada, en orden (mas reciente primero)
-    for (const auto& info : kUpdateRegistry)
-        RenderUpdateCard(info);
-
-    ImGui::EndChild(); // Fin de UpdatesList
-
-    ImGui::Dummy(ImVec2(0.0f, gapAfterList));
-
-    ImGui::BeginGroup();
-    ImGui::PushStyleColor(ImGuiCol_Button,        HT::Surface);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HT::SurfaceHover);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  HT::SurfaceActive);
-    ImGui::PushStyleColor(ImGuiCol_Text,          HT::TextPri);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusSm);
-    if (ImGui::Button("Buscar actualizaciones", ImVec2(180.0f, actionsRowH))) {
-        m_ActiveTab = 7; m_OpenSettingsRequested = true; // 7 = Actualizaciones (ver QuickBtn arriba)
-    }
-    ImGui::SameLine(0.0f, 15.0f);
-    if (ImGui::Button("Foro / Soporte", ImVec2(180.0f, actionsRowH)))
-        ProyecThor::External::OpenURL("https://github.com/TheVixcho/ProyecThor/discussions");
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor(4);
-    ImGui::EndGroup();
-
-    ImGui::EndGroup();
-
-    // ── Columna derecha ───────────────────────────────────────────────────────
-    ImGui::SameLine(0.0f, spacingX);
-    ImGui::BeginGroup();
-
-    SectionHeader("Resumen local", rightColWidth);
-
-    const auto topSongs = ProyecThor::UI::GetTopSongPlayStats(5);
-    const int totalProjections = ProyecThor::UI::GetTotalSongProjections();
-    const auto perfSummary = ProyecThor::UI::GetPerformanceSummary();
-    const auto perfHistory = ProyecThor::UI::GetRecentPerformanceHistory(8);
-
-    auto DrawMetricCard = [&](const char* label, const std::string& value, const char* hint,
-                               ImU32 color, const std::vector<int>* spark = nullptr) {
-        const bool  hasSpark = spark && spark->size() >= 2;
-        const float cardH    = hasSpark ? 96.0f : 70.0f;
-
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, HT::Card);
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusMd);
-        ImGui::BeginChild(label, ImVec2(rightColWidth - 8.0f, cardH), false);
-
-        const ImVec2 cMin     = ImGui::GetWindowPos();
-        const ImVec2 cMax     = ImVec2(cMin.x + rightColWidth - 8.0f, cMin.y + cardH);
-        const float  hoverT   = HubHoverLerp(ImGui::GetID(label), ImGui::IsWindowHovered());
-        if (hoverT > 0.001f)
-            ImGui::GetWindowDrawList()->AddRectFilled(cMin, cMax, ColAf(HT::TextPri, 0.04f * hoverT), HT::RadiusMd);
-
-        ImGui::PushStyleColor(ImGuiCol_Text, color);
-        ImGui::TextUnformatted(value.c_str());
-        ImGui::PopStyleColor();
-        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
-        ImGui::TextUnformatted(label);
-        ImGui::TextDisabled("%s", hint);
-        ImGui::PopStyleColor();
-
-        // Mini sparkline con el historial reciente (ya se pedia via
-        // GetRecentPerformanceHistory pero nunca se dibujaba).
-        if (hasSpark) {
-            const ImVec2 sMin = ImVec2(cMin.x + 12.0f, cMax.y - 30.0f);
-            const ImVec2 sMax = ImVec2(cMax.x - 12.0f, cMax.y - 10.0f);
-
-            int lo = spark->front(), hi = spark->front();
-            for (int v : *spark) { lo = std::min(lo, v); hi = std::max(hi, v); }
-            if (hi == lo) hi = lo + 1;
-
-            std::vector<ImVec2> pts(spark->size());
-            for (size_t i = 0; i < spark->size(); ++i) {
-                const float tx = static_cast<float>(i) / static_cast<float>(spark->size() - 1);
-                const float ty = static_cast<float>((*spark)[i] - lo) / static_cast<float>(hi - lo);
-                pts[i] = ImVec2(sMin.x + tx * (sMax.x - sMin.x), sMax.y - ty * (sMax.y - sMin.y));
-            }
-
-            ImDrawList* sdl = ImGui::GetWindowDrawList();
-            std::vector<ImVec2> fillPts = pts;
-            fillPts.push_back(ImVec2(sMax.x, sMax.y));
-            fillPts.push_back(ImVec2(sMin.x, sMax.y));
-            sdl->AddConvexPolyFilled(fillPts.data(), static_cast<int>(fillPts.size()), ColAf(color, 0.16f));
-            sdl->AddPolyline(pts.data(), static_cast<int>(pts.size()), color, 0, 1.6f);
-        }
-
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor();
-        ImGui::Dummy(ImVec2(0.0f, 8.0f));
-    };
-
-    std::vector<int> fpsSpark;
-    fpsSpark.reserve(perfHistory.size());
-    for (const auto& [sampleLabel, fps] : perfHistory)
-        fpsSpark.push_back(fps);
-
-    const std::string fpsHint =
-        std::string("Ultimos registros del Hub  ·  pico ") + std::to_string(perfSummary.second) + " fps";
-
-    DrawMetricCard("Proyecciones totales", std::to_string(totalProjections), "Cuentas locales registradas", HT::Success);
-    DrawMetricCard("FPS promedio", std::to_string(perfSummary.first), fpsHint.c_str(), HT::AccentBlue, &fpsSpark);
-
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, HT::Card);
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusMd);
-    ImGui::BeginChild("##SongStats", ImVec2(rightColWidth, 240.0f), false);
-
-    ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
-    ImGui::Text("Canciones más proyectadas");
-    ImGui::PopStyleColor();
-    ImGui::Dummy(ImVec2(0.0f, 6.0f));
-
-    if (topSongs.empty()) {
-        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
-        ImGui::TextWrapped("Aún no hay estadísticas locales. Proyecta 2 versos o más de una canción para empezar.");
-        ImGui::PopStyleColor();
-    } else {
-        for (size_t i = 0; i < topSongs.size(); ++i) {
-            const auto& [title, count] = topSongs[i];
-            const std::string childId = "##songStat" + std::to_string(i);
-
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, HT::CardAlt);
-            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusSm);
-            ImGui::BeginChild(childId.c_str(), ImVec2(rightColWidth - 10.0f, 48.0f), false);
-
-            const ImVec2 rMin    = ImGui::GetWindowPos();
-            const ImVec2 rMax    = ImVec2(rMin.x + rightColWidth - 10.0f, rMin.y + 48.0f);
-            const float  hoverT  = HubHoverLerp(ImGui::GetID(childId.c_str()), ImGui::IsWindowHovered());
-            if (hoverT > 0.001f)
-                ImGui::GetWindowDrawList()->AddRectFilled(rMin, rMax, ColAf(HT::TextPri, 0.05f * hoverT), HT::RadiusSm);
-
-            // Columna derecha (contador + "proyecciones") con ancho fijo
-            // reservado segun su propio contenido; el titulo se trunca con
-            // elipsis para no invadirla en canciones con nombres largos
-            // (antes se dibujaba sin clip y se superponia con el contador).
-            const std::string countStr  = std::to_string(count);
-            const float countColW   = std::max(ImGui::CalcTextSize(countStr.c_str()).x,
-                                                ImGui::CalcTextSize("proyecciones").x);
-            const float rightColX   = (rightColWidth - 10.0f) - countColW - 14.0f;
-            const float titleMaxW   = rightColX - 12.0f;
-
-            std::string displayTitle = title;
-            if (ImGui::CalcTextSize(displayTitle.c_str()).x > titleMaxW) {
-                while (!displayTitle.empty() &&
-                       ImGui::CalcTextSize((displayTitle + "...").c_str()).x > titleMaxW) {
-                    displayTitle.pop_back();
+        if (resultCopy.success) {
+            std::string savePath;
+            if (m_DownloadSubsAskEachTime || m_DownloadSubsPresetFolder.empty()) {
+                std::string suggested = resultCopy.title.empty() ? "subtitulos" : resultCopy.title;
+                savePath = ProyecThor::UI::PickSaveTextPath(
+                    (m_DownloadSubsPresetFolder.empty() ? suggested : (m_DownloadSubsPresetFolder + "/" + suggested)) + ".txt");
+            } else {
+                std::string base = resultCopy.title.empty() ? "subtitulos" : resultCopy.title;
+                std::string candidate = m_DownloadSubsPresetFolder + "/" + base + ".txt";
+                int suffix = 2;
+                while (std::filesystem::exists(candidate)) {
+                    candidate = m_DownloadSubsPresetFolder + "/" + base + " (" + std::to_string(suffix) + ").txt";
+                    ++suffix;
                 }
-                // Evita cortar a mitad de un caracter UTF-8 multibyte
-                // (tildes/ñ) dejando un byte de continuacion colgante.
-                while (!displayTitle.empty() &&
-                       (static_cast<unsigned char>(displayTitle.back()) & 0xC0) == 0x80) {
-                    displayTitle.pop_back();
+                savePath = candidate;
+            }
+
+            if (!savePath.empty()) {
+                std::ofstream f(savePath, std::ios::binary);
+                if (f.is_open()) {
+                    f << "\xEF\xBB\xBF" << resultCopy.lyrics;
+                    f.close();
+                    m_DownloadSubsSavedPath = savePath;
+                    m_DownloadSubsLastError.clear();
+                } else {
+                    m_DownloadSubsLastError = "No se pudo escribir el archivo en esa ubicacion.";
                 }
-                displayTitle += "...";
             }
-
-            ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
-            ImGui::TextUnformatted(displayTitle.c_str());
-            ImGui::PopStyleColor();
-            ImGui::SameLine(rightColX);
-            ImGui::BeginGroup();
-            ImGui::TextUnformatted(countStr.c_str());
-            ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
-            ImGui::TextDisabled("proyecciones");
-            ImGui::PopStyleColor();
-            ImGui::EndGroup();
-
-            ImGui::EndChild();
-            ImGui::PopStyleVar();
-            ImGui::PopStyleColor();
-            if (i + 1 < topSongs.size()) {
-                ImGui::Dummy(ImVec2(0.0f, 6.0f));
-            }
+        } else {
+            m_DownloadSubsLastError = resultCopy.error;
         }
     }
 
-    ImGui::EndChild();
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor();
+    if (!m_DownloadSubsOpen) return;
 
-    ImGui::Dummy(ImVec2(0.0f, 10.0f));
+    // FIX (Wayland): esta ventana usaba AlwaysAutoResize + un ancho de
+    // contenido derivado de GetContentRegionAvail() (ver el InputText de la
+    // carpeta fija mas abajo, "SetNextItemWidth(GetContentRegionAvail().x -
+    // 96.0f)"). En Wayland el tamaño real de ventana que devuelve GLFW llega
+    // con un frame de latencia (el compositor negocia el resize, no es
+    // inmediato como en X11) -- eso arma un circulo: el contenido pide un
+    // ancho basado en el tamaño de la ventana, la ventana se autoajusta a
+    // ese contenido, y el proximo frame el tamaño "real" que reporta GLFW ya
+    // cambio, asi que el contenido vuelve a pedir un ancho distinto. Crece
+    // sin limite. Pasaba justo al tocar "Carpeta fija" (la opcion de abajo)
+    // porque ese es el radio button que agrega el InputText problematico.
+    // Con tamaño FIJO (sin AlwaysAutoResize) no hay nada que reajustar en
+    // base al contenido, asi que el circulo no puede arrancar.
+    const ImVec2 baseSize(480.0f, 320.0f);
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f);
+    ImGui::SetNextWindowPos(workCenter, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(baseSize, ImGuiCond_Appearing);
 
-    ImGui::EndGroup();
-    ImGui::EndChild();
+    ImGuiWindowClass floatingClass;
+    floatingClass.DockingAllowUnclassed = false;
+    ImGui::SetNextWindowClass(&floatingClass);
 
-    // ── Modal Universal de Actualizacion ──────────────────────────────────────
-    // s_ModalAnim se aproxima a 1 mientras isUpdateModalOpen y decae a 0 al
-    // cerrar; el modal sigue dibujandose (con escala/alpha decrecientes)
-    // hasta que la animacion termina, en vez de desaparecer de golpe.
-    static float s_ModalAnim = 0.0f;
-    {
-        const float target = isUpdateModalOpen ? 1.0f : 0.0f;
-        s_ModalAnim += (target - s_ModalAnim) * std::min(1.0f, parallaxDt * 10.0f);
-        s_ModalAnim = std::clamp(s_ModalAnim, 0.0f, 1.0f);
-        if (s_ModalAnim < 0.001f) s_ModalAnim = 0.0f;
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 16.0f));
+    bool open = ImGui::Begin("Descargar subtitulos", &m_DownloadSubsOpen,
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking |
+        ImGuiWindowFlags_NoResize);
+
+    if (open) {
+        ImGui::TextWrapped("Pega el link de un video. Se buscan sus subtitulos (español primero, si "
+                            "no ingles) y se guardan como un .txt suelto -- no crea una cancion.");
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+
+        ImGui::BeginDisabled(m_DownloadSubsRunning);
+        ImGui::SetNextItemWidth(-1.0f);
+        bool enterPressed = ImGui::InputTextWithHint("##dlSubsUrl", "https://www.youtube.com/watch?v=...",
+            m_DownloadSubsUrlBuf, sizeof(m_DownloadSubsUrlBuf), ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::EndDisabled();
+
+        ImGui::Dummy(ImVec2(0.0f, 10.0f));
+
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+        ImGui::TextUnformatted("Guardar en");
+        ImGui::PopStyleColor();
+        if (ImGui::RadioButton("Preguntar cada vez", m_DownloadSubsAskEachTime))
+            m_DownloadSubsAskEachTime = true;
+        if (ImGui::RadioButton("Carpeta fija", !m_DownloadSubsAskEachTime))
+            m_DownloadSubsAskEachTime = false;
+
+        if (!m_DownloadSubsAskEachTime) {
+            ImGui::Dummy(ImVec2(0.0f, 4.0f));
+            char folderBuf[512];
+            std::snprintf(folderBuf, sizeof(folderBuf), "%s",
+                m_DownloadSubsPresetFolder.empty() ? "Sin elegir..." : m_DownloadSubsPresetFolder.c_str());
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 96.0f);
+            ImGui::InputText("##dlSubsPresetFolder", folderBuf, sizeof(folderBuf), ImGuiInputTextFlags_ReadOnly);
+            ImGui::SameLine();
+            if (ImGui::Button("Elegir...", ImVec2(86.0f, 0.0f))) {
+                std::string chosen = ProyecThor::UI::PickFolder("Elegir carpeta para subtitulos descargados");
+                if (!chosen.empty()) m_DownloadSubsPresetFolder = chosen;
+            }
+        }
+
+        ImGui::Dummy(ImVec2(0.0f, 10.0f));
+
+        bool wantStart = false;
+        if (m_DownloadSubsRunning) {
+            ImGui::TextColored(ImVec4(0.6f, 0.75f, 0.9f, 1.0f), "Buscando subtitulos...");
+        } else {
+            if (ImGui::Button("Descargar", ImVec2(120.0f, 32.0f)))
+                wantStart = true;
+            if (enterPressed)
+                wantStart = true;
+            ImGui::SameLine();
+            if (ImGui::Button("Cerrar", ImVec2(100.0f, 32.0f))) {
+                m_DownloadSubsOpen = false;
+                m_DownloadSubsLastError.clear();
+            }
+        }
+
+        if (!m_DownloadSubsLastError.empty()) {
+            ImGui::Dummy(ImVec2(0.0f, 8.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.93f, 0.35f, 0.35f, 1.0f));
+            ImGui::TextWrapped("%s", m_DownloadSubsLastError.c_str());
+            ImGui::PopStyleColor();
+        }
+        if (!m_DownloadSubsSavedPath.empty()) {
+            ImGui::Dummy(ImVec2(0.0f, 8.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, HT::Success);
+            ImGui::TextWrapped("Guardado en: %s", m_DownloadSubsSavedPath.c_str());
+            ImGui::PopStyleColor();
+        }
+
+        if (wantStart && !m_DownloadSubsRunning && m_DownloadSubsUrlBuf[0] != '\0') {
+            if (m_DownloadSubsThread.joinable()) m_DownloadSubsThread.join();
+            m_DownloadSubsLastError.clear();
+            m_DownloadSubsSavedPath.clear();
+            m_DownloadSubsRunning = true;
+            {
+                std::lock_guard<std::mutex> lk(m_DownloadSubsMutex);
+                m_DownloadSubsResult.reset();
+            }
+            std::string urlCopy = m_DownloadSubsUrlBuf;
+            m_DownloadSubsThread = std::thread([this, urlCopy]() {
+                ProyecThor::Core::SubtitleFetchResult res = ProyecThor::Core::FetchSubtitlesAsLyrics(urlCopy);
+                std::lock_guard<std::mutex> lk(m_DownloadSubsMutex);
+                m_DownloadSubsResult  = std::move(res);
+                m_DownloadSubsRunning = false;
+            });
+        }
     }
 
-    if (isUpdateModalOpen || s_ModalAnim > 0.0f) {
+    ImGui::End();
+    ImGui::PopStyleVar();
+}
+
+void Hub::RenderUpdateDetailModal() {
+    const int selectedUpdateVer = m_SelectedUpdateVer;
+
+    {
+        const float target = m_IsUpdateModalOpen ? 1.0f : 0.0f;
+        m_UpdateModalAnim += (target - m_UpdateModalAnim) * std::min(1.0f, ImGui::GetIO().DeltaTime * 10.0f);
+        m_UpdateModalAnim = std::clamp(m_UpdateModalAnim, 0.0f, 1.0f);
+        if (m_UpdateModalAnim < 0.001f) m_UpdateModalAnim = 0.0f;
+    }
+
+    if (m_IsUpdateModalOpen || m_UpdateModalAnim > 0.0f) {
         const UpdateVersionInfo* selInfo = FindUpdateVersion(selectedUpdateVer);
         const GLTextureInfo modalCover = selInfo ? GetCoverTexture(selInfo->coverFile) : GLTextureInfo{};
 
         ImGuiViewport* vp     = ImGui::GetMainViewport();
-        const float     fadeA = EaseOut(s_ModalAnim);
+        const float     fadeA = EaseOut(m_UpdateModalAnim);
 
         ImGui::PushStyleVar(ImGuiStyleVar_Alpha, fadeA);
 
@@ -1174,7 +1543,6 @@ void Hub::RenderMainContent(float w, float h) {
         ImGui::PopStyleVar();
         ImGui::PopStyleColor();
 
-        // Leve "pop" de escala al abrir (0.96 -> 1.0) con la misma curva.
         const float scale         = 0.96f + 0.04f * fadeA;
         const float modalW        = 780.0f * scale, modalH = 660.0f * scale;
         const float headerH       = 200.0f * scale, footerH = 62.0f * scale;
@@ -1206,11 +1574,9 @@ void Hub::RenderMainContent(float w, float h) {
                 snprintf(stateKey, sizeof(stateKey), "modal_%s", selInfo ? selInfo->version : "none");
                 const bool headerHovered = ImGui::IsMouseHoveringRect(headerMin, headerMax);
 
-                // Solo se redondean las esquinas superiores: coinciden con el
-                // borde del modal, mientras que abajo continua el contenido.
                 DrawCoverImageCover(dl, modalCover.id, modalCover.width, modalCover.height,
                     headerMin, headerMax, modalRounding, ImDrawFlags_RoundCornersTop,
-                    stateKey, parallaxDt, headerHovered, 1.06f);
+                    stateKey, ImGui::GetIO().DeltaTime, headerHovered, 1.06f);
                 ImGui::Dummy(ImVec2(modalW, headerH));
             } else {
                 dl->AddRectFilled(headerMin, headerMax, ColA(HT::CardAlt, 255),
@@ -1230,9 +1596,6 @@ void Hub::RenderMainContent(float w, float h) {
             ImGui::SetCursorPos(ImVec2(mg, 18.0f));
             ImGui::BeginGroup();
 
-            // Badge tipo "pill": mide el texto real y dibuja el padding con
-            // el rect, en vez del hack anterior de espacios embebidos en el
-            // string (" ACTUALIZACION MAYOR ") para simular relleno.
             auto DrawPillBadge = [&](const char* text) {
                 ImGui::SetWindowFontScale(0.8f);
                 const ImVec2 bs = ImGui::CalcTextSize(text);
@@ -1249,7 +1612,7 @@ void Hub::RenderMainContent(float w, float h) {
                 ImGui::PopStyleColor();
                 ImGui::SameLine(0.0f, pad.x);
             };
-            DrawPillBadge(selInfo ? selInfo->modalBadge : "ACTUALIZACION");
+            DrawPillBadge(selInfo ? selInfo->modalBadge : "BETA");
             ImGui::SameLine(0, 40);
 
             ImGui::SetWindowFontScale(0.8f);
@@ -1287,7 +1650,202 @@ void Hub::RenderMainContent(float w, float h) {
                 ImGui::Dummy(ImVec2(0,4));
             };
 
-            if (selectedUpdateVer == 12) { // v0.5.1
+            if (selectedUpdateVer == 18) {
+                Cat("ProyecThor v1.0.0: Primera Versión Oficial Estable");
+                Bul("Hito de lanzamiento oficial: culmina la etapa de desarrollo beta y se establece la primera versión 100% estable de ProyecThor para iglesias, auditorios y producción multimedia en vivo.");
+                Bul("Todas las versiones previas de desarrollo (v0.1 a v0.7.x) quedan archivadas en la sección histórica de la etapa Beta.");
+                ImGui::Dummy(ImVec2(0, 12));
+
+                Cat("Biblia 2.0: Buscador Inteligente, Acentos UTF-8 y Nueva UI");
+                Bul("Buscador integrado moderno en la cabecera superior de la Biblia (estilo Canciones), con búsqueda en tiempo real y salto/proyección inmediata al pulsar Enter.");
+                Bul("Compatibilidad universal con acentos y tildes: escribir 'genesis', 'génesis', 'exodo', 'éxodo', 'isaias', 'isaías' o 'salmo' encuentra el libro exacto de inmediato.");
+                Bul("Soporte para múltiples formatos de citas bíblicas: reconoce citas con dos puntos ('Jn 3:16', '1 Corintios 13:4') o separadas por espacios ('Juan 3 16', '1co 13 4', 'isaias 9 6', 'exodo 20').");
+                Bul("Corrección total del error de caracteres rotos (símbolos de diamante ? en UTF-8) en libros acentuados gracias a un nuevo catálogo de abreviaturas canónicas y recorte seguro Unicode.");
+                Bul("Píldoras de filtrado rápido por Testamento ('Todos', 'AT (39)', 'NT (27)') y botones rápidos de navegación de capítulos ('◀ Anterior' y 'Siguiente ▶').");
+                Bul("Barra luminosa y resaltado elegante en el versículo proyectado en vivo, con chips numéricos por sección y acciones rápidas al pasar el mouse (Favoritos, Edición y Proyección).");
+                ImGui::Dummy(ImVec2(0, 12));
+
+                Cat("Transiciones de Fondos y Transición Estilo Teatro (Iris)");
+                Bul("Nueva transición 'Teatro (Iris)' para fondos: apertura y cambio de fondo mediante un círculo expansivo concéntrico con halo dorado teatral y bordes suaves.");
+                Bul("Motor unificado de renderizado de transiciones para fondos (Fade, Iris, Slide, Cover, Uncover, Zoom) sincronizado entre el proyector de salida y la vista del operador.");
+                Bul("Acceso rápido '[🎭 Teatro]' integrado en la barra de transiciones de Estilos.");
+                ImGui::Dummy(ImVec2(0, 12));
+
+                Cat("Efectos Volumétricos y Atmosféricos por Zonas");
+                Bul("Efectos volumétricos acelerados por hardware: simulación de nubes, niebla y humo procedural mediante ruido fractal (FBM) en GPU.");
+                Bul("Control y delimitación de efectos por zonas específicas de la pantalla con ajustes de densidad, velocidad, turbulencia y paleta de color.");
+                ImGui::Dummy(ImVec2(0, 12));
+
+                Cat("Laboratorio (Lab) y Transmisión de Gráficas GeoGebra");
+                Bul("Nueva función para transmitir a pantalla pública las funciones matemáticas, curvas y gráficos geométricos interactivos del Lab.");
+                ImGui::Dummy(ImVec2(0, 12));
+
+                Cat("Tutorial Guiado Interactivo en el Hub (Estilo Adobe)");
+                Bul("Nuevo Tour Guiado profesional en 6 etapas interactivo en el Hub con barra de progreso, tarjetas explicativas y acceso directo a las herramientas principales de ProyecThor.");
+                ImGui::Dummy(ImVec2(0, 12));
+
+                Cat("Estabilidad y Rendimiento");
+                Bul("Optimizaciones en el ciclo de renderizado de Dear ImGui y consistencia en el diseño de toda la aplicación.");
+                ImGui::Dummy(ImVec2(0, 12));
+            } else if (selectedUpdateVer == 17) {
+                Cat("Visor y Catálogo de Recursos / Modelos 3D");
+                Bul("Nuevo botón '3D' con icono isométrico vectorial en el riel lateral izquierdo de la Biblioteca.");
+                Bul("Compatibilidad universal con archivos y carpetas glTF 2.0 (.gltf con buffers binarios .bin o base64 embebido) y Binary glTF (.glb).");
+                Bul("Compatibilidad con formatos 3D clásicos: Wavefront OBJ (.obj con normales y UVs), Stereolithography (.stl binario y ASCII) y Polygon File (.ply).");
+                Bul("Detección inteligente de carpetas de modelos descargadas (Sketchfab, Blender, Turbosquid): asigna automáticamente el nombre de la carpeta contenedora.");
+                Bul("Modelos 3D integrados listos para usar sin archivos externos: Cruz Latina 3D biselada, Cubo, Esfera, Cilindro, Torus / Anillo y Pirámide.");
+                Bul("Visor orbital 3D interactivo acelerado por hardware OpenGL: rotación libre con clic izquierdo, desplazamiento (pan) con clic derecho y zoom con rueda.");
+                Bul("Botón '⊙ Centrar' para restablecer encuadre y orientación de cámara de forma instantánea.");
+                Bul("Giro continuo automático '⟳ Auto-rotar' (Turntable 360°) a 60 FPS con velocidad ajustable.");
+                Bul("Modos de sombreado avanzados (Sombreado Blinn-Phong, Malla / Wireframe, Sombreado con Bordes resaltados) y paleta de colores/materiales con presets (Oro, Plata, Bronce, etc.).");
+                Bul("Proyección en vivo a pantalla pública con botón '[ 🚀 PROYECTAR 3D A PANTALLA ]' y superposición transparente sobre fondos o videos en tiempo real.");
+                ImGui::Dummy(ImVec2(0, 12));
+
+                Cat("Tipografía Real en Miniaturas de Estilos");
+                Bul("Previsualización tipográfica dinámica: cada tarjeta y fila de tema renderiza su muestra de texto con la tipografía real asignada.");
+                Bul("Riel lateral izquierdo optimizado con acceso prioritario a 'Nuevo estilo', 'Ajustes rápidos' y botón de 'Recargar fuentes ↺' 100% visible.");
+                Bul("Nuevo control deslizante (slider) de zoom suave en la cabecera de la cuadrícula.");
+                ImGui::Dummy(ImVec2(0, 12));
+
+                Cat("Transiciones Rápidas y Controles del Monitor");
+                Bul("Botón de transición rápida con icono vectorial de swap perfectamente centrado.");
+                Bul("Menú popup con presets de duración rápida (0.3s, 0.5s, 1.0s, 1.5s) y modos de corte / disolución.");
+                Bul("Alineación y distribución simétrica de borde a borde en los 5 botones de transporte y cabecera del Monitor de Vista en Vivo.");
+                ImGui::Dummy(ImVec2(0, 12));
+
+                Cat("Rendimiento y Pipeline Gráfico");
+                Bul("Pipeline OpenGL Framebuffer (FBO) desacoplado para renderizado de mallas tridimensionales sin impacto en la interfaz.");
+                Bul("Optimizaciones de estabilidad en la carga y escaneo de directorios con recarga en caliente.");
+                ImGui::Dummy(ImVec2(0, 12));
+            } else if (selectedUpdateVer == 16) {
+                Cat("HUD Estilizado y Fondo de Ondas Dinámicas");
+                Bul("Nuevo fondo atmosférico con ondas topográficas fluidas en movimiento lento y partículas astrales en suspensión.");
+                Bul("Tarjetas de inicio tipo póster con iluminación reactiva, brackets angulares y respiración ambiental armónica.");
+                Bul("Cabecera tipográfica nítida de dos tonos ProyecThor sin desenfoques.");
+                ImGui::Dummy(ImVec2(0, 12));
+
+                Cat("Navegador Web Integrado y Filtros Multimedia");
+                Bul("Panel Web rediseñado en formato vertical para integrarse perfectamente en el panel lateral de la Biblioteca.");
+                Bul("Envío de sitios web en vivo a la pantalla pública en pantalla completa con un solo clic.");
+                Bul("Importación múltiple de archivos a la vez en todas las secciones de la Biblioteca.");
+                Bul("Intercambio rápido entre Fondos (Backgrounds) y Multimedia: menú con clic derecho para mover/copiar y soporte para Drag & Drop (arrastrar y soltar) bidireccional.");
+                Bul("Barra de filtros de medios con iconos vectoriales homogéneos (Todos, Videos, Audios, Imágenes, Recargar, Importar, Cuadrícula y Lista).");
+                Bul("Corrección de colisión de controles: separación estricta entre el botón de importar archivos y el control de tamaño de miniaturas.");
+                ImGui::Dummy(ImVec2(0, 12));
+
+                Cat("Gestión de Datos y Carpetas de Importe Automático");
+                Bul("Nueva categoría Datos en Ajustes: personaliza la ubicación de almacenamiento de AppData en cualquier unidad o disco.");
+                Bul("Carpetas de Importe Automático (Watched Folders): vincula carpetas externas (ej. Descargas) con modo de reproducción directa o copia automática.");
+                ImGui::Dummy(ImVec2(0, 12));
+
+                Cat("Biblioteca de Notas Rápidas y Anuncios");
+                Bul("Sistema permanente de guardado y carga de notas con persistencia en disco JSON.");
+                Bul("Etiquetado inteligente por categorías: Anuncios, Avisos, Urgente, Culto y General.");
+                Bul("Sincronización directa con el letrero de anuncios rodante y selección de destinos (Público, LAN, Ambos).");
+                ImGui::Dummy(ImVec2(0, 12));
+
+                Cat("Proyección a Público y Rendimiento");
+                Bul("Corrección de oscurecimiento: la pantalla pública y los monitores secundarios nunca se oscurecen al abrir paneles o modales.");
+                Bul("Puntero del mouse oculto automáticamente al proyectar sobre la pantalla secundaria.");
+                Bul("Reloj y contadores LAN desacoplados: personalización de temas inalámbricos sin alterar la salida pública.");
+                ImGui::Dummy(ImVec2(0, 12));
+
+                Cat("Asistente de IA y Espacios de Trabajo");
+                Bul("Acceso directo y fluido a Claude, ChatGPT y Gemini en navegador embebido.");
+                Bul("Liberación inmediata de foco de teclado al cerrar la ventana del asistente web.");
+                Bul("Espacio de trabajo Producción enfocado en Render y Overlays.");
+                ImGui::Dummy(ImVec2(0, 12));
+            } else if (selectedUpdateVer == 15) {
+                Cat("Asistente de IA Integrado");
+                Bul("Nuevo Asistente de IA accesible directamente desde la barra inferior de la aplicación.");
+                Bul("Modo Básica: Navegador embebido real con Claude, ChatGPT o Gemini para consultar y generar contenido sin exponer tus credenciales.");
+                Bul("Modo Avanzada: Conexión directa mediante API Key propia de Claude. Permite listar, redactar, estructurar y editar canciones de la Biblioteca con confirmación explícita antes de guardar.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Espacio de Trabajo \"Producción\"");
+                Bul("El antiguo espacio de Video se transforma en Producción: un entorno completo para creación y procesado multimedia.");
+                Bul("Audio DAW multipista: graba desde tu micrófono, corta y mueve clips en la línea de tiempo, reproduce todas las pistas sincronizadas y exporta en WAV, MP3, AAC u OGG.");
+                Bul("Conversor Render: compresión y conversión optimizada de videos y audios entre formatos modernos (H.264, H.265, VP9, AV1).");
+                Bul("Galería y Editor de Overlays integrados en el riel de navegación lateral.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Transmisión y Salidas");
+                Bul("Espacio de Transmisión simplificado y enfocado: selección directa entre Captura, Overlays guardados o la salida al Público.");
+                Bul("Navegador Web en Biblioteca: navega cualquier sitio web y envíalo en vivo a la pantalla pública.");
+                Bul("Salida Inalámbrica (LAN): posibilidad de fijar la salida de red en \"Solo reloj\" o \"En blanco\" mientras el proyector principal sigue en vivo.");
+                Bul("Independización del estilo de reloj: el tema del reloj por LAN no interfiere con el estilo de la pantalla pública.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Mejoras de Rendimiento y UI");
+                Bul("Cola del Monitor con botones animados interactivos y corrección en el modo Loop de repetición.");
+                Bul("Editor de Overlays: correcciones en la lista de capas y mayor estabilidad general.");
+                ImGui::Dummy(ImVec2(0,12));
+            } else if (selectedUpdateVer == 14) {
+                Cat("Notas Rápidas y Atajos");
+                Bul("Notas Rápidas rediseñado con persistencia automática de texto: nunca más perderás lo que estabas escribiendo al cerrar la ventana.");
+                Bul("Nuevo atajo Shift+Z para alternar Notas Rápidas en cualquier momento.");
+                Bul("Atajos Alt Gr+1/2/3/4 para colapsar y expandir paneles con transiciones suaves (Alt Gr+0 restaura el entorno completo).");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Gestión de Medios y Biblioteca");
+                Bul("Sección Multimedia renombrada a \"Medios\", con vista en cuadrícula de miniaturas grandes e iconos descriptivos por tipo de archivo.");
+                Bul("Importación inteligente: el reproductor de Audio puede importar letras de canciones directamente desde enlaces de YouTube.");
+                Bul("Nuevo entorno de trabajo \"Biblioteca\" para concentrarse en la gestión de contenidos.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Pantalla Completa y Ajustes");
+                Bul("El Preview cuenta con modo de pantalla completa real (F11) con controles auto-ocultables y soporte para escalado FSR.");
+                Bul("Ajustes > Actualizaciones añade herramientas para desinstalar versiones anteriores y mover la carpeta de datos de la biblioteca.");
+                ImGui::Dummy(ImVec2(0,12));
+            } else if (selectedUpdateVer == 13) {
+                Cat("App movil: editor de overlays");
+                Bul("Edicion completa de overlays desde el celular: mover, redimensionar y rotar capas con gestos, igual que en la PC.");
+                Bul("Seleccion multiple con recuadro de arrastre (rubber-band), guias de iman para alinear capas entre si, y una barra con el tamaño en pixeles mientras moves o redimensionas.");
+                Bul("Panel de capas reordenable arrastrando (igual que en la PC), y dos herramientas nuevas: Borrador y Degradado, con edicion real de pixeles.");
+                Bul("Boton \"Enviar al PC\": exporta el overlay y lo sube directo a la app de escritorio sin pasar por USB ni un cable.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Biblioteca > Render");
+                Bul("Eleccion de codec de video al convertir (H.264, H.265, VP9 o AV1) y un control deslizante de compresion.");
+                Bul("Boton para cancelar una conversion a mitad de camino, con una barra de progreso real en vez de una animacion generica.");
+                Bul("Estimacion del peso final antes de convertir, y comparacion exacta de antes/despues una vez termina.");
+                Bul("Podes elegir si guardar siempre en una carpeta fija o que te pregunte cada vez, con el mismo dialogo nativo de siempre.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Soporte real para Linux y CachyOS");
+                Bul("ProyecThor ahora compila y corre en Linux de verdad: paquete para Arch/CachyOS validado automaticamente en cada version.");
+                Bul("Funciona tanto en X11 como en Wayland (via XWayland), incluyendo en escritorios como el de CachyOS.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Windows: escalado de pantalla (DPI)");
+                Bul("La app ahora respeta el porcentaje de escalado de Windows (125%, 150%, etc.): en laptops con pantallas de alta densidad, la letra y los botones ya no se ven diminutos.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Ajustes reorganizados");
+                Bul("Nueva categoria propia \"Conexiones\", con Red (LAN), Mobile, Streaming y OSC como subcategorias separadas -- antes vivian sueltas o mezcladas dentro de Proyeccion.");
+                Bul("Actualizaciones sigue siendo su propia categoria, pero sus 3 subcategorias (Version instalada, Estado, Configuracion) se unificaron en una sola pagina.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Editor de Estilos de Letra, renovado por completo");
+                Bul("Ahora es un editor visual a pantalla completa: arrastras y redimensionas directamente sobre una vista previa 16:9, en vez de tocar numeros de margen a mano.");
+                Bul("El cuerpo de un versiculo biblico usa el mismo diseno que las canciones (recuadro de Letras) -- ya no hay un recuadro aparte para el texto del versiculo.");
+                Bul("Nuevo recuadro opcional \"Indice\": si lo activas, muestra solo la referencia (ej. \"Genesis 1:1\") en la posicion, tamano y estilo que quieras, totalmente independiente de las Letras.");
+                Bul("Menu de opciones arriba (Fuente/Alinear, Efectos, Fondo de pantalla), mismo lenguaje visual que el editor de Overlays pero pensado para texto.");
+                Bul("Cada recuadro puede tener su propio fondo de imagen opcional, elegido de tu biblioteca de fondos, con control de opacidad -- transparente por defecto.");
+                Bul("Los estilos guardados con la version anterior se migran solos al nuevo formato al abrirlos, sin perder la configuracion previa.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Efectos de texto nuevos");
+                Bul("Texto 3D: extrusion solida detras de la letra, con color y profundidad configurables.");
+                Bul("Degradado de color: interpola entre dos colores a lo largo de un angulo, para letras multicolor.");
+                Bul("Transparencia con angulo: desvanece el texto de un extremo al otro segun el angulo elegido, en vez de una opacidad pareja.");
+                Bul("Los tres se combinan con el resto de efectos (sombra, borde, glow, neon, etc.) y se editan desde la misma tarjeta de Efectos.");
+                ImGui::Dummy(ImVec2(0,12));
+
+                Cat("Aviso");
+                Bul("Esta es una actualizacion grande y todavia esta en beta / en construccion: pueden aparecer ajustes y correcciones adicionales en las proximas versiones menores.");
+                ImGui::Dummy(ImVec2(0,12));
+            } else if (selectedUpdateVer == 12) {
                 Cat("Contadores (antes \"Reloj y Contadores\")");
                 Bul("Se acorto el nombre de la seccion a secas \"Contadores\" en el sidebar de Home.");
                 ImGui::Dummy(ImVec2(0,12));
@@ -1310,7 +1868,7 @@ void Hub::RenderMainContent(float w, float h) {
                 Bul("El aviso de \"overlay activo sin cuadro de reloj\" y otros textos largos ya no se cortaban contra el borde del panel: ahora se ajustan en varias lineas.");
                 Bul("Corregido un icono roto en el boton \"Avanzar\" del titulo/mensaje del reloj.");
                 ImGui::Dummy(ImVec2(0,12));
-            } else if (selectedUpdateVer == 11) { // v0.5.0
+            } else if (selectedUpdateVer == 11) {
                 Cat("Ajustes reorganizado");
                 Bul("Cada configuracion ahora es su propia pagina: al elegir una subcategoria en el menu de la izquierda, se ve sola en vez de tener que scrollear una lista larga con todo junto.");
                 Bul("Nuevo buscador arriba del menu de Ajustes, para encontrar una configuracion por nombre sin tener que navegar categoria por categoria.");
@@ -1349,7 +1907,7 @@ void Hub::RenderMainContent(float w, float h) {
                 Bul("Varias ventanas y menus (el menu superior, los popups de Estilos y el selector rapido Alt+Espacio, el Monitor de Control) ignoraban el tema elegido en Ajustes > Apariencia y se quedaban siempre con los mismos colores fijos — ahora todos respetan el tema.");
                 Bul("Los fondos de los paneles eran levemente transparentes y dejaban ver lo que hubiera atras, dando un aspecto \"lavado\" o inconsistente segun el tema — ahora son solidos.");
                 ImGui::Dummy(ImVec2(0,12));
-            } else if (selectedUpdateVer == 10) { // v0.4.3
+            } else if (selectedUpdateVer == 10) {
                 Cat("Nueva seccion: Conexiones");
                 Bul("Toolbar nueva arriba de todo (Hub / Proyector / Conexiones / Biblioteca / Biblia) para saltar entre secciones completas de la app, opcional segun Vista.");
                 Bul("OSC: enviar mensajes a luces/controladores externos con direccion IP y puerto configurables, mas \"Aprender\" (OSC Learn) para vincular un fader externo a parametros en vivo como opacidad, velocidad, escala, color o intensidad de los shaders.");
@@ -1400,7 +1958,7 @@ void Hub::RenderMainContent(float w, float h) {
                 Cat("Correcciones de estabilidad");
                 Bul("Corregido un cierre inesperado de la app relacionado con ffmpeg: antes podia abrir brevemente una consola negra y cerrarse sin avisar el motivo; ahora corre oculto y muestra el error real si algo falla (por ejemplo, al convertir un video en Biblioteca > Render).");
                 ImGui::Dummy(ImVec2(0,12));
-            } else if (selectedUpdateVer == 9) { // v0.4.2
+            } else if (selectedUpdateVer == 9) {
                 Cat("Pads de Vista en Vivo");
                 Bul("Corregido el problema por el cual guardar un pad (click derecho > Guardar aqui) podia no aplicar nada al presionarlo despues: ahora siempre captura estilo, fondo y captura de pantalla tal cual estan en pantalla.");
                 Bul("El panel de Pads se reorganizo en dos secciones: \"General\" (los pads de siempre) y \"Captura\", que ahora muestra las mismas escenas rapidas del panel Captura, sincronizadas — guardar o aplicar una desde cualquiera de los dos lados es lo mismo.");
@@ -1431,7 +1989,7 @@ void Hub::RenderMainContent(float w, float h) {
                 Bul("Blur, Sharpen, Bloom y Aberracion cromatica: desenfoque, nitidez, resplandor de brillos y desfase de color, respectivamente.");
                 Bul("TAA (antialiasing temporal): suaviza bordes mezclando con el frame anterior, a costa de un poco de desenfoque de movimiento.");
                 ImGui::Dummy(ImVec2(0,12));
-            } else if (selectedUpdateVer == 8) { // v0.4.1
+            } else if (selectedUpdateVer == 8) {
                 Cat("Editor de canciones (rediseño total)");
                 Bul("Editar una cancion ya no abre una ventana flotante encima: el mismo panel de Canciones pasa a modo edicion, con letra a la izquierda (mucho mas grande) y preview de las diapositivas a la derecha.");
                 Bul("Titulo y Autor quedan siempre a la vista; Nota, Derechos de autor y Extra se movieron detras de un boton de informacion para no restarle espacio a la letra.");
@@ -1481,7 +2039,7 @@ void Hub::RenderMainContent(float w, float h) {
                 Bul("Corregido un problema por el cual el video de fondo podia irse desincronizando del audio con el correr de los minutos en computadoras mas lentas.");
                 Bul("Corregido: el control de FSR en Ajustes > Proyeccion y el del panel de Shaders podian mostrar y guardar valores distintos entre si.");
                 ImGui::Dummy(ImVec2(0,12));
-            } else if (selectedUpdateVer == 7) { // v0.4.0
+            } else if (selectedUpdateVer == 7) {
                 Cat("Cola de videos y video en vivo");
                 Bul("La cola de videos es mucho mas confiable: los clips pasan de uno a otro sin cortes ni pantallas de carga de por medio.");
                 Bul("Corregido: la app ya no se traba si hacias clic varias veces seguidas sobre el mismo video.");
@@ -1526,7 +2084,7 @@ void Hub::RenderMainContent(float w, float h) {
                 Bul("Nuevo boton en Vista en Vivo para alternar la previsualizacion entre Publico y Stage, y tener a la vista ambas salidas sin un segundo monitor.");
                 Bul("[Experimental] Opcion para que el Monitor de Control muestre exactamente lo mismo que ve el operador en Vista en Vivo, en vez de la grilla de reloj/texto.");
                 ImGui::Dummy(ImVec2(0,12));
-            } else if (selectedUpdateVer == 6) { // v0.3.5 — version estable, changelog consolidado
+            } else if (selectedUpdateVer == 6) {
                 Cat("Audio");
                 Bul("Sonido renovado: nueva pantalla de audio, portada por cancion, ecualizador y control de volumen.");
                 Bul("Ahora podes asignar autores a las canciones.");
@@ -1593,7 +2151,7 @@ void Hub::RenderMainContent(float w, float h) {
 
                 Cat("Soporte y comunidad");
                 Bul("Canal oficial de comunicacion y soporte en WhatsApp y Discord.");
-            } else { // v0.3.0
+            } else {
                 Cat("General");
                 Bul("Nuevo Hub central para administrar la app.");
                 Bul("Codigo QR automatico para ver la transmision desde el celular.");
@@ -1632,15 +2190,411 @@ void Hub::RenderMainContent(float w, float h) {
             ImGui::PushStyleColor(ImGuiCol_Text,          HT::TextPri);
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusSm);
             if (ImGui::Button("Cerrar", ImVec2(bw, bh)))
-                isUpdateModalOpen = false;
+                m_IsUpdateModalOpen = false;
             ImGui::PopStyleVar();
             ImGui::PopStyleColor(4);
         }
 
         ImGui::End();
-        ImGui::PopStyleVar(4); // Alpha, WindowRounding, WindowBorderSize, WindowPadding
+        ImGui::PopStyleVar(4);
         ImGui::PopStyleColor(2);
     }
+}
+
+// ── Modal de Tutorial y Tour Guiado Profesional (Estilo Adobe) ──────────────
+void Hub::RenderTutorialModal() {
+    {
+        const float target = m_TutorialOpen ? 1.0f : 0.0f;
+        m_TutorialAnim += (target - m_TutorialAnim) * std::min(1.0f, ImGui::GetIO().DeltaTime * 12.0f);
+        m_TutorialAnim = std::clamp(m_TutorialAnim, 0.0f, 1.0f);
+        if (m_TutorialAnim < 0.001f) m_TutorialAnim = 0.0f;
+    }
+
+    if (!m_TutorialOpen && m_TutorialAnim <= 0.0f) return;
+
+    ImGuiViewport* vp    = ImGui::GetMainViewport();
+    const float    fadeA = EaseOut(m_TutorialAnim);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, fadeA);
+
+    // Overlay oscuro de fondo (Dim)
+    ImGui::SetNextWindowPos(vp->Pos);
+    ImGui::SetNextWindowSize(vp->Size);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, IM_COL32(0, 0, 0, 185));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::Begin("##TutorialDimOverlay", nullptr,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoFocusOnAppearing |
+        ImGuiWindowFlags_NoBringToFrontOnFocus);
+    ImGui::End();
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor();
+
+    // Ventana Modal de Tutorial
+    const float scale         = 0.96f + 0.04f * fadeA;
+    const float modalW        = std::min(vp->Size.x - 40.0f, 880.0f * scale);
+    const float modalH        = std::min(vp->Size.y - 40.0f, 660.0f * scale);
+    const float modalRounding = HT::RadiusLg;
+    const float footerH       = 62.0f;
+
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(modalW, modalH), ImGuiCond_Always);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ColA(HT::Card, 255));
+    ImGui::PushStyleColor(ImGuiCol_Border,   ColAf(HT::AccentBlue, 0.45f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,   modalRounding);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.5f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,    ImVec2(0.0f, 0.0f));
+
+    bool vis = ImGui::Begin("##TutorialModal", nullptr,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+        ImGuiWindowFlags_NoResize   | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMove);
+
+    if (vis) {
+        ImDrawList* dl   = ImGui::GetWindowDrawList();
+        ImVec2      winP = ImGui::GetWindowPos();
+
+        // ── 1. Header estilizado con gradiente ──
+        const float headerH = 92.0f;
+        const ImVec2 h0 = winP;
+        const ImVec2 h1 = { winP.x + modalW, winP.y + headerH };
+
+        dl->AddRectFilledMultiColor(h0, h1,
+            ColA(HT::CardAlt, 255), ColA(HT::CardAlt, 255),
+            ColA(HT::BgMain, 255), ColA(HT::BgMain, 255));
+        dl->AddLine(ImVec2(h0.x, h1.y), h1, ColAf(HT::Divider, 0.80f), 1.0f);
+
+        // Tag / Badge superior
+        const ImVec2 tagP = { winP.x + 24.0f, winP.y + 14.0f };
+        dl->AddRectFilled(tagP, { tagP.x + 200.0f, tagP.y + 20.0f }, ColAf(HT::AccentBlue, 0.25f), HT::RadiusSm);
+        dl->AddText({ tagP.x + 8.0f, tagP.y + 2.0f }, HT::AccentSoft, "🎓 TOUR GUIADO • APRENDE PROYECTHOR");
+
+        // Título Principal
+        ImGui::SetCursorScreenPos({ winP.x + 24.0f, winP.y + 38.0f });
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+        ImGui::SetWindowFontScale(1.22f);
+        ImGui::TextUnformatted("Guía Rápida de Funciones Esenciales");
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
+
+        // Botón cerrar (X) en la esquina superior derecha
+        ImGui::SetCursorScreenPos({ winP.x + modalW - 40.0f, winP.y + 12.0f });
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ColA(HT::Surface, 200));
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+        if (ImGui::Button("✕", ImVec2(28.0f, 28.0f))) {
+            m_TutorialOpen = false;
+        }
+        ImGui::PopStyleColor(3);
+
+        // ── 2. Stepper / Barra de Progreso de 6 Pasos (Adobe Style) ──
+        const float stepperY = winP.y + headerH + 10.0f;
+        const float stepperH = 46.0f;
+        const int totalSteps = 6;
+
+        struct StepMeta { const char* label; const char* shortName; };
+        const StepMeta steps[totalSteps] = {
+            { "1. Flujo en Vivo", "Flujo" },
+            { "2. Biblioteca",    "Biblioteca" },
+            { "3. Producción 3D", "Producción" },
+            { "4. Conexiones",    "Conexiones" },
+            { "5. Estilos & FX",  "Estilos" },
+            { "6. Atajos & Control", "Atajos" },
+        };
+
+        const float stepW = (modalW - 48.0f) / (float)totalSteps;
+
+        for (int i = 0; i < totalSteps; ++i) {
+            float sX = winP.x + 24.0f + i * stepW;
+            ImVec2 sMin = { sX, stepperY };
+            ImVec2 sMax = { sX + stepW - 6.0f, stepperY + stepperH };
+
+            bool isCur  = (m_TutorialStep == i);
+            bool isPast = (m_TutorialStep > i);
+
+            ImGui::SetCursorScreenPos(sMin);
+            ImGui::PushID(i + 100);
+            if (ImGui::InvisibleButton("##stepBtn", ImVec2(stepW - 6.0f, stepperH))) {
+                m_TutorialStep = i;
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+            ImGui::PopID();
+
+            // Fondo del botón de paso
+            ImU32 sBg = isCur ? ColAf(HT::AccentBlue, 0.22f) : (isPast ? ColA(HT::Surface, 180) : ColA(HT::CardAlt, 120));
+            ImU32 sBdr = isCur ? HT::AccentBlue : (isPast ? ColAf(HT::AccentSoft, 0.40f) : ColAf(HT::Divider, 0.40f));
+            dl->AddRectFilled(sMin, sMax, sBg, HT::RadiusSm);
+            dl->AddRect(sMin, sMax, sBdr, HT::RadiusSm, 0, isCur ? 1.6f : 1.0f);
+
+            // Indicador / Número de paso
+            ImVec2 numPos = { sMin.x + 8.0f, sMin.y + 6.0f };
+            ImU32 numCol = isCur ? HT::AccentSoft : (isPast ? HT::TextPri : HT::TextMuted);
+            dl->AddText(numPos, numCol, steps[i].label);
+
+            // Barra inferior activa
+            if (isCur) {
+                dl->AddRectFilled({ sMin.x + 2.0f, sMax.y - 2.5f }, { sMax.x - 2.0f, sMax.y }, HT::AccentBlue, 1.0f);
+            }
+        }
+
+        // ── 3. Cuerpo del Tutorial (Layout 2 Columnas) ──
+        const float bodyY = stepperY + stepperH + 12.0f;
+        const float bodyH = modalH - (headerH + stepperH + footerH + 34.0f);
+
+        ImGui::SetCursorScreenPos({ winP.x + 24.0f, bodyY });
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ColA(HT::BgMain, 180));
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusMd);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 16.0f));
+
+        if (ImGui::BeginChild("##tutorialBodyChild", ImVec2(modalW - 48.0f, bodyH), true)) {
+            float availW = ImGui::GetContentRegionAvail().x;
+            float leftColW = std::clamp(availW * 0.36f, 220.0f, 280.0f);
+            float rightColW = availW - leftColW - 20.0f;
+
+            ImVec2 bPos = ImGui::GetCursorScreenPos();
+
+            // ── Columna Izquierda: Tarjeta Ilustrativa del Paso ──
+            {
+                ImVec2 card0 = bPos;
+                ImVec2 card1 = { bPos.x + leftColW, bPos.y + bodyH - 32.0f };
+
+                dl->AddRectFilled(card0, card1, ColA(HT::CardAlt, 240), HT::RadiusMd);
+                dl->AddRect(card0, card1, ColAf(HT::AccentBlue, 0.35f), HT::RadiusMd, 0, 1.2f);
+
+                // Halo central decorativo
+                ImVec2 icCenter = { card0.x + leftColW * 0.5f, card0.y + 70.0f };
+                dl->AddCircleFilled(icCenter, 36.0f, ColAf(HT::AccentBlue, 0.18f));
+                dl->AddCircle(icCenter, 36.0f, ColAf(HT::AccentSoft, 0.40f), 24, 1.2f);
+
+                // Icono según paso
+                const char* stepIcons[] = { "🚀", "📚", "🎬", "🌐", "✨", "⌨" };
+                ImVec2 iSz = ImGui::CalcTextSize(stepIcons[m_TutorialStep]);
+                dl->AddText({ icCenter.x - iSz.x * 0.5f, icCenter.y - iSz.y * 0.5f }, IM_COL32_WHITE, stepIcons[m_TutorialStep]);
+
+                // Insignia del paso
+                const char* stepTags[] = {
+                    "FLUJO EN VIVO",
+                    "BIBLIOTECA & MEDIOS",
+                    "PRODUCCIÓN & 3D",
+                    "CONEXIONES & LAN",
+                    "ESTILOS & SHADERS",
+                    "ATAJOS DE TECLADO"
+                };
+                ImVec2 tSz = ImGui::CalcTextSize(stepTags[m_TutorialStep]);
+                ImVec2 t0 = { card0.x + (leftColW - tSz.x - 16.0f) * 0.5f, card0.y + 125.0f };
+                dl->AddRectFilled(t0, { t0.x + tSz.x + 16.0f, t0.y + tSz.y + 6.0f }, ColAf(HT::AccentBlue, 0.30f), HT::RadiusSm);
+                dl->AddText({ t0.x + 8.0f, t0.y + 3.0f }, HT::AccentSoft, stepTags[m_TutorialStep]);
+
+                // Beneficios clave en la tarjeta izquierda
+                const char* keyPoints[][3] = {
+                    { "• Sin pantallas negras", "• Previsualización segura", "• Control multimonitor" },
+                    { "• Canciones y acordes", "• Biblias multiversión", "• Drag & drop de archivos" },
+                    { "• Modelos 3D interactivos", "• Capas independientes", "• Navegador web en vivo" },
+                    { "• Control web con código QR", "• App móvil con PIN seguro", "• Integración luces OSC" },
+                    { "• Tipografías reales", "• Super-resolución FSR/NIS", "• Texto 3D y resplandor" },
+                    { "• Avance con Enter/Flechas", "• Notas con Shift+Z", "• Pánico: limpiar texto" }
+                };
+
+                float kpY = card0.y + 165.0f;
+                for (int kp = 0; kp < 3; ++kp) {
+                    dl->AddText({ card0.x + 14.0f, kpY }, HT::TextPri, keyPoints[m_TutorialStep][kp]);
+                    kpY += 26.0f;
+                }
+            }
+
+            // ── Columna Derecha: Explicación Detallada y Guías ──
+            ImGui::SetCursorScreenPos({ bPos.x + leftColW + 20.0f, bPos.y });
+            ImGui::BeginGroup();
+
+            auto BulletPoint = [&](const char* title, const char* desc, ImVec4 col) {
+                ImGui::PushStyleColor(ImGuiCol_Text, col);
+                ImGui::TextUnformatted("●");
+                ImGui::PopStyleColor();
+                ImGui::SameLine();
+                ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+                ImGui::TextUnformatted(title);
+                ImGui::PopStyleColor();
+                ImGui::SameLine();
+                ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+                ImGui::TextUnformatted(desc);
+                ImGui::PopStyleColor();
+                ImGui::Spacing();
+            };
+
+            const ImVec4 colAccentSoft = ImGui::ColorConvertU32ToFloat4(HT::AccentSoft);
+
+            if (m_TutorialStep == 0) {
+                ImGui::TextColored(colAccentSoft, "Paso 1: El Flujo de Trabajo Profesional");
+                ImGui::TextWrapped("ProyecThor separa de forma estricta la preparación de contenidos de la salida final, asegurando que nunca proyectes contenido accidentalmente.");
+                ImGui::Dummy(ImVec2(0, 8.0f));
+
+                BulletPoint("1. Biblioteca (Panel Izquierdo):", "Elige o busca canciones, versículos o videos.", ImVec4(0.2f, 0.8f, 1.0f, 1.0f));
+                BulletPoint("2. Previsualización (Centro):", "Selecciona la estrofa o diapositiva que deseas mostrar.", ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+                BulletPoint("3. Salida en Vivo (Derecha / Pantalla):", "El público ve únicamente lo que activas con Enter o doble clic.", ImVec4(0.2f, 0.9f, 0.4f, 1.0f));
+
+                ImGui::Dummy(ImVec2(0, 10.0f));
+                // Pro Tip Box
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ColAf(HT::AccentBlue, 0.12f));
+                ImGui::PushStyleColor(ImGuiCol_Border, ColAf(HT::AccentBlue, 0.45f));
+                ImGui::BeginChild("##tip0", ImVec2(0, 72), true);
+                ImGui::TextColored(colAccentSoft, "💡 CONSEJO PRO:");
+                ImGui::TextWrapped("Puedes pasar a la siguiente diapositiva en vivo usando la tecla Espacio o las Flechas (▲ / ▼) del teclado.");
+                ImGui::EndChild();
+                ImGui::PopStyleColor(2);
+            } else if (m_TutorialStep == 1) {
+                ImGui::TextColored(colAccentSoft, "Paso 2: Biblioteca de Medios, Canciones y Biblia");
+                ImGui::TextWrapped("Tu centro neurálgico para organizar, estructurar y proyectar todo el contenido multimedia de tus reuniones.");
+                ImGui::Dummy(ImVec2(0, 8.0f));
+
+                BulletPoint("Canciones:", "Detección de estrofas y coros con edición en caliente sin perder el foco.", ImVec4(0.2f, 0.8f, 1.0f, 1.0f));
+                BulletPoint("Biblia:", "Búsqueda instantánea por cita (ej. Juan 3:16) o por palabras clave.", ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+                BulletPoint("Medios:", "Videos, imágenes y audios con miniaturas reales, loops y ecualizador.", ImVec4(0.2f, 0.9f, 0.4f, 1.0f));
+
+                ImGui::Dummy(ImVec2(0, 10.0f));
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ColAf(HT::AccentBlue, 0.12f));
+                ImGui::PushStyleColor(ImGuiCol_Border, ColAf(HT::AccentBlue, 0.45f));
+                ImGui::BeginChild("##tip1", ImVec2(0, 72), true);
+                ImGui::TextColored(colAccentSoft, "💡 CONSEJO PRO:");
+                ImGui::TextWrapped("Arrastra archivos desde el explorador de Windows directamente sobre el panel de Medios para importarlos al instante.");
+                ImGui::EndChild();
+                ImGui::PopStyleColor(2);
+            } else if (m_TutorialStep == 2) {
+                ImGui::TextColored(colAccentSoft, "Paso 3: Producción Creativa, Overlays, Web y Modelos 3D");
+                ImGui::TextWrapped("Herramientas integradas para llevar tus presentaciones a un nivel visual cinematográfico.");
+                ImGui::Dummy(ImVec2(0, 8.0f));
+
+                BulletPoint("Modelos 3D:", "Carga archivos .obj, .stl, .ply, .gltf y .glb con rotación 360° y proyéctalos en vivo.", ImVec4(0.2f, 0.8f, 1.0f, 1.0f));
+                BulletPoint("Overlays:", "Capas transparentes de texto, logotipos y cronómetros sobre el video.", ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+                BulletPoint("Navegador Web & Lab:", "Muestra sitios web o grafica funciones matemáticas en vivo.", ImVec4(0.2f, 0.9f, 0.4f, 1.0f));
+
+                ImGui::Dummy(ImVec2(0, 10.0f));
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ColAf(HT::AccentBlue, 0.12f));
+                ImGui::PushStyleColor(ImGuiCol_Border, ColAf(HT::AccentBlue, 0.45f));
+                ImGui::BeginChild("##tip2", ImVec2(0, 72), true);
+                ImGui::TextColored(colAccentSoft, "💡 CONSEJO PRO:");
+                ImGui::TextWrapped("En el panel 3D puedes pulsar '🔄 Voltear Y' si un modelo importado aparece de cabeza por su orientación original.");
+                ImGui::EndChild();
+                ImGui::PopStyleColor(2);
+            } else if (m_TutorialStep == 3) {
+                ImGui::TextColored(colAccentSoft, "Paso 4: Centro de Conexiones (Red LAN, Móvil y OSC)");
+                ImGui::TextWrapped("Gestiona todas las comunicaciones locales y dispositivos externos desde una sola ventana unificada.");
+                ImGui::Dummy(ImVec2(0, 8.0f));
+
+                BulletPoint("Red (LAN / Web Remote):", "Escanea el código QR desde tu smartphone para controlar diapositivas por Wi-Fi.", ImVec4(0.2f, 0.8f, 1.0f, 1.0f));
+                BulletPoint("App Móvil:", "Emparejamiento bidireccional seguro mediante PIN de 4 dígitos.", ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+                BulletPoint("Protocolo OSC & Chat:", "Conecta mesas de iluminación DMX/OSC y comunícate con el equipo.", ImVec4(0.2f, 0.9f, 0.4f, 1.0f));
+
+                ImGui::Dummy(ImVec2(0, 10.0f));
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ColAf(HT::AccentBlue, 0.12f));
+                ImGui::PushStyleColor(ImGuiCol_Border, ColAf(HT::AccentBlue, 0.45f));
+                ImGui::BeginChild("##tip3", ImVec2(0, 72), true);
+                ImGui::TextColored(colAccentSoft, "💡 CONSEJO PRO:");
+                ImGui::TextWrapped("El Web Remote funciona 100% en tu red local (LAN), no consume datos ni depende de conexión a Internet.");
+                ImGui::EndChild();
+                ImGui::PopStyleColor(2);
+            } else if (m_TutorialStep == 4) {
+                ImGui::TextColored(colAccentSoft, "Paso 5: Diseño, Estilos Tipográficos y Shaders");
+                ImGui::TextWrapped("Personalización estética y procesado de imagen acelerado por hardware.");
+                ImGui::Dummy(ImVec2(0, 8.0f));
+
+                BulletPoint("Editor de Estilos:", "Plantillas con fuentes reales del sistema, bordes, sombras y texto 3D.", ImVec4(0.2f, 0.8f, 1.0f, 1.0f));
+                BulletPoint("Filtros Shaders:", "Escalado inteligente AMD FSR y NVIDIA NIS para máxima nitidez en proyectores.", ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+                BulletPoint("Relleno Inteligente:", "Elimina barras negras laterales al reproducir videos verticales.", ImVec4(0.2f, 0.9f, 0.4f, 1.0f));
+
+                ImGui::Dummy(ImVec2(0, 10.0f));
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ColAf(HT::AccentBlue, 0.12f));
+                ImGui::PushStyleColor(ImGuiCol_Border, ColAf(HT::AccentBlue, 0.45f));
+                ImGui::BeginChild("##tip4", ImVec2(0, 72), true);
+                ImGui::TextColored(colAccentSoft, "💡 CONSEJO PRO:");
+                ImGui::TextWrapped("Puedes elegir entre 14 temas Pro en Ajustes > Apariencia para adaptar la interfaz a tu estilo de trabajo.");
+                ImGui::EndChild();
+                ImGui::PopStyleColor(2);
+            } else if (m_TutorialStep == 5) {
+                ImGui::TextColored(colAccentSoft, "Paso 6: Atajos de Teclado y Control de Emergencia");
+                ImGui::TextWrapped("Domina los atajos esenciales para reaccionar al instante durante eventos en vivo.");
+                ImGui::Dummy(ImVec2(0, 8.0f));
+
+                BulletPoint("F11:", "Alternar pantalla completa en la ventana principal o monitor.", ImVec4(0.2f, 0.8f, 1.0f, 1.0f));
+                BulletPoint("Shift + Z:", "Abrir y cerrar el panel flotante de Notas Rápidas.", ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+                BulletPoint("Botones de Limpieza:", "Oculta el texto manteniendo el fondo, o envía a negro con 1 clic.", ImVec4(0.2f, 0.9f, 0.4f, 1.0f));
+
+                ImGui::Dummy(ImVec2(0, 10.0f));
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ColAf(HT::AccentBlue, 0.12f));
+                ImGui::PushStyleColor(ImGuiCol_Border, ColAf(HT::AccentBlue, 0.45f));
+                ImGui::BeginChild("##tip5", ImVec2(0, 72), true);
+                ImGui::TextColored(colAccentSoft, "💡 CONSEJO PRO:");
+                ImGui::TextWrapped("Presiona 'T' en el Hub para volver a abrir este tutorial interactivo cuando lo necesites.");
+                ImGui::EndChild();
+                ImGui::PopStyleColor(2);
+            }
+
+            ImGui::EndGroup();
+        }
+        ImGui::EndChild();
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor();
+
+        // ── 4. Footer con Navegación ──
+        const float footY = winP.y + modalH - footerH;
+        dl->AddLine(ImVec2(winP.x, footY), ImVec2(winP.x + modalW, footY), ColAf(HT::Divider, 0.80f), 1.0f);
+
+        // Indicador de Paso (Texto izquierda)
+        char stepStr[64];
+        snprintf(stepStr, sizeof(stepStr), "Paso %d de %d", m_TutorialStep + 1, totalSteps);
+        ImGui::SetCursorScreenPos({ winP.x + 24.0f, footY + (footerH - 24.0f) * 0.5f });
+        ImGui::AlignTextToFramePadding();
+        ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+        ImGui::TextUnformatted(stepStr);
+        ImGui::PopStyleColor();
+
+        // Botones de Acción (Derecha)
+        ImGui::SetCursorScreenPos({ winP.x + modalW - 380.0f, footY + (footerH - 34.0f) * 0.5f });
+
+        // Botón Anterior
+        ImGui::BeginDisabled(m_TutorialStep <= 0);
+        if (ImGui::Button(" ◀ Anterior ", ImVec2(100.0f, 34.0f))) {
+            if (m_TutorialStep > 0) m_TutorialStep--;
+        }
+        ImGui::EndDisabled();
+
+        ImGui::SameLine(0.0f, 10.0f);
+
+        // Botón Siguiente / Empezar
+        if (m_TutorialStep < totalSteps - 1) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ColAf(HT::AccentBlue, 0.35f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ColAf(HT::AccentBlue, 0.60f));
+            ImGui::PushStyleColor(ImGuiCol_Border, HT::AccentBlue);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.2f);
+            if (ImGui::Button(" Siguiente ▶ ", ImVec2(120.0f, 34.0f))) {
+                m_TutorialStep++;
+            }
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(3);
+        } else {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.65f, 0.35f, 0.50f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.85f, 0.45f, 0.70f));
+            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.25f, 0.95f, 0.50f, 0.90f));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.2f);
+            if (ImGui::Button(" 🚀 Empezar ", ImVec2(130.0f, 34.0f))) {
+                m_TutorialOpen = false;
+                m_LaunchRequested = true;
+            }
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(3);
+        }
+
+        ImGui::SameLine(0.0f, 10.0f);
+
+        // Botón Cerrar
+        if (ImGui::Button("Cerrar", ImVec2(90.0f, 34.0f))) {
+            m_TutorialOpen = false;
+        }
+    }
+
+    ImGui::End();
+    ImGui::PopStyleVar(4);
+    ImGui::PopStyleColor(2);
 }
 
 } // namespace ProyecThor::UI

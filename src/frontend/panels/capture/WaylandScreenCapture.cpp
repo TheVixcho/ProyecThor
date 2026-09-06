@@ -450,7 +450,7 @@ struct WaylandScreenCapture::Impl {
         resp = WaitForResponse(dbusConn, handle, 120000, &cancelRequested);
         if (!resp.ok) {
             if (resp.msg) dbus_message_unref(resp.msg);
-            SetState(State::Error, resp.error.empty() ? "el usuario cancelo la seleccion" : resp.error);
+            SetState(State::Error, resp.error.empty() ? "el usuario cancelo la selección" : resp.error);
             return;
         }
         uint32_t nodeId = 0;

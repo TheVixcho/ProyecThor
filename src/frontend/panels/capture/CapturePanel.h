@@ -45,7 +45,7 @@ public:
     CapturePanel();
     ~CapturePanel();
 
-    // Dibuja los controles (solo cuando la seccion "Captura" esta activa).
+    // Dibuja los controles (solo cuando la sección "Captura" esta activa).
     // Ya no abre su propia ventana — HomePanel es dueño de esa.
     void        RenderContent();
     std::string GetName()  const { return "Captura"; }
@@ -72,7 +72,7 @@ public:
     // Todo") que necesitan cortarla sin pasar por los controles internos.
     void        Stop() { StopCapture(); }
 
-    // Version parametrizada de la logica de "Escenas rápidas" (ver
+    // Versión parametrizada de la lógica de "Escenas rápidas" (ver
     // SaveCurrentAsScene/RecallScene mas abajo), para que paneles externos
     // (ViewPanel > Pads) puedan guardar/aplicar una disposicion de
     // captura sin pasar por los 8 slots fijos de este panel.

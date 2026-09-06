@@ -4,6 +4,7 @@
 #include "layers/LayersTheme.h"
 #include "frontend/ui/UIManager.h"
 #include "backend/core/PresentationCore.h"
+#include "backend/core/FileDeletionManager.h"
 #include "backend/core/AppPaths.h"
 #include <imgui.h>
 #ifdef _WIN32
@@ -91,8 +92,8 @@ static fs::path BgImagesRootDir() {
 static std::string OpenImageFileDialogUnix() {
     const char* commands[] = {
         "zenity --file-selection --title=\"Seleccionar imagen\" "
-        "--file-filter=\"Imagenes | *.jpg *.jpeg *.png\" 2>/dev/null",
-        "kdialog --getopenfilename . \"*.jpg *.jpeg *.png|Imagenes\" 2>/dev/null"
+        "--file-filter=\"Imágenes | *.jpg *.jpeg *.png\" 2>/dev/null",
+        "kdialog --getopenfilename . \"*.jpg *.jpeg *.png|Imágenes\" 2>/dev/null"
     };
     for (const char* cmd : commands) {
         std::string result;
@@ -316,7 +317,7 @@ std::string OverlayLibraryTab::ImportOverlayImage() {
     OPENFILENAMEA ofn = {};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner   = NULL;
-    ofn.lpstrFilter = "Imagenes\0*.jpg;*.jpeg;*.png\0Todos los archivos\0*.*\0";
+    ofn.lpstrFilter = "Imágenes\0*.jpg;*.jpeg;*.png\0Todos los archivos\0*.*\0";
     ofn.lpstrFile   = filename;
     ofn.nMaxFile    = MAX_PATH;
     ofn.Flags       = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
@@ -371,9 +372,8 @@ OverlayLayer OverlayLibraryTab::ImportOverlaySvgSingle(int canvasW, int canvasH)
 //  control remoto de Overlays desde el celular).
 // ─────────────────────────────────────────────────────────────────────────────
 bool OverlayLibraryTab::DeleteOverlay(const std::string& name) {
-    std::error_code ec;
-    fs::remove(OverlaysDir() / (name + ".overlay"), ec);
-    fs::remove(OverlaysDir() / (name + ".png"), ec);
+    Core::FileDeletionManager::ForceDeleteFile((OverlaysDir() / (name + ".overlay")).string());
+    Core::FileDeletionManager::ForceDeleteFile((OverlaysDir() / (name + ".png")).string());
     m_ThumbnailCache.erase(ResolvePngPath(name));
     return true;
 }
@@ -591,7 +591,7 @@ void OverlayLibraryTab::RenderGallery() {
         ImGui::GetWindowDrawList()->AddRectFilled(p, {p.x+w,p.y+64}, LPU32(LP::Surface1), 10.0f);
         ImGui::Dummy({0,12});
         ImGui::PushStyleColor(ImGuiCol_Text, LP::TextMuted);
-        const char* msg = "Sin overlays aun. Usa el boton + de arriba para crear uno.";
+        const char* msg = "Sin overlays aun. Usa el botón + de arriba para crear uno.";
         float tw = ImGui::CalcTextSize(msg).x;
         ImGui::SetCursorPosX(std::max(0.0f, (w-tw)*0.5f));
         ImGui::Text("%s", msg);

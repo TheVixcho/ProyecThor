@@ -70,7 +70,7 @@ void HomePanel::RenderHomeContent()
         // estaba en pantalla: ni el boton Reproducir, ni el target de
         // drag-and-drop para agregar videos, nada. Eso explicaba reportes
         // de "agrego un video y no pasa nada" / "aprieto reproducir y no
-        // hace nada" — no era que la logica fallara, es que la UI de la
+        // hace nada" — no era que la lógica fallara, es que la UI de la
         // cola no estaba ahi para interactuar. Ahora se muestra tambien
         // aca (el estado por defecto de Home, sin nada mas seleccionado),
         // asi la cola queda accesible de forma confiable sin depender de
@@ -81,12 +81,28 @@ void HomePanel::RenderHomeContent()
 
 void HomePanel::Render()
 {
+    // El boton de pantalla completa del Preview (ver MonitorView::
+    // RequestPreviewFullscreen) necesita UIManager para poder tomar todo el
+    // area de contenido -- se re-propaga cada frame (asignacion de puntero,
+    // gratis) en vez de un setter propio porque m_UIManagerRef se fija
+    // directo como campo publico desde main.cpp, sin un punto unico
+    // despues de construir HomePanel donde enganchar esto una sola vez.
+    if (m_UIManagerRef)
+        m_MonitorView.SetUIManager(m_UIManagerRef);
+
     // Pump incondicional: la cola del Monitor (MonitorView::Update -> avanza
     // al siguiente clip cuando VLC reporta fin real) tiene que correr
     // siempre, no solo cuando Home esta dibujando su contenido (aunque en la
     // practica Home ya no tiene otras pestañas que la tapen — esto se
     // mantiene por si el panel se llega a colapsar/ocultar).
     m_MonitorView.Update();
+
+    // Alt Gr + 4: si Home esta colapsado (o pasando el punto medio de la
+    // animacion), no dibujar la ventana ni su sidebar/contenido -- el pump
+    // de arriba ya corrio, asi que la cola del Monitor sigue avanzando
+    // igual que si el panel estuviera visible.
+    if (m_UIManagerRef && m_UIManagerRef->IsPanelCollapsedForRender(GetName()))
+        return;
 
     bool visible = false;
     if (m_UIManagerRef)

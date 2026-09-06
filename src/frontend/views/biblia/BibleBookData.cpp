@@ -8,15 +8,15 @@ namespace ProyecThor::UI::BibleBooks {
 namespace {
 
 const char* kBookNames[] = {
-    "Genesis","Exodo","Levitico","Numeros","Deuteronomio",
-    "Josue","Jueces","Rut","1 Samuel","2 Samuel","1 Reyes","2 Reyes",
-    "1 Cronicas","2 Cronicas","Esdras","Nehemias","Ester","Job","Salmos",
-    "Proverbios","Eclesiastes","Cantares","Isaias","Jeremias","Lamentaciones",
-    "Ezequiel","Daniel","Oseas","Joel","Amos","Abdias","Jonas","Miqueas",
-    "Nahum","Habacuc","Sofonias","Hageo","Zacarias","Malaquias",
+    "Génesis","Éxodo","Levítico","Números","Deuteronomio",
+    "Josué","Jueces","Rut","1 Samuel","2 Samuel","1 Reyes","2 Reyes",
+    "1 Crónicas","2 Crónicas","Esdras","Nehemías","Ester","Job","Salmos",
+    "Proverbios","Eclesiastés","Cantares","Isaías","Jeremías","Lamentaciones",
+    "Ezequiel","Daniel","Oseas","Joel","Amós","Abdías","Jonás","Miqueas",
+    "Nahúm","Habacuc","Sofonías","Hageo","Zacarías","Malaquías",
     "Mateo","Marcos","Lucas","Juan","Hechos","Romanos","1 Corintios",
-    "2 Corintios","Galatas","Efesios","Filipenses","Colosenses","1 Tesalonicenses",
-    "2 Tesalonicenses","1 Timoteo","2 Timoteo","Tito","Filemon","Hebreos",
+    "2 Corintios","Gálatas","Efesios","Filipenses","Colosenses","1 Tesalonicenses",
+    "2 Tesalonicenses","1 Timoteo","2 Timoteo","Tito","Filemón","Hebreos",
     "Santiago","1 Pedro","2 Pedro","1 Juan","2 Juan","3 Juan","Judas","Apocalipsis"
 };
 
@@ -98,16 +98,34 @@ const AbbrevEntry kAbbrevTable[] = {
 
 constexpr int kAbbrevCount = sizeof(kAbbrevTable) / sizeof(kAbbrevTable[0]);
 
+const char* kBookShortAbbrevs[] = {
+    "Gén","Éxo","Lev","Núm","Deut",
+    "Jos","Jue","Rut","1 Sam","2 Sam","1 Rey","2 Rey",
+    "1 Cr","2 Cr","Esd","Neh","Est","Job","Sal",
+    "Prov","Ecl","Cant","Isa","Jer","Lam",
+    "Eze","Dan","Os","Joel","Amós","Abd","Jon","Miq",
+    "Nah","Hab","Sof","Hag","Zac","Mal",
+    "Mat","Mar","Luc","Juan","Hech","Rom","1 Cor",
+    "2 Cor","Gál","Ef","Fil","Col","1 Tes",
+    "2 Tes","1 Tim","2 Tim","Tito","Filem","Heb",
+    "Sant","1 Pe","2 Pe","1 Jn","2 Jn","3 Jn","Jud","Apoc"
+};
+
 bool StartsWith(const std::string& str, const std::string& prefix) {
     return prefix.size() <= str.size()
         && str.compare(0, prefix.size(), prefix) == 0;
 }
 
-} // namespace anonimo
+}
 
 const char* GetCanonicalBookName(int canonicalNumber) {
     if (canonicalNumber < 1 || canonicalNumber > kBookCount) return nullptr;
     return kBookNames[canonicalNumber - 1];
+}
+
+const char* GetBookShortAbbrev(int canonicalNumber) {
+    if (canonicalNumber < 1 || canonicalNumber > kBookCount) return nullptr;
+    return kBookShortAbbrevs[canonicalNumber - 1];
 }
 
 int GetBookCount() {
@@ -173,4 +191,4 @@ void GetSectionColor(BibleSection section, float& r, float& g, float& b) {
     }
 }
 
-} // namespace ProyecThor::UI::BibleBooks
+}

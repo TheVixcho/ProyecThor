@@ -26,9 +26,6 @@ struct BibleData {
     std::string           name;
     std::vector<BookData> books;
 
-    // Atributos de la etiqueta <bible ...> del XML original — capturados al
-    // cargar y re-escritos al guardar (ver XmlIO::SaveBible) para no perder
-    // metadata en cada edicion de versiculo.
     std::string translation;
     std::string info;
     std::string link;
@@ -42,9 +39,10 @@ enum class BibleSection {
 struct HistoryEntry {
     std::string ref;
     std::string fullText;
+    std::string body;
     int         bookIdx  = -1;
     int         chapIdx  = -1;
     int         verseIdx = -1;
 };
 
-} // namespace ProyecThor::UI
+}

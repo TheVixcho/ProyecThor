@@ -42,6 +42,7 @@ namespace ProyecThor::Settings {
         bool     startMinimized = false;
         bool     rememberLayout = true;
         bool     confirmOnExit  = true;
+        bool     openHubOnStartup = true;
         std::string defaultBiblesFolder = "assets/bibles";
         std::string defaultMediaFolder  = "assets/videos";
         std::string lastOpenedBible     = "";

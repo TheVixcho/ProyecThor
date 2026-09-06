@@ -3,7 +3,7 @@
 #ifdef _WIN32
     #include <windows.h>
 #endif
-#include <GL/glew.h> 
+#include <GL/glew.h>
 #include <string>
 #include <cstdint>
 #include "ImageView.h"
@@ -29,4 +29,4 @@ namespace ProyecThor::UI {
         ImageView m_ImageView;
     };
 
-} // namespace ProyecThor::UI
+}

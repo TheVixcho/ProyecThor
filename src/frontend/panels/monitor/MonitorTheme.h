@@ -1,5 +1,6 @@
 #pragma once
 #include <imgui.h>
+#include <algorithm>
 
 namespace ProyecThor::Settings { struct ThemeSettings; }
 
@@ -69,6 +70,10 @@ inline constexpr float k_TransportH = 26.0f;
 inline constexpr float k_VolumeH    = 24.0f;
 inline constexpr float k_Meters_H   = 48.0f;
 inline constexpr float k_CenterW    = 86.0f;
+
+inline ImU32 ColAf(const ImVec4& c, float a) {
+    return ImGui::ColorConvertFloat4ToU32(ImVec4(c.x, c.y, c.z, std::clamp(c.w * a, 0.0f, 1.0f)));
+}
 
 // Recalcula la paleta de MonitorView a partir del tema activo.
 void Sync(const ProyecThor::Settings::ThemeSettings& theme);

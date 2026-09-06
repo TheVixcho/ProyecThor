@@ -20,7 +20,7 @@ public:
     // operador este mirando otra pestaña (ver captura de estado en el plan).
     void Update();
 
-    // Dibuja los controles (solo cuando la seccion "Transmisión en Red" esta
+    // Dibuja los controles (solo cuando la sección "Transmisión en Red" esta
     // activa). Ya no abre su propia ventana — HomePanel es dueño de esa.
     void RenderContent();
 

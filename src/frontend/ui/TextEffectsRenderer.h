@@ -5,7 +5,7 @@
 namespace ProyecThor::UI {
 
 // Dibuja un bloque/linea de texto con los efectos visuales configurados en
-// TextEffectsData (fondo/borde/sombra/aberracion cromatica/glow "bloom"/
+// TextEffectsData (fondo/borde/sombra/aberración cromática/glow "bloom"/
 // neon/subrayado), en capas via ImDrawList -- sin FBO ni shader, mismo
 // espiritu "dibujado a mano" que el resto de los widgets custom de este
 // codebase (ver DrawPadButton en ViewPanel.cpp para el mismo truco de halo,

@@ -247,13 +247,24 @@ std::vector<RemoteOverlayEntry> ListRemoteOverlays() {
     return out;
 }
 
-// Mismo formato que BibleView::BuildProjectedText (PC): "Libro Cap:Verso (Biblia)\ntexto".
+// Mismo formato que BibleView::BuildVerseRef (PC): solo "Libro Cap:Verso",
+// sin el nombre de la Biblia -- es lo que se manda a SetCurrentRef, que
+// dibuja SOLO la referencia en la caja del Indice (opcional, independiente
+// de la caja de Letras donde va el cuerpo del versiculo).
+std::string BuildVerseRef(const ProyecThor::UI::BookData& book,
+                           const ProyecThor::UI::ChapterData& chap,
+                           const ProyecThor::UI::VerseData& verse) {
+    return book.name + " " + std::to_string(chap.number) + ":" + std::to_string(verse.number);
+}
+
+// Formato concatenado legacy "Libro Cap:Verso (Biblia)\ntexto" -- se sigue
+// usando SOLO para el "siguiente" del Stage Display (SetNextText), que no
+// pasa por las cajas de Letras/Indice.
 std::string BuildProjectedVerseText(const ProyecThor::UI::BookData& book,
                                      const ProyecThor::UI::ChapterData& chap,
                                      const ProyecThor::UI::VerseData& verse,
                                      const std::string& bibleName) {
-    return book.name + " " + std::to_string(chap.number) + ":" + std::to_string(verse.number)
-         + " (" + bibleName + ")\n" + verse.text;
+    return BuildVerseRef(book, chap, verse) + " (" + bibleName + ")\n" + verse.text;
 }
 
 // ── Formato de "estilo" para la app movil ─────────────────────────────────
@@ -808,10 +819,11 @@ void SyncServer::ServerThreadFunc(int port, std::promise<bool> startedPromise) {
                     if (c.verses.empty()) break;
                     int idx = std::clamp(m_CurrentVerseIndex + delta, 0, (int)c.verses.size() - 1);
                     m_CurrentVerseIndex = idx;
-                    std::string text = BuildProjectedVerseText(b, c, c.verses[idx], m_CachedBible.name);
+                    std::string ref  = BuildVerseRef(b, c, c.verses[idx]);
                     std::string next = idx + 1 < (int)c.verses.size()
                         ? BuildProjectedVerseText(b, c, c.verses[idx + 1], m_CachedBible.name) : "";
-                    core.SetLayer2_Text(text);
+                    core.SetLayer2_Text(c.verses[idx].text);
+                    core.SetCurrentRef(ref);
                     core.SetNextText(next);
                     json j; j["ok"] = true; j["verseIndex"] = idx; j["verseCount"] = (int)c.verses.size();
                     res.set_content(j.dump(), "application/json");
@@ -1023,12 +1035,13 @@ void SyncServer::ServerThreadFunc(int port, std::promise<bool> startedPromise) {
         if (!chap || chap->verses.empty()) { res.status = 404; return; }
 
         idx = std::clamp(idx, 0, (int)chap->verses.size() - 1);
-        std::string text = BuildProjectedVerseText(*book, *chap, chap->verses[idx], m_CachedBible.name);
+        std::string ref  = BuildVerseRef(*book, *chap, chap->verses[idx]);
         std::string next = idx + 1 < (int)chap->verses.size()
             ? BuildProjectedVerseText(*book, *chap, chap->verses[idx + 1], m_CachedBible.name) : "";
 
         auto& core = Core::PresentationCore::Get();
-        core.SetLayer2_Text(text);
+        core.SetLayer2_Text(chap->verses[idx].text);
+        core.SetCurrentRef(ref);
         core.SetNextText(next);
         core.SetProjecting(true);
 

@@ -201,8 +201,8 @@ void TeamChatPanel::RenderContent()
         ImGui::PushStyleColor(ImGuiCol_Text, ColA(kGrayDim, 0.85f));
         ImGui::TextWrapped(
             "Al iniciar, se genera una URL y un QR propios del chat (distintos a "
-            "los de Transmision en Red) para que el equipo se sume desde su "
-            "celular o notebook en la misma red WiFi, ademas de poder escribir "
+            "los de Transmisión en Red) para que el equipo se sume desde su "
+            "celular o notebook en la misma red WiFi, además de poder escribir "
             "aca mismo.");
         ImGui::PopStyleColor();
         return;
@@ -299,7 +299,7 @@ void TeamChatPanel::RenderServerControl()
     dl->AddText(ImVec2(p0.x + innerX, p0.y + labelY), Col(kGrayText), "CHAT DETENIDO");
     dl->AddText(ImVec2(p0.x + innerX, p0.y + labelY + ImGui::GetTextLineHeight() + 6.0f),
         ColA(kGrayDim, 0.8f),
-        streamingUp ? "Se va a sumar al puerto que ya usa Transmision en Red"
+        streamingUp ? "Se va a sumar al puerto que ya usa Transmisión en Red"
                     : "Configura el puerto y presiona Iniciar");
 
     float portW = 80.0f;

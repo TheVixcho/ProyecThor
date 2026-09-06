@@ -10,18 +10,22 @@
 ;     66A0344F-F850-49CB-9F63-488AB7B3DBCD
 ;
 ; Variables de preprocesador (podés pasarlas con /D al compilar, ej.
-; ISCC ProyecThor.iss /DBuildDir=C:\ruta\a\build-win /DProductVersion=0.5.1):
+; ISCC ProyecThor.iss /DBuildDir=C:\ruta\a\build-win /DProductVersion=0.6.0):
 ;   BuildDir       -> carpeta con el build de Windows ya compilado
 ;                      (build-win/, con ProyecThor.exe + todas las DLLs,
 ;                      ffmpeg.exe, yt-dlp.exe, lua/, plugins/, shaders/,
 ;                      bin/assets/... , splash_bg*.png, proyecthor.ico, etc.)
 ;   ProductVersion -> version del instalador, mantenida a mano en sync con
-;                      el "project(VERSION ...)" de CMakeLists.txt
+;                      PROYECTHOR_VERSION_STRING (project(VERSION ...) +
+;                      PROYECTHOR_VERSION_SUFFIX de CMakeLists.txt -- incluir
+;                      el sufijo "-beta.N"/"-rc.N" aca tambien si el build es
+;                      una pre-release, para que AppVersion coincida con lo
+;                      que la app reporta como version instalada).
 #ifndef BuildDir
   #define BuildDir "..\..\build-win"
 #endif
 #ifndef ProductVersion
-  #define ProductVersion "0.5.1"
+  #define ProductVersion "1.0.0"
 #endif
 
 [Setup]
@@ -77,6 +81,35 @@ Source: "{#BuildDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdir
 [Icons]
 Name: "{group}\ProyecThor"; Filename: "{app}\ProyecThor.exe"; WorkingDir: "{app}"; IconFilename: "{app}\proyecthor.ico"
 Name: "{userdesktop}\ProyecThor"; Filename: "{app}\ProyecThor.exe"; WorkingDir: "{app}"; IconFilename: "{app}\proyecthor.ico"
+
+[Registry]
+; Registra ProyecThor bajo HKCU\Software\Classes\Applications\ProyecThor.exe --
+; el mecanismo estandar de Windows para "aparecer en Abrir con" SIN pisar la
+; app predeterminada actual de esas extensiones (a diferencia de registrar
+; la extension misma con un ProgID propio, que si cambiaria el default).
+; SupportedTypes lista las extensiones que este .exe declara poder abrir;
+; main.cpp (GetPendingOpenFilePath/ImportAndPreviewExternalFile) importa el
+; archivo a la biblioteca correspondiente y lo carga en Preview.
+; Bajo HKCU y sin admin, coherente con PrivilegesRequired=lowest de arriba.
+Root: HKCU; Subkey: "Software\Classes\Applications\ProyecThor.exe"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\Applications\ProyecThor.exe"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "ProyecThor"
+Root: HKCU; Subkey: "Software\Classes\Applications\ProyecThor.exe\shell\open\command"; ValueType: string; ValueData: """{app}\ProyecThor.exe"" ""%1"""
+; Audio
+Root: HKCU; Subkey: "Software\Classes\Applications\ProyecThor.exe\SupportedTypes"; ValueType: string; ValueName: ".mp3"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\Applications\ProyecThor.exe\SupportedTypes"; ValueType: string; ValueName: ".flac"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\Applications\ProyecThor.exe\SupportedTypes"; ValueType: string; ValueName: ".wav"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\Applications\ProyecThor.exe\SupportedTypes"; ValueType: string; ValueName: ".ogg"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\Applications\ProyecThor.exe\SupportedTypes"; ValueType: string; ValueName: ".aac"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\Applications\ProyecThor.exe\SupportedTypes"; ValueType: string; ValueName: ".m4a"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\Applications\ProyecThor.exe\SupportedTypes"; ValueType: string; ValueName: ".wma"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\Applications\ProyecThor.exe\SupportedTypes"; ValueType: string; ValueName: ".opus"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\Applications\ProyecThor.exe\SupportedTypes"; ValueType: string; ValueName: ".aiff"; ValueData: ""
+; Video
+Root: HKCU; Subkey: "Software\Classes\Applications\ProyecThor.exe\SupportedTypes"; ValueType: string; ValueName: ".mp4"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\Applications\ProyecThor.exe\SupportedTypes"; ValueType: string; ValueName: ".mkv"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\Applications\ProyecThor.exe\SupportedTypes"; ValueType: string; ValueName: ".avi"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\Applications\ProyecThor.exe\SupportedTypes"; ValueType: string; ValueName: ".mov"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\Applications\ProyecThor.exe\SupportedTypes"; ValueType: string; ValueName: ".webm"; ValueData: ""
 
 [Run]
 Filename: "{app}\ProyecThor.exe"; Description: "{cm:LaunchProgram,ProyecThor}"; Flags: nowait postinstall skipifsilent

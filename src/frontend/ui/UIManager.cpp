@@ -5,7 +5,9 @@
 #include "backend/core/PerformanceGovernor.h"
 #include "../toolbar/ConfigPanel.h"
 #include "panels/HomePanel.h"
+#include "panels/LibraryPanel.h"
 #include "panels/StylesHubPanel.h"
+#include "panels/lab/LabPanel.h"
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
@@ -70,6 +72,9 @@ bool UIManager::Initialize(GLFWwindow* window)
 {
     m_Window = window;
     if (!m_Window) return false;
+
+    auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
+    m_Mode = general.openHubOnStartup ? WorkspaceMode::Hub : WorkspaceMode::Projector;
 
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -151,6 +156,17 @@ void UIManager::OpenHub()
     m_Mode = WorkspaceMode::Hub;
 }
 
+// Ver comentario en UIManager.h. Cambia el preset SOLO en memoria (nunca
+// llama Save()) para no pisar la preferencia real del usuario -- el cambio
+// lo detecta solo BeginDockspace() (compara contra m_LastWorkspacePreset)
+// y dispara el reset de layout.
+void UIManager::EnterLibraryWorkspaceMode()
+{
+    ProyecThor::Settings::SettingsManager::Get().GetSettings().workspace.layoutPreset =
+        ProyecThor::Settings::WorkspaceLayoutPreset::Library;
+    m_Mode = WorkspaceMode::Projector;
+}
+
 void UIManager::RequestSettings()
 {
     m_ShowConfig = true;
@@ -180,6 +196,11 @@ void UIManager::RenderLiveOutputWindows()
 
     auto state = Core::PresentationCore::Get().GetState();
 
+    // Viewports de post-FX extra que efectivamente se dibujaron este frame
+    // -- se usa al final para podar (destruir) instancias de CompositePostChain
+    // de monitores que el usuario destildo o que dejaron de estar activos.
+    std::vector<ImGuiID> activeExtraProjectorIds;
+
     if (state.isProjecting)
     {
         int monitorCount = 0;
@@ -200,6 +221,18 @@ if (m_TransitionPanel) {
     Core::PresentationCore::Get().SetTransitionConfig(
         static_cast<int>(m_TransitionPanel->GetCurrentType()),
         m_TransitionPanel->GetDuration());
+
+    // Duracion del crossfade de fondo: solo la toca el preset activo si
+    // "Afecta a Fondos" esta prendido -- si no, se mantiene el default de
+    // siempre (0.2s), ver BackgroundLayer::m_BlendSeconds.
+    constexpr float kDefaultBgBlendSeconds = 0.2f;
+    float bgBlendDuration = kDefaultBgBlendSeconds;
+    if (m_TransitionPanel->AffectsBackground()) {
+        bgBlendDuration = (m_TransitionPanel->GetCurrentType() == TransitionType::None)
+            ? 0.01f
+            : m_TransitionPanel->GetDuration();
+    }
+    Core::PresentationCore::Get().SetBackgroundBlendDuration(bgBlendDuration);
 }
 
 if (m_TransitionPanel && state.textTransitionTrigger != m_LastTransitionTrigger)
@@ -209,13 +242,91 @@ if (m_TransitionPanel && state.textTransitionTrigger != m_LastTransitionTrigger)
     std::string outgoing = m_LastProjectedText;
     m_LastProjectedText   = state.currentText;
 
-    if (!outgoing.empty() && !state.currentText.empty())
+    // Si el preset activo no afecta a Letras, el texto cambia al instante
+    // (no se llama Trigger(), igual que si el tipo fuera "Sin transición").
+    if (!outgoing.empty() && !state.currentText.empty() && m_TransitionPanel->AffectsLyrics())
     {
         m_OutgoingText = outgoing;
         m_TransitionPanel->Trigger();
     }
 }
 
+                // Primario -- IDENTICO a como funcionaba antes de agregar
+                // soporte multi-monitor.
+                RenderProjectorOutput("ProjectorLive", mx, my, mode, state,
+                                       /*isPrimary=*/true, nullptr);
+
+                // Monitores de salida publica ADICIONALES (opcional) --
+                // todos muestran exactamente lo mismo que el primario de
+                // arriba (ver PresentationState::extraTargetMonitors,
+                // poblado en PresentationCore::SetTargetMonitor).
+                for (int extraIdx : state.extraTargetMonitors)
+                {
+                    if (extraIdx == state.targetMonitorIndex) continue;
+                    if (extraIdx < 0 || extraIdx >= monitorCount) continue;
+
+                    const GLFWvidmode* exMode = glfwGetVideoMode(monitors[extraIdx]);
+                    if (!exMode || exMode->width <= 0 || exMode->height <= 0) continue;
+
+                    int exX, exY;
+                    glfwGetMonitorPos(monitors[extraIdx], &exX, &exY);
+
+                    std::string exName = "ProjectorLive_" + std::to_string(extraIdx);
+                    RenderProjectorOutput(exName.c_str(), exX, exY, exMode, state,
+                                           /*isPrimary=*/false, &activeExtraProjectorIds);
+                }
+            }
+        }
+    }
+
+    // Libera instancias de post-FX de monitores extra que ya no esten
+    // activas este frame (destildadas, o proyeccion detenida del todo).
+    Core::PresentationCore::Get().PruneExtraProjectorViewports(activeExtraProjectorIds);
+
+    if (state.isStaging)
+    {
+        int stageMonitorIdx = state.stageMonitorIndex;
+        int stageMonitorCount = 0;
+        GLFWmonitor** stageMonitors = glfwGetMonitors(&stageMonitorCount);
+
+        if (stageMonitors && stageMonitorIdx >= 0 && stageMonitorIdx < stageMonitorCount)
+        {
+            const GLFWvidmode* stageMode = glfwGetVideoMode(stageMonitors[stageMonitorIdx]);
+
+            if (stageMode && stageMode->width > 0 && stageMode->height > 0)
+            {
+                int smx = 0, smy = 0;
+                glfwGetMonitorPos(stageMonitors[stageMonitorIdx], &smx, &smy);
+
+                RenderStageOutput("StageLive", smx, smy, stageMode);
+
+                // Monitores de Stage ADICIONALES (opcional) -- mismo
+                // criterio que el bloque de Proyector de arriba.
+                for (int extraIdx : state.extraStageMonitors)
+                {
+                    if (extraIdx == stageMonitorIdx) continue;
+                    if (extraIdx < 0 || extraIdx >= stageMonitorCount) continue;
+
+                    const GLFWvidmode* exMode = glfwGetVideoMode(stageMonitors[extraIdx]);
+                    if (!exMode || exMode->width <= 0 || exMode->height <= 0) continue;
+
+                    int exX, exY;
+                    glfwGetMonitorPos(stageMonitors[extraIdx], &exX, &exY);
+
+                    std::string exName = "StageLive_" + std::to_string(extraIdx);
+                    RenderStageOutput(exName.c_str(), exX, exY, exMode);
+                }
+            }
+        }
+    }
+}
+
+void UIManager::RenderProjectorOutput(const char* windowName, int mx, int my,
+                                       const GLFWvidmode* mode,
+                                       const Core::PresentationState& state,
+                                       bool isPrimary,
+                                       std::vector<ImGuiID>* activeExtraViewportIds)
+{
                 ImGui::SetNextWindowPos(ImVec2((float)mx, (float)my));
                 ImGui::SetNextWindowSize(ImVec2((float)mode->width, (float)mode->height));
 
@@ -232,10 +343,15 @@ projectorClass.ViewportFlagsOverrideSet =
     ImGuiViewportFlags_NoAutoMerge | ImGuiViewportFlags_TopMost;
 ImGui::SetNextWindowClass(&projectorClass);
 
-ImGui::Begin("ProjectorLive", nullptr, flags);
+ImGui::Begin(windowName, nullptr, flags);
 
-                Core::PresentationCore::Get().SetProjectorPostFXViewportID(
-                    ImGui::GetWindowViewport()->ID);
+                ImGuiID vpID = ImGui::GetWindowViewport()->ID;
+                if (isPrimary) {
+                    Core::PresentationCore::Get().SetProjectorPostFXViewportID(vpID);
+                } else {
+                    Core::PresentationCore::Get().RegisterExtraProjectorViewport(vpID);
+                    if (activeExtraViewportIds) activeExtraViewportIds->push_back(vpID);
+                }
                 ImDrawList* drawList = ImGui::GetWindowDrawList();
 
 bool showingLoadingScreen = Core::PresentationCore::Get().ShouldShowLoadingScreen();
@@ -291,8 +407,7 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                         IM_COL32(0, 0, 0, 255));
 
                     int srcW = 0, srcH = 0;
-                    auto* player = Core::PresentationCore::Get().GetBackgroundPlayer();
-                    if (player) player->GetVideoSize(srcW, srcH);
+                    Core::PresentationCore::Get().GetBackgroundVideoSize(srcW, srcH);
 
                     bool stretch = Core::PresentationCore::Get().GetStretchToFill();
 
@@ -348,30 +463,28 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                             }
                         }
 
-                        drawList->AddImage(texID,
+                        auto& core = Core::PresentationCore::Get();
+                        void* standbyTex = nullptr;
+                        bool isTransActive = false;
+                        float progress = 0.0f;
+                        int transType = core.GetBackgroundTransitionType();
+
+                        if (core.IsBackgroundSwapPending() && core.IsBackgroundStandbyReady())
+                        {
+                            standbyTex = core.GetStandbyBackgroundTexture();
+                            progress = std::clamp(core.GetBackgroundBlendProgress(), 0.0f, 1.0f);
+                            isTransActive = (standbyTex != nullptr);
+                        }
+
+                        RenderBackgroundWithTransition(drawList, texID, standbyTex,
                             ImVec2(destX, destY),
                             ImVec2(destX + destW, destY + destH),
-                            ImVec2(0, 0), ImVec2(1, 1));
+                            transType, progress, isTransActive);
                     } else {
                         drawList->AddRectFilled(
                             ImVec2((float)mx, (float)my),
                             ImVec2((float)(mx + mode->width), (float)(my + mode->height)),
                             IM_COL32(0, 0, 0, 255));
-                    }
-
-                    auto& core = Core::PresentationCore::Get();
-                    if (core.IsBackgroundSwapPending() && core.IsBackgroundStandbyReady())
-                    {
-                        void* standbyTex = core.GetStandbyBackgroundTexture();
-                        if (standbyTex)
-                        {
-                            float progress = std::clamp(core.GetBackgroundBlendProgress(), 0.0f, 1.0f);
-                            ImU32 tint = IM_COL32(255, 255, 255, (int)(progress * 255.0f));
-                            drawList->AddImage(standbyTex,
-                                ImVec2(destX, destY),
-                                ImVec2(destX + destW, destY + destH),
-                                ImVec2(0, 0), ImVec2(1, 1), tint);
-                        }
                     }
                 }
 
@@ -389,35 +502,47 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
 
                 if (state.showText)
                 {
-                    auto DrawTextBlock = [&](const std::string& text,
+                    auto DrawTextBlock = [&](const std::string& text, const Core::TextBoxStyle& box,
+                                            bool isLyricsBox,
                                             float offsetX, float offsetY,
                                             float alphaMult = 1.0f, float scaleMult = 1.0f)
                     {
                         if (text.empty() || alphaMult <= 0.001f) return;
 
-                        float screenScale = (float)mode->width / 1920.0f;
-                        float marginL = state.margins[0] * screenScale;
-                        float marginT = state.margins[1] * screenScale;
-                        float marginR = state.margins[2] * screenScale;
-                        float marginB = state.margins[3] * screenScale;
+                        auto& core = Core::PresentationCore::Get();
+                        // El diseno de una caja (Letras) se dibuja siempre igual sin
+                        // importar el tipo de contenido; "isSong" acá solo decide la
+                        // FORMA del texto (canciones traen saltos de linea manuales,
+                        // el cuerpo de un versiculo es un parrafo sin cortar y necesita
+                        // wrap normal), no que caja/estilo usar.
+                        bool isSong = (core.PeekSelection().type == Core::ItemType::Song);
 
-                        float boxW = std::max(10.0f, (float)mode->width  - marginL - marginR);
-                        float boxH = std::max(10.0f, (float)mode->height - marginT - marginB);
+                        float screenScale = (float)mode->width / 1920.0f;
+                        float boxW = std::max(10.0f, box.sizeW * (float)mode->width);
+                        float boxH = std::max(10.0f, box.sizeH * (float)mode->height);
 
                         float shiftX = offsetX * (float)mode->width;
                         float shiftY = offsetY * (float)mode->height;
-                        float boxX   = (float)mx + marginL + shiftX;
-                        float boxY   = (float)my + marginT + shiftY;
+                        float boxX   = (float)mx + box.posX * (float)mode->width  - boxW * 0.5f + shiftX;
+                        float boxY   = (float)my + box.posY * (float)mode->height - boxH * 0.5f + shiftY;
 
-                        float targetFontSize = state.textSize * screenScale;
+                        if (box.bgMediaEnabled && !box.bgMediaPath.empty()) {
+                            unsigned int bgTex = core.GetBoxBgTexture(isLyricsBox, box.bgMediaPath);
+                            if (bgTex != 0) {
+                                ImU32 tint = IM_COL32(255, 255, 255,
+                                    (int)(std::clamp(box.bgMediaOpacity, 0.0f, 1.0f) * alphaMult * 255.0f));
+                                drawList->AddImage((ImTextureID)(intptr_t)bgTex,
+                                    ImVec2(boxX, boxY), ImVec2(boxX + boxW, boxY + boxH),
+                                    ImVec2(0, 0), ImVec2(1, 1), tint);
+                            }
+                        }
 
-                        std::string activeFontName =
-                            Core::PresentationCore::Get().GetActiveFontName();
-                        ImFont* activeFont =
-                            Core::PresentationCore::Get().GetImGuiFont(activeFontName, targetFontSize);
+                        float targetFontSize = box.textSize * screenScale;
+
+                        ImFont* activeFont = core.GetImGuiFont(box.fontName, targetFontSize);
                         if (!activeFont) activeFont = ImGui::GetFont();
 
-                        if (state.autoScale) {
+                        if (box.autoScale) {
                             while (targetFontSize > 10.0f) {
                                 ImVec2 tSize = activeFont->CalcTextSizeA(
                                     targetFontSize, FLT_MAX, boxW, text.c_str());
@@ -432,23 +557,20 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                             targetFontSize, FLT_MAX, boxW, text.c_str());
 
                         ImU32 col = ImGui::ColorConvertFloat4ToU32(
-                            ImVec4(state.textColor[0], state.textColor[1],
-                                   state.textColor[2], state.textColor[3] * alphaMult));
-
-                        bool isSong = (Core::PresentationCore::Get().PeekSelection().type
-                                       == Core::ItemType::Song);
+                            ImVec4(box.color[0], box.color[1],
+                                   box.color[2], box.color[3] * alphaMult));
 
                         drawList->PushClipRect(
                             ImVec2((float)mx, (float)my),
                             ImVec2((float)(mx + mode->width), (float)(my + mode->height)),
                             true);
 
-                        if (isSong && state.textAlignment == 1)
+                        if (isSong && box.hAlign == 1)
                         {
                             float startY = boxY;
-                            if (state.vAlignment == 1)
+                            if (box.vAlign == 1)
                                 startY += (boxH - finalBlockSize.y) * 0.5f;
-                            else if (state.vAlignment == 2)
+                            else if (box.vAlign == 2)
                                 startY += (boxH - finalBlockSize.y);
 
                             float  currentY   = startY;
@@ -469,7 +591,7 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
 
                                     DrawStyledText(drawList, activeFont, targetFontSize,
                                         ImVec2(lineX, currentY), col, line.c_str(),
-                                        0.0f, screenScale, state.effects, alphaMult);
+                                        0.0f, screenScale, box.effects, alphaMult);
                                 }
 
                                 currentY += lineHeight;
@@ -481,20 +603,20 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                         else
                         {
                             float textX = boxX;
-                            if (state.textAlignment == 1)
+                            if (box.hAlign == 1)
                                 textX += (boxW - finalBlockSize.x) * 0.5f;
-                            else if (state.textAlignment == 2)
+                            else if (box.hAlign == 2)
                                 textX += (boxW - finalBlockSize.x);
 
                             float textY = boxY;
-                            if (state.vAlignment == 1)
+                            if (box.vAlign == 1)
                                 textY += (boxH - finalBlockSize.y) * 0.5f;
-                            else if (state.vAlignment == 2)
+                            else if (box.vAlign == 2)
                                 textY += (boxH - finalBlockSize.y);
 
                             DrawStyledText(drawList, activeFont, targetFontSize,
                                 ImVec2(textX, textY), col, text.c_str(),
-                                boxW, screenScale, state.effects, alphaMult);
+                                boxW, screenScale, box.effects, alphaMult);
                         }
 
                         drawList->PopClipRect();
@@ -503,19 +625,26 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                     bool transActive = m_TransitionPanel && m_TransitionPanel->IsActive();
 
                     if (transActive) {
-                        DrawTextBlock(m_OutgoingText,
+                        DrawTextBlock(m_OutgoingText, state.lyricsBox, true,
                             m_TransitionPanel->GetOutgoingOffsetX(),
                             m_TransitionPanel->GetOutgoingOffsetY(),
                             m_TransitionPanel->GetOutgoingAlpha(),
                             m_TransitionPanel->GetOutgoingScale());
 
-                        DrawTextBlock(state.currentText,
+                        DrawTextBlock(state.currentText, state.lyricsBox, true,
                             m_TransitionPanel->GetIncomingOffsetX(),
                             m_TransitionPanel->GetIncomingOffsetY(),
                             m_TransitionPanel->GetIncomingAlpha(),
                             m_TransitionPanel->GetIncomingScale());
                     } else if (!state.currentText.empty()) {
-                        DrawTextBlock(state.currentText, 0.0f, 0.0f, 1.0f, 1.0f);
+                        DrawTextBlock(state.currentText, state.lyricsBox, true, 0.0f, 0.0f, 1.0f, 1.0f);
+                    }
+
+                    // Indice de referencia biblica -- OPCIONAL, caja aparte
+                    // e independiente de Letras (ver TextBoxStyle::indexBox
+                    // y BibleView::ProjectVerse/SetCurrentRef).
+                    if (state.indexEnabled && !state.currentRef.empty()) {
+                        DrawTextBlock(state.currentRef, state.indexBox, false, 0.0f, 0.0f, 1.0f, 1.0f);
                     }
                 }
 
@@ -531,6 +660,30 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                         ImVec2((float)mx, (float)my),
                         ImVec2((float)(mx + mode->width), (float)(my + mode->height)),
                         ImVec2(0, 0), ImVec2(1, 1));
+                }
+
+                // ── Capa 3D (Modelos y Recursos 3D en vivo) ─────────────────
+                if (Core::PresentationCore::Get().IsLive3DModelActive())
+                {
+                    if (void* model3dTex = Core::PresentationCore::Get().GetLive3DModelTexture())
+                    {
+                        drawList->AddImage(model3dTex,
+                            ImVec2((float)mx, (float)my),
+                            ImVec2((float)(mx + mode->width), (float)(my + mode->height)),
+                            ImVec2(0, 0), ImVec2(1, 1));
+                    }
+                }
+
+                // ── Capa de Laboratorio Matemático (Gráficas GeoGebra en vivo) ─────────
+                if (Core::PresentationCore::Get().IsLiveLabActive())
+                {
+                    if (LabPanel* lab = Core::PresentationCore::Get().GetLabPanelRef())
+                    {
+                        lab->RenderLiveProjection(drawList,
+                            ImVec2((float)mx, (float)my),
+                            ImVec2((float)(mx + mode->width), (float)(my + mode->height)),
+                            (float)mode->width, (float)mode->height);
+                    }
                 }
 
                 // ── Reloj/contador en vivo sobre el overlay ──────────────────
@@ -598,53 +751,36 @@ if (state.bgType == Core::PresentationState::BackgroundType::SolidColor)
                 }
 
                 ImGui::End();
-            }
-        }
-    }
+}
 
-    if (state.isStaging)
-    {
-        int stageMonitorIdx = state.stageMonitorIndex;
-        int stageMonitorCount = 0;
-        GLFWmonitor** stageMonitors = glfwGetMonitors(&stageMonitorCount);
+void UIManager::RenderStageOutput(const char* windowName, int smx, int smy,
+                                   const GLFWvidmode* stageMode)
+{
+    ImGui::SetNextWindowPos(ImVec2((float)smx, (float)smy));
+    ImGui::SetNextWindowSize(ImVec2((float)stageMode->width, (float)stageMode->height));
 
-        if (stageMonitors && stageMonitorIdx >= 0 && stageMonitorIdx < stageMonitorCount)
-        {
-            const GLFWvidmode* stageMode = glfwGetVideoMode(stageMonitors[stageMonitorIdx]);
+    ImGuiWindowFlags stageFlags =
+        ImGuiWindowFlags_NoDecoration          |
+        ImGuiWindowFlags_NoBackground          |
+        ImGuiWindowFlags_NoSavedSettings       |
+        ImGuiWindowFlags_NoFocusOnAppearing    |
+        ImGuiWindowFlags_NoNav                 |
+        ImGuiWindowFlags_NoBringToFrontOnFocus;
 
-            if (stageMode && stageMode->width > 0 && stageMode->height > 0)
-            {
-                int smx = 0, smy = 0;
-                glfwGetMonitorPos(stageMonitors[stageMonitorIdx], &smx, &smy);
+    ImGuiWindowClass stageClass;
+    stageClass.ViewportFlagsOverrideSet =
+        ImGuiViewportFlags_NoAutoMerge | ImGuiViewportFlags_TopMost;
+    ImGui::SetNextWindowClass(&stageClass);
 
-                ImGui::SetNextWindowPos(ImVec2((float)smx, (float)smy));
-                ImGui::SetNextWindowSize(ImVec2((float)stageMode->width, (float)stageMode->height));
+    ImGui::Begin(windowName, nullptr, stageFlags);
+    ImDrawList* stageDrawList = ImGui::GetWindowDrawList();
 
-                ImGuiWindowFlags stageFlags =
-                    ImGuiWindowFlags_NoDecoration          |
-                    ImGuiWindowFlags_NoBackground          |
-                    ImGuiWindowFlags_NoSavedSettings       |
-                    ImGuiWindowFlags_NoFocusOnAppearing    |
-                    ImGuiWindowFlags_NoNav                 |
-                    ImGuiWindowFlags_NoBringToFrontOnFocus;
+    DrawStageContent(
+        stageDrawList,
+        ImVec2((float)smx, (float)smy),
+        ImVec2((float)(smx + stageMode->width), (float)(smy + stageMode->height)));
 
-                ImGuiWindowClass stageClass;
-                stageClass.ViewportFlagsOverrideSet =
-                    ImGuiViewportFlags_NoAutoMerge | ImGuiViewportFlags_TopMost;
-                ImGui::SetNextWindowClass(&stageClass);
-
-                ImGui::Begin("StageLive", nullptr, stageFlags);
-                ImDrawList* stageDrawList = ImGui::GetWindowDrawList();
-
-                DrawStageContent(
-                    stageDrawList,
-                    ImVec2((float)smx, (float)smy),
-                    ImVec2((float)(smx + stageMode->width), (float)(smy + stageMode->height)));
-
-                ImGui::End();
-            }
-        }
-    }
+    ImGui::End();
 }
 
 void UIManager::RenderAll()
@@ -674,6 +810,31 @@ void UIManager::RenderAll()
 
         if (ImGui::IsKeyPressed(ImGuiKey_F11, false))
             ToggleFullscreen();
+
+        // Shift+Z: abrir/cerrar Notas rapidas (ver Ajustes > Accesos
+        // Rapidos). Se ignora mientras el usuario esta escribiendo en
+        // cualquier campo de texto (io.WantTextInput) -- sin esto, tipear
+        // una "Z" mayuscula en CUALQUIER lado de la app (incluida la propia
+        // ventana de Notas) cerraria/abriria el panel a mitad de escritura.
+        if (!io.WantTextInput && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z, false))
+            ToggleNotesWindow();
+
+        // Alt Gr + 1/2/3/4: colapsar/expandir Biblioteca/Home/Vista en
+        // Vivo/Diseño. Alt Gr + 0: restablecer el entorno completo. Se
+        // detecta con ImGuiKey_RightAlt (no io.KeyAlt/ImGuiMod_Alt): en
+        // Windows, Alt Gr fisico se reporta como Alt derecho -- GLFW ya
+        // descarta el Ctrl "fantasma" que el sistema sintetiza junto con
+        // ella. Igual que Shift+Z, se ignora con un campo de texto activo:
+        // en teclados Latam/ES, Alt Gr + 2/3/etc son "@"/"#" reales.
+        if (!io.WantTextInput && ImGui::IsKeyDown(ImGuiKey_RightAlt))
+        {
+            for (int i = 0; i < kCollapsiblePanelCount; ++i)
+                if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(ImGuiKey_1 + i), false))
+                    TogglePanelCollapse(i);
+
+            if (ImGui::IsKeyPressed(ImGuiKey_0, false))
+                ResetPanelCollapse();
+        }
     }
 
     m_Red.Update();
@@ -682,7 +843,10 @@ void UIManager::RenderAll()
     m_Sync.Update();
     m_OSC.Update();
 
-    RenderModeToolbar();
+    // La toolbar de modos (pills "Hub"/"Proyector" + Notas/Estilos/Streaming)
+    if (m_Mode != WorkspaceMode::Hub &&
+        !(m_FullscreenEditorActive && m_FullscreenEditorHidesToolbar))
+        RenderModeToolbar();
 
     // Salida real ("ProjectorLive"/"StageLive") -- SIEMPRE se renderiza aca,
     // antes de cualquier return anticipado de abajo (editor a pantalla
@@ -690,6 +854,28 @@ void UIManager::RenderAll()
     // interrumpa solo porque el operador esta mirando otra cosa en su
     // propia pantalla. Ver comentario en UIManager.h.
     RenderLiveOutputWindows();
+
+    // Se renderiza siempre, sin importar el modo/return anticipado de mas
+    // abajo, para que "Archivo > Importar > Importar desde URL" funcione
+    // igual desde el Hub que desde el Proyector.
+    RenderUrlImportModal();
+
+    // Idem Notas: antes solo vivia dentro del workspace de Proyector, asi
+    // que Shift+Z no hacia nada desde el Hub y la ventana se cerraba de
+    // golpe (sin guardar) apenas se volvia a el mientras se seguia
+    // proyectando. Ahora se somete siempre, sin importar el modo/editor a
+    // pantalla completa activo, igual que la salida real de arriba.
+    if (m_ShowNotes)
+        RenderNotesWindow();
+
+    // Se somete siempre (no solo cuando m_ShowAIAssistant es true): el
+    // WebView2 embebido necesita que se le avise UpdateBounds(...,
+    // visible=false) todos los frames mientras esta oculto.
+    RenderAIAssistantWindow();
+
+    // Ventana flotante "Centro de Conexiones" (Red LAN, App Móvil, Transmisión, OSC, Chat)
+    if (m_ShowConnectionsWindow)
+        RenderConnectionsWindow();
 
     // Editor a pantalla completa (Overlay/Estilos) activo -- ver
     // EnterFullscreenEditor. Reemplaza TODO lo de abajo (Hub/Proyector/
@@ -742,8 +928,58 @@ if (m_Mode == WorkspaceMode::Hub)
 
     const auto& str = ProyecThor::UI::GetUIStrings();
 
+    // Presets reducidos (ver Settings::WorkspaceLayoutPreset): cada uno
+    // somete solo un subconjunto de m_Panels este frame y, si corresponde,
+    // bloquea a Biblioteca en una sola vista -- recalculado cada frame
+    // (barato, mismo criterio que ApplyTheme() arriba) asi que nunca queda
+    // desincronizado del preset real, sin importar por donde haya cambiado
+    // (Ajustes, menu Espacio de trabajo, o "Abrir con ProyecThor").
+    using ProyecThor::Settings::WorkspaceLayoutPreset;
+    const WorkspaceLayoutPreset activePreset =
+        ProyecThor::Settings::SettingsManager::Get().GetSettings().workspace.layoutPreset;
+    const bool isLibraryWorkspace   = (activePreset == WorkspaceLayoutPreset::Library);
+    const bool isBroadcastWorkspace = (activePreset == WorkspaceLayoutPreset::Broadcast);
+    const bool isVideoWorkspace     = (activePreset == WorkspaceLayoutPreset::Video);
+    if (m_LibraryPanelRef) {
+        m_LibraryPanelRef->SetMediaOnlyMode(isLibraryWorkspace);
+    }
+
     for (auto& panel : m_Panels)
+    {
+        // "Library" es el GetName() interno de LibraryPanel (no el titulo
+        // localizado de su ventana, ese es str.library).
+        const std::string& panelName = panel->GetName();
+        if (isLibraryWorkspace && panelName != "Library" && panelName != "Home")
+            continue;
+        // "Transmisión": Streaming (ver StreamingWorkspacePanel) ocupa el
+        // lugar de Vista en Vivo -- esta NUNCA se dockea en ese preset (ver
+        // BuildWorkspaceLayoutBroadcast), asi que no puede someterse o
+        // queda flotando sin nodo. El panel de Streaming, al reves, solo
+        // tiene sentido EN este preset.
+        if (isBroadcastWorkspace && panelName == "Vista en Vivo")
+            continue;
+        if (!isBroadcastWorkspace && panelName == "Transmisión")
+            continue;
+        // "Transmisión" ahora es un preset exclusivo (ver
+        // BuildWorkspaceLayoutBroadcast) -- "es solo para ver la
+        // transmision, nada de proyeccion", asi que Biblioteca/Home/Diseño
+        // tampoco se someten aca (mismo criterio que "Producción"/
+        // "Biblioteca" arriba).
+        if (isBroadcastWorkspace && (panelName == "Library" || panelName == "Home" || panelName == "Diseño"))
+            continue;
+        // "Producción" (VideoEditorPanel, GetName()=="VideoEditor"): a
+        // pantalla completa, solo se somete en su propio preset -- si no
+        // quedaria flotando sin nodo en el resto.
+        if (panelName == "VideoEditor" && !isVideoWorkspace) continue;
+        if (isVideoWorkspace && panelName != "VideoEditor") continue;
+        // El colapso de contenido (Alt Gr + 1..4) NO se filtra aca: cada
+        // panel lo consulta el mismo dentro de su Render(), despues de
+        // correr su "pump incondicional" propio si tiene uno (ver
+        // IsPanelCollapsedForRender en UIManager.h). Saltear Render() entero
+        // desde aca rompia esos pumps (cola del Monitor en Home, Reloj en
+        // Biblioteca) mientras el panel estaba oculto.
         panel->Render();
+    }
 if (m_FocusViewNextFrame) {
         ImGui::SetWindowFocus("Vista en Vivo");
         m_FocusViewNextFrame = false;
@@ -753,9 +989,6 @@ if (m_FocusViewNextFrame) {
 
     if (m_ShowConfig)
         m_SettingsPanel.Render(&m_ShowConfig);
-
-    if (m_ShowNotes)
-        RenderNotesWindow();
 
     {
         auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
@@ -812,6 +1045,8 @@ if (m_FocusViewNextFrame) {
 
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.500f, 0.500f, 0.490f, 1.0f));
         ImGui::Text("Creado por TheVixcho y la comunidad de ProyecThor");
+        ImGui::Spacing();
+        ImGui::TextUnformatted("Colaboradores: Oscar Farias, Victor Farias, Fabiola Fernandez");
         ImGui::Spacing();
         ImGui::TextDisabled("2026");
         ImGui::PopStyleColor();
@@ -912,17 +1147,8 @@ void UIManager::ToggleFullscreen()
 
 void UIManager::RenderModeToolbar()
 {
-    // SIEMPRE visible -- pedido explicito, no ocultable (ni por Ajustes ni
-    // por el menu Vista): es el punto principal para saltar entre Hub y
-    // Proyector y para el acceso rapido a Notas/Estilos/Streaming, asi que
-    // no puede depender de una preferencia que la deje escondida.
     auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
 
-    // Grupo izquierdo (Hub/Proyector) separado del resto por una linea
-    // vertical -- Conexiones/Biblia ya no viven aca (ver comentario de
-    // WorkspaceMode en UIManager.h): a la derecha de la linea solo quedan
-    // Notas y Estilos, que no son WorkspaceMode (no reemplazan el contenido
-    // de abajo, abren su propia ventana/popup encima).
     static const IconRailItem kItemsLeft[] = {
         { (int)WorkspaceMode::Hub,        HomeIcons::DrawIcon_Home,      "Hub"        },
         { (int)WorkspaceMode::Projector,  AppIcons::DrawIcon_Monitor,    "Proyector"  },
@@ -960,20 +1186,14 @@ void UIManager::RenderModeToolbar()
 
         ImFont* font          = ImGui::GetFont();
         const float labelSz   = std::max(9.0f, std::floor(ImGui::GetFontSize() * 0.72f));
-        // *0.85: iconos un poco mas chicos que el maximo que entraria en
-        // btnH -- pedido explicito, ahora que la barra queda prendida por
-        // defecto se queria mas discreta.
         const float iconSz    = std::max(11.0f, (btnH - (showLbl ? (labelSz + iconGap) : 0.0f) - 2.0f) * 0.85f);
 
         ImGuiStorage* storage = ImGui::GetStateStorage();
 
         ImGui::SetCursorPos(ImVec2(10.0f, padY));
 
-        // Pastillas de icono+etiqueta APILADOS (icono arriba, texto abajo) --
-        // pedido explicito en vez del layout lado a lado de antes, mismo
-        // idioma visual que una bottom-tab-bar. drawLabel/measureLabel usan
-        // labelSz (mas chico que el font por defecto) para que el texto entre
-        // completo debajo del icono sin agrandar la barra.
+        auto Lerp = [](float a, float b, float t) { return a + (b - a) * t; };
+
         auto measureLabelW = [&](const char* text) {
             return showLbl ? font->CalcTextSizeA(labelSz, FLT_MAX, 0.0f, text).x : 0.0f;
         };
@@ -984,10 +1204,6 @@ void UIManager::RenderModeToolbar()
             dl->AddText(font, labelSz, { x, labelY }, col, text);
         };
 
-        // Una sola pastilla icono+etiqueta apilados -- factorizado para que
-        // los grupos Hub/Proyector, Conexiones, Notas y Biblia (cada uno con
-        // su propia fuente de "activo") compartan el mismo dibujo en vez de
-        // triplicar/cuadruplicar el mismo bloque de ~30 lineas.
         auto RenderPill = [&](const char* label, DrawIconFn drawIcon, bool active, bool sameLine, float sameLineSpacing) -> bool {
             float lblW     = measureLabelW(label);
             float contentW = std::max(iconSz, lblW);
@@ -996,7 +1212,7 @@ void UIManager::RenderModeToolbar()
             if (sameLine) ImGui::SameLine(0.0f, sameLineSpacing);
 
             ImVec2 cursor = ImGui::GetCursorScreenPos();
-            ImVec2 bMin   = cursor;
+            ImVec2 bMin   = { cursor.x, cursor.y };
             ImVec2 bMax   = { cursor.x + btnW, cursor.y + btnH };
 
             ImGuiID hovId = ImGui::GetID(label);
@@ -1006,29 +1222,50 @@ void UIManager::RenderModeToolbar()
             float t = *pT;
 
             if (active) {
-                dl->AddRectFilled(bMin, bMax, ImGui::ColorConvertFloat4ToU32(accent), rounding);
+                ImVec4 ac = accent;
+                ac.w = 0.16f;
+                dl->AddRectFilled(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding);
+                ac.w = 0.32f;
+                dl->AddRect(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding, 0, 1.0f);
             } else if (t > 0.01f) {
                 dl->AddRectFilled(bMin, bMax, IM_COL32(255, 255, 255, (int)(t * 18.0f)), rounding);
+            }
+
+            // Barra indicadora inferior (indicador de seleccion)
+            {
+                float barW     = (btnW - 14.0f) * (active ? 1.0f : t);
+                float barX0    = cursor.x + (btnW - barW) * 0.5f;
+                float barAlpha = active ? 1.0f : t * 0.60f;
+                ImVec4 ac      = accent;
+                ac.w           = barAlpha;
+                dl->AddRectFilled({ barX0, bMax.y - 2.5f }, { barX0 + barW, bMax.y },
+                                  ImGui::ColorConvertFloat4ToU32(ac), 1.5f);
             }
 
             ImGui::SetCursorScreenPos(bMin);
             const std::string btnId = std::string("##modeTb_") + label;
             bool clicked = ImGui::InvisibleButton(btnId.c_str(), { btnW, btnH });
 
-            ImU32 icCol;
+            ImVec4 textPriV = ImGui::ColorConvertU32ToFloat4(DS::TextPrimary);
+            ImVec4 textDimV = ImGui::ColorConvertU32ToFloat4(DS::TextSecondary);
+            float  brightT  = active ? 1.0f : t;
+            ImVec4 icF = {
+                Lerp(textDimV.x, textPriV.x, brightT),
+                Lerp(textDimV.y, textPriV.y, brightT),
+                Lerp(textDimV.z, textPriV.z, brightT),
+                1.0f
+            };
             if (active) {
-                icCol = IM_COL32(18, 18, 20, 255);
-            } else {
-                ImVec4 base  = ImGui::ColorConvertU32ToFloat4(DS::TextSecondary);
-                ImVec4 hover = ImGui::ColorConvertU32ToFloat4(DS::TextPrimary);
-                base.x += (hover.x - base.x) * t;
-                base.y += (hover.y - base.y) * t;
-                base.z += (hover.z - base.z) * t;
-                icCol = ImGui::ColorConvertFloat4ToU32(base);
+                icF.x = Lerp(icF.x, accent.x, 0.35f);
+                icF.y = Lerp(icF.y, accent.y, 0.35f);
+                icF.z = Lerp(icF.z, accent.z, 0.35f);
+                icF.w = 1.0f;
             }
 
+            ImU32 icCol = ImGui::ColorConvertFloat4ToU32(icF);
+
             float iconX = bMin.x + (btnW - iconSz) * 0.5f;
-            float iconY = bMin.y + 1.0f;
+            float iconY = bMin.y + 2.0f;
             drawIcon(dl, { iconX, iconY }, iconSz, icCol);
             drawLabelCentered(label, btnW, bMin, iconY + iconSz + iconGap, icCol);
 
@@ -1064,27 +1301,23 @@ void UIManager::RenderModeToolbar()
             ImGui::Dummy(ImVec2(1.0f, btnH));
         }
 
-        // ── Grupo derecho: Notas y Estilos -- ninguno de los dos es un
-        //    WorkspaceMode (no reemplazan el contenido de abajo): Notas
-        //    abre/cierra una ventana flotante (ver RenderNotesWindow) y
-        //    Estilos abre un popup para aplicar un estilo guardado sin ir
-        //    hasta Diseño > Estilos.
+        // ── Grupo derecho: Notas, IA, Estilos, Streaming ───────────────────
         {
             bool clicked = RenderPill("Notas", HomeIcons::DrawIcon_Notepad, m_ShowNotes, true, gap * 2.0f);
-            if (clicked) m_ShowNotes = !m_ShowNotes;
+            if (clicked) ToggleNotesWindow();
+        }
+        {
+            bool clicked = RenderPill("Asistente IA", HomeIcons::DrawIcon_Sparkle, m_ShowAIAssistant, true, gap);
+            if (clicked) ToggleAIAssistant();
         }
         {
             bool clicked = RenderPill("Estilos", AppIcons::DrawIcon_Layers, false, true, gap);
             if (clicked) ImGui::OpenPopup("##modeTbStylesPopup");
         }
         {
-            // Abre Ajustes directo en "Proyeccion" (indice 1 de k_Categories,
-            // ver SettingsPanel.cpp) -- Streaming (RTMP) vive ahi como
-            // subcategoria, junto a Red/Mobile/OSC (ver CategoryProjection.cpp).
-            bool clicked = RenderPill("Streaming", HomeIcons::DrawIcon_Broadcast, false, true, gap);
+            bool clicked = RenderPill("Conexiones", HomeIcons::DrawIcon_Broadcast, m_ShowConnectionsWindow, true, gap);
             if (clicked) {
-                m_ShowConfig = true;
-                m_SettingsPanel.SetInitialCategory(1);
+                ToggleConnectionsWindow();
             }
         }
         RenderStylesPopup();
@@ -1116,7 +1349,7 @@ void UIManager::RenderModeToolbarStatusActions(float winW, float railH)
     float       clearGroupW  = clearIconSz + clearIconGap + clearTxtSz.x;
     float       clearBtnW    = clearGroupW + 24.0f;
 
-    ImVec2 dotSzAudience = ImVec2(5.0f * 2.0f + 6.0f + ImGui::CalcTextSize("Publico").x + 14.0f, rowH);
+    ImVec2 dotSzAudience = ImVec2(5.0f * 2.0f + 6.0f + ImGui::CalcTextSize("Público").x + 14.0f, rowH);
     ImVec2 dotSzStage    = ImVec2(5.0f * 2.0f + 6.0f + ImGui::CalcTextSize("Stage").x    + 14.0f, rowH);
 
     const float gap   = 14.0f;
@@ -1125,7 +1358,7 @@ void UIManager::RenderModeToolbarStatusActions(float winW, float railH)
 
     ImGui::SetCursorPos(ImVec2(startX, (railH - rowH) * 0.5f));
 
-    if (StatusDotToggle(dl, "##modeTbDotAudience", "Publico", audienceOn, MT::k_LiveAccent, rowH))
+    if (StatusDotToggle(dl, "##modeTbDotAudience", "Público", audienceOn, MT::k_LiveAccent, rowH))
         ToggleAudience(!audienceOn);
 
     ImGui::SameLine(0.0f, gap);
@@ -1228,13 +1461,20 @@ void UIManager::ToggleStageQuick(bool active)
     }
 }
 
+void UIManager::ToggleNotesWindow()
+{
+    m_ShowNotes = !m_ShowNotes;
+    if (!m_ShowNotes)
+        m_NotesPanel.PersistNow();
+}
+
 void UIManager::RenderNotesWindow()
 {
     static bool s_WasOpenLastFrame = false;
     const bool  justOpened = !s_WasOpenLastFrame;
     s_WasOpenLastFrame = true;
 
-    const ImVec2 baseSize(520.0f, 480.0f);
+    const ImVec2 baseSize(580.0f, 620.0f);
 
     ImGuiViewport* vp = ImGui::GetMainViewport();
     ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f,
@@ -1244,32 +1484,289 @@ void UIManager::RenderNotesWindow()
         ImGui::SetNextWindowPos(workCenter, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
         ImGui::SetNextWindowSize(baseSize, ImGuiCond_Always);
     }
-    ImGui::SetNextWindowSizeConstraints(ImVec2(420.0f, 360.0f), ImVec2(10000.0f, 10000.0f));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(480.0f, 480.0f), ImVec2(10000.0f, 10000.0f));
 
     ImGuiWindowClass floatingClass;
     floatingClass.DockingAllowUnclassed = false;
     ImGui::SetNextWindowClass(&floatingClass);
 
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f, 12.0f));
-    bool open = ImGui::Begin("Notas", &m_ShowNotes,
-        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking);
-    ImGui::PopStyleVar();
+    bool open = DS::BeginGlassPanel("Notas", m_GlassRenderer, &m_ShowNotes,
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking,
+        ImVec2(16.0f, 14.0f));
 
     if (open)
         m_NotesPanel.Render();
 
-    ImGui::End();
+    DS::EndGlassPanel();
 
-    if (!m_ShowNotes)
+    if (!m_ShowNotes) {
+        m_NotesPanel.PersistNow();
         s_WasOpenLastFrame = false;
+    }
+}
+
+void UIManager::RenderAIAssistantWindow()
+{
+    m_AIAssistant.Render(&m_ShowAIAssistant, m_GlassRenderer);
+}
+
+void UIManager::RenderConnectionsWindow()
+{
+    static bool s_WasOpenLastFrame = false;
+    const bool  justOpened = !s_WasOpenLastFrame;
+    s_WasOpenLastFrame = true;
+
+    const ImVec2 baseSize(760.0f, 680.0f);
+
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f,
+                       vp->WorkPos.y + vp->WorkSize.y * 0.5f);
+
+    if (justOpened) {
+        ImGui::SetNextWindowPos(workCenter, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(baseSize, ImGuiCond_Always);
+    }
+    ImGui::SetNextWindowSizeConstraints(ImVec2(620.0f, 520.0f), ImVec2(10000.0f, 10000.0f));
+
+    ImGuiWindowClass floatingClass;
+    floatingClass.DockingAllowUnclassed = false;
+    ImGui::SetNextWindowClass(&floatingClass);
+
+    bool open = DS::BeginGlassPanel("Centro de Conexiones", m_GlassRenderer, &m_ShowConnectionsWindow,
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking,
+        ImVec2(16.0f, 14.0f));
+
+    if (open)
+    {
+        const auto& theme = ProyecThor::Settings::SettingsManager::Get().GetSettings().theme;
+        auto& core = Core::PresentationCore::Get();
+
+        // ── Cabecera / Status Summary Bar ──
+        bool lanActive = core.GetNetworkServer() && core.GetNetworkServer()->IsRunning();
+        bool syncActive = ProyecThor::Settings::SettingsManager::Get().GetSettings().sync.enabled;
+        bool bcastActive = m_Broadcast.IsStreaming();
+
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(theme.surface1[0], theme.surface1[1], theme.surface1[2], 0.45f));
+        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(theme.border[0], theme.border[1], theme.border[2], 0.35f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f, 8.0f));
+
+        if (ImGui::BeginChild("##conn_summary_bar", ImVec2(0, 48), true, ImGuiWindowFlags_NoScrollbar))
+        {
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            ImVec2 p0 = ImGui::GetCursorScreenPos();
+            float itemW = ImGui::GetContentRegionAvail().x / 4.0f;
+
+            auto DrawStatusChip = [&](int idx, const char* label, bool active, const char* detail) {
+                float chipX = p0.x + idx * itemW;
+                ImVec2 dotPos(chipX + 8.0f, p0.y + 14.0f);
+                ImU32 dotCol = active ? IM_COL32(34, 197, 94, 255) : IM_COL32(148, 163, 184, 160);
+                dl->AddCircleFilled(dotPos, 4.0f, dotCol);
+                if (active) dl->AddCircle(dotPos, 6.5f, IM_COL32(34, 197, 94, 90), 16, 1.2f);
+
+                ImGui::SetCursorScreenPos(ImVec2(chipX + 18.0f, p0.y + 4.0f));
+                ImGui::TextColored(ImVec4(theme.textPrimary[0], theme.textPrimary[1], theme.textPrimary[2], 1.0f), "%s", label);
+                ImGui::SetCursorScreenPos(ImVec2(chipX + 18.0f, p0.y + 18.0f));
+                ImGui::TextColored(ImVec4(theme.textDim[0], theme.textDim[1], theme.textDim[2], 0.9f), "%s", detail);
+            };
+
+            DrawStatusChip(0, "Red (LAN)", lanActive, lanActive ? "En línea :8080" : "Detenido");
+            DrawStatusChip(1, "App Móvil", syncActive, syncActive ? "Sincronizado" : "Inactivo");
+            DrawStatusChip(2, "Transmisión", bcastActive, bcastActive ? "Emitiendo" : "En espera");
+            DrawStatusChip(3, "OSC Control", true, ":8000 / :9000");
+        }
+        ImGui::EndChild();
+        ImGui::PopStyleVar(3);
+        ImGui::PopStyleColor(2);
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // ── Pestañas de Conexión Estilo Segmented Bar ──
+        struct TabInfo { const char* label; const char* icon; };
+        static const TabInfo tabs[] = {
+            { "Red (LAN)",      "\xF0\x9F\x8C\x90" }, // 🌐
+            { "App Móvil",      "\xF0\x9F\x93\xB1" }, // 📱
+            { "Transmisión",    "\xF0\x9F\x93\xA1" }, // 📡
+            { "Control OSC",    "\xF0\x9F\x8E\x9B" }, // 🎛
+            { "Chat de Equipo", "\xF0\x9F\x92\xAC" }, // 💬
+        };
+        const int tabCount = 5;
+        const float tabW = (ImGui::GetContentRegionAvail().x - (tabCount - 1) * 6.0f) / tabCount;
+
+        for (int i = 0; i < tabCount; i++) {
+            if (i > 0) ImGui::SameLine(0, 6.0f);
+
+            bool isSelected = (m_ConnectionsActiveTab == i);
+            ImVec4 btnBg = isSelected ? ImVec4(theme.accent[0], theme.accent[1], theme.accent[2], 0.85f)
+                                      : ImVec4(theme.surface1[0], theme.surface1[1], theme.surface1[2], 0.55f);
+            ImVec4 btnTxt = isSelected ? ImVec4(1, 1, 1, 1)
+                                       : ImVec4(theme.textPrimary[0], theme.textPrimary[1], theme.textPrimary[2], 0.85f);
+
+            ImGui::PushStyleColor(ImGuiCol_Button, btnBg);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(theme.surface2[0], theme.surface2[1], theme.surface2[2], 0.9f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(theme.surface3[0], theme.surface3[1], theme.surface3[2], 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, btnTxt);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+
+            char tabLabel[64];
+            snprintf(tabLabel, sizeof(tabLabel), "%s %s##conn_tab_%d", tabs[i].icon, tabs[i].label, i);
+            if (ImGui::Button(tabLabel, ImVec2(tabW, 34.0f))) {
+                m_ConnectionsActiveTab = i;
+            }
+
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(4);
+        }
+
+        ImGui::Spacing();
+        ImGui::Spacing();
+
+        // ── Contenedor de la Pestaña Activa ──
+        if (ImGui::BeginChild("##conn_tab_content", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar))
+        {
+            switch (m_ConnectionsActiveTab) {
+                case 0: // Red LAN
+                    m_Red.RenderContent();
+                    break;
+                case 1: // App Móvil / Sync
+                    m_Sync.RenderContent();
+                    break;
+                case 2: // Transmisión / Captura
+                    m_Broadcast.RenderCaptureSection();
+                    ImGui::Spacing();
+                    m_Broadcast.RenderLayerSection();
+                    ImGui::Spacing();
+                    m_Broadcast.RenderStartSection();
+                    break;
+                case 3: // OSC
+                    m_OSC.RenderContent();
+                    break;
+                case 4: // Chat del Equipo
+                    m_Chat.RenderContent();
+                    break;
+                default:
+                    break;
+            }
+        }
+        ImGui::EndChild();
+    }
+
+    DS::EndGlassPanel();
+
+    if (!m_ShowConnectionsWindow) {
+        s_WasOpenLastFrame = false;
+    }
+}
+
+void UIManager::RenderUrlImportModal()
+{
+    bool resultReady = false;
+    ProyecThor::Core::SubtitleFetchResult resultCopy;
+    {
+        std::lock_guard<std::mutex> lk(m_UrlImportMutex);
+        if (m_UrlImportResult.has_value() && !m_UrlImportRunning) {
+            resultCopy   = *m_UrlImportResult;
+            resultReady  = true;
+            m_UrlImportResult.reset();
+        }
+    }
+    if (resultReady) {
+        if (m_UrlImportThread.joinable())
+            m_UrlImportThread.join();
+
+        if (resultCopy.success) {
+            if (m_ShowUrlImport) {
+                ProyecThor::Library::CreateNewSongFromText(resultCopy.title, resultCopy.lyrics);
+                m_ShowUrlImport         = false;
+                m_UrlImportBuffer[0]    = '\0';
+                m_UrlImportLastError.clear();
+            }
+        } else {
+            m_UrlImportLastError = resultCopy.error;
+        }
+    }
+
+    if (!m_ShowUrlImport) return;
+
+    const ImVec2 baseSize(480.0f, 230.0f);
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f);
+    ImGui::SetNextWindowPos(workCenter, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(baseSize, ImGuiCond_Appearing);
+
+    ImGuiWindowClass floatingClass;
+    floatingClass.DockingAllowUnclassed = false;
+    ImGui::SetNextWindowClass(&floatingClass);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 16.0f));
+    bool open = ImGui::Begin("Importar desde URL", &m_ShowUrlImport,
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking |
+        ImGuiWindowFlags_AlwaysAutoResize);
+
+    if (open) {
+        ImGui::TextWrapped("Pega el link de un video (YouTube y similares). Se buscan sus subtitulos "
+                            "-- primero en espa\xC3\xB1ol, si no en ingles -- y se usan como letra "
+                            "inicial de una cancion nueva.");
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+
+        ImGui::BeginDisabled(m_UrlImportRunning);
+        ImGui::SetNextItemWidth(-1.0f);
+        bool enterPressed = ImGui::InputTextWithHint("##urlImportInput", "https://www.youtube.com/watch?v=...",
+            m_UrlImportBuffer, sizeof(m_UrlImportBuffer), ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::EndDisabled();
+
+        ImGui::Dummy(ImVec2(0.0f, 10.0f));
+
+        bool wantStart = false;
+        if (m_UrlImportRunning) {
+            ImGui::TextColored(ImVec4(0.6f, 0.75f, 0.9f, 1.0f), "Buscando subtitulos...");
+        } else {
+            if (ImGui::Button("Importar", ImVec2(120.0f, 32.0f)))
+                wantStart = true;
+            if (enterPressed)
+                wantStart = true;
+            ImGui::SameLine();
+            if (ImGui::Button("Cancelar", ImVec2(100.0f, 32.0f))) {
+                m_ShowUrlImport      = false;
+                m_UrlImportBuffer[0] = '\0';
+                m_UrlImportLastError.clear();
+            }
+        }
+
+        if (!m_UrlImportLastError.empty()) {
+            ImGui::Dummy(ImVec2(0.0f, 8.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.93f, 0.35f, 0.35f, 1.0f));
+            ImGui::TextWrapped("%s", m_UrlImportLastError.c_str());
+            ImGui::PopStyleColor();
+        }
+
+        if (wantStart && !m_UrlImportRunning && m_UrlImportBuffer[0] != '\0') {
+            if (m_UrlImportThread.joinable()) m_UrlImportThread.join();
+            m_UrlImportLastError.clear();
+            m_UrlImportRunning = true;
+            {
+                std::lock_guard<std::mutex> lk(m_UrlImportMutex);
+                m_UrlImportResult.reset();
+            }
+            std::string urlCopy = m_UrlImportBuffer;
+            m_UrlImportThread = std::thread([this, urlCopy]() {
+                ProyecThor::Core::SubtitleFetchResult res = ProyecThor::Core::FetchSubtitlesAsLyrics(urlCopy);
+                std::lock_guard<std::mutex> lk(m_UrlImportMutex);
+                m_UrlImportResult  = std::move(res);
+                m_UrlImportRunning = false;
+            });
+        }
+    }
+
+    ImGui::End();
+    ImGui::PopStyleVar();
 }
 
 void UIManager::RenderStylesPopup()
 {
-    // Sin color de fondo propio -- hereda ImGuiCol_PopupBg del tema activo
-    // (ver SettingsManager::ApplyTheme), como cualquier otro popup sin
-    // override. Antes tenia un ImVec4 fijo aca que lo tapaba y quedaba
-    // desentonado con el tema elegido en Ajustes > Apariencia.
     ImGui::SetNextWindowSize(ImVec2(260.0f, 0.0f), ImGuiCond_Appearing);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(14.0f, 12.0f));
@@ -1345,9 +1842,6 @@ void UIManager::RenderQuickSwitcher()
     ImGui::SetNextWindowSize(winSize);
     ImGui::SetNextWindowFocus();
 
-    // Sin colores propios -- hereda WindowBg/Border del tema activo (ver
-    // SettingsManager::ApplyTheme), antes fijos y desentonados con el tema
-    // elegido en Ajustes > Apariencia.
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(10.0f, 10.0f));
 
@@ -1391,17 +1885,19 @@ void UIManager::RenderMainMenuBar()
 
     const auto& str = ProyecThor::UI::GetUIStrings();
 
-    // Sin MenuBarBg/Text propios -- heredan del tema activo (ver
-    // SettingsManager::ApplyTheme), antes fijos y ademas ignorando el
-    // color realmente elegido en Ajustes > Apariencia.
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(10.0f, 4.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(8.0f, 4.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 10.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,   ImVec2(14.0f, 10.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,   ImVec2(8.0f, 6.0f));
+
+    ImGui::PushStyleColor(ImGuiCol_MenuBarBg,     ImGui::ColorConvertU32ToFloat4(DS::GlassFillTop));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg,       ImGui::ColorConvertU32ToFloat4(DS::GlassFillTop));
+    ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.20f, 0.40f, 0.85f, 0.45f));
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.25f, 0.48f, 0.95f, 0.65f));
 
     if (ImGui::BeginMainMenuBar())
     {
-
-        if (ImGui::BeginMenu("ProyecThor"))
+        // ── Menú Archivo ───────────────────────────────────────────────────
+        if (ImGui::BeginMenu(str.menuFile))
         {
             ImGui::Spacing();
             if (ImGui::MenuItem(str.menuPrefs, "Ctrl+P"))
@@ -1411,36 +1907,62 @@ void UIManager::RenderMainMenuBar()
             ImGui::Separator();
             ImGui::Spacing();
 
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.45f, 0.45f, 1.0f));
-            if (ImGui::MenuItem(str.menuExit, "Alt+F4"))
-                glfwSetWindowShouldClose(m_Window, true);
-            ImGui::PopStyleColor();
-            ImGui::Spacing();
-            ImGui::EndMenu();
-        }
-
-        if (ImGui::BeginMenu(str.menuFile))
-        {
-            ImGui::Spacing();
-
             if (ImGui::BeginMenu(str.importLabel))
             {
-                if (ImGui::MenuItem("Importar cancion desde portapapeles"))
+                if (ImGui::MenuItem("Importar canción desde portapapeles"))
                 {
                     const char* clip = ImGui::GetClipboardText();
                     if (clip && clip[0] != '\0')
                         ProyecThor::Library::CreateNewSongFromClipboard(clip);
                 }
+                if (ImGui::MenuItem("Importar desde URL"))
+                {
+                    m_ShowUrlImport = true;
+                    m_UrlImportLastError.clear();
+                }
                 ImGui::EndMenu();
             }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.45f, 0.45f, 1.0f));
+            if (ImGui::MenuItem(str.menuExit, "Alt+F4"))
+                glfwSetWindowShouldClose(m_Window, true);
+            ImGui::PopStyleColor();
 
             ImGui::Spacing();
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu(str.menuView))
+        // ── Menú Espacio de Trabajo ────────────────────────────────────────
+        if (ImGui::BeginMenu("Espacio de trabajo"))
         {
             ImGui::Spacing();
+            auto& workspace = ProyecThor::Settings::SettingsManager::Get().GetSettings().workspace;
+
+            struct WsEntry { const char* label; ProyecThor::Settings::WorkspaceLayoutPreset preset; };
+            static const WsEntry kWorkspaceEntries[] = {
+                { "Clásico",     ProyecThor::Settings::WorkspaceLayoutPreset::Classic   },
+                { "Simple",      ProyecThor::Settings::WorkspaceLayoutPreset::Simple    },
+                { "Biblioteca",  ProyecThor::Settings::WorkspaceLayoutPreset::Library   },
+                { "Producción",  ProyecThor::Settings::WorkspaceLayoutPreset::Video     },
+            };
+            for (const auto& e : kWorkspaceEntries)
+            {
+                bool active = (workspace.layoutPreset == e.preset);
+                if (ImGui::MenuItem(e.label, nullptr, active))
+                {
+                    workspace.layoutPreset = e.preset;
+                    ProyecThor::Settings::SettingsManager::Get().Save();
+                }
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
             if (ImGui::MenuItem(str.menuResetLayout))
                 m_ResetLayout = true;
 
@@ -1451,34 +1973,71 @@ void UIManager::RenderMainMenuBar()
             ImGui::Separator();
             ImGui::Spacing();
 
-            auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
-            if (ImGui::MenuItem("Titulos en barras de iconos", nullptr, general.showRailLabels))
             {
-                general.showRailLabels = !general.showRailLabels;
-                ProyecThor::Settings::SettingsManager::Get().Save();
-            }
+                auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
+                if (ImGui::MenuItem("Titulos en barras de iconos", nullptr, general.showRailLabels))
+                {
+                    general.showRailLabels = !general.showRailLabels;
+                    ProyecThor::Settings::SettingsManager::Get().Save();
+                }
 
-            if (ImGui::MenuItem("Rendimiento", nullptr, general.showPerfPanel))
-            {
-                general.showPerfPanel = !general.showPerfPanel;
-                ProyecThor::Settings::SettingsManager::Get().Save();
-            }
+                if (ImGui::MenuItem("Rendimiento", nullptr, general.showPerfPanel))
+                {
+                    general.showPerfPanel = !general.showPerfPanel;
+                    ProyecThor::Settings::SettingsManager::Get().Save();
+                }
 
-            if (ImGui::MenuItem("Botones de limpieza (Vista en Vivo)", nullptr, general.showViewQuickActions))
-            {
-                general.showViewQuickActions = !general.showViewQuickActions;
-                ProyecThor::Settings::SettingsManager::Get().Save();
+                if (ImGui::MenuItem("Botones de limpieza (Vista en Vivo)", nullptr, general.showViewQuickActions))
+                {
+                    general.showViewQuickActions = !general.showViewQuickActions;
+                    ProyecThor::Settings::SettingsManager::Get().Save();
+                }
             }
-
 
             ImGui::Spacing();
             ImGui::EndMenu();
         }
 
+        // ── Menú Pantallas ─────────────────────────────────────────────────
+        if (ImGui::BeginMenu("Pantallas"))
+        {
+            ImGui::Spacing();
+            if (ImGui::MenuItem("Configuración de Stage"))
+            {
+                m_ShowConfig = true;
+                m_SettingsPanel.SetInitialCategory(2);
+            }
+            ImGui::Spacing();
+            ImGui::EndMenu();
+        }
+
+        // ── Menú Ventana ───────────────────────────────────────────────────
+        if (ImGui::BeginMenu("Ventana"))
+        {
+            ImGui::Spacing();
+            bool isFullscreen = (glfwGetWindowMonitor(m_Window) != nullptr);
+            if (ImGui::MenuItem("Pantalla completa", "F11", isFullscreen))
+                ToggleFullscreen();
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
+            if (ImGui::MenuItem("Abrir Hub al iniciar", nullptr, general.openHubOnStartup))
+            {
+                general.openHubOnStartup = !general.openHubOnStartup;
+                ProyecThor::Settings::SettingsManager::Get().Save();
+            }
+
+            ImGui::Spacing();
+            ImGui::EndMenu();
+        }
+
+        // ── Menú Ayuda ─────────────────────────────────────────────────────
         if (ImGui::BeginMenu(str.menuHelp))
         {
             ImGui::Spacing();
-
             if (ImGui::MenuItem(str.menuDocs, "F1"))
                 ProyecThor::External::OpenURL("https://proyecthor.web.app/");
 
@@ -1497,19 +2056,6 @@ void UIManager::RenderMainMenuBar()
                 ImGui::EndMenu();
             }
 
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.898f, 0.224f, 0.208f, 1.0f));
-            bool youtubeOpen = ImGui::BeginMenu("Canal de YouTube");
-            ImGui::PopStyleColor();
-            if (youtubeOpen)
-            {
-                const char* youtubeUrl = "https://www.youtube.com/@thevixcho";
-                RenderSocialQrMenu(youtubeUrl);
-                ImGui::EndMenu();
-            }
-
-            // App movil de control remoto (Android, ver SyncPanel/SyncServer)
-            // -- mismo criterio que los canales de arriba: submenu con QR
-            // para escanear con el celular en vez de tipear la URL a mano.
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.290f, 0.780f, 0.490f, 1.0f));
             bool mobileAppOpen = ImGui::BeginMenu("App movil (control remoto)");
             ImGui::PopStyleColor();
@@ -1536,37 +2082,10 @@ void UIManager::RenderMainMenuBar()
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("Pantallas"))
-        {
-            // Salto directo a Ajustes > Pantallas (indice 3 de k_Categories,
-            // ver SettingsPanel.cpp -- categoria de Stage, renombrada a
-            // "Pantallas"): que monitor/LAN usa, layout de celdas, etc. son
-            // varios ajustes relacionados entre si (a diferencia de un
-            // toggle simple), asi que abre esa seccion en vez de intentar
-            // duplicarlos sueltos en un menu.
-            ImGui::Spacing();
-            if (ImGui::MenuItem("Configuración de Stage"))
-            {
-                m_ShowConfig = true;
-                m_SettingsPanel.SetInitialCategory(2);
-            }
-            ImGui::Spacing();
-            ImGui::EndMenu();
-        }
-
-        if (ImGui::BeginMenu("Ventana"))
-        {
-            ImGui::Spacing();
-            bool isFullscreen = (glfwGetWindowMonitor(m_Window) != nullptr);
-            if (ImGui::MenuItem("Pantalla completa", "F11", isFullscreen))
-                ToggleFullscreen();
-            ImGui::Spacing();
-            ImGui::EndMenu();
-        }
-
         ImGui::EndMainMenuBar();
     }
 
+    ImGui::PopStyleColor(4);
     ImGui::PopStyleVar(3);
 }
 
@@ -1592,10 +2111,28 @@ void UIManager::BeginDockspace()
     ImGui::Begin("ProyecThorWorkspace", nullptr, window_flags);
     ImGui::PopStyleVar(3);
 
-    const auto& str = ProyecThor::UI::GetUIStrings();
-
     ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
+
+    // Debe correr ANTES de someter el DockSpace de este frame -- empuja el
+    // tamaño animado de los nodos colapsados/expandidos (ver Alt Gr + 1..4
+    // en RenderAll) para que el paso de layout de abajo ya lo tenga en
+    // cuenta, mismo criterio que DockBuilderSetNodeSize(dockspace_id, ...)
+    // un poco mas abajo en esta misma funcion.
+    UpdatePanelCollapseAnim();
+
     ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+
+    // Ajustes > Apariencia > Entorno de trabajo cambio desde el ultimo frame
+    // -- fuerza un reset de layout sin que la pagina de Ajustes necesite
+    // conocer a UIManager (solo escribe el setting, esto lo detecta solo).
+    {
+        int currentPreset = (int)ProyecThor::Settings::SettingsManager::Get().GetSettings().workspace.layoutPreset;
+        if (currentPreset != m_LastWorkspacePreset)
+        {
+            m_LastWorkspacePreset = currentPreset;
+            m_ResetLayout         = true;
+        }
+    }
 
     if (m_ResetLayout || !ImGui::DockBuilderGetNode(dockspace_id))
     {
@@ -1605,45 +2142,256 @@ void UIManager::BeginDockspace()
         ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
         ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->WorkSize);
 
-        ImGuiID dock_main = dockspace_id;
+        using ProyecThor::Settings::WorkspaceLayoutPreset;
+        switch (ProyecThor::Settings::SettingsManager::Get().GetSettings().workspace.layoutPreset)
+        {
+            case WorkspaceLayoutPreset::Simple:
+                BuildWorkspaceLayoutSimple(dockspace_id);
+                break;
+            case WorkspaceLayoutPreset::Broadcast:
+                BuildWorkspaceLayoutBroadcast(dockspace_id);
+                break;
+            case WorkspaceLayoutPreset::Library:
+                BuildWorkspaceLayoutLibrary(dockspace_id);
+                break;
+            case WorkspaceLayoutPreset::Video:
+                BuildWorkspaceLayoutVideo(dockspace_id);
+                break;
+            default:
+                BuildWorkspaceLayoutClassic(dockspace_id);
+                break;
+        }
 
-        ImGuiID dock_left = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Left, 0.25f, nullptr, &dock_main);
-        ImGuiID dock_left_top, dock_left_bottom;
-        ImGui::DockBuilderSplitNode(dock_left, ImGuiDir_Down, 0.40f, &dock_left_bottom, &dock_left_top);
+        for (auto& p : m_PanelCollapse)
+            if (ImGuiDockNode* node = ImGui::DockBuilderGetNode(p.nodeId))
+                p.expandedSize = node->Size;
 
-        ImGuiID dock_right;
-        ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.37f, &dock_right, &dock_main);
-
-        ImGuiID dock_center_right;
-        ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.45f, &dock_center_right, &dock_main);
-        ImGuiID dock_center_right_top, dock_center_right_bottom;
-        ImGui::DockBuilderSplitNode(dock_center_right, ImGuiDir_Down, 0.70f, &dock_center_right_bottom, &dock_center_right_top);
-
-        ImGuiID dock_main_top, dock_main_bottom;
-        ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Down, 0.30f, &dock_main_bottom, &dock_main_top);
-ImGui::DockBuilderDockWindow(str.library,          dock_left_top);
-
-ImGui::DockBuilderDockWindow("Home",               dock_main_top);
-ImGui::DockBuilderDockWindow("Vista en Vivo",      dock_right);
-
-        ImGui::DockBuilderDockWindow("Diseño",              dock_main_bottom);
-
-{
-    ImGuiID leafNodes[] = {
-        dock_left_top, dock_left_bottom,
-        dock_main_top, dock_main_bottom,
-        dock_right
-    };
-    for (ImGuiID nodeId : leafNodes)
-    {
-        if (ImGuiDockNode* node = ImGui::DockBuilderGetNode(nodeId))
-            node->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
+        m_FocusViewNextFrame = true;
     }
 }
 
-ImGui::DockBuilderFinish(dockspace_id);
+// ── Entorno de trabajo: "Clásico" (default) ─────────────────────────────────
+// Biblioteca a la izquierda; a la derecha Vista en Vivo; en el centro, Home
+// arriba y Diseño abajo.
+void UIManager::BuildWorkspaceLayoutClassic(ImGuiID dockspace_id)
+{
+    const auto& str = ProyecThor::UI::GetUIStrings();
+    ImGuiID     dock_main = dockspace_id;
 
-        m_FocusViewNextFrame = true;
+    ImGuiID dock_left = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Left, 0.25f, nullptr, &dock_main);
+    ImGuiID dock_left_top, dock_left_bottom;
+    ImGui::DockBuilderSplitNode(dock_left, ImGuiDir_Down, 0.40f, &dock_left_bottom, &dock_left_top);
+
+    ImGuiID dock_right;
+    ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.37f, &dock_right, &dock_main);
+
+    ImGuiID dock_main_top, dock_main_bottom;
+    ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Down, 0.30f, &dock_main_bottom, &dock_main_top);
+
+    ImGui::DockBuilderDockWindow(str.library,     dock_left_top);
+    ImGui::DockBuilderDockWindow("Home",          dock_main_top);
+    ImGui::DockBuilderDockWindow("Vista en Vivo", dock_right);
+    ImGui::DockBuilderDockWindow("Diseño",        dock_main_bottom);
+
+    ImGuiID leafNodes[] = { dock_left_top, dock_left_bottom, dock_main_top, dock_main_bottom, dock_right };
+    for (ImGuiID nodeId : leafNodes)
+        if (ImGuiDockNode* node = ImGui::DockBuilderGetNode(nodeId))
+            node->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
+
+    ImGui::DockBuilderFinish(dockspace_id);
+
+    // Orden fijo (1=Biblioteca, 2=Diseño, 3=Vista en Vivo, 4=Home), pedido
+    // explicito del operador -- ver Alt Gr + 1..4 en RenderAll. Se apunta al
+    // nodo CONTENEDOR del split (dock_left/dock_right/dock_main_top/
+    // dock_main_bottom), no a dock_left_top -- ese es el que controla el
+    // ancho/alto real hacia el resto del layout; dock_left_top solo reparte
+    // ESE espacio ya fijo verticalmente contra dock_left_bottom.
+    m_PanelCollapse[0] = { dock_left,        ImVec2(0, 0), true,  false, 0.0f }; // 1: Biblioteca
+    m_PanelCollapse[1] = { dock_main_bottom, ImVec2(0, 0), false, false, 0.0f }; // 2: Diseño
+    m_PanelCollapse[2] = { dock_right,       ImVec2(0, 0), true,  false, 0.0f }; // 3: Vista en Vivo
+    m_PanelCollapse[3] = { dock_main_top,    ImVec2(0, 0), false, false, 0.0f }; // 4: Home
+}
+
+// ── Entorno de trabajo: "Simple" (estilo Holyrics) ──────────────────────────
+// Cuatro columnas de alto completo, nada apilado verticalmente: Biblioteca |
+// Home | Vista en Vivo | Diseño. Diseño se corre TODO a la derecha (a la
+// derecha de Vista en Vivo) en vez de vivir abajo de Home -- Home y Vista en
+// Vivo quedan cada uno en su propia columna al medio. Diseño (y en paneles
+// angostos, Vista en Vivo) quedan angostos y altos aca -- ver
+// StylesHubPanel::Render, que detecta esto y pasa su rail de iconos a
+// vertical, y ViewPanel::RenderCompactWide para el caso ancho-y-bajo (no
+// aplica en este preset, Vista en Vivo ya es una columna alta).
+void UIManager::BuildWorkspaceLayoutSimple(ImGuiID dockspace_id)
+{
+    const auto& str = ProyecThor::UI::GetUIStrings();
+    ImGuiID     dock_main = dockspace_id;
+
+    // Ratios pensados para que Vista en Vivo (video 16:9, cuyo alto depende
+    // de su ancho) quede con una columna realmente usable -- antes le tocaba
+    // ~26% y Home (que solo necesita ancho para su Preview+Cola) se llevaba
+    // demasiado, dejando el video chico con espacio vacio abajo.
+    ImGuiID dock_left = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Left, 0.22f, nullptr, &dock_main);
+    ImGuiID dock_left_top, dock_left_bottom;
+    ImGui::DockBuilderSplitNode(dock_left, ImGuiDir_Down, 0.40f, &dock_left_bottom, &dock_left_top);
+
+    ImGuiID dock_right;
+    ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.20f, &dock_right, &dock_main);
+
+    ImGuiID dock_mid_right;
+    ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.52f, &dock_mid_right, &dock_main);
+    // dock_main (lo que sobra) es Home, la columna medio-izquierda;
+    // dock_mid_right es Vista en Vivo, la columna medio-derecha -- ahora la
+    // mas ancha de las dos columnas del medio (~32% del total vs ~30% de
+    // Home), en vez de quedar mas chica que Home.
+
+    ImGui::DockBuilderDockWindow(str.library,     dock_left_top);
+    ImGui::DockBuilderDockWindow("Home",          dock_main);
+    ImGui::DockBuilderDockWindow("Vista en Vivo", dock_mid_right);
+    ImGui::DockBuilderDockWindow("Diseño",        dock_right);
+
+    ImGuiID leafNodes[] = { dock_left_top, dock_left_bottom, dock_main, dock_mid_right, dock_right };
+    for (ImGuiID nodeId : leafNodes)
+        if (ImGuiDockNode* node = ImGui::DockBuilderGetNode(nodeId))
+            node->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
+
+    ImGui::DockBuilderFinish(dockspace_id);
+
+    // Las 4 son columnas puras (splits izquierda/derecha en cadena) -- todas
+    // colapsan por ancho.
+    m_PanelCollapse[0] = { dock_left,      ImVec2(0, 0), true, false, 0.0f }; // 1: Biblioteca
+    m_PanelCollapse[1] = { dock_right,     ImVec2(0, 0), true, false, 0.0f }; // 2: Diseño
+    m_PanelCollapse[2] = { dock_mid_right, ImVec2(0, 0), true, false, 0.0f }; // 3: Vista en Vivo
+    m_PanelCollapse[3] = { dock_main,      ImVec2(0, 0), true, false, 0.0f }; // 4: Home
+}
+
+// ── Entorno de trabajo: "Transmisión" ───────────────────────────────────────
+// Streaming (Captura/Capas/Iniciar, ver StreamingWorkspacePanel) a pantalla
+// completa, SOLO -- pedido explicito: "elimina todo lo relacionado a
+// proyeccion, es solo para ver la transmision a un servidor... en su lugar
+// paneles para manejar las capas". Antes tambien mostraba Biblioteca/Home/
+// Diseño en tres columnas abajo (todo eso es "proyeccion") -- se saco del
+// todo; el manejo de fuentes ahora vive DENTRO de la propia franja de
+// Transmisión, ver BroadcastPanel::RenderLayerSection (lista de capas:
+// Captura/Overlay/Vista en vivo).
+void UIManager::BuildWorkspaceLayoutBroadcast(ImGuiID dockspace_id)
+{
+    ImGui::DockBuilderDockWindow("Transmisión", dockspace_id);
+    ImGui::DockBuilderFinish(dockspace_id);
+
+    for (auto& p : m_PanelCollapse) { p.nodeId = 0; p.collapsed = false; p.animT = 0.0f; }
+}
+
+// ── Entorno de trabajo: "Biblioteca" ────────────────────────────────────────
+// Biblioteca (bloqueada en la categoria Medios, ver LibraryPanel::
+// SetMediaOnlyMode -- sincronizado cada frame en RenderAll segun el preset
+// activo) a la izquierda, Home (Preview, ya se adapta solo al tipo de
+// contenido seleccionado) ocupando el resto -- sin Vista en Vivo/Diseño.
+// Pensado para operar solo reproduciendo contenido de la biblioteca; "Abrir
+// con ProyecThor" tambien activa este preset para esa sesion (ver
+// EnterLibraryWorkspaceMode en main.cpp), sin pisar el preset guardado.
+void UIManager::BuildWorkspaceLayoutLibrary(ImGuiID dockspace_id)
+{
+    const auto& str = ProyecThor::UI::GetUIStrings();
+    ImGuiID     dock_main = dockspace_id;
+
+    ImGuiID dock_left;
+    ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Left, 0.30f, &dock_left, &dock_main);
+
+    ImGui::DockBuilderDockWindow(str.library, dock_left);
+    ImGui::DockBuilderDockWindow("Home",      dock_main);
+
+    ImGuiID leafNodes[] = { dock_left, dock_main };
+    for (ImGuiID nodeId : leafNodes)
+        if (ImGuiDockNode* node = ImGui::DockBuilderGetNode(nodeId))
+            node->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
+
+    ImGui::DockBuilderFinish(dockspace_id);
+
+    // Diseño/Vista en Vivo no existen en este layout -- nodeId=0 es un
+    // no-op seguro para Alt Gr+2/3 (ver IsPanelCollapsedForRender/
+    // TogglePanelCollapse). Biblioteca/Home SI pueden colapsar (Alt Gr+1/4),
+    // mismo split izq/der que Vista en Vivo en Clasico -> axisIsWidth=true.
+    m_PanelCollapse[0] = { dock_left, ImVec2(0, 0), true, false, 0.0f }; // 1: Biblioteca
+    m_PanelCollapse[1] = { 0,         ImVec2(0, 0), false, false, 0.0f }; // 2: Diseño
+    m_PanelCollapse[2] = { 0,         ImVec2(0, 0), false, false, 0.0f }; // 3: Vista en Vivo
+    m_PanelCollapse[3] = { dock_main, ImVec2(0, 0), true, false, 0.0f }; // 4: Home
+}
+
+// ── Entorno de trabajo: "Producción" ────────────────────────────────────────
+// Una sola ventana ocupa todo el dockspace, sin Biblioteca/Home/Vista en
+// Vivo/Diseño alrededor -- VideoEditorPanel (titulo real de ventana
+// "Producción") absorbe Render/Colorimetria/Canales de trabajo/Audio(DAW)/
+// Overlays como pestañas internas.
+void UIManager::BuildWorkspaceLayoutVideo(ImGuiID dockspace_id)
+{
+    ImGui::DockBuilderDockWindow("Producción", dockspace_id);
+    ImGui::DockBuilderFinish(dockspace_id);
+    for (auto& p : m_PanelCollapse) { p.nodeId = 0; p.collapsed = false; p.animT = 0.0f; }
+}
+
+bool UIManager::IsPanelCollapsedForRender(const std::string& name) const
+{
+    int idx = -1;
+    if      (name == "Library")        idx = 0; // Biblioteca
+    else if (name == "Diseño")          idx = 1;
+    else if (name == "Vista en Vivo")   idx = 2;
+    else if (name == "Home")            idx = 3;
+
+    if (idx < 0) return false;
+
+    const PanelCollapseState& p = m_PanelCollapse[idx];
+    if (p.nodeId == 0) return false; // ese panel no existe en el preset activo
+    return p.animT > 0.5f;
+}
+
+void UIManager::TogglePanelCollapse(int index)
+{
+    if (index < 0 || index >= kCollapsiblePanelCount) return;
+    m_PanelCollapse[index].collapsed = !m_PanelCollapse[index].collapsed;
+}
+
+void UIManager::ResetPanelCollapse()
+{
+    for (auto& p : m_PanelCollapse) { p.collapsed = false; p.animT = 0.0f; }
+    // Mismo camino que el menu Vista > "Restablecer Entorno": reconstruye
+    // el arbol de docking entero desde cero, asi los paneles vuelven a sus
+    // proporciones originales en vez de quedar en el tamaño que tenian
+    // justo antes del reset.
+    m_ResetLayout = true;
+}
+
+void UIManager::UpdatePanelCollapseAnim()
+{
+    // Ancho/alto del "riel" colapsado -- lo bastante angosto para leerse
+    // como "oculto" sin llegar a 0 (DockBuilderSetNodeSize exige > 0, y un
+    // nodo de dock a 0px se pone inestable).
+    const float kCollapsedPx = 40.0f;
+    const float kSpeed       = 9.0f;
+    const float dt           = ImGui::GetIO().DeltaTime;
+
+    for (auto& p : m_PanelCollapse)
+    {
+        if (p.nodeId == 0) continue;
+
+        const float target = p.collapsed ? 1.0f : 0.0f;
+        if (p.animT == target) continue; // en reposo -- no pelear con un resize manual del operador
+
+        p.animT += (target - p.animT) * std::min(1.0f, dt * kSpeed);
+        if (std::fabs(p.animT - target) < 0.004f) p.animT = target;
+
+        ImGuiDockNode* node = ImGui::DockBuilderGetNode(p.nodeId);
+        if (!node) continue;
+
+        const float expandedPx = p.axisIsWidth ? p.expandedSize.x : p.expandedSize.y;
+        const float animatedPx = expandedPx + (kCollapsedPx - expandedPx) * p.animT;
+
+        ImVec2 size = node->Size;
+        if (p.axisIsWidth) size.x = std::max(1.0f, animatedPx);
+        else                size.y = std::max(1.0f, animatedPx);
+        if (size.x <= 0.0f) size.x = 1.0f;
+        if (size.y <= 0.0f) size.y = 1.0f;
+
+        ImGui::DockBuilderSetNodeSize(p.nodeId, size);
     }
 }
 
@@ -1654,6 +2402,11 @@ void UIManager::EndDockspace()
 
 void UIManager::Shutdown()
 {
+    // Puede bloquear un instante si una descarga de subtitulos seguia en
+    // curso -- preferible a std::terminate() por destruir un std::thread
+    // todavia joinable (ver RenderUrlImportModal).
+    if (m_UrlImportThread.joinable())
+        m_UrlImportThread.join();
     m_Panels.clear();
 }
 

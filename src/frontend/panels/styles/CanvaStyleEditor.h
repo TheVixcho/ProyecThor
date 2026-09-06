@@ -11,8 +11,6 @@ namespace ProyecThor::Settings { struct ThemeSettings; }
 namespace ProyecThor::UI {
 
 class TabTypography;
-class TabAlignment;
-class TabMargins;
 class TabEffects;
 
 struct CanvaPalette {
@@ -34,25 +32,18 @@ struct CanvaPalette {
     static void Sync(const ProyecThor::Settings::ThemeSettings& theme);
 };
 
-// StyleData — parametros de estilo de una presentacion. Alineacion:
+// StyleData — un estilo guardable. "lyrics" es la caja de Letras: dibuja
+// TODO el contenido de texto (canciones y tambien el CUERPO de un
+// versiculo biblico, ambos con el mismo diseno). "index" es una caja
+// OPCIONAL e independiente que dibuja SOLO la referencia biblica (ej.
+// "Genesis 1:1"), nunca el cuerpo -- ver indexEnabled. Cada caja tiene su
+// propia posicion, tamano, fuente, color, alineacion y efectos (ver
+// ProyecThor::Core::TextBoxStyle). Alineacion dentro de cada caja:
 // 0 = izquierda/arriba, 1 = centro, 2 = derecha/abajo.
 struct StyleData {
-    std::string selectedFont  = "Predeterminada";
-    float       textColor[4]  = { 1.0f, 1.0f, 1.0f, 1.0f };
-    float       textSize      = 80.0f;
-    float       refTextSize   = 28.0f;   // tamano de la linea de referencia biblica
-    float       verseTextSize = 60.0f;   // tamano del cuerpo del versiculo
-    bool        autoScale     = true;
-    float       margins[4]    = { 80.0f, 60.0f, 80.0f, 60.0f }; // L T R B en px a 1920x1080
-    int         textAlignment = 1;
-    int         vAlignment    = 1;
-
-    int         songTextAlignment  = 1;
-    int         songVAlignment     = 1;
-    int         bibleTextAlignment = 1;
-    int         bibleVAlignment    = 1;
-
-    ProyecThor::Core::TextEffectsData effects;
+    ProyecThor::Core::TextBoxStyle lyrics;
+    ProyecThor::Core::TextBoxStyle index;
+    bool                           indexEnabled = false;
 };
 
 class CanvaStyleEditor {
@@ -67,10 +58,11 @@ public:
     void OpenNew(const StyleData& defaults = {});
     void OpenEdit(const std::string& existingName, const StyleData& existingData);
 
-    // Devuelve true el frame en que el usuario presiona Guardar.
-    // embedded=true: dibuja el contenido dentro de la ventana ya activa
-    // en vez de abrir una ventana flotante propia.
-    bool Render(OnSaveCallback onSave, bool embedded = false);
+    // Devuelve true el frame en que el usuario presiona Guardar. Editor a
+    // pantalla completa (arma su propia ventana, ver Render()) -- pensado
+    // para llamarse dentro de UIManager::EnterFullscreenEditor, igual que
+    // OverlayCanvasEditor.
+    bool Render(OnSaveCallback onSave);
 
     bool IsOpen() const { return m_IsOpen; }
 
@@ -84,15 +76,19 @@ public:
                               const ImVec4& activeColor);
 
 private:
-    void RenderHeader    (ImDrawList* dl, ImVec2 winPos, ImVec2 winSize);
-    void RenderActiveTab (float colWidth, float contentH, float tabH, ImDrawList* dl);
-    void RenderPreview   (ImVec2 pos, ImVec2 sz, ImDrawList* dl);
-    void RenderFooter    (ImVec2 winPos, ImVec2 winSize,
-                          OnSaveCallback& onSave, bool& savedThisFrame);
+    // flagIdx: 0 = Letras, 1 = Indice.
+    ProyecThor::Core::TextBoxStyle& SelectedBox();
+
+    void RenderHeader (ImVec2 winPos, ImVec2 winSize, OnSaveCallback& onSave, bool& savedThisFrame);
+    void RenderRibbon (float width);
+    void RenderRibbonFontAlign(float width);
+    void RenderRibbonEffects  (float width);
+    void RenderRibbonBackground(float width);
+    void RenderCanvas  (float availW, float availH);
+    void RenderFlag    (int flagIdx, ImVec2 p0, ImVec2 canvasSize, ImDrawList* dl, ImDrawList* fgDl);
+    void RenderResizeHandle(int flagIdx, ImVec2 handlePos, int corner, ImDrawList* fgDl);
 
     std::unique_ptr<TabTypography> m_TabTypography;
-    std::unique_ptr<TabAlignment>  m_TabAlignment;
-    std::unique_ptr<TabMargins>    m_TabMargins;
     std::unique_ptr<TabEffects>    m_TabEffects;
 
     std::vector<std::string>* m_FontList = nullptr;
@@ -101,8 +97,26 @@ private:
     char        m_Name[128]         = {};
     bool        m_IsOpen            = false;
     bool        m_IsEditingExisting = false;
-    int         m_ActiveTab         = 0;
-    bool        m_LongPreview       = false;
+
+    int m_SelectedFlag = 0; // 0 = Letras, 1 = Indice -- ver SelectedBox()
+    int m_RibbonTab    = 0; // 0 = Fuente/Alinear, 1 = Efectos, 2 = Fondo de pantalla
+
+    // Arrastre/redimension de flags sobre el canvas -- mismo patron que
+    // OverlayCanvasEditor (delta de mouse normalizado por tamano de canvas,
+    // esquina opuesta fija al redimensionar). Sin rotacion (no aplica a
+    // cajas de texto).
+    ImVec2 m_CanvasScreenPos  = { 0.0f, 0.0f };
+    ImVec2 m_CanvasScreenSize = { 0.0f, 0.0f };
+
+    int    m_DraggingFlag  = -1;
+    ImVec2 m_DragStartMouse;
+    float  m_DragStartPosX = 0.0f, m_DragStartPosY = 0.0f;
+
+    int    m_ResizingFlag  = -1;
+    int    m_ResizeCorner  = 0; // 0=TL 1=TR 2=BL 3=BR
+    ImVec2 m_ResizeStartMouse;
+    float  m_ResizeStartPosX = 0.0f, m_ResizeStartPosY = 0.0f;
+    float  m_ResizeStartSizeW = 0.0f, m_ResizeStartSizeH = 0.0f;
 };
 
 } // namespace ProyecThor::UI

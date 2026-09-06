@@ -12,6 +12,25 @@
     </p>
   </description>
   <launchable type="desktop-id">io.github.thevixcho.ProyecThor.desktop</launchable>
+  <!-- Debe coincidir con MimeType= en io.github.thevixcho.ProyecThor.desktop
+       -- esto es lo que hace que "Abrir con" en el explorador de archivos
+       ofrezca ProyecThor para estos tipos, ademas de la entrada del .desktop. -->
+  <provides>
+    <mediatype>audio/mpeg</mediatype>
+    <mediatype>audio/flac</mediatype>
+    <mediatype>audio/x-wav</mediatype>
+    <mediatype>audio/ogg</mediatype>
+    <mediatype>audio/aac</mediatype>
+    <mediatype>audio/mp4</mediatype>
+    <mediatype>audio/x-ms-wma</mediatype>
+    <mediatype>audio/opus</mediatype>
+    <mediatype>audio/x-aiff</mediatype>
+    <mediatype>video/mp4</mediatype>
+    <mediatype>video/x-matroska</mediatype>
+    <mediatype>video/x-msvideo</mediatype>
+    <mediatype>video/quicktime</mediatype>
+    <mediatype>video/webm</mediatype>
+  </provides>
   <url type="homepage">https://github.com/TheVixcho/ProyecThor</url>
   <url type="bugtracker">https://github.com/TheVixcho/ProyecThor/issues</url>
   <content_rating type="oars-1.1" />

@@ -24,7 +24,7 @@ std::string PickImageOrVideoFile() {
     COMDLG_FILTERSPEC filters[] = {
         {L"Video e Imagen", L"*.mp4;*.mkv;*.avi;*.mov;*.jpg;*.jpeg;*.png"},
         {L"Videos",         L"*.mp4;*.mkv;*.avi;*.mov"},
-        {L"Imagenes",       L"*.jpg;*.jpeg;*.png"},
+        {L"Imágenes",       L"*.jpg;*.jpeg;*.png"},
     };
     dlg->SetFileTypes(3, filters);
     dlg->SetFileTypeIndex(1);
@@ -57,11 +57,45 @@ std::string PickImageFile() {
         return {};
 
     COMDLG_FILTERSPEC filters[] = {
-        {L"Imagenes", L"*.jpg;*.jpeg;*.png"},
+        {L"Imágenes", L"*.jpg;*.jpeg;*.png"},
     };
     dlg->SetFileTypes(1, filters);
     dlg->SetFileTypeIndex(1);
     dlg->SetTitle(L"Elegir imagen");
+
+    std::string result;
+    if (SUCCEEDED(dlg->Show(nullptr))) {
+        IShellItem* item = nullptr;
+        if (SUCCEEDED(dlg->GetResult(&item))) {
+            PWSTR pp = nullptr;
+            if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &pp))) {
+                int len = WideCharToMultiByte(CP_UTF8, 0, pp, -1, nullptr, 0, nullptr, nullptr);
+                if (len > 0) {
+                    result.resize(len - 1);
+                    WideCharToMultiByte(CP_UTF8, 0, pp, -1, result.data(), len, nullptr, nullptr);
+                }
+                CoTaskMemFree(pp);
+            }
+            item->Release();
+        }
+    }
+    dlg->Release();
+    return result;
+}
+
+std::string PickHtmlFile() {
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    IFileOpenDialog* dlg = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&dlg))))
+        return {};
+
+    COMDLG_FILTERSPEC filters[] = {
+        {L"Archivos HTML y Web (*.html, *.htm)", L"*.html;*.htm;*.xhtml"},
+        {L"Todos los archivos (*.*)",            L"*.*"},
+    };
+    dlg->SetFileTypes(2, filters);
+    dlg->SetFileTypeIndex(1);
+    dlg->SetTitle(L"Elegir archivo HTML o sitio web local");
 
     std::string result;
     if (SUCCEEDED(dlg->Show(nullptr))) {
@@ -167,6 +201,51 @@ std::string PickSaveVideoPath(const std::string& defaultPath) {
     dlg->Release();
     return result;
 }
+
+std::string PickSaveTextPath(const std::string& defaultPath) {
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    IFileSaveDialog* dlg = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_FileSaveDialog, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&dlg))))
+        return {};
+
+    COMDLG_FILTERSPEC filters[] = {
+        {L"Texto plano", L"*.txt"},
+    };
+    dlg->SetFileTypes(1, filters);
+    dlg->SetFileTypeIndex(1);
+    dlg->SetTitle(L"Guardar subtitulos como");
+
+    fs::path def(defaultPath);
+    std::wstring wFolder = Utf8ToWide(def.parent_path().string());
+    std::wstring wName   = Utf8ToWide(def.filename().string());
+    if (!wName.empty()) dlg->SetFileName(wName.c_str());
+    if (!wFolder.empty()) {
+        IShellItem* folderItem = nullptr;
+        if (SUCCEEDED(SHCreateItemFromParsingName(wFolder.c_str(), nullptr, IID_PPV_ARGS(&folderItem)))) {
+            dlg->SetFolder(folderItem);
+            folderItem->Release();
+        }
+    }
+
+    std::string result;
+    if (SUCCEEDED(dlg->Show(nullptr))) {
+        IShellItem* item = nullptr;
+        if (SUCCEEDED(dlg->GetResult(&item))) {
+            PWSTR pp = nullptr;
+            if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &pp))) {
+                int len = WideCharToMultiByte(CP_UTF8, 0, pp, -1, nullptr, 0, nullptr, nullptr);
+                if (len > 0) {
+                    result.resize(len - 1);
+                    WideCharToMultiByte(CP_UTF8, 0, pp, -1, result.data(), len, nullptr, nullptr);
+                }
+                CoTaskMemFree(pp);
+            }
+            item->Release();
+        }
+    }
+    dlg->Release();
+    return result;
+}
 #else
 static std::string RunFilePickerCommands(const char* const commands[], size_t count) {
     for (size_t i = 0; i < count; ++i) {
@@ -199,8 +278,17 @@ std::string PickImageOrVideoFile() {
 std::string PickImageFile() {
     const char* commands[] = {
         "zenity --file-selection --title=\"Elegir imagen\" "
-        "--file-filter=\"Imagenes | *.jpg *.jpeg *.png\" 2>/dev/null",
-        "kdialog --getopenfilename . \"*.jpg *.jpeg *.png|Imagenes\" 2>/dev/null"
+        "--file-filter=\"Imágenes | *.jpg *.jpeg *.png\" 2>/dev/null",
+        "kdialog --getopenfilename . \"*.jpg *.jpeg *.png|Imágenes\" 2>/dev/null"
+    };
+    return RunFilePickerCommands(commands, 2);
+}
+
+std::string PickHtmlFile() {
+    const char* commands[] = {
+        "zenity --file-selection --title=\"Elegir archivo HTML o sitio web local\" "
+        "--file-filter=\"Archivos HTML (*.html *.htm) | *.html *.htm *.xhtml\" 2>/dev/null",
+        "kdialog --getopenfilename . \"*.html *.htm *.xhtml|Archivos HTML\" 2>/dev/null"
     };
     return RunFilePickerCommands(commands, 2);
 }
@@ -220,6 +308,14 @@ std::string PickSaveVideoPath(const std::string& defaultPath) {
                         "--filename=\"" + defaultPath + "\" --title=\"Guardar video como\" 2>/dev/null";
     std::string cmd2 = "kdialog --getsavefilename \"" + defaultPath +
                         "\" \"*.mp4 *.mkv *.webm *.avi *.mov|Video\" 2>/dev/null";
+    const char* commands[] = { cmd1.c_str(), cmd2.c_str() };
+    return RunFilePickerCommands(commands, 2);
+}
+
+std::string PickSaveTextPath(const std::string& defaultPath) {
+    std::string cmd1 = "zenity --file-selection --save --confirm-overwrite "
+                        "--filename=\"" + defaultPath + "\" --title=\"Guardar subtitulos como\" 2>/dev/null";
+    std::string cmd2 = "kdialog --getsavefilename \"" + defaultPath + "\" \"*.txt|Texto plano\" 2>/dev/null";
     const char* commands[] = { cmd1.c_str(), cmd2.c_str() };
     return RunFilePickerCommands(commands, 2);
 }

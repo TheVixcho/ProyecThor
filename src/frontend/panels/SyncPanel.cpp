@@ -107,21 +107,17 @@ void SyncPanel::Update() {
 void SyncPanel::RenderContent() {
     SyncPalette();
 
-    ImGui::PushStyleColor(ImGuiCol_ScrollbarBg, ImVec4(0,0,0,0));
-    ImGui::PushStyleColor(ImGuiCol_ScrollbarGrab, ColA(kGrayText, 0.2f));
-    ImGui::PushStyleColor(ImGuiCol_ScrollbarGrabHovered, ColA(kAccent, 0.5f));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,   ImVec2(10.0f, 10.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize, 6.0f);
-
-    ImGui::BeginChild("##sync_scroll_area", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_None);
-    ImGui::PopStyleVar(2);
-    ImGui::PopStyleColor(3);
+    // Sin BeginChild propio: ver comentario equivalente en
+    // StreamingPanel::RenderContent() -- este metodo solo vive embebido
+    // dentro del area ya scrolleable de Ajustes > Conexiones, un child
+    // scrolleable anidado aca adentro causaba doble scrollbar.
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10.0f, 10.0f));
 
     RenderServerControl();
     if (m_Server.IsRunning()) RenderPairingSection();
 
     ImGui::Dummy(ImVec2(0.0f, 20.0f));
-    ImGui::EndChild();
+    ImGui::PopStyleVar();
 }
 
 void SyncPanel::RenderServerControl() {
@@ -146,7 +142,7 @@ void SyncPanel::RenderServerControl() {
     dl->AddRect(p0, p1, bdr, 10.0f, 0, 1.5f);
 
     // Barra lateral SOLIDA (sin pulso): a diferencia de Red/Streaming, Mobile
-    // no esta "en vivo" -- es una utilidad de fondo, asi que no hace falta
+    // no esta "en vivo" -- es una utilidad de fondo, así que no hace falta
     // ningun parpadeo que sugiera "cuidado, esto esta transmitiendo".
     dl->AddRectFilled(p0, ImVec2(p0.x + 4.0f, p0.y + cardH),
         ColA(stateCol, on ? 0.9f : 0.35f), 10.0f, ImDrawFlags_RoundCornersLeft);
@@ -158,7 +154,7 @@ void SyncPanel::RenderServerControl() {
         Col(stateCol),
         on ? "Mobile conectado" : "Mobile desactivado");
 
-    // Punto de estado quieto (sin animacion) -- indica "disponible", no
+    // Punto de estado quieto (sin animación) -- indica "disponible", no
     // "grabando/transmitiendo".
     dl->AddCircleFilled(ImVec2(p0.x + innerX - 10.0f, p0.y + labelY + 7.0f), 3.5f, ColA(stateCol, on ? 1.0f : 0.5f));
 
@@ -235,8 +231,8 @@ void SyncPanel::RenderServerControl() {
     ImGui::PushStyleColor(ImGuiCol_Text, ColA(kGrayDim, 0.75f));
     ImGui::TextWrapped(
         "Liviano: solo intercambia texto y ajustes con la app (canciones, "
-        "biblias, control remoto). No manda video ni audio, asi que no le "
-        "resta rendimiento a la proyeccion en vivo.");
+        "biblias, control remoto). No manda video ni audio, así que no le "
+        "resta rendimiento a la proyección en vivo.");
     ImGui::PopStyleColor();
     ImGui::Dummy(ImVec2(0.0f, 4.0f));
 }
@@ -295,7 +291,7 @@ void SyncPanel::RenderPairingSection() {
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 10.0f));
 
-        if (ImGui::Button("Copiar direccion", ImVec2(btnW, 0.0f)))
+        if (ImGui::Button("Copiar dirección", ImVec2(btnW, 0.0f)))
             ImGui::SetClipboardText(m_Server.GetBaseURL().c_str());
 
         ImGui::SameLine(0.0f, gap);
@@ -319,8 +315,8 @@ void SyncPanel::RenderPairingSection() {
         "vez vas a tener que escribir el PIN de arriba para emparejar los "
         "dispositivos. Despues, usa Subir/Bajar/Sincronizar todo segun que "
         "lado tenga los datos mas recientes -- nunca se borra nada "
-        "automaticamente. El mismo emparejamiento habilita ademas la "
-        "seccion Control remoto de la app movil (elegir cancion/verso/fondo "
+        "automáticamente. El mismo emparejamiento habilita además la "
+        "sección Control remoto de la app movil (elegir canción/verso/fondo "
         "y proyectarlo, estilo Holyrics).");
     ImGui::PopStyleColor();
 }

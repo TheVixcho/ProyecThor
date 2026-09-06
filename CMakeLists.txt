@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.11)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 project(ProyecThor
-    VERSION 0.5.1
+    VERSION 1.0.0
     LANGUAGES C CXX
 )
 
@@ -40,6 +40,19 @@ if(NOT DEFINED PROYECTHOR_BUILD_NUMBER)
     file(WRITE "${_build_count_file}" "${PROYECTHOR_BUILD_NUMBER}")
 endif()
 
+# ── SUFIJO DE VERSION (pre-release) ──────────────────────────────────────────
+# Vacio = release estable ("1.0.0"). Para una beta/rc que todavia no es la
+# version final, pasar -DPROYECTHOR_VERSION_SUFFIX=-beta.2 al configurar (o
+# cambiar el default de aca a mano). IMPORTANTE: volver a "" ANTES de compilar
+# la 1.0.0 estable de verdad, sino queda marcada como beta para siempre.
+# project(VERSION ...) arriba no puede llevar el sufijo (CMake solo acepta
+# numeros en esa directiva), por eso se maneja aparte y se concatena a mano en
+# Version.h.in. El comparador de versiones del updater (IsNewer, ver
+# CategoryUpdates.cpp) ya entiende sufijos -beta.N / -rc.N.
+if(NOT DEFINED PROYECTHOR_VERSION_SUFFIX)
+    set(PROYECTHOR_VERSION_SUFFIX "")
+endif()
+
 # ── VERSION GENERADA AUTOMATICAMENTE ─────────────────────────────────────────
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Version.h.in"
@@ -66,6 +79,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
+add_compile_definitions(IMGUI_USE_WCHAR32)
+
 # ── 2. RUTAS DE LIBRERIAS ────────────────────────────────────────────────────
 set(IMGUI_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/src/external/imgui-docking")
 set(GLFW_SDK   "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/glfw")
@@ -74,6 +89,12 @@ set(VLC_SDK    "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/vlc")
 set(VLC_SDK_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/vlc-linux")
 set(PDFIUM_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/pdfium")
 set(PDFIUM_SDK_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/pdfium-linux")
+# WebView2 (Asistente de IA, panel embebido -- ver AIWebViewPanel): headers +
+# import lib (.dll.lib) vendorizados desde el paquete NuGet oficial de
+# Microsoft (Microsoft.Web.WebView2). Solo Windows -- no existe equivalente
+# de WebView2 en Linux, ahi el panel del Asistente cae a abrir el navegador
+# externo del sistema (ver OpenURL.cpp).
+set(WEBVIEW2_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/webview2")
 set(HTTPLIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk")
 
 # ── 3. ARCHIVOS FUENTE ───────────────────────────────────────────────────────
@@ -101,11 +122,14 @@ file(GLOB FRONTEND_STYLES_SOURCES   CONFIGURE_DEPENDS "src/frontend/panels/style
 file(GLOB FRONTEND_VIEWS_SOURCES    CONFIGURE_DEPENDS "src/frontend/views/*.cpp")
 file(GLOB FRONTEND_VIEWS_BIBLIA_SOURCES CONFIGURE_DEPENDS "src/frontend/views/biblia/*.cpp")
 file(GLOB FRONTEND_UI_SOURCES       CONFIGURE_DEPENDS "src/frontend/ui/*.cpp")
+file(GLOB FRONTEND_UI_LANG_SOURCES  CONFIGURE_DEPENDS "src/frontend/ui/lenguaje/*.cpp")
 file(GLOB PREVIEW_DOC_SOURCES       CONFIGURE_DEPENDS "src/frontend/views/documents/*.cpp")
 file(GLOB PREVIEW_MON_SOURCES       CONFIGURE_DEPENDS "src/frontend/panels/preview/monitors/*.cpp")
 file(GLOB PREVIEW_MON_SOURCES       CONFIGURE_DEPENDS "src/frontend/panels/stb_image_write_impl.cpp")
 file(GLOB FRONTEND_BIBLIO_SOURCES   CONFIGURE_DEPENDS "src/frontend/panels/biblio/*.cpp")
 file(GLOB FRONTEND_HOME_SOURCES     CONFIGURE_DEPENDS "src/frontend/panels/home/*.cpp")
+file(GLOB FRONTEND_MODEL3D_SOURCES  CONFIGURE_DEPENDS "src/frontend/panels/model3d/*.cpp")
+file(GLOB FRONTEND_LAB_SOURCES      CONFIGURE_DEPENDS "src/frontend/panels/lab/*.cpp")
 # -- RAIZ src/ (main.cpp y similares) --
 file(GLOB ROOT_SOURCES              CONFIGURE_DEPENDS "src/*.cpp")
 
@@ -147,6 +171,8 @@ if(WIN32)
         ${AUDIO_SOURCES}
         ${FRONTEND_BIBLIO_SOURCES}
         ${FRONTEND_HOME_SOURCES}
+        ${FRONTEND_MODEL3D_SOURCES}
+        ${FRONTEND_LAB_SOURCES}
         ${ROOT_SOURCES}
         ${FRONTEND_UI_BIN_SOURCES}
         ${BACKEND_CORE_SOURCES}
@@ -165,6 +191,7 @@ if(WIN32)
         ${FRONTEND_VIEWS_SOURCES}
         ${FRONTEND_VIEWS_BIBLIA_SOURCES}
         ${FRONTEND_UI_SOURCES}
+        ${FRONTEND_UI_LANG_SOURCES}
         ${FRONTEND_WINDOWING_SOURCES}
         ${PREVIEW_DOC_SOURCES}
         ${PREVIEW_MON_SOURCES}
@@ -178,6 +205,8 @@ else()
         ${AUDIO_SOURCES}
         ${FRONTEND_BIBLIO_SOURCES}
         ${FRONTEND_HOME_SOURCES}
+        ${FRONTEND_MODEL3D_SOURCES}
+        ${FRONTEND_LAB_SOURCES}
         ${ROOT_SOURCES}
         ${FRONTEND_UI_BIN_SOURCES}
         ${BACKEND_CORE_SOURCES}
@@ -196,6 +225,7 @@ else()
         ${FRONTEND_VIEWS_SOURCES}
         ${FRONTEND_VIEWS_BIBLIA_SOURCES}
         ${FRONTEND_UI_SOURCES}
+        ${FRONTEND_UI_LANG_SOURCES}
         ${FRONTEND_WINDOWING_SOURCES}
         ${PREVIEW_DOC_SOURCES}
         ${PREVIEW_MON_SOURCES}
@@ -212,6 +242,30 @@ target_compile_definitions(ProyecThor PRIVATE
     GLFW_INCLUDE_NONE
     CPPHTTPLIB_NO_EXCEPTIONS
 )
+
+# OpenSSL para httplib::Client saliente por HTTPS (api.anthropic.com, ver
+# AIAssistant/ClaudeClient) -- todo lo que ya usaba httplib en este proyecto
+# (SyncServer, NetworkStreamServer, single-instance de main.cpp) era HTTP
+# plano contra localhost, asi que nunca hizo falta SSL hasta ahora. En
+# Windows es obligatorio (el toolchain de este proyecto es MSYS2/ucrt64,
+# que ya trae libssl/libcrypto); en Linux es opcional con fallback
+# silencioso (mismo criterio que OpenCV mas abajo) -- sin libssl-dev
+# instalado, el asistente de IA simplemente no puede conectarse (se avisa
+# en tiempo de ejecucion, no en compilacion).
+if(WIN32)
+    target_compile_definitions(ProyecThor PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
+    set(PROYECTHOR_HAS_OPENSSL TRUE)
+else()
+    find_package(OpenSSL QUIET)
+    if(OpenSSL_FOUND)
+        message(STATUS "OpenSSL encontrado (${OPENSSL_VERSION}): Asistente de IA (HTTPS saliente) habilitado")
+        target_compile_definitions(ProyecThor PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
+        set(PROYECTHOR_HAS_OPENSSL TRUE)
+    else()
+        message(STATUS "OpenSSL NO encontrado: el Asistente de IA no podra conectarse (instala libssl-dev y recompila)")
+        set(PROYECTHOR_HAS_OPENSSL FALSE)
+    endif()
+endif()
 
 if(WIN32)
     target_compile_definitions(ProyecThor PRIVATE
@@ -271,7 +325,7 @@ target_include_directories(ProyecThor PRIVATE
 
 # El include de PDFium y VLC cambia segun la plataforma
 if(WIN32)
-    target_include_directories(ProyecThor PRIVATE "${PDFIUM_SDK}/include")
+    target_include_directories(ProyecThor PRIVATE "${PDFIUM_SDK}/include" "${WEBVIEW2_SDK}/include")
 else()
     target_include_directories(ProyecThor PRIVATE
         "${PDFIUM_SDK_LINUX}/include"
@@ -304,6 +358,7 @@ if(WIN32)
         "${VLC_SDK}/lib/libvlc.lib"
         "${VLC_SDK}/lib/libvlccore.lib"
         "${PDFIUM_LIB}"
+        "${WEBVIEW2_SDK}/x64/WebView2Loader.dll.lib"
         opengl32
         gdi32
         shell32
@@ -315,6 +370,24 @@ if(WIN32)
         winhttp
         d3d11
         dxgi
+        # OpenSSL (ver CPPHTTPLIB_OPENSSL_SUPPORT mas arriba) -- .a estaticos
+        # a proposito, no .dll.a: el ejecutable ya se linkea entero con
+        # -static (ver target_link_options mas abajo), asi que usar los
+        # estaticos evita que haga falta redistribuir libssl-3-x64.dll/
+        # libcrypto-3-x64.dll junto al .exe. crypt32/bcrypt son las
+        # dependencias del sistema que OpenSSL en Windows necesita para el
+        # almacen de certificados y el generador de numeros aleatorios.
+        ssl
+        crypto
+        crypt32
+        bcrypt
+        # ws2_32 de nuevo aca: OpenSSL (arriba) trae sus propias referencias a
+        # simbolos de Winsock (WSAIoctl, WSASocketA, accept, gethostbyname,
+        # etc.) que solo aparecen como pendientes DESPUES de que el linker ya
+        # proceso el ws2_32 de mas arriba -- ld resuelve en una sola pasada de
+        # izquierda a derecha, asi que sin este segundo ws2_32 esos simbolos
+        # quedan "undefined reference" al final.
+        ws2_32
     )
 
     target_link_options(ProyecThor PRIVATE
@@ -411,6 +484,10 @@ else()
         pthread
         dl
     )
+
+    if(PROYECTHOR_HAS_OPENSSL)
+        target_link_libraries(ProyecThor PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+    endif()
 endif()
 
 # ── 7. COPIA DE ARCHIVOS EN RUNTIME (solo Windows) ───────────────────────────
@@ -438,12 +515,48 @@ if(WIN32)
             COMMENT "Copiando plugins de VLC"
         )
     endif()
+
+    # WebView2Loader.dll: trampolin liviano que en runtime busca el Runtime
+    # de WebView2 real instalado en el sistema (viene con Windows 10/11 via
+    # Edge) -- sin esta DLL al lado del .exe, CreateCoreWebView2EnvironmentWithOptions
+    # falla siempre con HRESULT de "modulo no encontrado".
+    if(EXISTS "${WEBVIEW2_SDK}/x64/WebView2Loader.dll")
+        add_custom_command(TARGET ProyecThor POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${WEBVIEW2_SDK}/x64/WebView2Loader.dll"
+                "$<TARGET_FILE_DIR:ProyecThor>"
+            COMMENT "Copiando WebView2Loader.dll al directorio de salida"
+        )
+    endif()
+endif()
+
+# ── 7a-bis. COPIA DE assets/ AL DIRECTORIO DE SALIDA (Windows y Linux) ───────
+# A diferencia de extrabuild/ (gitignored, binarios vendorizados pesados:
+# libvlc.dll, plugins/ de VLC, ffmpeg.exe, yt-dlp.exe -- Linux ni los
+# necesita, usa las versiones del sistema), assets/ SI esta en git: son los
+# recursos minimos multiplataforma sin los que la app arranca "pelada" --
+# iconos, fuente, texturas de tarjetas del Hub y fondos de splash/Hub (estos
+# ultimos re-comprimidos a JPG, ver README de la carpeta). Quien clona desde
+# GitHub y compila ya los tiene, sin depender de extrabuild/.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets")
+    add_custom_command(TARGET ProyecThor POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+            "$<TARGET_FILE_DIR:ProyecThor>"
+        COMMENT "Copiando assets/ al directorio de salida"
+    )
+else()
+    message(WARNING "assets/ NO encontrado en ${CMAKE_CURRENT_SOURCE_DIR}/assets -- "
+                     "la app va a arrancar sin iconos/fuente/splash")
 endif()
 
 # ── 7b. COPIA DE extrabuild/ AL DIRECTORIO DE SALIDA (Windows y Linux) ───────
-# Contiene binarios/recursos que hoy pegás a mano (bin/, lua/, plugins/,
-# libvlc.dll, pdfium.dll, iconos, splash screens, yt-dlp.exe, etc). Se copia
-# entero al lado del ejecutable cada vez que se compila.
+# Contiene binarios/recursos pesados que se distribuyen aparte, no en git
+# (bin/, lua/, plugins/, libvlc.dll, pdfium.dll, yt-dlp.exe, etc -- ver
+# extrabuild/pasteinbuild.txt). Se copia entero al lado del ejecutable cada
+# vez que se compila, ENCIMA de assets/ (mismo directorio de salida) -- no
+# hay conflicto real porque ya no comparten archivos (fuente/iconos/splash
+# se movieron a assets/, ver arriba).
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
     message(STATUS "extrabuild/ encontrado, se copiara al build")
     add_custom_command(TARGET ProyecThor POST_BUILD
@@ -453,7 +566,8 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
         COMMENT "Copiando extrabuild/ al directorio de salida"
     )
 else()
-    message(WARNING "extrabuild/ NO encontrado en ${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
+    message(STATUS "extrabuild/ no encontrado -- se sigue con lo que trajo assets/ (icono/fuente/splash). "
+                    "Para audio/video real (VLC) todavia hace falta VLC instalado (Linux) o extrabuild/ (Windows).")
 endif()
 
 # ── 7c. COPIA DE libpdfium.so Y libvlc.so AL DIRECTORIO DE BUILD (Linux) ─────
@@ -539,8 +653,21 @@ exec ./ProyecThor \"\$@\"
     # Icono y entrada de menu (.desktop) — opcionales, solo si existen los
     # archivos en packaging/. Si todavia no tenes un icono, comenta estas
     # dos lineas de install() de abajo.
-    # Recursos de extrabuild/ (splash screens, iconos, config, lua/, bin/)
-    # excluyendo binarios exclusivos de Windows.
+
+    # assets/ (icono, fuente, splash/Hub, texturas de tarjetas) -- esta en
+    # git, SIEMPRE presente para quien compila el paquete desde el repo
+    # clonado. Es lo minimo para que el paquete no arranque "pelado".
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets")
+        install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/"
+            DESTINATION ${PROYECTHOR_INSTALL_DIR}
+        )
+    else()
+        message(WARNING "assets/ NO encontrado, el paquete no tendra iconos/fuente/splash")
+    endif()
+
+    # Recursos de extrabuild/ (lua/, plugins/ de VLC, etc) -- gitignored,
+    # opcional en Linux: el paquete .deb/.rpm depende de la libvlc/plugins
+    # DEL SISTEMA (ver Depends en packaging/debian/control), no de esto.
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
         message(STATUS "extrabuild/ encontrado, se incluira en el paquete")
         install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild/"
@@ -549,8 +676,6 @@ exec ./ProyecThor \"\$@\"
             PATTERN "*.exe" EXCLUDE
             PATTERN "pasteinbuild.txt" EXCLUDE
         )
-    else()
-        message(WARNING "extrabuild/ NO encontrado, el paquete no tendra iconos/splash/config")
     endif()
 if(UNIX AND NOT APPLE)
     find_package(X11 REQUIRED)

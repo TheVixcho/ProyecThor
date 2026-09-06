@@ -134,12 +134,12 @@ void MonitorQueueEngine::PlayIndex(int index)
         // operador reportaba tener que mutear/desmutear a mano para que
         // sonara. Invertir el orden hace que el permiso de audio ya este
         // vigente ANTES de cargar el clip, sin depender de una segunda
-        // pasada de "auto-correccion".
+        // pasada de "auto-corrección".
         core.SetProjecting(true);
 
         // FIX: la cola marcaba isProjecting=true pero nunca se aseguraba de
         // que el monitor destino estuviera configurado — eso solo pasaba si
-        // el operador ademas prendia a mano el punto "Publico" en Vista en
+        // el operador además prendia a mano el punto "Público" en Vista en
         // Vivo (ViewPanel::ToggleAudience). Ahora la cola se asegura de
         // tener el monitor destino fijado por su cuenta, igual que hace
         // ToggleAudience (que tampoco crea ya una ventana nativa propia —
@@ -270,6 +270,20 @@ void MonitorQueueEngine::Update()
         }
     } else {
         m_ConsecutiveErrors = 0;
+
+        // Boton "Loop" de Monitor (ver MonitorCenterColumn.cpp / PresentationCore::
+        // GetLiveLoop) -- estaba desconectado del todo: BackgroundLayer::SetVideo
+        // fuerza loop=false SIEMPRE para videos reales (allowAudio=true, ver
+        // comentario ahi) porque esta cola depende de que ConsumeEndReached()
+        // dispare de verdad para avanzar. En vez de loopear a nivel VLC, el loop
+        // se logra aca: si esta prendido, se vuelve a reproducir el MISMO indice
+        // en vez de avanzar -- un clip real que termino sin error se repite en
+        // loop; un clip que dio error nunca se repite (cae al avance normal de
+        // abajo, que lo saltea).
+        if (Core::PresentationCore::Get().GetLiveLoop()) {
+            PlayIndex(m_CurrentIndex);
+            return;
+        }
     }
 
     PlayIndex(m_CurrentIndex + 1);

@@ -9,7 +9,7 @@
 namespace ProyecThor::UI {
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  LayersBgTab — toda la logica del tab "Fondos"
+//  LayersBgTab — toda la lógica del tab "Fondos"
 //  Layout tipo ProPresenter: carpetas en una columna angosta a la izquierda,
 //  contenido de la carpeta seleccionada en el area central. Toolbar compacta
 //  arriba (solo iconos, sin titulos) con importar / nueva carpeta / zoom /
@@ -78,6 +78,10 @@ private:
     void RenderFolderSidebar(float w, float h);    // columna izquierda: "Todos" + carpetas
     void RenderSidebarItem(const std::string& label, const std::string& folderKey,
                            int count, bool selected, float w);
+    // Alternativa a RenderFolderSidebar para columnas angostas (ver Render):
+    // fila de chips que envuelve, en vez de una columna fija de 116px que le
+    // resta ancho al contenido.
+    void RenderFolderChips();
     void RenderContentArea(float w, float h);      // grid/lista de la seleccion actual
 
     void RenderBgCard(const BgEntry& e, float cardW, float cardH, int col, int cols);

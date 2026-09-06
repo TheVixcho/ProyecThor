@@ -9,10 +9,6 @@ namespace ProyecThor::UI {
 
 namespace {
 
-// Normaliza para comparar: minusculas + tildes/eñe plegadas a su letra
-// base. Solo cubre el puñado de secuencias UTF-8 de 2 bytes que aparecen
-// en español (á é í ó ú ü ñ y mayusculas) -- alcanza para este uso sin
-// necesitar una libreria Unicode completa.
 std::string FoldSpanish(const std::string& s)
 {
     std::string out;
@@ -26,13 +22,13 @@ std::string FoldSpanish(const std::string& s)
             char folded = 0;
             switch (c2)
             {
-                case 0xA1: case 0x81: folded = 'a'; break; // á Á
-                case 0xA9: case 0x89: folded = 'e'; break; // é É
-                case 0xAD: case 0x8D: folded = 'i'; break; // í Í
-                case 0xB3: case 0x93: folded = 'o'; break; // ó Ó
-                case 0xBA: case 0x9A: folded = 'u'; break; // ú Ú
-                case 0xBC: case 0x9C: folded = 'u'; break; // ü Ü
-                case 0xB1: case 0x91: folded = 'n'; break; // ñ Ñ
+                case 0xA1: case 0x81: folded = 'a'; break;
+                case 0xA9: case 0x89: folded = 'e'; break;
+                case 0xAD: case 0x8D: folded = 'i'; break;
+                case 0xB3: case 0x93: folded = 'o'; break;
+                case 0xBA: case 0x9A: folded = 'u'; break;
+                case 0xBC: case 0x9C: folded = 'u'; break;
+                case 0xB1: case 0x91: folded = 'n'; break;
                 default: break;
             }
             if (folded) { out += folded; i += 2; continue; }
@@ -59,7 +55,7 @@ std::vector<std::string> SplitWords(const std::string& folded)
     return words;
 }
 
-} // namespace
+}
 
 void BibleWordSearch::Open()
 {
@@ -225,4 +221,5 @@ bool BibleWordSearch::Render(const BibleData& bible, ImVec2 anchorPos, ImVec2 an
     return picked;
 }
 
-} // namespace ProyecThor::UI
+}
+

@@ -1,6 +1,9 @@
 #include "LayersBgTab.h"
 #include "LayersTheme.h"
 #include "backend/core/PresentationCore.h"
+#include "backend/core/FileDeletionManager.h"
+#include "backend/core/AppPaths.h"
+#include "frontend/panels/biblio/LibraryMultimedia.h"
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
 #ifdef _WIN32
@@ -236,7 +239,7 @@ bool LayersBgTab::ImportBackground() {
     COMDLG_FILTERSPEC fs[] = {
         {L"Video e Imagen", L"*.mp4;*.mkv;*.avi;*.mov;*.jpg;*.jpeg;*.png"},
         {L"Videos",         L"*.mp4;*.mkv;*.avi;*.mov"},
-        {L"Imagenes",       L"*.jpg;*.jpeg;*.png"}
+        {L"Imágenes",       L"*.jpg;*.jpeg;*.png"}
     };
     dlg->SetFileTypes(3, fs); dlg->SetFileTypeIndex(1); dlg->SetTitle(L"Importar Fondo");
     FILEOPENDIALOGOPTIONS o = 0; dlg->GetOptions(&o);
@@ -272,7 +275,7 @@ bool LayersBgTab::ImportBackground() {
 }
 #else
 bool LayersBgTab::ImportBackground() {
-    // En Linux se usa "zenity --file-selection" con seleccion multiple como
+    // En Linux se usa "zenity --file-selection" con selección multiple como
     // reemplazo del dialogo IFileOpenDialog de Windows. Requiere que zenity
     // este instalado en el sistema (paquete "zenity" en la mayoria de las
     // distribuciones).
@@ -328,10 +331,10 @@ bool LayersBgTab::RenameBgFolder(const std::string& oldName, const std::string& 
     std::error_code ec; fs::rename(BgRootDir()/oldName, BgRootDir()/newName, ec); return !ec;
 }
 bool LayersBgTab::DeleteBgFile(const std::string& fullPath) {
-    std::error_code ec; fs::remove(fs::path(fullPath), ec); return !ec;
+    return Core::FileDeletionManager::ForceDeleteFile(fullPath);
 }
 bool LayersBgTab::DeleteBgFolder(const std::string& folderName) {
-    std::error_code ec; fs::remove_all(BgRootDir()/folderName, ec); return !ec;
+    return Core::FileDeletionManager::ForceDeleteDirectory((BgRootDir() / folderName).string());
 }
 bool LayersBgTab::MoveBgToFolder(const std::string& srcFull, const std::string& destFolder) {
     fs::path src  = srcFull;
@@ -352,6 +355,27 @@ void LayersBgTab::BgContextMenu(const BgEntry& entry) {
     std::string disp = entry.name.length() > 22 ? entry.name.substr(0,19)+"..." : entry.name;
     ImGui::Text("%s", disp.c_str());
     ImGui::PopStyleColor();
+    ImGui::Separator();
+
+    if (ImGui::Selectable("  Mover a Biblioteca (Media)")) {
+        std::error_code ec;
+        fs::path src(entry.fullPath);
+        std::string targetDir = entry.isImage ? (GetAssetsPath() + "/images") : (GetAssetsPath() + "/videos");
+        fs::create_directories(targetDir, ec);
+        fs::path dst = fs::path(targetDir) / src.filename();
+        fs::rename(src, dst, ec);
+        ReloadList();
+        Library::RefreshMultimediaLists();
+    }
+    if (ImGui::Selectable("  Copiar a Biblioteca (Media)")) {
+        std::error_code ec;
+        fs::path src(entry.fullPath);
+        std::string targetDir = entry.isImage ? (GetAssetsPath() + "/images") : (GetAssetsPath() + "/videos");
+        fs::create_directories(targetDir, ec);
+        fs::path dst = fs::path(targetDir) / src.filename();
+        fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+        Library::RefreshMultimediaLists();
+    }
     ImGui::Separator();
 
     if (ImGui::Selectable("  Renombrar")) {
@@ -641,6 +665,67 @@ void LayersBgTab::RenderSidebarItem(const std::string& label, const std::string&
     ImGui::PopID();
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Selector de carpetas compacto (fila de chips que envuelve) -- usado en
+//  vez de RenderFolderSidebar cuando el panel queda angosto (ver Render).
+//  Mismos datos y acciones (SelectFolder, mover por drag&drop, menu
+//  contextual de carpeta) que la sidebar de 116px, solo que en fila en vez
+//  de columna para no robarle ancho al contenido.
+// ─────────────────────────────────────────────────────────────────────────────
+void LayersBgTab::RenderFolderChips() {
+    int rootCount = 0;
+    for (const auto& bg : m_AllBackgrounds) if (bg.folder.empty()) rootCount++;
+
+    bool first = true;
+    auto chip = [&](const std::string& label, const std::string& folderKey, int count, bool selected) {
+        std::string text = count > 0 ? (label + " (" + std::to_string(count) + ")") : label;
+        float w = ImGui::CalcTextSize(text.c_str()).x + 20.0f;
+
+        if (!first) {
+            if (ImGui::GetContentRegionAvail().x < w) ImGui::NewLine();
+            else                                       ImGui::SameLine(0.0f, 6.0f);
+        }
+        first = false;
+
+        bool sel = selected;
+        ImGui::PushStyleColor(ImGuiCol_Button,
+            sel ? ImVec4(LP::Accent.x, LP::Accent.y, LP::Accent.z, 0.28f) : ImVec4(1,1,1,0.05f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(LP::Accent.x, LP::Accent.y, LP::Accent.z, 0.20f));
+        ImGui::PushStyleColor(ImGuiCol_Text, sel ? LP::Text : LP::TextSub);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 12.0f);
+
+        std::string btnId = text + "##fc_" + (folderKey.empty() ? "root" : folderKey);
+        bool clicked = ImGui::Button(btnId.c_str(), ImVec2(w, 26.0f));
+
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(3);
+
+        if (!folderKey.empty() && ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("BG_FILE")) {
+                std::string src(static_cast<const char*>(p->Data), p->DataSize - 1);
+                if (MoveBgToFolder(src, folderKey)) ReloadList();
+            }
+            ImGui::EndDragDropTarget();
+        }
+
+        if (clicked) SelectFolder(folderKey);
+
+        if (!folderKey.empty() && ImGui::BeginPopupContextItem(("SbCtxChip_" + folderKey).c_str())) {
+            FolderContextMenu(folderKey);
+            ImGui::EndPopup();
+        }
+    };
+
+    chip("Todos", "", rootCount, m_CurrentBgFolder.empty());
+    for (const auto& fn : m_BgFolders) {
+        int cnt = 0;
+        for (const auto& bg : m_AllBackgrounds) if (bg.folder == fn) cnt++;
+        chip(fn, fn, cnt, m_CurrentBgFolder == fn);
+    }
+
+    ImGui::NewLine();
+}
+
 void LayersBgTab::RenderFolderSidebar(float w, float h) {
     (void)h;
     int rootCount = 0;
@@ -708,12 +793,14 @@ void LayersBgTab::RenderBgCard(const BgEntry& e, float W, float H, int col, int 
 
     // Overlay de hover: play/imagen
     if (t > 0.02f) {
-        const char* icon = e.isImage ? "[ IMG ]" : "[ PLAY ]";
-        ImVec2 is = ImGui::CalcTextSize(icon);
-        dl->AddRectFilled({p0.x,p0.y},{p1.x,p1.y-26.0f},
-            LPU32({0,0,0,0.35f*t}), 10.0f, ImDrawFlags_RoundCornersTop);
-        dl->AddText({p0.x+(W-is.x)*0.5f, p0.y+(H-26.0f-is.y)*0.5f},
-            LPU32(ImVec4(1,1,1,t)), icon);
+        ImVec2 center = { (p0.x + p1.x) * 0.5f, p0.y + (H - 26.0f) * 0.5f };
+        dl->AddCircleFilled(center, 18.0f, IM_COL32(0, 0, 0, (int)(170.0f * t)), 24);
+        dl->AddCircle(center, 18.0f, LPU32({ LP::Accent.x, LP::Accent.y, LP::Accent.z, 0.7f * t }), 24, 1.3f);
+        if (e.isImage) {
+            LPDrawImage(dl, center, 11.0f, LPU32(ImVec4(1, 1, 1, t)));
+        } else {
+            LPDrawPlay(dl, center, 12.0f, LPU32(ImVec4(1, 1, 1, t)));
+        }
     }
 
     ImGui::InvisibleButton(id.c_str(), {W, H});
@@ -723,6 +810,7 @@ void LayersBgTab::RenderBgCard(const BgEntry& e, float W, float H, int col, int 
     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
         wasDragged = true;
         ImGui::SetDragDropPayload("BG_FILE", e.fullPath.c_str(), e.fullPath.size()+1);
+        ImGui::SetDragDropPayload("BG_ITEM_PATH", e.fullPath.c_str(), e.fullPath.size()+1);
         ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
         ImGui::Text("Mover: %s", dn.c_str());
         ImGui::PopStyleColor();
@@ -807,6 +895,7 @@ void LayersBgTab::RenderBgRow(const BgEntry& e, float W, float rowH) {
     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
         wasDragged = true;
         ImGui::SetDragDropPayload("BG_FILE", e.fullPath.c_str(), e.fullPath.size()+1);
+        ImGui::SetDragDropPayload("BG_ITEM_PATH", e.fullPath.c_str(), e.fullPath.size()+1);
         ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
         ImGui::Text("Mover: %s", dn.c_str());
         ImGui::PopStyleColor();
@@ -854,7 +943,7 @@ void LayersBgTab::RenderContentArea(float w, float h) {
         ImGui::Dummy({0,12});
         ImGui::PushStyleColor(ImGuiCol_Text, LP::TextMuted);
         const char* msg = m_CurrentBgFolder.empty()
-            ? "Sin fondos aun. Usa el boton + de arriba para importar."
+            ? "Sin fondos aun. Usa el botón + de arriba para importar."
             : "Esta carpeta esta vacia.";
         float tw = ImGui::CalcTextSize(msg).x;
         ImGui::SetCursorPosX(std::max(0.0f, (w-tw)*0.5f));
@@ -890,6 +979,28 @@ void LayersBgTab::RenderContentArea(float w, float h) {
     } else {
         for (const auto* bg : files)
             RenderBgRow(*bg, w, 44.0f);
+    }
+
+    if (ImGui::BeginDragDropTarget()) {
+        auto HandleDrop = [&](const ImGuiPayload* payload) {
+            const char* droppedPath = (const char*)payload->Data;
+            if (droppedPath && *droppedPath) {
+                std::error_code ec;
+                fs::path src(droppedPath);
+                fs::path dstFolder = m_CurrentBgFolder.empty() ? BgRootDir() : (BgRootDir() / m_CurrentBgFolder);
+                fs::create_directories(dstFolder, ec);
+                fs::path dst = dstFolder / src.filename();
+                fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+                ReloadList();
+            }
+        };
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("MEDIA_ITEM_PATH")) {
+            HandleDrop(payload);
+        }
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("VIDEO_TO_QUEUE")) {
+            HandleDrop(payload);
+        }
+        ImGui::EndDragDropTarget();
     }
 }
 
@@ -960,29 +1071,51 @@ void LayersBgTab::Render() {
     ImGui::Spacing();
     LPSeparatorLine();
 
-    const float sidebarW = 116.0f;
-    const float totalH   = ImGui::GetContentRegionAvail().y;
+    const float totalW = ImGui::GetContentRegionAvail().x;
+    const float totalH = ImGui::GetContentRegionAvail().y;
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0,0,0,0));
-    ImGui::BeginChild("##bgSidebar", ImVec2(sidebarW, totalH), false,
-                      ImGuiWindowFlags_NoScrollbar);
-    RenderFolderSidebar(sidebarW, totalH);
-    ImGui::EndChild();
-    ImGui::PopStyleColor();
+    // Columna angosta (ej. "Diseño" en Ajustes > Apariencia > Entorno de
+    // trabajo > Simple): la sidebar fija de 116px le restaba demasiado ancho
+    // al contenido -- se reemplaza por una fila de chips que envuelve arriba
+    // del contenido (ver RenderFolderChips), que ocupa solo lo que necesita.
+    const bool narrow = totalW < 300.0f;
 
-    ImGui::SameLine();
+    if (narrow)
     {
-        ImVec2 p = ImGui::GetCursorScreenPos();
-        ImGui::GetWindowDrawList()->AddLine({p.x, p.y}, {p.x, p.y+totalH}, LPU32(LP::Border), 1.0f);
-        ImGui::Dummy(ImVec2(1.0f, totalH));
-    }
-    ImGui::SameLine();
+        RenderFolderChips();
+        ImGui::Spacing();
 
-    ImGui::BeginChild("##bgContent", ImVec2(0, totalH), false);
-    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * m_ContentFade);
-    RenderContentArea(ImGui::GetContentRegionAvail().x, totalH);
-    ImGui::PopStyleVar();
-    ImGui::EndChild();
+        ImGui::BeginChild("##bgContent", ImVec2(0, 0), false);
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * m_ContentFade);
+        RenderContentArea(ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y);
+        ImGui::PopStyleVar();
+        ImGui::EndChild();
+    }
+    else
+    {
+        const float sidebarW = 116.0f;
+
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0,0,0,0));
+        ImGui::BeginChild("##bgSidebar", ImVec2(sidebarW, totalH), false,
+                          ImGuiWindowFlags_NoScrollbar);
+        RenderFolderSidebar(sidebarW, totalH);
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+
+        ImGui::SameLine();
+        {
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            ImGui::GetWindowDrawList()->AddLine({p.x, p.y}, {p.x, p.y+totalH}, LPU32(LP::Border), 1.0f);
+            ImGui::Dummy(ImVec2(1.0f, totalH));
+        }
+        ImGui::SameLine();
+
+        ImGui::BeginChild("##bgContent", ImVec2(0, totalH), false);
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * m_ContentFade);
+        RenderContentArea(ImGui::GetContentRegionAvail().x, totalH);
+        ImGui::PopStyleVar();
+        ImGui::EndChild();
+    }
 
     RenderHoldPreview();
 

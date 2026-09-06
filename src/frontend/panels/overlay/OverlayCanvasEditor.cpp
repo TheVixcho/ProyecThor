@@ -319,7 +319,7 @@ void OverlayCanvasEditor::AddImageLayerFromMenu() {
         std::vector<std::string> imgs = m_ListBgImages ? m_ListBgImages() : std::vector<std::string>{};
         if (imgs.empty()) {
             ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
-            ImGui::TextUnformatted("No hay imagenes en Fondos.");
+            ImGui::TextUnformatted("No hay imágenes en Fondos.");
             ImGui::PopStyleColor();
         }
         for (const auto& path : imgs) {
@@ -549,7 +549,7 @@ void OverlayCanvasEditor::RenderCanvas(float availW, float availH) {
         } else if (isClock) {
             // Cuadro-flag: se previsualiza en el editor (placeholder + marco
             // punteado) pero SOLO en el foreground draw list -- nunca en
-            // "dl", asi que nunca queda horneado en el PNG exportado. En
+            // "dl", así que nunca queda horneado en el PNG exportado. En
             // vivo, el reloj real se dibuja en esta misma posicion/estilo
             // sobre el overlay ya proyectado (ver LiveContentRenderer.cpp/
             // UIManager.cpp), no sobre el PNG.
@@ -1030,7 +1030,7 @@ void OverlayCanvasEditor::RenderLayersPanel(float w, float h) {
     w = ImGui::GetContentRegionAvail().x;
     if (m_Doc.layers.empty()) {
         ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
-        ImGui::TextWrapped("Sin capas todavia. Usa la toolbar de arriba del canvas para anadir texto, formas, imagenes o un reloj.");
+        ImGui::TextWrapped("Sin capas todavia. Usa la toolbar de arriba del canvas para anadir texto, formas, imágenes o un reloj.");
         ImGui::PopStyleColor();
     }
     // Filas estilo Photoshop: mas altura, cuadradas con padding, y agarrables
@@ -1150,6 +1150,15 @@ void OverlayCanvasEditor::RenderLayersPanel(float w, float h) {
             break; // los indices cambiaron: no seguir iterando este frame
         }
     }
+    // FIX (warning de Dear ImGui "Code uses SetCursorPos()/SetCursorScreenPos()
+    // to extend window/parent boundaries. Please submit an item... afterwards"):
+    // el SetCursorScreenPos() de arriba, en la ULTIMA fila, empuja el cursor
+    // kRowGap por debajo de esa fila para "cerrar" la lista, pero nunca se
+    // somete ningun item ahi -- todo lo demas de la fila (fondo/texto) se
+    // dibuja directo con ImDrawList, no cuenta como item real para que este
+    // child sepa que ese espacio es contenido de verdad. Un Dummy() invisible
+    // en la posicion final confirma el limite inferior real.
+    ImGui::Dummy(ImVec2(w, 0.0f));
     ImGui::EndChild();
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();
@@ -1244,14 +1253,14 @@ void OverlayCanvasEditor::RenderPropertiesPanel(float w, float h) {
         }
 
         ImGui::Dummy(ImVec2(0.0f, 6.0f));
-        ImGui::TextUnformatted("Rotacion");
+        ImGui::TextUnformatted("Rotación");
         ImGui::SetNextItemWidth(w);
         ImGui::DragFloat("##ovLayerRotation", &layer.rotation, 0.5f, -180.0f, 180.0f, "%.0f grados");
 
         ImGui::Dummy(ImVec2(0.0f, 6.0f));
         ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
         ImGui::TextWrapped("Tambien podes arrastrar las esquinas (tamano) o el "
-                           "handle de arriba (rotacion) en el canvas.");
+                           "handle de arriba (rotación) en el canvas.");
         ImGui::PopStyleColor();
     } else { // Shape
         ImGui::TextUnformatted("Tipo de forma");
@@ -1278,11 +1287,11 @@ void OverlayCanvasEditor::RenderPropertiesPanel(float w, float h) {
         }
 
         ImGui::Dummy(ImVec2(0.0f, 6.0f));
-        ImGui::TextUnformatted("Rotacion");
+        ImGui::TextUnformatted("Rotación");
         ImGui::SetNextItemWidth(w);
         ImGui::DragFloat("##ovShapeRotation", &layer.rotation, 0.5f, -180.0f, 180.0f, "%.0f grados");
 
-        // Selector rapido: cubre el caso pedido explicitamente ("solo el
+        // Selector rápido: cubre el caso pedido explicitamente ("solo el
         // borde con color y transparente adentro") en un click, en vez de
         // tener que descubrir que apagar Relleno + prender Borde por
         // separado logra lo mismo (los checkboxes de abajo siguen ahi para

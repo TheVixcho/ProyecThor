@@ -1,35 +1,19 @@
 #include "Announcements.h"
 #include "backend/core/PresentationCore.h"
+#include "backend/core/AppPaths.h"
 #include "frontend/ui/UIStrings.h"
 #include "frontend/ui/DesignSystem.h"
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <nlohmann/json.hpp>
+#include <fstream>
+#include <filesystem>
+#include <ctime>
 #include <algorithm>
 #include <cstring>
 #include <cmath>
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Nota de integración
-//
-//  Render(GlassRenderer&) ya NO abre su propia ventana — es contenido de la
-//  sección "Anuncios" del sidebar de HomePanel (ver HomePanel.h/.cpp,
-//  m_Announcements, dispatch en HomePanel::Render()).
-//
-//  La salida real al proyector sigue siendo independiente de esto: en
-//  UIManager::RenderAll(), bloque ProjectorLive, se busca el panel "Home" en
-//  m_Panels, se castea a HomePanel* y se llama incondicionalmente (sin
-//  importar que sección del sidebar este activa):
-//       if (homePanel->m_Announcements.IsLive()) {
-//           ... RenderOnProjector(ImGui::GetWindowDrawList(), mx, my, mode->width, mode->height, dt);
-//       }
-// ─────────────────────────────────────────────────────────────────────────────
-
 namespace ProyecThor::UI {
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Helpers locales — mismo patron que ControlPanel.cpp: todos los colores
-//  salen de DS:: (DesignSystem), sincronizado con el tema activo.
-// ─────────────────────────────────────────────────────────────────────────────
 
 static ImU32 AnnColU32(float r, float g, float b, float a = 1.0f) {
     return ImGui::ColorConvertFloat4ToU32(ImVec4(r, g, b, a));
@@ -48,6 +32,14 @@ static ImVec4 Brighten(const ImVec4& c, float amount) {
         c.w);
 }
 
+static ImU32 AnnCategoryColor(const std::string& cat) {
+    if (cat == "Anuncios" || cat == "Anuncio") return IM_COL32(50, 180, 240, 255);
+    if (cat == "Avisos"   || cat == "Aviso")   return IM_COL32(82, 224, 160, 255);
+    if (cat == "Urgente")                      return IM_COL32(240, 80, 90, 255);
+    if (cat == "Culto")                        return IM_COL32(245, 180, 50, 255);
+    return IM_COL32(160, 165, 180, 255);
+}
+
 static bool SmallIconButton(const char* label, ImVec2 size,
                             ImVec4 col, ImVec4 colHov, ImVec4 colAct) {
     ImGui::PushStyleColor(ImGuiCol_Button,        col);
@@ -58,30 +50,109 @@ static bool SmallIconButton(const char* label, ImVec2 size,
     return pressed;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Constructor
-// ─────────────────────────────────────────────────────────────────────────────
+struct LoadedQuickNote {
+    std::string id;
+    std::string title;
+    std::string content;
+    std::string category;
+    bool isFavorite = false;
+    std::string updatedAt;
+};
+
+static std::vector<LoadedQuickNote> LoadAllQuickNotesFromDisk() {
+    std::vector<LoadedQuickNote> list;
+    try {
+        std::filesystem::path p = std::filesystem::path(ProyecThor::GetAppDataRoot()) / "quick_notes.json";
+        if (std::filesystem::exists(p)) {
+            std::ifstream in(p);
+            if (in.is_open()) {
+                nlohmann::json j;
+                in >> j;
+                if (j.contains("notes") && j["notes"].is_array()) {
+                    for (const auto& item : j["notes"]) {
+                        LoadedQuickNote n;
+                        n.id = item.value("id", "");
+                        n.title = item.value("title", "");
+                        n.content = item.value("content", "");
+                        n.category = item.value("category", "General");
+                        n.isFavorite = item.value("isFavorite", false);
+                        n.updatedAt = item.value("updatedAt", "");
+                        if (!n.content.empty()) list.push_back(n);
+                    }
+                }
+            }
+        }
+    } catch (...) {}
+    return list;
+}
+
+static void SaveNoteToQuickNotesLibrary(const std::string& title, const std::string& text, const std::string& category) {
+    if (text.empty()) return;
+    try {
+        std::filesystem::path p = std::filesystem::path(ProyecThor::GetAppDataRoot()) / "quick_notes.json";
+        nlohmann::json j;
+        if (std::filesystem::exists(p)) {
+            std::ifstream in(p);
+            if (in.is_open()) {
+                in >> j;
+            }
+        }
+        if (!j.is_object()) j = nlohmann::json::object();
+        if (!j.contains("notes") || !j["notes"].is_array()) j["notes"] = nlohmann::json::array();
+
+        auto now = std::chrono::system_clock::now();
+        std::time_t nowTime = std::chrono::system_clock::to_time_t(now);
+        std::tm tmBuf{};
+#if defined(_WIN32)
+        localtime_s(&tmBuf, &nowTime);
+#else
+        localtime_r(&nowTime, &tmBuf);
+#endif
+        char dateStr[64];
+        std::strftime(dateStr, sizeof(dateStr), "%d/%m/%Y %H:%M", &tmBuf);
+
+        std::string id = std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count());
+
+        nlohmann::json item;
+        item["id"] = id;
+        item["title"] = title.empty() ? text.substr(0, std::min<size_t>(text.size(), 24)) : title;
+        item["content"] = text;
+        item["category"] = category.empty() ? "Anuncios" : category;
+        item["isFavorite"] = false;
+        item["updatedAt"] = dateStr;
+
+        j["notes"].insert(j["notes"].begin(), item);
+
+        std::ofstream out(p);
+        if (out.is_open()) {
+            out << j.dump(2);
+        }
+    } catch (...) {}
+}
 
 Announcements::Announcements() {
     Message first;
     std::strncpy(first.text, "Bienvenidos al servicio", sizeof(first.text) - 1);
+    std::strncpy(first.tag, "Anuncios", sizeof(first.tag) - 1);
     m_Messages.push_back(first);
 
-    // Cargar lista de fuentes al iniciar
     SyncFontList();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  SyncFontList
-// ─────────────────────────────────────────────────────────────────────────────
+void Announcements::AddMessage(const std::string& text, const std::string& tag, bool enabled) {
+    if (text.empty()) return;
+    Message msg;
+    std::strncpy(msg.text, text.c_str(), sizeof(msg.text) - 1);
+    msg.text[sizeof(msg.text) - 1] = '\0';
+    std::strncpy(msg.tag, tag.empty() ? "Anuncios" : tag.c_str(), sizeof(msg.tag) - 1);
+    msg.tag[sizeof(msg.tag) - 1] = '\0';
+    msg.enabled = enabled;
+    m_Messages.push_back(msg);
+}
 
 void Announcements::SyncFontList() {
     Core::PresentationCore::Get().SyncFontListFromDisk(m_FontList);
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  GetCurrentMessage
-// ─────────────────────────────────────────────────────────────────────────────
 
 const std::string& Announcements::GetCurrentMessage() const {
     static std::string s_Cache;
@@ -99,10 +170,6 @@ const std::string& Announcements::GetCurrentMessage() const {
     }
     return s_Cache;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  TickScroll
-// ─────────────────────────────────────────────────────────────────────────────
 
 void Announcements::TickScroll(float deltaTime, float contentWidth, float screenW) {
     if (m_Paused || m_Messages.empty()) return;
@@ -142,10 +209,6 @@ void Announcements::TickScroll(float deltaTime, float contentWidth, float screen
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  RenderOnProjector
-// ─────────────────────────────────────────────────────────────────────────────
-
 void Announcements::RenderOnProjector(void* drawListPtr,
                                       float screenX, float screenY,
                                       float screenW, float screenH,
@@ -160,14 +223,12 @@ void Announcements::RenderOnProjector(void* drawListPtr,
 
     float screenScale = screenW / 1920.0f;
 
-    // ── Resolver fuente, tamaño y color según el modo activo ──────────────
     float   fontSize = m_FontSize * screenScale;
     ImFont* font     = nullptr;
     ImU32   textCol  = ImGui::ColorConvertFloat4ToU32(
         ImVec4(m_TextColor[0], m_TextColor[1], m_TextColor[2], m_TextColor[3]));
 
     if (m_StyleMode == 0 && m_AssignedStyleName[0] != '\0') {
-        // Modo: estilo guardado — usa todos los campos del SavedStyle
         Core::SavedStyle resolvedStyle;
         if (core.GetSavedStyle(std::string(m_AssignedStyleName), resolvedStyle)) {
             fontSize = resolvedStyle.size * screenScale;
@@ -177,7 +238,6 @@ void Announcements::RenderOnProjector(void* drawListPtr,
                        resolvedStyle.color[2], resolvedStyle.color[3]));
         }
     } else if (m_StyleMode == 1) {
-        // Modo: estilo inline — fuente por nombre desde m_FontList
         if (m_SelectedFontIndex >= 0 && m_SelectedFontIndex < (int)m_FontList.size()) {
             font = core.GetImGuiFont(m_FontList[m_SelectedFontIndex], fontSize);
         }
@@ -185,13 +245,11 @@ void Announcements::RenderOnProjector(void* drawListPtr,
 
     if (!font) font = ImGui::GetFont();
 
-    // ── Medir texto ────────────────────────────────────────────────────────
     ImVec2 textSize     = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, msg.c_str());
     float  contentWidth = textSize.x;
 
     TickScroll(deltaTime, contentWidth, screenW);
 
-    // ── Posición vertical del banner ───────────────────────────────────────
     float bannerH = screenH * m_BannerHeightPct;
     float bannerY = screenY;
 
@@ -206,7 +264,6 @@ void Announcements::RenderOnProjector(void* drawListPtr,
     float bannerX2 = screenX + screenW;
     float bannerY2 = bannerY + bannerH;
 
-    // ── Fondo ──────────────────────────────────────────────────────────────
     if (m_ShowBg) {
         drawList->AddRectFilled(
             ImVec2(bannerX, bannerY), ImVec2(bannerX2, bannerY2),
@@ -242,14 +299,9 @@ void Announcements::RenderOnProjector(void* drawListPtr,
     drawList->PopClipRect();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Render  —  panel de control (ImGui)
-// ─────────────────────────────────────────────────────────────────────────────
-
 void Announcements::Render(GlassRenderer& glass) {
     auto& core = Core::PresentationCore::Get();
 
-    // ── Delta time interno ─────────────────────────────────────────────────
     float deltaTime = 0.016f;
     if (!m_FirstFrame) {
         auto now  = std::chrono::steady_clock::now();
@@ -259,8 +311,6 @@ void Announcements::Render(GlassRenderer& glass) {
     m_FirstFrame    = false;
     m_LastFrameTime = std::chrono::steady_clock::now();
 
-    // Tokens compartidos con el resto de la app (DS::), sincronizados desde
-    // el tema activo — mismo patron que ControlPanel.cpp.
     const ImVec4 fillBase    = ToVec4(DS::BtnDefaultFill);
     const ImVec4 fillHover   = ToVec4(DS::BtnHoverFill);
     const ImVec4 textSection = ToVec4(DS::TextSecondary);
@@ -272,14 +322,11 @@ void Announcements::Render(GlassRenderer& glass) {
 
     (void)glass;
     ImGui::PushStyleColor(ImGuiCol_Text, accent);
-    ImGui::TextUnformatted("Anuncios");
+    ImGui::TextUnformatted("Anuncios y Avisos");
     ImGui::PopStyleColor();
     ImGui::Separator();
     ImGui::Spacing();
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  SECCIÓN: Preview del letrero
-    // ─────────────────────────────────────────────────────────────────────
     {
         float panelW   = ImGui::GetContentRegionAvail().x;
         float previewH = 50.0f;
@@ -290,18 +337,30 @@ void Announcements::Render(GlassRenderer& glass) {
         dl->AddRectFilled(
             previewPos,
             ImVec2(previewPos.x + panelW, previewPos.y + previewH),
-            AnnColU32(m_BgR, m_BgG, m_BgB, m_IsLive ? m_BgA : 0.5f),
-            6.0f);
+            AnnColU32(m_BgR, m_BgG, m_BgB, m_IsLive ? m_BgA : 0.65f),
+            8.0f);
 
         dl->AddRect(
             previewPos,
             ImVec2(previewPos.x + panelW, previewPos.y + previewH),
-            m_IsLive ? ColA(DS::AccentColor, 179) : DS::GlassBorder,
-            6.0f, 0, 1.5f);
+            m_IsLive ? ColA(DS::AccentColor, 190) : ColA(DS::GlassBorder, 100),
+            8.0f, 0, m_IsLive ? 1.8f : 1.0f);
+
+        {
+            const char* bText = m_IsLive ? "EN VIVO" : "STANDBY";
+            ImVec2 bSz = ImGui::CalcTextSize(bText);
+            float bx1 = previewPos.x + panelW - 8.0f;
+            float bx0 = bx1 - bSz.x - 10.0f;
+            float by0 = previewPos.y + 6.0f;
+            float by1 = by0 + bSz.y + 4.0f;
+            ImU32 bCol = m_IsLive ? ColA(DS::DangerColor, 220) : IM_COL32(0, 0, 0, 160);
+            dl->AddRectFilled({ bx0, by0 }, { bx1, by1 }, bCol, 4.0f);
+            dl->AddText({ bx0 + 5.0f, by0 + 2.0f }, IM_COL32_WHITE, bText);
+        }
 
         dl->PushClipRect(
             previewPos,
-            ImVec2(previewPos.x + panelW, previewPos.y + previewH),
+            ImVec2(previewPos.x + panelW - 75.0f, previewPos.y + previewH),
             true);
 
         const std::string& msg = GetCurrentMessage();
@@ -310,7 +369,6 @@ void Announcements::Render(GlassRenderer& glass) {
             float   previewFontSize = ImGui::GetFontSize();
 
             if (m_StyleMode == 1) {
-                // Escalar m_FontSize al ancho del panel
                 float scale     = panelW / 1920.0f;
                 previewFontSize = std::max(8.0f, m_FontSize * scale);
                 if (m_SelectedFontIndex >= 0 && m_SelectedFontIndex < (int)m_FontList.size()) {
@@ -361,17 +419,45 @@ void Announcements::Render(GlassRenderer& glass) {
     ImGui::Separator();
     ImGui::Spacing();
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  SECCIÓN: Lista de mensajes
-    // ─────────────────────────────────────────────────────────────────────
-
     ImGui::PushStyleColor(ImGuiCol_Text, textSection);
-    ImGui::TextUnformatted("Mensajes");
+    ImGui::TextUnformatted("Mensajes de Anuncios y Avisos");
     ImGui::PopStyleColor();
     ImGui::Spacing();
 
-    float listH = std::min(160.0f, (float)m_Messages.size() * 36.0f + 8.0f);
-    listH       = std::max(listH, 44.0f);
+    {
+        const std::vector<std::string> categories = { "Todos", "Anuncios", "Avisos", "Urgente", "Culto", "General" };
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, 4.0f));
+
+        for (const auto& cat : categories) {
+            bool selected = (m_CategoryFilter == cat);
+
+            ImVec4 bg = selected
+                ? ImGui::ColorConvertU32ToFloat4(ColA(DS::AccentColor, 55))
+                : ImGui::ColorConvertU32ToFloat4(IM_COL32(255, 255, 255, 10));
+
+            ImGui::PushStyleColor(ImGuiCol_Button, bg);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::ColorConvertU32ToFloat4(IM_COL32(255, 255, 255, 24)));
+            ImGui::PushStyleColor(ImGuiCol_Border, selected ? ImGui::ColorConvertU32ToFloat4(ColA(DS::AccentColor, 180)) : ImGui::ColorConvertU32ToFloat4(IM_COL32(255, 255, 255, 18)));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+            ImGui::PushStyleColor(ImGuiCol_Text, selected ? ImVec4(1, 1, 1, 1) : ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
+
+            if (ImGui::Button(cat.c_str(), ImVec2(0.0f, 26.0f)))
+                m_CategoryFilter = cat;
+
+            ImGui::PopStyleColor(4);
+            ImGui::PopStyleVar();
+            ImGui::SameLine();
+        }
+        ImGui::NewLine();
+        ImGui::PopStyleVar(2);
+    }
+
+    ImGui::Spacing();
+
+    float listH = std::min(180.0f, (float)m_Messages.size() * 38.0f + 12.0f);
+    listH       = std::max(listH, 48.0f);
 
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ToVec4(DS::GlassFillBot));
     ImGui::BeginChild("##ann_list", ImVec2(0, listH), true, ImGuiWindowFlags_None);
@@ -379,7 +465,12 @@ void Announcements::Render(GlassRenderer& glass) {
     int toDelete = -1;
     int toMoveUp = -1;
 
+    const char* cycleTags[] = { "Anuncios", "Avisos", "Urgente", "Culto", "General" };
+
     for (int i = 0; i < (int)m_Messages.size(); ++i) {
+        if (m_CategoryFilter != "Todos" && m_Messages[i].tag != m_CategoryFilter)
+            continue;
+
         ImGui::PushID(i);
 
         bool isActive = (i == m_ActiveIndex);
@@ -392,12 +483,46 @@ void Announcements::Render(GlassRenderer& glass) {
         ImGui::Checkbox("##en", &m_Messages[i].enabled);
         ImGui::SameLine(0, 6);
 
-        float fieldW = ImGui::GetContentRegionAvail().x - 60.0f;
+        ImU32 catCol = AnnCategoryColor(m_Messages[i].tag);
+        ImGui::PushStyleColor(ImGuiCol_Button, (catCol & 0x00FFFFFF) | 0x35000000);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, (catCol & 0x00FFFFFF) | 0x55000000);
+        ImGui::PushStyleColor(ImGuiCol_Text, catCol);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
+
+        char tagBtnId[64];
+        std::snprintf(tagBtnId, sizeof(tagBtnId), "%s##tagBtn", m_Messages[i].tag);
+        if (ImGui::Button(tagBtnId, ImVec2(68.0f, 22.0f))) {
+            int curIdx = 0;
+            for (int k = 0; k < 5; ++k) {
+                if (std::strcmp(m_Messages[i].tag, cycleTags[k]) == 0) {
+                    curIdx = k;
+                    break;
+                }
+            }
+            int nextIdx = (curIdx + 1) % 5;
+            std::strncpy(m_Messages[i].tag, cycleTags[nextIdx], sizeof(m_Messages[i].tag) - 1);
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clic para cambiar categoría / etiqueta");
+
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(3);
+
+        ImGui::SameLine(0, 6);
+
+        float fieldW = ImGui::GetContentRegionAvail().x - 88.0f;
         ImGui::SetNextItemWidth(fieldW);
         ImGui::InputText("##msg", m_Messages[i].text, sizeof(m_Messages[i].text));
 
         ImGui::PopStyleColor();
         ImGui::SameLine(0, 6);
+
+        if (SmallIconButton("G", ImVec2(22, 22),
+            fillBase, fillHover, Brighten(fillHover, 0.08f))) {
+            SaveNoteToQuickNotesLibrary(m_Messages[i].text, m_Messages[i].text, m_Messages[i].tag);
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Guardar este mensaje en la Biblioteca de Notas");
+
+        ImGui::SameLine(0, 4);
 
         if (i > 0) {
             if (SmallIconButton("^", ImVec2(22, 22),
@@ -435,30 +560,56 @@ void Announcements::Render(GlassRenderer& glass) {
 
     ImGui::Spacing();
 
-    ImGui::PushStyleColor(ImGuiCol_Button,        accentDim);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Brighten(accentDim, 0.08f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Brighten(accentDim, -0.08f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
+    {
+        float availW = ImGui::GetContentRegionAvail().x;
+        float addBtnW = (availW - 12.0f) / 3.0f;
 
-    if (ImGui::Button("+ Agregar mensaje", ImVec2(ImGui::GetContentRegionAvail().x, 28.0f))) {
-        Message nm;
-        std::strncpy(nm.text, "Nuevo anuncio", sizeof(nm.text) - 1);
-        m_Messages.push_back(nm);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
+
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.15f, 0.35f, 0.55f, 0.85f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.45f, 0.70f, 0.95f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.12f, 0.30f, 0.48f, 1.0f));
+        if (ImGui::Button("+ Anuncio", ImVec2(addBtnW, 28.0f))) {
+            Message nm;
+            std::strncpy(nm.text, "Nuevo anuncio", sizeof(nm.text) - 1);
+            std::strncpy(nm.tag, "Anuncios", sizeof(nm.tag) - 1);
+            m_Messages.push_back(nm);
+        }
+        ImGui::PopStyleColor(3);
+
+        ImGui::SameLine(0, 6);
+
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.45f, 0.32f, 0.85f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.55f, 0.40f, 0.95f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.14f, 0.38f, 0.28f, 1.0f));
+        if (ImGui::Button("+ Aviso", ImVec2(addBtnW, 28.0f))) {
+            Message nm;
+            std::strncpy(nm.text, "Nuevo aviso", sizeof(nm.text) - 1);
+            std::strncpy(nm.tag, "Avisos", sizeof(nm.tag) - 1);
+            m_Messages.push_back(nm);
+        }
+        ImGui::PopStyleColor(3);
+
+        ImGui::SameLine(0, 6);
+
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.40f, 0.32f, 0.15f, 0.85f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.50f, 0.40f, 0.18f, 0.95f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.35f, 0.28f, 0.12f, 1.0f));
+        if (ImGui::Button("Desde Notas", ImVec2(addBtnW, 28.0f))) {
+            m_ShowNotesImportModal = true;
+            m_ImportSearchFilter[0] = '\0';
+        }
+        ImGui::PopStyleColor(3);
+
+        ImGui::PopStyleVar();
     }
-
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor(3);
 
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  SECCIÓN: Animación
-    // ─────────────────────────────────────────────────────────────────────
-
     ImGui::PushStyleColor(ImGuiCol_Text, textSection);
-    ImGui::TextUnformatted("Animacion");
+    ImGui::TextUnformatted("Animación");
     ImGui::PopStyleColor();
     ImGui::Spacing();
 
@@ -490,19 +641,15 @@ void Announcements::Render(GlassRenderer& glass) {
     ImGui::Spacing();
 
     ImGui::PushStyleColor(ImGuiCol_CheckMark, accent);
-    ImGui::Checkbox("Pausar animacion", &m_Paused);
+    ImGui::Checkbox("Pausar animación", &m_Paused);
     ImGui::PopStyleColor();
 
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  SECCIÓN: Posición y apariencia del banner
-    // ─────────────────────────────────────────────────────────────────────
-
     ImGui::PushStyleColor(ImGuiCol_Text, textSection);
-    ImGui::TextUnformatted("Posicion y apariencia");
+    ImGui::TextUnformatted("Posición y apariencia");
     ImGui::PopStyleColor();
     ImGui::Spacing();
 
@@ -548,16 +695,11 @@ void Announcements::Render(GlassRenderer& glass) {
     ImGui::Separator();
     ImGui::Spacing();
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  SECCIÓN: Estilo de texto
-    // ─────────────────────────────────────────────────────────────────────
-
     ImGui::PushStyleColor(ImGuiCol_Text, textSection);
     ImGui::TextUnformatted("Estilo de texto");
     ImGui::PopStyleColor();
     ImGui::Spacing();
 
-    // ── Selector de modo ──────────────────────────────────────────────────
     {
         float modeW = (ImGui::GetContentRegionAvail().x - 4.0f) * 0.5f;
         float modeH = 26.0f;
@@ -588,9 +730,6 @@ void Announcements::Render(GlassRenderer& glass) {
 
     ImGui::Spacing();
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  Modo 0: elegir estilo guardado
-    // ─────────────────────────────────────────────────────────────────────
     if (m_StyleMode == 0) {
         std::vector<std::string> styleNames = core.GetSavedStyleNames();
 
@@ -626,7 +765,6 @@ void Announcements::Render(GlassRenderer& glass) {
                                  sizeof(m_AssignedStyleName) - 1);
                     m_AssignedStyleName[sizeof(m_AssignedStyleName) - 1] = '\0';
 
-                    // Precargar los valores en los campos inline para coherencia
                     Core::SavedStyle loaded;
                     if (core.GetSavedStyle(styleNames[currentIdx], loaded)) {
                         m_FontSize     = loaded.size;
@@ -641,7 +779,6 @@ void Announcements::Render(GlassRenderer& glass) {
             ImGui::PopStyleVar();
             ImGui::PopStyleColor(2);
 
-            // Resumen del estilo activo
             if (m_AssignedStyleName[0] != '\0') {
                 Core::SavedStyle preview;
                 if (core.GetSavedStyle(std::string(m_AssignedStyleName), preview)) {
@@ -655,11 +792,7 @@ void Announcements::Render(GlassRenderer& glass) {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    //  Modo 1: editar fuente, tamaño y color inline + guardar
-    // ─────────────────────────────────────────────────────────────────────
     else {
-        // ── Botón recargar fuentes ────────────────────────────────────────
         ImGui::PushStyleColor(ImGuiCol_Button,        fillBase);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, fillHover);
         ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Brighten(fillHover, 0.08f));
@@ -672,7 +805,6 @@ void Announcements::Render(GlassRenderer& glass) {
 
         ImGui::Spacing();
 
-        // ── Fuente ────────────────────────────────────────────────────────
         ImGui::PushStyleColor(ImGuiCol_Text, textSub);
         ImGui::TextUnformatted("Fuente");
         ImGui::PopStyleColor();
@@ -702,9 +834,8 @@ void Announcements::Render(GlassRenderer& glass) {
 
         ImGui::Spacing();
 
-        // ── Tamaño de fuente ──────────────────────────────────────────────
         ImGui::PushStyleColor(ImGuiCol_Text, textSub);
-        ImGui::TextUnformatted("Tamanio (px a 1920px de ancho)");
+        ImGui::TextUnformatted("Tamaño (px a 1920px de ancho)");
         ImGui::PopStyleColor();
 
         {
@@ -731,7 +862,6 @@ void Announcements::Render(GlassRenderer& glass) {
 
         ImGui::Spacing();
 
-        // ── Color del texto ───────────────────────────────────────────────
         ImGui::PushStyleColor(ImGuiCol_Text, textSub);
         ImGui::TextUnformatted("Color del texto");
         ImGui::PopStyleColor();
@@ -743,7 +873,6 @@ void Announcements::Render(GlassRenderer& glass) {
 
         ImGui::Spacing();
 
-        // ── Botón guardar este estilo con nombre ──────────────────────────
         ImGui::PushStyleColor(ImGuiCol_Button,        accentDim);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Brighten(accentDim, 0.08f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Brighten(accentDim, -0.08f));
@@ -761,7 +890,6 @@ void Announcements::Render(GlassRenderer& glass) {
         ImGui::PopStyleVar();
         ImGui::PopStyleColor(3);
 
-        // ── Popup de guardado ──────────────────────────────────────────────
         ImGui::SetNextWindowSize(ImVec2(320.0f, 0.0f), ImGuiCond_Always);
         if (ImGui::BeginPopup("##ann_save_popup")) {
             ImGui::PushStyleColor(ImGuiCol_Text, textSection);
@@ -790,8 +918,6 @@ void Announcements::Render(GlassRenderer& glass) {
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
 
             if (ImGui::Button("Guardar##annSaveBtn", ImVec2(144.0f, 28.0f)) && nameOk) {
-                // Construir el SavedStyle con los valores inline actuales.
-                // SaveStyle() toma el nombre desde el campo style.name.
                 Core::SavedStyle newStyle;
                 newStyle.name      = std::string(m_SaveStyleName);
                 newStyle.size      = m_FontSize;
@@ -806,7 +932,6 @@ void Announcements::Render(GlassRenderer& glass) {
                     newStyle.fontName = "Predeterminada";
                 }
 
-                // Defaults razonables para los campos que Announcements no edita
                 newStyle.hAlign    = 1;
                 newStyle.vAlign    = 1;
                 newStyle.autoScale = false;
@@ -814,7 +939,6 @@ void Announcements::Render(GlassRenderer& glass) {
 
                 core.SaveStyle(newStyle);
 
-                // Seleccionar el estilo recién guardado para que quede activo
                 std::strncpy(m_AssignedStyleName, m_SaveStyleName,
                              sizeof(m_AssignedStyleName) - 1);
                 m_AssignedStyleName[sizeof(m_AssignedStyleName) - 1] = '\0';
@@ -847,10 +971,6 @@ void Announcements::Render(GlassRenderer& glass) {
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
-
-    // ─────────────────────────────────────────────────────────────────────
-    //  SECCIÓN: Transmisión en vivo
-    // ─────────────────────────────────────────────────────────────────────
 
     float btnW = ImGui::GetContentRegionAvail().x;
     float btnH = 38.0f;
@@ -891,9 +1011,6 @@ void Announcements::Render(GlassRenderer& glass) {
         ImGui::PopStyleColor(3);
         ImGui::SameLine(0, 8);
 
-        // "Pausar"/"Reanudar" son indicadores tipo semaforo (ambar/verde) —
-        // se mantienen literales a proposito, igual que el boton de Mute en
-        // ControlPanel, en vez de derivarse del acento del tema.
         if (!m_Paused) {
             ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.50f, 0.38f, 0.08f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.65f, 0.50f, 0.10f, 1.0f));
@@ -930,6 +1047,147 @@ void Announcements::Render(GlassRenderer& glass) {
     }
 
     ImGui::PopStyleVar();
+
+    if (m_ShowNotesImportModal) {
+        RenderNotesImportModal();
+    }
 }
 
-} // namespace ProyecThor::UI
+void Announcements::RenderNotesImportModal() {
+    ImGui::OpenPopup("Importar desde Biblioteca de Notas");
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(520.0f, 430.0f), ImGuiCond_Appearing);
+
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImGui::ColorConvertU32ToFloat4(DS::GlassFillTop));
+    ImGui::PushStyleColor(ImGuiCol_Border,   ImGui::ColorConvertU32ToFloat4(DS::GlassBorder));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, DS::RadiusLarge);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(18.0f, 16.0f));
+
+    if (ImGui::BeginPopupModal("Importar desde Biblioteca de Notas", &m_ShowNotesImportModal, ImGuiWindowFlags_NoResize)) {
+        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextPrimary), "Selecciona notas guardadas para añadir al banner de anuncios:");
+        ImGui::Spacing();
+
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
+        ImGui::SetNextItemWidth(-1.0f);
+        ImGui::InputTextWithHint("##importFilter", "Buscar notas por título o texto...", m_ImportSearchFilter, sizeof(m_ImportSearchFilter));
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+
+        ImGui::Spacing();
+
+        auto notes = LoadAllQuickNotesFromDisk();
+
+        std::string filterLower = m_ImportSearchFilter;
+        std::transform(filterLower.begin(), filterLower.end(), filterLower.begin(), ::tolower);
+
+        std::vector<LoadedQuickNote> filtered;
+        for (const auto& n : notes) {
+            if (!filterLower.empty()) {
+                std::string tLower = n.title;
+                std::string cLower = n.content;
+                std::transform(tLower.begin(), tLower.end(), tLower.begin(), ::tolower);
+                std::transform(cLower.begin(), cLower.end(), cLower.begin(), ::tolower);
+                if (tLower.find(filterLower) == std::string::npos && cLower.find(filterLower) == std::string::npos)
+                    continue;
+            }
+            filtered.push_back(n);
+        }
+
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::ColorConvertU32ToFloat4(DS::GlassFillBot));
+        ImGui::BeginChild("##importNotesList", ImVec2(0.0f, 260.0f), true);
+
+        if (filtered.empty()) {
+            ImGui::Dummy(ImVec2(0.0f, 40.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextHint));
+            const char* noNotesMsg = notes.empty()
+                ? "No hay notas guardadas en la biblioteca todavía."
+                : "No se encontraron notas con el término buscado.";
+            ImVec2 nsz = ImGui::CalcTextSize(noNotesMsg);
+            ImGui::SetCursorPosX((ImGui::GetWindowWidth() - nsz.x) * 0.5f);
+            ImGui::TextUnformatted(noNotesMsg);
+            ImGui::PopStyleColor();
+        } else {
+            for (size_t i = 0; i < filtered.size(); ++i) {
+                const auto& note = filtered[i];
+                ImGui::PushID((int)i);
+
+                ImU32 catCol = AnnCategoryColor(note.category);
+
+                ImVec2 catSz = ImGui::CalcTextSize(note.category.c_str());
+                ImVec2 catPos = ImGui::GetCursorScreenPos();
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                dl->AddRectFilled(catPos, ImVec2(catPos.x + catSz.x + 8.0f, catPos.y + catSz.y + 2.0f),
+                    (catCol & 0x00FFFFFF) | 0x35000000, DS::RadiusSmall);
+
+                ImGui::SetCursorScreenPos(ImVec2(catPos.x + 4.0f, catPos.y));
+                ImGui::PushStyleColor(ImGuiCol_Text, catCol);
+                ImGui::SetWindowFontScale(0.85f);
+                ImGui::TextUnformatted(note.category.c_str());
+                ImGui::SetWindowFontScale(1.0f);
+                ImGui::PopStyleColor();
+
+                ImGui::SameLine(0.0f, 10.0f);
+
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextPrimary));
+                ImGui::TextUnformatted(note.title.c_str());
+                ImGui::PopStyleColor();
+
+                ImGui::SameLine(ImGui::GetContentRegionAvail().x - 70.0f);
+
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.45f, 0.65f, 0.85f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.55f, 0.75f, 0.95f));
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
+                if (ImGui::Button("+ Añadir", ImVec2(68.0f, 22.0f))) {
+                    AddMessage(note.content, note.category, true);
+                }
+                ImGui::PopStyleVar();
+                ImGui::PopStyleColor(2);
+
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
+                std::string snip = note.content;
+                if (snip.size() > 80) snip = snip.substr(0, 75) + "...";
+                ImGui::TextWrapped("  %s", snip.c_str());
+                ImGui::PopStyleColor();
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                ImGui::PopID();
+            }
+        }
+
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+
+        ImGui::Spacing();
+
+        float btnW = (ImGui::GetContentRegionAvail().x - 10.0f) * 0.5f;
+
+        if (DS::GlassButton("Añadir Todas", ImVec2(btnW, 32.0f), DS::AccentColor)) {
+            for (const auto& note : filtered) {
+                AddMessage(note.content, note.category, true);
+            }
+            m_ShowNotesImportModal = false;
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::SameLine(0.0f, 10.0f);
+
+        if (DS::GlassButton("Cerrar", ImVec2(btnW, 32.0f), DS::TextHint)) {
+            m_ShowNotesImportModal = false;
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(2);
+}
+
+}
+

@@ -32,24 +32,52 @@ int CalcVerseDurationMs(const std::string& stanza, int bpm);
 void CreateNewSong(LibraryContext& ctx);
 
 // Variante de CreateNewSong para el menu Archivo > Importar > "Importar
-// cancion desde portapapeles": crea el archivo con <clipboardText> como
+// canción desde portapapeles": crea el archivo con <clipboardText> como
 // letra inicial (en vez de vacio) y pide que el editor unificado se abra
 // directo. No recibe LibraryContext (a diferencia de CreateNewSong) porque
 // se llama desde la barra de menu, que no tiene una instancia a mano —
 // hace el mismo select+RequestSongEditorOpen directo contra PresentationCore.
 void CreateNewSongFromClipboard(const std::string& clipboardText);
 
+// Variante para el menu Archivo > Importar > "Importar desde URL": mismo
+// patron que CreateNewSongFromClipboard, pero <suggestedTitle> (titulo del
+// video, via yt-dlp) se usa como base del nombre de archivo en vez de
+// "Cancion pegada" -- ver SubtitleImporter::FetchSubtitlesAsLyrics y
+// RenderUrlImportModal en UIManager.cpp.
+void CreateNewSongFromText(const std::string& suggestedTitle, const std::string& text);
+
+// Sobreescribe el contenido de una cancion YA EXISTENTE (a diferencia de
+// CreateNewSongFromText, que siempre crea un archivo nuevo con dedup de
+// nombre) -- usado por el Asistente de IA en modo Avanzada (ver AITools.cpp)
+// para editar letras con confirmacion previa del operador. Devuelve false
+// sin tocar nada si <filename> no existe.
+bool SetSongText(const std::string& filename, const std::string& text);
+
 std::string GetSongAuthor(const std::string& filename);
 void SetSongAuthor(const std::string& filename, const std::string& author);
 
 // Nombre a mostrar en listas/playlists/buscador: el Titulo guardado desde el
 // editor unificado (LibrarySongMeta::title) si existe, si no el nombre de
-// archivo sin extension (comportamiento legacy). El archivo en si NUNCA se
-// renombra al tipear un titulo nuevo (rompería la seleccion activa en
-// PresentationCore y las referencias en playlists, que usan el nombre de
-// archivo como clave) — esta funcion es lo que hace que ese Titulo
-// realmente se "vea" en la Biblioteca en vez de quedar solo en el sidecar.
+// archivo sin extension (comportamiento legacy). Para canciones YA
+// renombradas a mano (o con un Titulo distinto del archivo) el .txt en si no
+// se toca — esta funcion es lo que hace que ese Titulo realmente se "vea" en
+// la Biblioteca en vez de quedar solo en el sidecar. Ver
+// RenameNewSongToTitleIfApplicable para el unico caso en el que el archivo
+// SI se renombra automaticamente.
 std::string GetSongDisplayName(const std::string& filename);
+
+// Cancion recien creada por CreateNewSong/CreateNewSongFromClipboard (todavia
+// con su nombre generico "Nueva cancion(...).txt" / "Cancion pegada(...).txt")
+// a la que el usuario ya le puso <title> en el editor unificado: renombra el
+// .txt (y migra todos sus sidecars, ver MigrateSongSidecars) para que el
+// nombre en disco coincida, evitando dedup con "(2)", "(3)"... si ya existe
+// un archivo con ese nombre. Soluciona que las canciones nuevas se sigan
+// guardando para siempre como "Nueva cancion" en el sistema de archivos (ver
+// src/notes.txt). No-op (devuelve <filename> sin cambios) si la cancion ya
+// tiene un nombre de archivo propio, si <title> esta vacio, o si el
+// renombrado en disco falla. Llamar SIEMPRE con el filename devuelto en
+// adelante (ver SongEditView::FlushIfDirty).
+std::string RenameNewSongToTitleIfApplicable(const std::string& filename, const std::string& title);
 
 // Migra TODOS los sidecars de una cancion (autor, etiquetas, estilo/fondo
 // preset, color de estrofa, meta JSON de LibrarySongMeta, y las referencias
@@ -63,7 +91,7 @@ std::vector<std::string> GetSongTags(const std::string& filename);
 void SetSongTags(const std::string& filename, const std::vector<std::string>& tags);
 
 // ── Preset por cancion (estilo + fondo por defecto) ─────────────────────────
-// Reemplaza el viejo "estilo por defecto" a nivel de categoria completa: cada
+// Reemplaza el viejo "estilo por defecto" a nivel de categoría completa: cada
 // cancion puede tener su propio estilo/fondo preferido, asignado desde la
 // tarjeta de ajustes (la primera del grid de estrofas en SongView). Si la
 // cancion no tiene nada guardado, no se aplica nada (el operador elige a
@@ -77,7 +105,7 @@ void SetSongBackground(const std::string& filename, const std::string& path, boo
 void ClearSongBackground(const std::string& filename);
 
 // ── Color de etiqueta por estrofa ────────────────────────────────────────────
-// Tag visual libre (no un "tipo" automatico como Verso/Coro de ProPresenter,
+// Tag visual libre (no un "tipo" automático como Verso/Coro de ProPresenter,
 // que requeriria parsear estructura que este parser de texto plano no tiene):
 // el operador le pone color a mano a cada tarjeta para agrupar visualmente.
 // 0 = sin color asignado (se dibuja neutro).

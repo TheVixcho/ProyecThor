@@ -8,7 +8,7 @@ namespace ProyecThor::UI {
     // elegir a que pantalla fisica (o LAN) se sirve, y que se muestra en el
     // (reloj, texto en vivo, proxima linea, organizados en una grilla de
     // celdas). El render real de la grilla ocurre en UIManager.cpp (bloque
-    // "StageLive"); este panel solo edita la configuracion persistida en
+    // "StageLive"); este panel solo edita la configuración persistida en
     // SettingsManager y controla el arranque/parada real via PresentationCore.
     // Vive como categoria dentro de Ajustes (ver SettingsPanel::
     // RenderCategoryStage) — el hub de Control se elimino porque su

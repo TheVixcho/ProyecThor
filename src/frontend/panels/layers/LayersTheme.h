@@ -184,72 +184,167 @@ inline float LPApproach(float current, float target, float speed) {
 using LPDrawIconFn = void(*)(ImDrawList*, ImVec2, float, ImU32);
 
 inline bool LPCornerIconBtn(const char* id, LPDrawIconFn drawIcon, const char* tooltip,
-                            ImVec2 size = {26.0f, 26.0f}, bool active = false) {
-    ImVec4 bg = active ? ImVec4(0.24f, 0.27f, 0.46f, 1.0f) : ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
-    ImGui::PushStyleColor(ImGuiCol_Button,        bg);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, LP::Surface2);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  LP::Surface3);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
-    bool clicked = ImGui::Button(id, size);
+                            ImVec2 size = {28.0f, 28.0f}, bool active = false) {
+    ImVec2 cursor = ImGui::GetCursorScreenPos();
+    ImVec2 bMin   = cursor;
+    ImVec2 bMax   = { cursor.x + size.x, cursor.y + size.y };
 
-    ImVec2 bMin = ImGui::GetItemRectMin();
-    ImVec2 bMax = ImGui::GetItemRectMax();
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    ImGuiID hovId = ImGui::GetID(id);
+    float*  pT    = storage->GetFloatRef(hovId ^ 0x6543ABCDu, 0.0f);
+    bool hovered  = ImGui::IsMouseHoveringRect(bMin, bMax, false);
+    *pT += ((hovered ? 1.0f : 0.0f) - *pT) * std::min(1.0f, ImGui::GetIO().DeltaTime * 14.0f);
+    float t = *pT;
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    constexpr float rounding = 6.0f;
+
+    if (active) {
+        ImVec4 ac = LP::Accent;
+        ac.w = 0.20f;
+        dl->AddRectFilled(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding);
+        ac.w = 0.40f;
+        dl->AddRect(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding, 0, 1.0f);
+    } else if (t > 0.01f) {
+        dl->AddRectFilled(bMin, bMax, IM_COL32(255, 255, 255, (int)(t * 20.0f)), rounding);
+    } else {
+        dl->AddRectFilled(bMin, bMax, IM_COL32(255, 255, 255, 8), rounding);
+    }
+
+    ImGui::SetCursorScreenPos(bMin);
+    bool clicked = ImGui::InvisibleButton(id, size);
+
     ImVec2 center = { (bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f };
-    ImU32 col = active ? LPU32(LP::Accent) : LPU32(LP::TextSub);
-    drawIcon(ImGui::GetWindowDrawList(), center, size.x * 0.42f, col);
+    ImVec4 textPriV = ImGui::ColorConvertU32ToFloat4(DS::TextPrimary);
+    ImVec4 textDimV = ImGui::ColorConvertU32ToFloat4(DS::TextSecondary);
+    float  brightT  = active ? 1.0f : t;
+    ImVec4 icF = {
+        textDimV.x + (textPriV.x - textDimV.x) * brightT,
+        textDimV.y + (textPriV.y - textDimV.y) * brightT,
+        textDimV.z + (textPriV.z - textDimV.z) * brightT,
+        1.0f
+    };
+    if (active) {
+        icF.x += (LP::Accent.x - icF.x) * 0.40f;
+        icF.y += (LP::Accent.y - icF.y) * 0.40f;
+        icF.z += (LP::Accent.z - icF.z) * 0.40f;
+    }
+    ImU32 col = ImGui::ColorConvertFloat4ToU32(icF);
 
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor(3);
+    float r = size.x * 0.42f;
+    drawIcon(dl, center, r, col);
 
     if (tooltip && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
         ImGui::SetTooltip("%s", tooltip);
     return clicked;
 }
 
+inline void LPDrawAll(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+    float len = r * 0.52f;
+    float th  = 1.5f;
+    dl->AddLine({c.x, c.y - len}, {c.x, c.y + len}, col, th);
+    dl->AddLine({c.x - len, c.y}, {c.x + len, c.y}, col, th);
+    float diag = len * 0.70f;
+    dl->AddLine({c.x - diag, c.y - diag}, {c.x + diag, c.y + diag}, col, th * 0.85f);
+    dl->AddLine({c.x - diag, c.y + diag}, {c.x + diag, c.y - diag}, col, th * 0.85f);
+}
+
+inline void LPDrawPlay(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+    float w = r * 0.56f;
+    float h = r * 0.66f;
+    dl->AddTriangleFilled(
+        {c.x - w * 0.45f, c.y - h * 0.50f},
+        {c.x - w * 0.45f, c.y + h * 0.50f},
+        {c.x + w * 0.55f, c.y}, col);
+}
+
+inline void LPDrawAudio(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+    float s = r * 0.52f;
+    ImVec2 spk[4] = {
+        {c.x - s * 0.70f, c.y - s * 0.32f},
+        {c.x - s * 0.70f, c.y + s * 0.32f},
+        {c.x - s * 0.15f, c.y + s * 0.65f},
+        {c.x - s * 0.15f, c.y - s * 0.65f},
+    };
+    dl->AddConvexPolyFilled(spk, 4, col);
+    dl->PathArcTo({c.x - s * 0.15f, c.y}, s * 0.55f, -IM_PI * 0.30f, IM_PI * 0.30f, 8);
+    dl->PathStroke(col, ImDrawFlags_None, 1.4f);
+    dl->PathArcTo({c.x - s * 0.15f, c.y}, s * 0.95f, -IM_PI * 0.30f, IM_PI * 0.30f, 8);
+    dl->PathStroke(col, ImDrawFlags_None, 1.4f);
+}
+
+inline void LPDrawImage(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+    float w = r * 0.62f, h = r * 0.50f;
+    dl->AddRect({c.x - w, c.y - h}, {c.x + w, c.y + h}, col, 1.5f, 0, 1.3f);
+    dl->AddCircleFilled({c.x - w * 0.40f, c.y - h * 0.25f}, r * 0.14f, col, 8);
+    dl->AddTriangleFilled(
+        {c.x - w * 0.75f, c.y + h * 0.70f},
+        {c.x - w * 0.10f, c.y - h * 0.05f},
+        {c.x + w * 0.45f, c.y + h * 0.70f}, col);
+    dl->AddTriangleFilled(
+        {c.x + w * 0.10f, c.y + h * 0.70f},
+        {c.x + w * 0.45f, c.y + h * 0.20f},
+        {c.x + w * 0.85f, c.y + h * 0.70f}, col);
+}
+
 inline void LPDrawPlus(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
-    float s  = r * 0.85f;
-    float th = std::max(1.4f, r * 0.24f);
-    dl->AddLine({c.x - s, c.y}, {c.x + s, c.y}, col, th);
-    dl->AddLine({c.x, c.y - s}, {c.x, c.y + s}, col, th);
+    float len = r * 0.52f;
+    float th  = 1.5f;
+    dl->AddLine({c.x - len, c.y}, {c.x + len, c.y}, col, th);
+    dl->AddLine({c.x, c.y - len}, {c.x, c.y + len}, col, th);
 }
 
 inline void LPDrawFolderGlyph(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
-    float w = r * 1.5f, h = r * 1.05f;
+    float w = r * 1.3f, h = r * 0.95f;
     ImVec2 tl = {c.x - w * 0.5f, c.y - h * 0.32f};
     dl->AddRectFilled({tl.x, tl.y - h * 0.30f}, {tl.x + w * 0.46f, tl.y + h*0.02f}, col, r * 0.10f);
     dl->AddRectFilled(tl, {tl.x + w, tl.y + h}, col, r * 0.14f);
 }
 
 inline void LPDrawFolderPlus(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
-    LPDrawFolderGlyph(dl, {c.x, c.y + r * 0.12f}, r * 0.72f, col);
-    LPDrawPlus(dl, {c.x + r * 0.62f, c.y - r * 0.55f}, r * 0.34f, col);
+    LPDrawFolderGlyph(dl, {c.x, c.y + r * 0.12f}, r * 0.65f, col);
+    LPDrawPlus(dl, {c.x + r * 0.58f, c.y - r * 0.50f}, r * 0.30f, col);
 }
 
 inline void LPDrawRefresh(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
-    float rad = r * 0.62f;
-    float th  = std::max(1.4f, r * 0.20f);
-    dl->PathArcTo(c, rad, -IM_PI * 0.65f, IM_PI * 0.85f, 20);
+    float rad = r * 0.50f;
+    float th  = 1.4f;
+    dl->PathArcTo(c, rad, -IM_PI * 0.55f, IM_PI * 0.90f, 16);
     dl->PathStroke(col, ImDrawFlags_None, th);
-    float ang = IM_PI * 0.85f;
-    ImVec2 tip  = {c.x + rad * std::cos(ang), c.y + rad * std::sin(ang)};
-    ImVec2 perp = {-std::sin(ang), std::cos(ang)};
-    ImVec2 back = {std::cos(ang), std::sin(ang)};
-    float asz = r * 0.42f;
+    float ang = IM_PI * 0.90f;
+    ImVec2 tip = {c.x + rad * std::cos(ang), c.y + rad * std::sin(ang)};
+    float asz = r * 0.30f;
     dl->AddTriangleFilled(
-        {tip.x + back.x * asz,               tip.y + back.y * asz},
-        {tip.x - perp.x * asz * 0.7f,        tip.y - perp.y * asz * 0.7f},
-        {tip.x + perp.x * asz * 0.7f,        tip.y + perp.y * asz * 0.7f}, col);
+        {tip.x, tip.y - asz * 0.3f},
+        {tip.x + asz * 0.8f, tip.y + asz * 0.6f},
+        {tip.x - asz * 0.6f, tip.y + asz * 0.8f}, col);
+}
+
+inline void LPDrawGrid(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+    float cs = r * 0.34f, g = r * 0.18f;
+    for (int rI = 0; rI < 2; rI++) {
+        for (int cI = 0; cI < 2; cI++) {
+            ImVec2 o = { c.x - cs - g * 0.5f + cI * (cs + g), c.y - cs - g * 0.5f + rI * (cs + g) };
+            dl->AddRectFilled(o, {o.x + cs, o.y + cs}, col, 1.2f);
+        }
+    }
+}
+
+inline void LPDrawList(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+    float w = r * 1.0f, h = r * 0.18f, g = r * 0.18f;
+    float totalH = h * 3.0f + g * 2.0f;
+    float startY = c.y - totalH * 0.5f;
+    for (int i = 0; i < 3; i++) {
+        float y = startY + i * (h + g);
+        dl->AddRectFilled({c.x - w * 0.5f, y}, {c.x + w * 0.5f, y + h}, col, 1.0f);
+    }
 }
 
 // ── Slider compacto para controlar el zoom de las miniaturas (grid) ────────
-// Antes: ImGui::SliderFloat con estilos pisados (barra gruesa, y encima con
-// el acento violeta-azul de LP::Accent, que ya no combina con el tema gris
-// del resto de la app). Ahora rutea a DS::ModernSlider (track fino + thumb
-// circular animado) con los tokens grises de DS::.
 inline bool LPZoomSlider(const char* id, float* zoom, float minZ, float maxZ, float width) {
     bool changed = ProyecThor::UI::DS::ModernSlider(id, zoom, minZ, maxZ, width);
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-        ImGui::SetTooltip("Tamano de las miniaturas");
+        ImGui::SetTooltip("Tamaño de las miniaturas");
     return changed;
 }
 

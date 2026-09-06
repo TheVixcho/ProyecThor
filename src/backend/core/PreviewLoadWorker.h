@@ -59,6 +59,8 @@ public:
     // mientras exista este worker.
     void RequestLoad(VLCBasePlayer* player, const std::string& path, bool loop, bool startMuted);
     void RequestStop(VLCBasePlayer* player);
+    void RequestStopSync(VLCBasePlayer* player, int timeoutMs = 1000);
+    void Flush(int timeoutMs = 1000);
 
 private:
     void ThreadFunc();

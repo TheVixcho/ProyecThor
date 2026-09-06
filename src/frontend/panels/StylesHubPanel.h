@@ -3,6 +3,7 @@
 #include "BackgroundsPanel.h"
 #include "CanvasStylesPanel.h"
 #include "ShadersPanel.h"
+#include "layers/LayersTransitionsTab.h"
 #include "frontend/views/Announcements.h"
 #include "capture/CapturePanel.h"
 #include <string>
@@ -32,7 +33,10 @@ public:
     // TransitionPanel sigue siendo dueño de UIManager (su Update/Trigger ya
     // corre incondicionalmente cada frame, independiente de este hub) — acá
     // solo se recibe un puntero para dibujar su UI de configuracion.
-    void SetTransitionPanel(TransitionPanel* tp) { m_TransitionsRef = tp; }
+    void SetTransitionPanel(TransitionPanel* tp) {
+        m_TransitionsRef = tp;
+        m_TransitionsTab.SetTransitionPanel(tp);
+    }
 
     // Usado por UIManager (bloque ProjectorLive) para llegar a Anuncios/
     // Captura en vivo sin que sean IPanel propios (mismo patron que HomePanel
@@ -42,20 +46,25 @@ public:
 
 private:
     // Barra compacta de transicion (duracion + Sin transicion/Disolver/
-    // Avanzado) dibujada arriba del contenido de Estilos — ver Render().
-    // "Avanzado" abre el panel completo (m_TransitionsRef->RenderContent())
-    // como popup, para los tipos complejos (Zoom, Slide, Cover, Uncover).
+    // Avanzado). Ya no se dibuja fija arriba de Estilos (le robaba espacio
+    // vertical a algo que solo importa para canciones/multi-slide) -- ahora
+    // vive detras de un icono chico en el rail de arriba (ver
+    // RenderTransitionRailButton), como un popup flotante. "Avanzado" abre
+    // el panel completo (m_TransitionsRef->RenderContent()) como OTRO popup
+    // anidado, para los tipos complejos (Zoom, Slide, Cover, Uncover).
     void RenderTransitionQuickBar();
+    void RenderTransitionRailButton();
 
     UIManager*    m_UIManager = nullptr;
     StylesSection m_CurrentSection = StylesSection::Backgrounds;
 
-    BackgroundsPanel   m_Backgrounds;
-    CanvasStylesPanel  m_Styles;
-    ShadersPanel       m_Shaders;
-    TransitionPanel*   m_TransitionsRef = nullptr;
-    Announcements      m_Announcements;
-    CapturePanel       m_Capture;
+    BackgroundsPanel      m_Backgrounds;
+    CanvasStylesPanel     m_Styles;
+    ShadersPanel          m_Shaders;
+    TransitionPanel*      m_TransitionsRef = nullptr;
+    LayersTransitionsTab  m_TransitionsTab; // pestaña "Transiciones" (catalogo con nombre)
+    Announcements         m_Announcements;
+    CapturePanel          m_Capture;
 };
 
 } // namespace ProyecThor::UI

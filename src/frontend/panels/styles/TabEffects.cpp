@@ -6,13 +6,17 @@ namespace ProyecThor::UI {
 
 void TabEffects::RenderEffectCard(const char* title, const ImVec4& accent, float colWidth,
                                    bool& enabled, float* color4,
-                                   float* intensity, const char* intensityLabel)
+                                   float* intensity, const char* intensityLabel,
+                                   float* color4B, float* angleDegrees, const char* angleLabel)
 {
     ImGui::PushID(title);
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2 p0 = ImGui::GetCursorScreenPos();
-    float  cardH = 40.0f + (enabled ? ((color4 ? 34.0f : 0.0f) + (intensity ? 34.0f : 0.0f)) : 0.0f);
+    float  cardH = 40.0f + (enabled ? (
+        (color4 ? 34.0f : 0.0f) + (color4B ? 34.0f : 0.0f) +
+        (intensity ? 34.0f : 0.0f) + (angleDegrees ? 34.0f : 0.0f)
+    ) : 0.0f);
     ImVec2 p1 = { p0.x + colWidth, p0.y + cardH };
 
     ImU32 bg = enabled
@@ -45,6 +49,14 @@ void TabEffects::RenderEffectCard(const char* title, const ImVec4& accent, float
         y += 34.0f;
     }
 
+    if (enabled && color4B) {
+        ImGui::SetCursorScreenPos({ p0.x + 12.0f, y });
+        ImGui::SetNextItemWidth(colWidth - 24.0f);
+        ImGui::ColorEdit4("##colorB", color4B,
+            ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_NoInputs);
+        y += 34.0f;
+    }
+
     if (enabled && intensity) {
         ImGui::SetCursorScreenPos({ p0.x + 12.0f, y });
         ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
@@ -52,6 +64,17 @@ void TabEffects::RenderEffectCard(const char* title, const ImVec4& accent, float
         ImGui::PopStyleColor();
         ImGui::SetCursorScreenPos({ p0.x + 12.0f, y + 16.0f });
         DS::ModernSlider("##intensity", intensity, 0.0f, 1.0f, colWidth - 24.0f, CanvaPalette::ToU32(accent));
+        y += 34.0f;
+    }
+
+    if (enabled && angleDegrees) {
+        ImGui::SetCursorScreenPos({ p0.x + 12.0f, y });
+        ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
+        ImGui::TextUnformatted(angleLabel);
+        ImGui::PopStyleColor();
+        ImGui::SetCursorScreenPos({ p0.x + 12.0f, y + 16.0f });
+        ImGui::SetNextItemWidth(colWidth - 24.0f);
+        ImGui::DragFloat("##angle", angleDegrees, 1.0f, -180.0f, 180.0f, "%.0f°");
     }
 
     // Resetear cursor a p0 antes del Dummy final: los widgets de arriba se
@@ -61,15 +84,13 @@ void TabEffects::RenderEffectCard(const char* title, const ImVec4& accent, float
     ImGui::PopID();
 }
 
-void TabEffects::Render(StyleData& data, float colWidth) {
+void TabEffects::Render(Core::TextEffectsData& fx, float colWidth) {
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
     CanvaStyleEditor::Badge("EFECTOS DE TEXTO", CanvaPalette::Accent);
     ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
     CanvaStyleEditor::SectionLabel("Capas dibujadas sobre las letras, de atras hacia adelante.");
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
-
-    auto& fx = data.effects;
 
     RenderEffectCard("Fondo", CanvaPalette::Accent, colWidth,
                       fx.bgEnabled, fx.bgColor, nullptr, nullptr);
@@ -80,7 +101,7 @@ void TabEffects::Render(StyleData& data, float colWidth) {
     RenderEffectCard("Sombra", CanvaPalette::Accent, colWidth,
                       fx.shadowEnabled, fx.shadowColor, &fx.shadowIntensity, "Distancia");
 
-    RenderEffectCard("Aberracion cromatica", CanvaPalette::Accent, colWidth,
+    RenderEffectCard("Aberración cromática", CanvaPalette::Accent, colWidth,
                       fx.chromaticAberrationEnabled, nullptr,
                       &fx.chromaticAberrationIntensity, "Intensidad");
 
@@ -92,6 +113,18 @@ void TabEffects::Render(StyleData& data, float colWidth) {
 
     RenderEffectCard("Subrayado", CanvaPalette::Accent, colWidth,
                       fx.underlineEnabled, fx.underlineColor, &fx.underlineThickness, "Grosor");
+
+    RenderEffectCard("Texto 3D", CanvaPalette::Accent, colWidth,
+                      fx.text3dEnabled, fx.text3dColor, &fx.text3dDepth, "Profundidad");
+
+    RenderEffectCard("Degradado de color", CanvaPalette::Pink, colWidth,
+                      fx.gradientEnabled, fx.gradientColorA, nullptr, nullptr,
+                      fx.gradientColorB, &fx.gradientAngle, "Angulo");
+
+    RenderEffectCard("Transparencia con angulo", CanvaPalette::Accent, colWidth,
+                      fx.opacityGradientEnabled, nullptr,
+                      &fx.opacityGradientStrength, "Fuerza",
+                      nullptr, &fx.opacityGradientAngle, "Angulo");
 }
 
 } // namespace ProyecThor::UI

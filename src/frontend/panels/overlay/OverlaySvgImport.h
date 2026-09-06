@@ -30,7 +30,7 @@ std::vector<OverlayLayer> ImportSvgAsLayers(const std::string& svgPath,
 // tal cual se veria en cualquier visor). Pensado para archivos que no
 // agrupan de forma util para separar en capas -- en la practica, Canva
 // exporta cada forma/glifo suelto como su propio grupo de primer nivel sin
-// jerarquia real de "capas de diseño", asi que ImportSvgAsLayers termina
+// jerarquia real de "capas de diseño", así que ImportSvgAsLayers termina
 // fragmentando en decenas de pedazos irreconocibles. Esta funcion es el
 // resultado seguro/garantizado: se ve exactamente igual que el archivo
 // original, a costa de no poder mover/editar cada parte por separado.

@@ -1,11 +1,3 @@
-// AudioAlbumArt.cpp — Extraccion de portadas embebidas SIN dependencias externas
-// con licencias restrictivas. Implementa parsers binarios propios para cada
-// contenedor (ID3v2, FLAC, Ogg/Opus Vorbis Comment, MP4 box structure) en vez
-// de TagLib (LGPL 2.1 / MPL 1.1), evitando cualquier problema de licencia al
-// enlazar estaticamente en un binario comercial cerrado.
-//
-// Unica dependencia externa: stb_image (dominio publico / MIT-0), ya usada
-// en el proyecto, para decodificar los bytes JPEG/PNG embebidos.
 
 #include "AudioAlbumArt.h"
 #include "audio/AudioHelpers.h"
@@ -23,8 +15,6 @@ namespace fs = std::filesystem;
 
 namespace ProyecThor::Audio {
 
-// ─── Apertura de archivo binario respetando rutas UTF-8 en Windows ───────────
-
 static std::ifstream OpenBinaryFile(const std::string& utf8Path)
 {
 #ifdef _WIN32
@@ -34,8 +24,6 @@ static std::ifstream OpenBinaryFile(const std::string& utf8Path)
     return std::ifstream(utf8Path, std::ios::binary);
 #endif
 }
-
-// ─── Helpers de lectura de enteros multibyte ─────────────────────────────────
 
 static uint32_t ReadBE32(const uint8_t* p)
 {
@@ -52,8 +40,6 @@ static uint32_t ReadLE32(const uint8_t* p)
            (static_cast<uint32_t>(p[2]) << 16) |
            (static_cast<uint32_t>(p[3]) << 24);
 }
-
-// ─── Base64 minimal (usado para METADATA_BLOCK_PICTURE en Ogg/Vorbis) ───────
 
 static const std::string kB64Chars =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -77,12 +63,9 @@ static std::vector<uint8_t> Base64Decode(const std::string& in)
     return out;
 }
 
-// ─── Decodificar bytes de imagen con stb_image ───────────────────────────────
-
 static bool DecodeImageBytes(const uint8_t* data, size_t size, AlbumArt& out)
 {
     int w = 0, h = 0, ch = 0;
-    // STBI_rgb_alpha fuerza 4 canales (RGBA), que es lo que ImGui/OpenGL esperan
     unsigned char* pixels = stbi_load_from_memory(data, static_cast<int>(size), &w, &h, &ch, 4);
 
     if (!pixels) {
@@ -97,11 +80,6 @@ static bool DecodeImageBytes(const uint8_t* data, size_t size, AlbumArt& out)
     return true;
 }
 
-// ─── Decodificar un bloque binario tipo METADATA_BLOCK_PICTURE ───────────────
-// Mismo layout para el bloque PICTURE nativo de FLAC y para el contenido
-// (una vez decodificado de base64) del comentario METADATA_BLOCK_PICTURE
-// de Vorbis/Opus. Todos los enteros son big-endian.
-
 static void DecodePictureBlock(const uint8_t* data, size_t size, AlbumArt& out)
 {
     if (size < 32) return;
@@ -109,7 +87,7 @@ static void DecodePictureBlock(const uint8_t* data, size_t size, AlbumArt& out)
     const uint8_t* p   = data;
     const uint8_t* end = data + size;
 
-    p += 4; // tipo de imagen (no lo necesitamos)
+    p += 4;
     if (p + 4 > end) return;
 
     uint32_t mimeLen = ReadBE32(p); p += 4;
@@ -121,7 +99,7 @@ static void DecodePictureBlock(const uint8_t* data, size_t size, AlbumArt& out)
     if (p + descLen > end) return;
     p += descLen;
 
-    p += 16; // ancho, alto, profundidad de color, numero de colores
+    p += 16;
     if (p + 4 > end) return;
 
     uint32_t dataLen = ReadBE32(p); p += 4;
@@ -129,10 +107,6 @@ static void DecodePictureBlock(const uint8_t* data, size_t size, AlbumArt& out)
 
     DecodeImageBytes(p, dataLen, out);
 }
-
-// ───────────────────────────────────────────────────────────────────────────
-//  MP3 — ID3v2, frame APIC (o PIC en v2.2)
-// ───────────────────────────────────────────────────────────────────────────
 
 static AlbumArt ExtractMP3Cover(const std::string& utf8Path)
 {
@@ -149,7 +123,6 @@ static AlbumArt ExtractMP3Cover(const std::string& utf8Path)
     uint8_t flags         = header[5];
     bool    extendedHeader = (flags & 0x40) != 0;
 
-    // El tamaño total del tag siempre se codifica syncsafe (7 bits por byte)
     uint32_t tagSize =
         (static_cast<uint32_t>(header[6]) << 21) |
         (static_cast<uint32_t>(header[7]) << 14) |
@@ -165,7 +138,6 @@ static AlbumArt ExtractMP3Cover(const std::string& utf8Path)
 
     size_t pos = 0;
 
-    // Saltar el encabezado extendido si existe (su tamaño tambien es syncsafe)
     if (extendedHeader && pos + 4 <= tagData.size()) {
         uint32_t extSize =
             (static_cast<uint32_t>(tagData[pos]) << 21) |
@@ -181,7 +153,6 @@ static AlbumArt ExtractMP3Cover(const std::string& utf8Path)
         size_t      frameHeaderLen = 0;
 
         if (majorVersion == 2) {
-            // ID3v2.2: ID de 3 caracteres, tamaño de 3 bytes plano (big endian)
             if (pos + 6 > tagData.size()) break;
             frameId.assign(reinterpret_cast<const char*>(&tagData[pos]), 3);
             frameSize = (static_cast<uint32_t>(tagData[pos + 3]) << 16) |
@@ -189,20 +160,17 @@ static AlbumArt ExtractMP3Cover(const std::string& utf8Path)
                          static_cast<uint32_t>(tagData[pos + 5]);
             frameHeaderLen = 6;
         } else {
-            // ID3v2.3 / ID3v2.4: ID de 4 caracteres, tamaño de 4 bytes, 2 de flags
             if (pos + 10 > tagData.size()) break;
             frameId.assign(reinterpret_cast<const char*>(&tagData[pos]), 4);
-            if (frameId[0] == '\0') break; // relleno final del tag
+            if (frameId[0] == '\0') break;
 
             if (majorVersion >= 4) {
-                // ID3v2.4: tamaño de frame syncsafe
                 frameSize =
                     (static_cast<uint32_t>(tagData[pos + 4]) << 21) |
                     (static_cast<uint32_t>(tagData[pos + 5]) << 14) |
                     (static_cast<uint32_t>(tagData[pos + 6]) <<  7) |
                      static_cast<uint32_t>(tagData[pos + 7]);
             } else {
-                // ID3v2.3: tamaño de frame plano (NO syncsafe)
                 frameSize = ReadBE32(&tagData[pos + 4]);
             }
             frameHeaderLen = 10;
@@ -222,18 +190,14 @@ static AlbumArt ExtractMP3Cover(const std::string& utf8Path)
             p += 1;
 
             if (majorVersion == 2) {
-                // Formato de imagen de 3 caracteres ("JPG", "PNG", etc.)
                 p += 3;
             } else {
-                // Cadena MIME terminada en un byte nulo
                 while (p < end && *p != 0x00) p++;
                 if (p < end) p++;
             }
 
-            if (p < end) p++; // tipo de imagen (1 byte)
+            if (p < end) p++;
 
-            // Descripcion: terminada en un byte nulo (Latin1/UTF8)
-            // o en dos bytes nulos (UTF16, codificaciones 1 y 2)
             bool doubleNullTerminator = (textEncoding == 1 || textEncoding == 2);
             if (doubleNullTerminator) {
                 while (p + 1 < end && !(p[0] == 0x00 && p[1] == 0x00)) p += 2;
@@ -253,10 +217,6 @@ static AlbumArt ExtractMP3Cover(const std::string& utf8Path)
 
     return art;
 }
-
-// ───────────────────────────────────────────────────────────────────────────
-//  FLAC — bloque de metadatos PICTURE (tipo 6)
-// ───────────────────────────────────────────────────────────────────────────
 
 static AlbumArt ExtractFLACCover(const std::string& utf8Path)
 {
@@ -296,10 +256,6 @@ static AlbumArt ExtractFLACCover(const std::string& utf8Path)
 
     return art;
 }
-
-// ───────────────────────────────────────────────────────────────────────────
-//  OGG / Opus — METADATA_BLOCK_PICTURE dentro del Vorbis Comment header
-// ───────────────────────────────────────────────────────────────────────────
 
 static void ParseVorbisCommentForPicture(const uint8_t* data, size_t size, AlbumArt& out)
 {
@@ -350,7 +306,7 @@ static AlbumArt ExtractOggCover(const std::string& utf8Path)
     uint32_t trackedSerial    = 0;
     bool     serialKnown      = false;
     int      packetsChecked   = 0;
-    const int kMaxPacketsToCheck = 8; // identificacion + comentarios + margen
+    const int kMaxPacketsToCheck = 8;
 
     while (file.good() && packetsChecked < kMaxPacketsToCheck) {
         uint8_t pageHeader[27];
@@ -387,7 +343,6 @@ static AlbumArt ExtractOggCover(const std::string& utf8Path)
             }
 
             if (seg < 255) {
-                // Fin de paquete completo
                 if (belongsToTrackedStream && packetStarted) {
                     packetsChecked++;
 
@@ -414,10 +369,6 @@ static AlbumArt ExtractOggCover(const std::string& utf8Path)
 
     return art;
 }
-
-// ───────────────────────────────────────────────────────────────────────────
-//  MP4 / M4A — atom covr (moov/udta/meta/ilst/covr/data)
-// ───────────────────────────────────────────────────────────────────────────
 
 static bool ReadBoxHeader(std::ifstream& file, uint64_t& boxSize,
                           std::string& boxType, uint64_t& headerLen)
@@ -447,10 +398,9 @@ static bool ReadBoxHeader(std::ifstream& file, uint64_t& boxSize,
     return true;
 }
 
-// Recorre recursivamente los boxes MP4 buscando moov/udta/meta/ilst/covr/data
 static bool FindMP4CoverBox(std::ifstream& file, uint64_t rangeEnd, AlbumArt& out, int depth)
 {
-    if (depth > 8) return false; // limite de seguridad contra recursion excesiva
+    if (depth > 8) return false;
 
     while (true) {
         uint64_t curPos = static_cast<uint64_t>(file.tellg());
@@ -461,8 +411,8 @@ static bool FindMP4CoverBox(std::ifstream& file, uint64_t rangeEnd, AlbumArt& ou
         std::string boxType;
         if (!ReadBoxHeader(file, boxSize, boxType, headerLen)) break;
 
-        if (boxSize == 0) boxSize = rangeEnd - curPos; // box se extiende hasta el final del rango
-        if (boxSize < headerLen) break;                 // box malformado, evitar bucle infinito
+        if (boxSize == 0) boxSize = rangeEnd - curPos;
+        if (boxSize < headerLen) break;
 
         uint64_t boxEnd = curPos + boxSize;
         if (boxEnd > rangeEnd) boxEnd = rangeEnd;
@@ -470,12 +420,9 @@ static bool FindMP4CoverBox(std::ifstream& file, uint64_t rangeEnd, AlbumArt& ou
         if (boxType == "moov" || boxType == "udta" || boxType == "ilst" || boxType == "covr") {
             if (FindMP4CoverBox(file, boxEnd, out, depth + 1)) return true;
         } else if (boxType == "meta") {
-            // El box 'meta' de estilo iTunes/QuickTime lleva 4 bytes
-            // adicionales (version + flags) antes de sus hijos.
             file.seekg(static_cast<std::streamoff>(curPos + headerLen + 4), std::ios::beg);
             if (FindMP4CoverBox(file, boxEnd, out, depth + 1)) return true;
         } else if (boxType == "data") {
-            // Layout: 4 bytes tipo bien conocido, 4 bytes locale, luego datos crudos
             uint64_t payloadStart = curPos + headerLen + 8;
             uint64_t payloadSize  = (boxEnd > payloadStart) ? (boxEnd - payloadStart) : 0;
             if (payloadSize > 0) {
@@ -510,10 +457,6 @@ static AlbumArt ExtractMP4Cover(const std::string& utf8Path)
     return art;
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-//  Dispatcher publico
-// ───────────────────────────────────────────────────────────────────────────
-
 AlbumArt ExtractAlbumArt(const std::string& utf8FilePath)
 {
     AlbumArt art;
@@ -535,10 +478,8 @@ AlbumArt ExtractAlbumArt(const std::string& utf8FilePath)
         } else if (ext == "m4a" || ext == "mp4") {
             art = ExtractMP4Cover(utf8FilePath);
         }
-        // Nota: .wav, .aac (ADTS crudo) y .wma no llevan portada embebida
-        // en un contenedor estandar soportado aqui, por lo que se omiten.
     } catch (const std::exception& e) {
-        std::cerr << "[AlbumArt] Excepcion al leer portada: " << e.what() << std::endl;
+        std::cerr << "[AlbumArt] Excepción al leer portada: " << e.what() << std::endl;
     }
 
     if (!art.HasData())
@@ -549,13 +490,10 @@ AlbumArt ExtractAlbumArt(const std::string& utf8FilePath)
     return art;
 }
 
-// ─── UploadAlbumArtToGL ───────────────────────────────────────────────────────
-
 void UploadAlbumArtToGL(AlbumArt& art)
 {
     if (!art.HasData()) return;
 
-    // Destruir textura previa si existe
     if (art.texID != 0) {
         glDeleteTextures(1, &art.texID);
         art.texID = 0;
@@ -575,12 +513,9 @@ void UploadAlbumArtToGL(AlbumArt& art)
 
     art.texID = tex;
 
-    // Liberar memoria de CPU una vez subida a GPU
     art.pixels.clear();
     art.pixels.shrink_to_fit();
 }
-
-// ─── FreeAlbumArtTexture ──────────────────────────────────────────────────────
 
 void FreeAlbumArtTexture(AlbumArt& art)
 {
@@ -593,4 +528,4 @@ void FreeAlbumArtTexture(AlbumArt& art)
     art.height = 0;
 }
 
-} // namespace ProyecThor::Audio
+}

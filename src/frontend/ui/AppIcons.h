@@ -36,7 +36,7 @@ inline void DrawIcon_Pads(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 }
 
 // Yggdrasil — arbol sin hojas (tronco + ramas desnudas), el "arbol del
-// mundo": funcion fundamental de primer nivel, no un icono de red generico.
+// mundo": función fundamental de primer nivel, no un icono de red generico.
 inline void DrawIcon_Yggdrasil(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 {
     float thick = sz * 0.06f;
@@ -129,18 +129,32 @@ inline void DrawIcon_Palette(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
         dl->AddCircleFilled(IcPt(o, sz, x, 0.30f), sz * 0.06f, col, 10);
 }
 
-// Overlays — marco de imagen (sol + montaña) con una linea de texto debajo
+// Overlays — capas superpuestas (layout/overlay multi-nivel)
 inline void DrawIcon_Overlay(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 {
+    float thick = sz * 0.075f;
+    // Capa trasera
+    dl->AddRect(IcPt(o, sz, 0.28f, 0.16f), IcPt(o, sz, 0.86f, 0.68f),
+                col, sz * 0.07f, ImDrawFlags_RoundCornersAll, thick * 0.85f);
+    // Capa frontal superpuesta con fondo opaco para dar profundidad
+    dl->AddRectFilled(IcPt(o, sz, 0.14f, 0.32f), IcPt(o, sz, 0.72f, 0.84f),
+                      IM_COL32(20, 20, 30, 230), sz * 0.07f);
+    dl->AddRect(IcPt(o, sz, 0.14f, 0.32f), IcPt(o, sz, 0.72f, 0.84f),
+                col, sz * 0.07f, ImDrawFlags_RoundCornersAll, thick);
+    // Detalles internos en la capa frontal (texto / barra simulada)
+    dl->AddLine(IcPt(o, sz, 0.24f, 0.48f), IcPt(o, sz, 0.62f, 0.48f), col, sz * 0.06f);
+    dl->AddLine(IcPt(o, sz, 0.24f, 0.64f), IcPt(o, sz, 0.50f, 0.64f), col, sz * 0.06f);
+}
+
+// Web — globo (circulo + meridiano + paralelo), navegador embebido generico
+inline void DrawIcon_Globe(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
     float thick = sz * 0.065f;
-    dl->AddRect(IcPt(o, sz, 0.14f, 0.14f), IcPt(o, sz, 0.86f, 0.68f),
-                col, sz * 0.04f, ImDrawFlags_RoundCornersAll, thick);
-    dl->AddCircleFilled(IcPt(o, sz, 0.32f, 0.32f), sz * 0.06f, col, 10);
-    dl->AddTriangleFilled(
-        IcPt(o, sz, 0.20f, 0.60f), IcPt(o, sz, 0.42f, 0.36f), IcPt(o, sz, 0.62f, 0.60f), col);
-    dl->AddTriangleFilled(
-        IcPt(o, sz, 0.44f, 0.60f), IcPt(o, sz, 0.66f, 0.40f), IcPt(o, sz, 0.80f, 0.60f), col);
-    dl->AddRectFilled(IcPt(o, sz, 0.20f, 0.80f), IcPt(o, sz, 0.80f, 0.88f), col, sz * 0.02f);
+    ImVec2 center = IcPt(o, sz, 0.5f, 0.5f);
+    float  r = sz * 0.36f;
+    dl->AddCircle(center, r, col, 24, thick);
+    dl->AddEllipse(center, ImVec2(r * 0.42f, r), col, 0.0f, 24, thick);
+    dl->AddLine(IcPt(o, sz, 0.14f, 0.5f), IcPt(o, sz, 0.86f, 0.5f), col, thick);
 }
 
 // Estilos — "Aa" (icono tipico de formato de texto/tipografia)
@@ -183,6 +197,66 @@ inline void DrawIcon_Shader(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
         IcPt(o, sz, 0.74f, 0.38f), IcPt(o, sz, 0.68f, 0.26f), col);
     dl->AddCircleFilled(IcPt(o, sz, 0.20f, 0.30f), sz * 0.04f, col, 8);
     dl->AddCircleFilled(IcPt(o, sz, 0.86f, 0.62f), sz * 0.035f, col, 8);
+}
+
+// 3D — Cubo isométrico 3D
+inline void DrawIcon_Cube3D(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = std::max(1.2f, sz * 0.065f);
+    ImVec2 center = IcPt(o, sz, 0.5f, 0.5f);
+    ImVec2 top    = IcPt(o, sz, 0.5f, 0.16f);
+    ImVec2 bot    = IcPt(o, sz, 0.5f, 0.84f);
+    ImVec2 midL   = IcPt(o, sz, 0.18f, 0.35f);
+    ImVec2 midR   = IcPt(o, sz, 0.82f, 0.35f);
+    ImVec2 botL   = IcPt(o, sz, 0.18f, 0.65f);
+    ImVec2 botR   = IcPt(o, sz, 0.82f, 0.65f);
+
+    // Cara superior
+    dl->AddQuad(top, midR, center, midL, col, thick);
+    // Cara izquierda
+    dl->AddQuad(midL, center, bot, botL, col, thick);
+    // Cara derecha
+    dl->AddQuad(center, midR, botR, bot, col, thick);
+}
+
+// Lab — Laboratorio Matemático, gráficas y fórmulas f(x)
+inline void DrawIcon_Formula(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = std::max(1.2f, sz * 0.07f);
+    // Ejes cartesianos (X e Y)
+    dl->AddLine(IcPt(o, sz, 0.16f, 0.84f), IcPt(o, sz, 0.88f, 0.84f), col, thick);
+    dl->AddLine(IcPt(o, sz, 0.20f, 0.16f), IcPt(o, sz, 0.20f, 0.88f), col, thick);
+
+    // Curva de función suave f(x) estilo sin/parábola
+    const int pts = 14;
+    ImVec2 prevPt;
+    for (int i = 0; i <= pts; ++i) {
+        float t = (float)i / (float)pts;
+        float px = 0.20f + t * 0.64f;
+        float py = 0.72f - 0.44f * std::sin(t * 3.14159f * 0.9f);
+        ImVec2 pt = IcPt(o, sz, px, py);
+        if (i > 0) {
+            dl->AddLine(prevPt, pt, col, thick * 1.3f);
+        }
+        prevPt = pt;
+    }
+    // Punto de vértice / evaluación
+    dl->AddCircleFilled(IcPt(o, sz, 0.52f, 0.28f), sz * 0.07f, col, 10);
+}
+
+inline void DrawIcon_Grid(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = std::max(1.2f, sz * 0.065f);
+    float boxSz = sz * 0.28f;
+    float gap = sz * 0.12f;
+    float start = (sz - (boxSz * 2.0f + gap)) * 0.5f;
+    for (int y = 0; y < 2; ++y) {
+        for (int x = 0; x < 2; ++x) {
+            ImVec2 p0 = { o.x + start + x * (boxSz + gap), o.y + start + y * (boxSz + gap) };
+            ImVec2 p1 = { p0.x + boxSz, p0.y + boxSz };
+            dl->AddRect(p0, p1, col, sz * 0.05f, ImDrawFlags_RoundCornersAll, thick);
+        }
+    }
 }
 
 } // namespace ProyecThor::UI::AppIcons

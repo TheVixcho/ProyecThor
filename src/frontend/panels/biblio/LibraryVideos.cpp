@@ -2,6 +2,7 @@
 #include "LibraryIcons.h"
 #include "LibraryStyles.h"
 #include "LibraryHelpers.h"
+#include "LibraryVideoPreview.h"
 #include "ui/DesignSystem.h"
 #include "frontend/ui/bin/StyleGeneralApp.h"
 #include "frontend/panels/layers/LayersTheme.h"
@@ -177,6 +178,7 @@ static void DrainVideoThumbnails() {
 }
 
 static std::string VideoFullPath(const std::string& filename) {
+    if (std::filesystem::path(filename).is_absolute()) return filename;
     return GetAssetsPath() + "/videos/" + filename;
 }
 
@@ -196,6 +198,29 @@ static bool RenderVideoContextMenu(LibraryContext& ctx, const std::string& filen
         // frio como el crossfade sobre lo que esta al aire.
         Core::PresentationCore::Get().SetBackgroundMedia(fp, true, /*allowAudio=*/true);
         Core::PresentationCore::Get().SetProjecting(true);
+    }
+    if (ImGui::MenuItem("Ver en pantalla completa") && origIdx >= 0) {
+        OpenVideoPreview(ctx, origIdx);
+    }
+    ImGui::Separator();
+    if (ImGui::MenuItem("Mover a Fondos (Backgrounds)")) {
+        std::error_code ec;
+        std::string srcPath = VideoFullPath(filename);
+        fs::path src(srcPath);
+        std::string targetDir = GetAssetsPath() + "/backgrounds";
+        fs::create_directories(targetDir, ec);
+        fs::path dst = fs::path(targetDir) / src.filename();
+        fs::rename(src, dst, ec);
+        ctx.refreshList();
+    }
+    if (ImGui::MenuItem("Copiar a Fondos (Backgrounds)")) {
+        std::error_code ec;
+        std::string srcPath = VideoFullPath(filename);
+        fs::path src(srcPath);
+        std::string targetDir = GetAssetsPath() + "/backgrounds";
+        fs::create_directories(targetDir, ec);
+        fs::path dst = fs::path(targetDir) / src.filename();
+        fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
     }
     ImGui::Separator();
     if (ImGui::MenuItem("Renombrar")) {
@@ -260,7 +285,7 @@ static void RenderVideoRow(LibraryContext& ctx, const std::string& filename, int
     if (clicked && origIdx >= 0) {
         ctx.selectedIndex = origIdx;
         Core::LibrarySelection s;
-        s.title = filename;
+        s.title = VideoFullPath(filename);
         s.type  = Core::ItemType::Video;
         Core::PresentationCore::Get().SetSelection(s);
     }
@@ -268,6 +293,7 @@ static void RenderVideoRow(LibraryContext& ctx, const std::string& filename, int
     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
         std::string fullPath = VideoFullPath(filename);
         ImGui::SetDragDropPayload("VIDEO_TO_QUEUE", fullPath.c_str(), fullPath.size() + 1);
+        ImGui::SetDragDropPayload("MEDIA_ITEM_PATH", fullPath.c_str(), fullPath.size() + 1);
         ImGui::PushStyleColor(ImGuiCol_Text, DS::SuccessColor);
         ImGui::TextUnformatted(disp.c_str());
         ImGui::PopStyleColor();
@@ -331,19 +357,34 @@ static void RenderVideoCard(LibraryContext& ctx, const std::string& filename, in
     ImVec2 ns = ImGui::CalcTextSize(dn.c_str());
     dl->AddText({p0.x+(W-ns.x)*0.5f, p1.y-21.0f}, DS::TextPrimary, dn.c_str());
 
+    ImGui::SetNextItemAllowOverlap(); // deja que el boton de preview de abajo, dibujado encima, reciba su propio click
     ImGui::InvisibleButton(("##vidcard" + std::to_string(cardIdx)).c_str(), {W, H});
 
     if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left) && origIdx >= 0) {
         ctx.selectedIndex = origIdx;
         Core::LibrarySelection s;
-        s.title = filename;
+        s.title = VideoFullPath(filename);
         s.type  = Core::ItemType::Video;
         Core::PresentationCore::Get().SetSelection(s);
+    }
+
+    // Boton "ver en pantalla completa" -- centrado sobre la miniatura, solo
+    // visible al pasar el mouse (mismo hover t que ya se calcula arriba
+    // para el borde). Ver LibraryVideoPreview.h.
+    if (t > 0.01f && origIdx >= 0) {
+        const float playSz = 40.0f;
+        ImGui::SetCursorScreenPos({ pos.x + (W - playSz) * 0.5f, pos.y + (H - playSz) * 0.5f });
+        if (GlassIconButton(("pvopen" + std::to_string(cardIdx)).c_str(), "play", ">",
+                             "Ver en pantalla completa", { playSz, playSz }))
+        {
+            OpenVideoPreview(ctx, origIdx);
+        }
     }
 
     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
         std::string fullPath = VideoFullPath(filename);
         ImGui::SetDragDropPayload("VIDEO_TO_QUEUE", fullPath.c_str(), fullPath.size() + 1);
+        ImGui::SetDragDropPayload("MEDIA_ITEM_PATH", fullPath.c_str(), fullPath.size() + 1);
         ImGui::PushStyleColor(ImGuiCol_Text, DS::SuccessColor);
         ImGui::TextUnformatted(dn.c_str());
         ImGui::PopStyleColor();
@@ -402,6 +443,11 @@ void RenderVideoSection(LibraryContext& ctx)
     }
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(5);
+
+    // Se dibuja siempre, sin importar la pestaña activa -- tiene que poder
+    // seguir mostrandose/cerrandose aunque el operador cambie de pestaña
+    // mientras el preview a pantalla completa esta abierto.
+    RenderVideoPreviewOverlay(ctx);
 }
 
 // =============================================================================
@@ -448,21 +494,10 @@ void RenderLocalVideoList(LibraryContext& ctx)
         }
 
         ImGui::PushID("vidview");
-        if (UI::LPCornerIconBtn("##gridm", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
-                float cs = r*0.42f, g = r*0.18f;
-                for (int rI=0; rI<2; rI++) for (int cI=0; cI<2; cI++) {
-                    ImVec2 o = { c.x - cs - g*0.5f + cI*(cs+g), c.y - cs - g*0.5f + rI*(cs+g) };
-                    dl->AddRectFilled(o, {o.x+cs, o.y+cs}, col, 1.5f);
-                }
-            }, "Vista en cuadricula", {btnSz,btnSz}, s_GridMode))
+        if (UI::LPCornerIconBtn("##gridm", UI::LPDrawGrid, "Vista en cuadrícula", {btnSz, btnSz}, s_GridMode))
             s_GridMode = true;
         ImGui::SameLine(0, gap);
-        if (UI::LPCornerIconBtn("##listm", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
-                for (int i=0;i<3;i++) {
-                    float y = c.y - r*0.5f + i*r*0.5f;
-                    dl->AddRectFilled({c.x-r*0.7f, y}, {c.x+r*0.7f, y+r*0.22f}, col, 1.0f);
-                }
-            }, "Vista en lista", {btnSz,btnSz}, !s_GridMode))
+        if (UI::LPCornerIconBtn("##listm", UI::LPDrawList, "Vista en lista", {btnSz, btnSz}, !s_GridMode))
             s_GridMode = false;
         ImGui::PopID();
     }
@@ -551,6 +586,28 @@ void RenderLocalVideoList(LibraryContext& ctx)
             }
 
             ImGui::PopStyleVar(); // ItemSpacing
+        }
+
+        if (ImGui::BeginDragDropTarget()) {
+            auto HandleDrop = [&](const ImGuiPayload* payload) {
+                const char* droppedPath = (const char*)payload->Data;
+                if (droppedPath && *droppedPath) {
+                    std::error_code ec;
+                    fs::path src(droppedPath);
+                    std::string targetDir = GetAssetsPath() + "/videos";
+                    fs::create_directories(targetDir, ec);
+                    fs::path dst = fs::path(targetDir) / src.filename();
+                    fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+                    ctx.refreshList();
+                }
+            };
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("BG_FILE")) {
+                HandleDrop(payload);
+            }
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("BG_ITEM_PATH")) {
+                HandleDrop(payload);
+            }
+            ImGui::EndDragDropTarget();
         }
     }
     ImGui::EndChild();

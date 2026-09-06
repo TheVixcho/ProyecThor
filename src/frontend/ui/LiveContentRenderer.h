@@ -16,4 +16,12 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
 // por la ventana real de Stage como por el preview de ViewPanel en modo Stage.
 void DrawStageContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1);
 
+// Dibuja el fondo activo y el entrante (standby) aplicando la transición elegida
+// (Fade, ZoomIn, ZoomOut, Slide, Cover, Uncover, Iris/Teatro, etc.)
+void RenderBackgroundWithTransition(ImDrawList* dl,
+                                    void* activeTex, void* standbyTex,
+                                    ImVec2 pMin, ImVec2 pMax,
+                                    int transitionType, float progress,
+                                    bool isTransitionActive);
+
 } // namespace ProyecThor::UI

@@ -16,7 +16,7 @@ namespace ProyecThor::UI::Settings {
         void SetInitialCategory(int idx) { m_SelectedCategory = idx; }
 
         // Misma instancia que UIManager::GetOSCPanel() -- subcategoria "OSC"
-        // dentro de Ajustes > Proyeccion (ver CategoryProjection.cpp) pero
+        // dentro de Ajustes > Conexiones (ver CategoryConnections.cpp) pero
         // UIManager sigue siendo el dueño, para poder llamarle Update()
         // incondicionalmente cada frame sin importar si Ajustes esta
         // abierto. Ver cableado en UIManager::Initialize.
@@ -24,16 +24,16 @@ namespace ProyecThor::UI::Settings {
 
         // Misma instancia que UIManager::GetBroadcastPanel() -- subcategoria
         // "Streaming" (RTMP: Captura/Capa/Iniciar) dentro de Ajustes >
-        // Proyeccion, junto a Red/Mobile/OSC.
+        // Conexiones, junto a Red/Mobile/OSC.
         void SetBroadcastPanelRef(ProyecThor::UI::BroadcastPanel* ref) { m_BroadcastPanelRef = ref; }
 
         // Misma instancia que UIManager::GetRedPanel() -- subcategoria "Red"
-        // dentro de Ajustes > Proyeccion (antes vivia en el sidebar de
+        // dentro de Ajustes > Conexiones (antes vivia en el sidebar de
         // Library junto a Reloj/Render/Mobile).
         void SetStreamingPanelRef(ProyecThor::UI::StreamingPanel* ref) { m_StreamingPanelRef = ref; }
 
         // Misma instancia que UIManager::GetSyncPanel() -- subcategoria
-        // "Mobile" dentro de Ajustes > Proyeccion (control del SyncServer/
+        // "Mobile" dentro de Ajustes > Conexiones (control del SyncServer/
         // app movil companion).
         void SetSyncPanelRef(ProyecThor::UI::SyncPanel* ref) { m_SyncPanelRef = ref; }
     private:
@@ -77,12 +77,14 @@ namespace ProyecThor::UI::Settings {
 
         void RenderCategoryTheme();
         void RenderCategoryProjection();
+        void RenderCategoryConnections();
         void RenderCategoryStage();
         void RenderCategoryAudio();
         void RenderCategoryLanguage();
         void RenderCategoryUpdates();
         void RenderCategoryShortcuts();
-void RenderCategorySongs();
+        void RenderCategorySongs();
+        void RenderCategoryData();
 
         ProyecThor::UI::OSCPanel*       m_OSCPanelRef       = nullptr;
         ProyecThor::UI::BroadcastPanel* m_BroadcastPanelRef = nullptr;

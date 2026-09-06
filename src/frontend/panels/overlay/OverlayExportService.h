@@ -18,7 +18,7 @@ namespace ProyecThor::UI {
 //  El draw list a exportar lo arma el LLAMADOR (ver OverlayCanvasEditor::
 //  DrawLayersForExport) dibujando SOLO el contenido real de las capas, en un
 //  ImDrawList propio e independiente del que se usa para el canvas en vivo
-//  (que ademas tiene el cuadriculado "sin fondo" y el chrome de edicion) --
+//  (que además tiene el cuadriculado "sin fondo" y el chrome de edicion) --
 //  asi no hace falta ningun recorte/skip de comandos: lo que se pide
 //  exportar es exactamente lo que se exporta, sin ambiguedad.
 //

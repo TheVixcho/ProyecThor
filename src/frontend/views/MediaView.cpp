@@ -6,6 +6,7 @@
 #include <imgui.h>
 #include <iomanip>
 #include <sstream>
+#include <filesystem>
 
 namespace ProyecThor::UI {
 
@@ -30,37 +31,18 @@ namespace ProyecThor::UI {
         if (selection.title != m_LastSelectedFile) {
             m_LastSelectedFile = selection.title;
 
-            // FIX (crash en Windows/Wine): la cola del Monitor pasa por
-            // SetSelection(..., fromQueue=true) al arrancar/avanzar cada
-            // item, solo para que el titulo se muestre — no es una eleccion
-            // manual del operador en la Biblioteca. Antes esto no se
-            // distinguia, asi que cada avance de la cola disparaba TAMBIEN
-            // una carga en el reproductor de Preview del mismo archivo que
-            // la cola ya esta reproduciendo/precargando (a la vez que
-            // MonitorView::Render() hacia lo mismo sobre el mismo preview
-            // player) — dos/tres instancias de VLC abriendo el mismo
-            // archivo al mismo tiempo, lo que crasheaba en Windows.
             bool fromQueue = Core::PresentationCore::Get().IsSelectionFromQueue();
 
             if (selection.type == Core::ItemType::Video && fromQueue) {
-                // No tocar el preview para nada: ni cargarlo (evita el
-                // choque de instancias de VLC descripto arriba) ni
-                // detenerlo (si el operador tenia otra cosa en preview,
-                // que un avance interno de la cola no se lo pise).
             } else if (selection.type == Core::ItemType::Video) {
                 if (previewPlayer) {
                     std::string previewPath = selection.title;
 
-                    // Si NO es un enlace de internet, armamos la ruta local
-                    if (previewPath.rfind("http", 0) != 0) {
+                    if (previewPath.rfind("http", 0) != 0 && !std::filesystem::path(previewPath).is_absolute()) {
                         previewPath = VideosPath() + previewPath;
                     }
 
-                    // Carga en un hilo aparte (ver
-                    // PresentationCore::RequestPreviewLoad): el video en
-                    // vivo al publico nunca debe esperar a que el Preview
-                    // termine de abrir un archivo.
-                    Core::PresentationCore::Get().RequestPreviewLoad(previewPath, /*loop=*/true, /*startMuted=*/true);
+                    Core::PresentationCore::Get().RequestPreviewLoad(previewPath, true, true);
                     m_IsPlayingPreview = true;
                 }
             } else if (selection.type == Core::ItemType::Image) {
@@ -68,7 +50,11 @@ namespace ProyecThor::UI {
                     Core::PresentationCore::Get().RequestPreviewStop();
                     m_IsPlayingPreview = false;
                 }
-                m_ImageView.LoadImageFromFile(ImagesPath() + selection.title);
+                std::string imgPath = selection.title;
+                if (!std::filesystem::path(imgPath).is_absolute()) {
+                    imgPath = ImagesPath() + imgPath;
+                }
+                m_ImageView.LoadImageFromFile(imgPath);
                 m_ImageView.ResetAdjustments();
             } else {
                 if (previewPlayer) {
@@ -94,14 +80,18 @@ namespace ProyecThor::UI {
             }
             ImGui::EndChild();
         } else if (selection.type == Core::ItemType::Image) {
-            // (Mantenemos la lógica de la imagen como la tienes)
-            ImGui::TextDisabled("%s", selection.title.c_str());
+            std::string dispTitle = std::filesystem::path(selection.title).filename().string();
+            ImGui::TextDisabled("%s", dispTitle.c_str());
             ImGui::Spacing();
 
             ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.8f, 0.3f, 1.0f));
             if (ImGui::Button(str.mediaProjectImage, ImVec2(-1, 40))) {
-                Core::PresentationCore::Get().SetBackgroundMedia(ImagesPath() + selection.title, true);
+                std::string imgPath = selection.title;
+                if (!std::filesystem::path(imgPath).is_absolute()) {
+                    imgPath = ImagesPath() + imgPath;
+                }
+                Core::PresentationCore::Get().SetBackgroundMedia(imgPath, true);
             }
             ImGui::PopStyleColor(2);
 
@@ -118,10 +108,7 @@ namespace ProyecThor::UI {
             m_ImageView.Render(availSize.x, availSize.y - 10.0f);
 
         } else if (selection.type == Core::ItemType::Video) {
-            // --- AQUÍ ESTABA EL CAMBIO ---
-            // Simplemente dejamos este bloque vacío o añadimos un espaciado mínimo 
-            // si quieres que no se pegue al borde, pero ya no habrá textos.
         }
     }
 
-} // namespace ProyecThor::UI
+}

@@ -3,6 +3,7 @@
 #include "DesignSystem.h"
 #include "backend/core/PresentationCore.h"
 #include "frontend/ui/UIStrings.h"
+#include "frontend/ui/WikiHelp.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <algorithm>
@@ -17,12 +18,10 @@ static ImU32 ColU32(float r, float g, float b, float a = 1.0f) {
 static ImU32 ColA(ImU32 col, int a) {
     return (col & 0x00FFFFFFu) | (static_cast<ImU32>(std::clamp(a, 0, 255)) << 24);
 }
-// DS:: expone colores como ImU32; ImGui::TextColored/PushStyleColor piden ImVec4.
 static ImVec4 ToVec4(ImU32 col) {
     return ImGui::ColorConvertU32ToFloat4(col);
 }
 
-// Sombra suave reutilizando el mismo patrón visual que el resto de paneles.
 static void DrawSoftShadow(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float rounding) {
     for (float i = 1.0f; i <= 5.0f; i += 1.0f) {
         int alpha = static_cast<int>(34.0f - (i * 5.0f));
@@ -35,20 +34,16 @@ static void DrawSoftShadow(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float rounding)
 
 static constexpr int kPresetMinutes[] = { 5, 10, 15, 20, 30, 45 };
 
-// Constantes de espaciado, centralizadas para que todo el panel respete la
-// misma grilla en vez de numeros sueltos repartidos por cada funcion (eso
-// era buena parte de por que la UI se sentia "en el aire": cada seccion
-// usaba su propio gap arbitrario, sin relacion con las demas).
 namespace {
-    constexpr float kGapTight  = 5.0f;   // separacion entre elementos muy relacionados (ej. checkboxes)
-    constexpr float kGapNormal = 7.0f;   // separacion estandar entre campos de un mismo grupo
-    constexpr float kGapWide   = 12.0f;  // separacion entre grupos distintos dentro de la misma seccion
-    constexpr float kCardH     = 48.0f;  // alto estandar de las tarjetas seleccionables (modo/direccion)
+    constexpr float kGapTight  = 5.0f;
+    constexpr float kGapNormal = 7.0f;
+    constexpr float kGapWide   = 12.0f;
+    constexpr float kCardH     = 48.0f;
 }
 
-// ── Ciclo de vida / lógica de tiempo ────────────────────────────────────────
-
-OClock::OClock() : m_ElapsedTime(std::chrono::seconds(0)) {}
+OClock::OClock() : m_ElapsedTime(std::chrono::seconds(0)) {
+    m_TargetTime = std::chrono::minutes(m_InputMin) + std::chrono::seconds(m_InputSec);
+}
 
 void OClock::Start(int minutes, int seconds) {
     if (m_PausedElapsed.count() <= 0.0) {
@@ -69,15 +64,52 @@ void OClock::Reset() {
     m_IsOvertime    = false;
     m_ElapsedTime   = std::chrono::seconds(0);
     m_PausedElapsed = std::chrono::seconds(0);
+    m_TargetTime    = std::chrono::minutes(m_InputMin) + std::chrono::seconds(m_InputSec);
 }
 
 void OClock::ApplyPreset(int minutes) {
     m_InputMin = minutes;
     m_InputSec = 0;
+    if (!m_IsRunning && m_PausedElapsed.count() <= 0.0) {
+        m_TargetTime = std::chrono::minutes(minutes);
+    }
+}
+
+void OClock::AddExtraTime(int seconds) {
+    if (m_Mode == OClockMode::Timer) {
+        int curSec = static_cast<int>(m_TargetTime.count());
+        if (curSec <= 0) {
+            curSec = m_InputMin * 60 + m_InputSec;
+        }
+        curSec = std::max(0, curSec + seconds);
+        m_TargetTime = std::chrono::seconds(curSec);
+        m_InputMin = curSec / 60;
+        m_InputSec = curSec % 60;
+        if (m_IsRunning) {
+            m_IsOvertime = m_ElapsedTime >= m_TargetTime;
+        }
+    }
+}
+
+void OClock::SetTitle(const std::string& title) {
+    if (title.empty()) {
+        ClearTitle();
+        return;
+    }
+    auto it = std::find(m_Titles.begin(), m_Titles.end(), title);
+    if (it != m_Titles.end()) {
+        m_TitleIndex = static_cast<int>(std::distance(m_Titles.begin(), it));
+    } else {
+        m_Titles.push_back(title);
+        m_TitleIndex = static_cast<int>(m_Titles.size()) - 1;
+    }
+}
+
+void OClock::ClearTitle() {
+    m_TitleIndex = -1;
 }
 
 std::string OClock::GetFormattedTime() const {
-    // ── Modo reloj de pared: hora actual del dispositivo ────────────────
     if (m_Mode == OClockMode::WallClock) {
         auto        now = std::chrono::system_clock::now();
         std::time_t tt   = std::chrono::system_clock::to_time_t(now);
@@ -107,16 +139,10 @@ std::string OClock::GetFormattedTime() const {
         return std::string(buffer) + suffix;
     }
 
-    // ── Modo cronometro / cuenta regresiva (comportamiento original) ────
     int targetSecs  = static_cast<int>(m_TargetTime.count());
     int elapsedSecs = std::max<int>(
         0, (int)std::chrono::duration_cast<std::chrono::seconds>(m_ElapsedTime).count());
 
-    // El "cruce a final" (m_IsOvertime) es siempre elapsed >= target, sin
-    // importar el sentido. Lo que cambia es que numero se muestra:
-    //  - CountUp:   se muestra el elapsed tal cual (sigue subiendo en overtime).
-    //  - CountDown: se muestra target-elapsed mientras sea >= 0; una vez
-    //               cruzado el 0, se muestra el excedente con signo "-".
     int displaySecs;
     if (m_Direction == OClockDirection::CountDown) {
         int remaining = targetSecs - elapsedSecs;
@@ -147,8 +173,6 @@ float OClock::GetProgressRatio() const {
     return static_cast<float>(std::clamp(elapsedSecs / targetSecs, 0.0, 1.0));
 }
 
-// ── Título / mensaje ─────────────────────────────────────────────────────
-
 std::string OClock::GetCurrentTitle() const {
     if (m_TitleIndex < 0 || m_TitleIndex >= (int)m_Titles.size()) return "";
     return m_Titles[m_TitleIndex];
@@ -165,55 +189,28 @@ void OClock::SyncTransmission(const std::string& timeStr) {
     bool wasLAN = (m_PrevTransmitMode == OClockTransmitMode::LAN);
     bool isLAN  = (m_TransmitMode     == OClockTransmitMode::LAN);
 
-    // Estilo: si el usuario definio un "estilo final" explicito, se usa
-    // completo (color/tamano/alineacion propios) al llegar al final. Si no
-    // definio uno, se mantiene el comportamiento clasico: estilo normal +
-    // color de peligro forzado via colorOverride. En modo WallClock
-    // m_IsOvertime siempre es false, asi que esto naturalmente nunca se
-    // activa fuera del modo Timer.
     bool usingFinalStyle = m_IsOvertime && !m_FinalStyleName.empty();
-
-    if (isLAN) {
-        const std::string& styleToApply = usingFinalStyle ? m_FinalStyleName : m_StyleName;
-        if (!styleToApply.empty())
-            core.ApplyStyleByName(styleToApply);
-    }
+    const std::string& styleToApply = usingFinalStyle ? m_FinalStyleName : m_StyleName;
 
     ImVec4 dangerV4 = ImGui::ColorConvertU32ToFloat4(DS::DangerColor);
     float  dangerRGBA[4] = { dangerV4.x, dangerV4.y, dangerV4.z, dangerV4.w };
     const float* colorOverride = (m_IsOvertime && !usingFinalStyle) ? dangerRGBA : nullptr;
 
-    // Título activo + tiempo, combinados en un solo bloque de texto.
     std::string title    = GetCurrentTitle();
     std::string fullText = title.empty() ? timeStr : (title + "\n" + timeStr);
 
     if (isLAN) {
-        core.SetLiveQuickNoteLAN(fullText, colorOverride);
+        core.SetLiveQuickNoteLAN(fullText, colorOverride, styleToApply);
     } else if (wasLAN) {
         core.ClearQuickNoteLAN();
     }
 
-    // Reloj en overlay: se publica SIEMPRE (no depende de m_TransmitMode) --
-    // la pantalla principal ya no tiene un modo on/off propio, la visibilidad
-    // la decide exclusivamente si el overlay activo tiene o no un cuadro de
-    // reloj (ver PresentationCore::HasOverlayClockLayer, consumido en
-    // LiveContentRenderer.cpp/UIManager.cpp). Publicar sin esa capa es
-    // inofensivo: simplemente no se dibuja en ningun lado.
     core.SetLiveOverlayClockText(fullText, colorOverride);
 
     m_PrevTransmitMode = m_TransmitMode;
 }
 
-// ── Update: logica pura, sin ImGui, corre todos los frames ─────────────────
-
 void OClock::Update() {
-    // Mensajes pedidos desde el celular (ver PresentationCore::
-    // PushRemoteClockTitle / SyncServer POST /remote/clock-message) -- se
-    // agregan a la lista igual que "Agregar" a mano, pero se activan de
-    // inmediato (a diferencia del boton de escritorio, que no cambia la
-    // seleccion activa): el sentido de "enviar" desde el celular es verlo
-    // en el momento. Si llegara mas de uno en el mismo frame, gana el
-    // ultimo (queda como m_TitleIndex final).
     for (auto& text : Core::PresentationCore::Get().DrainRemoteClockTitles()) {
         if (text.empty()) continue;
         m_Titles.push_back(text);
@@ -221,594 +218,721 @@ void OClock::Update() {
     }
 
     if (m_Mode == OClockMode::Timer) {
-        // m_ElapsedTime/m_IsOvertime son independientes del sentido de
-        // visualizacion: siempre representan "cuanto paso desde Start()" y
-        // "si ya cruzamos el objetivo". GetFormattedTime() decide como
-        // mostrarlo.
         if (m_IsRunning) {
             auto now      = std::chrono::steady_clock::now();
             m_ElapsedTime = now - m_StartTime;
             m_IsOvertime  = m_ElapsedTime >= m_TargetTime;
         }
     } else {
-        // En modo reloj de pared no existe concepto de "objetivo excedido".
         m_IsOvertime = false;
     }
 
-    // Se sincroniza la transmision (proyector/LAN) en cada llamada a
-    // Update(), sin importar si el panel esta visible o no. Antes esta
-    // linea vivia unicamente dentro de Render(), y como Render() solo se
-    // ejecuta cuando la pestaña de OClock esta activa, al cambiar de
-    // pestaña el texto transmitido quedaba congelado en el ultimo valor
-    // dibujado, aunque el tiempo interno siguiera corriendo correctamente
-    // por detras (se recalcula desde steady_clock/system_clock, nunca se
-    // "pausa" solo por no dibujarse). Quien integra este widget debe
-    // llamar OClock::Update() una vez por frame de forma incondicional,
-    // junto al resto de las actualizaciones de fondo de la aplicacion.
     SyncTransmission(GetFormattedTime());
 
-    // Cue de cambio de estilo pendiente: "consumir una vez", asi no pisa un
-    // cambio manual del operador en RenderStyleSelector salvo que realmente
-    // haya una cue pendiente que lo pida.
     std::string clockCue = Core::PresentationCore::Get().ConsumeClockStyleCue();
     if (!clockCue.empty())
         m_StyleName = clockCue;
 }
 
-void OClock::RenderStyleSelector() {
-    auto& core = Core::PresentationCore::Get();
-    std::vector<std::string> styleNames = core.GetSavedStyleNames();
+static ImU32 ColAf(ImU32 col, float a) {
+    int ai = static_cast<int>(std::clamp(a, 0.0f, 1.0f) * 255.0f);
+    return (col & 0x00FFFFFFu) | (static_cast<ImU32>(ai) << 24);
+}
 
-    // Un solo combo reutilizable para "estilo normal" y "estilo final".
-    auto renderCombo = [&](const char* label, const char* comboId,
-                           std::string& target, const char* emptyHint) {
-        ImGui::Spacing();
-        ImGui::TextColored(ToVec4(DS::TextHint), "%s", label);
+static bool DrawSegmentTab(ImDrawList* dl, const char* id, const char* label,
+                           bool active, const ImVec2& p0, const ImVec2& p1,
+                           ImU32 activeColor = DS::AccentColor)
+{
+    float w = p1.x - p0.x;
+    float h = p1.y - p0.y;
 
-        std::string preview = target.empty() ? "Usar estilo actual" : target;
+    ImGui::SetCursorScreenPos(p0);
+    bool clicked = ImGui::InvisibleButton(id, ImVec2(w, h));
+    bool hovered = ImGui::IsItemHovered();
+    if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
-        ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImVec4(0.05f, 0.09f, 0.13f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.07f, 0.12f, 0.17f, 1.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
-        ImGui::SetNextItemWidth(-1.0f);
+    ImU32 bg = active
+        ? ColA(activeColor, hovered ? 75 : 50)
+        : (hovered ? IM_COL32(255, 255, 255, 18) : IM_COL32(255, 255, 255, 8));
+    ImU32 border = active
+        ? ColA(activeColor, hovered ? 255 : 210)
+        : (hovered ? IM_COL32(255, 255, 255, 60) : IM_COL32(255, 255, 255, 24));
 
-        if (ImGui::BeginCombo(comboId, preview.c_str())) {
-            bool noneSelected = target.empty();
-            if (ImGui::Selectable("Usar estilo actual", noneSelected))
-                target.clear();
-            if (noneSelected) ImGui::SetItemDefaultFocus();
+    dl->AddRectFilled(p0, p1, bg, DS::RadiusMedium);
+    dl->AddRect(p0, p1, border, DS::RadiusMedium, 0, active ? 1.5f : 1.0f);
 
-            for (const auto& name : styleNames) {
-                bool sel = (target == name);
-                if (ImGui::Selectable(name.c_str(), sel))
-                    target = name;
-                if (sel) ImGui::SetItemDefaultFocus();
+    ImVec2 labelSz = ImGui::CalcTextSize(label);
+    float startX = p0.x + (w - labelSz.x) * 0.5f;
+    float startY = p0.y + (h - labelSz.y) * 0.5f;
+    dl->AddText(ImVec2(startX, startY), active ? DS::TextPrimary : DS::TextSecondary, label);
+
+    return clicked;
+}
+
+static bool DrawChip(const char* label, bool active, const ImVec2& size, ImU32 accent = DS::AccentColor) {
+    ImVec2 p0 = ImGui::GetCursorScreenPos();
+    ImVec2 p1 = ImVec2(p0.x + size.x, p0.y + size.y);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    ImGui::InvisibleButton(label, size);
+    bool hovered = ImGui::IsItemHovered();
+    bool clicked = ImGui::IsItemClicked();
+    if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+
+    ImU32 bg = active
+        ? ColA(accent, hovered ? 85 : 60)
+        : (hovered ? IM_COL32(255, 255, 255, 22) : IM_COL32(255, 255, 255, 10));
+    ImU32 border = active
+        ? ColA(accent, 240)
+        : (hovered ? IM_COL32(255, 255, 255, 75) : IM_COL32(255, 255, 255, 26));
+
+    dl->AddRectFilled(p0, p1, bg, size.y * 0.5f);
+    dl->AddRect(p0, p1, border, size.y * 0.5f, 0, active ? 1.5f : 1.0f);
+
+    const char* text_end = ImGui::FindRenderedTextEnd(label);
+    ImVec2 txtSz = ImGui::CalcTextSize(label, text_end, true);
+    dl->AddText(ImVec2(p0.x + (size.x - txtSz.x) * 0.5f, p0.y + (size.y - txtSz.y) * 0.5f),
+                active ? DS::TextPrimary : DS::TextSecondary, label, text_end);
+
+    return clicked;
+}
+
+void OClock::RenderDisplayCard(float w, const std::string& timeStr) {
+    const float dispH = 104.0f;
+    ImVec2 dispPos = ImGui::GetCursorScreenPos();
+    ImVec2 dispEnd = ImVec2(dispPos.x + w, dispPos.y + dispH);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float t = static_cast<float>(ImGui::GetTime());
+
+    ImU32 bgCol, borderCol, textCol, glowCol;
+    const char* modeBadge = "";
+    const char* statusBadge = "";
+    ImU32 statusDotCol = 0;
+
+    if (m_Mode == OClockMode::WallClock) {
+        bgCol        = IM_COL32(11, 18, 24, 255);
+        borderCol    = IM_COL32(35, 175, 215, 160);
+        textCol      = IM_COL32(80, 225, 255, 255);
+        glowCol      = IM_COL32(35, 175, 215, 35);
+        modeBadge    = "🕒 HORA LOCAL";
+        statusBadge  = "● EN VIVO";
+        statusDotCol = IM_COL32(50, 215, 255, 255);
+    } else if (m_IsOvertime) {
+        float pulse  = 0.5f + 0.5f * std::sin(t * 5.0f);
+        bgCol        = IM_COL32(28, 12, 16, 255);
+        borderCol    = ColA(IM_COL32(255, 55, 75, 255), static_cast<int>(150 + 105 * pulse));
+        textCol      = IM_COL32(255, 80, 95, 255);
+        glowCol      = ColA(IM_COL32(255, 45, 65, 255), static_cast<int>(35 + 40 * pulse));
+        modeBadge    = "⚠️ OVERTIME";
+        statusBadge  = "● EXCEDIDO";
+        statusDotCol = IM_COL32(255, 60, 80, 255);
+    } else if (m_IsRunning) {
+        bgCol        = IM_COL32(10, 22, 19, 255);
+        borderCol    = IM_COL32(40, 200, 135, 170);
+        textCol      = IM_COL32(75, 240, 170, 255);
+        glowCol      = IM_COL32(40, 200, 135, 35);
+        modeBadge    = (m_Direction == OClockDirection::CountDown) ? "⏱️ REGRESIVA" : "⏱️ CRONÓMETRO";
+        statusBadge  = "● EN VIVO";
+        statusDotCol = IM_COL32(60, 240, 160, 255);
+    } else if (m_PausedElapsed.count() > 0.0) {
+        bgCol        = IM_COL32(24, 18, 10, 255);
+        borderCol    = IM_COL32(235, 165, 30, 160);
+        textCol      = IM_COL32(255, 195, 60, 255);
+        glowCol      = IM_COL32(235, 165, 30, 30);
+        modeBadge    = (m_Direction == OClockDirection::CountDown) ? "⏱️ REGRESIVA" : "⏱️ CRONÓMETRO";
+        statusBadge  = "❚❚ PAUSADO";
+        statusDotCol = IM_COL32(255, 190, 50, 255);
+    } else {
+        bgCol        = IM_COL32(13, 16, 22, 255);
+        borderCol    = IM_COL32(55, 65, 85, 140);
+        textCol      = IM_COL32(220, 225, 235, 255);
+        glowCol      = IM_COL32(55, 65, 85, 20);
+        modeBadge    = (m_Direction == OClockDirection::CountDown) ? "⏱️ REGRESIVA" : "⏱️ CRONÓMETRO";
+        statusBadge  = "○ LISTO";
+        statusDotCol = IM_COL32(130, 140, 160, 255);
+    }
+
+    dl->AddRect(ImVec2(dispPos.x - 2.0f, dispPos.y - 2.0f), ImVec2(dispEnd.x + 2.0f, dispEnd.y + 2.0f),
+                glowCol, DS::RadiusMedium + 2.0f, 0, 1.5f);
+
+    dl->AddRectFilled(dispPos, dispEnd, bgCol, DS::RadiusMedium);
+    dl->AddRect(dispPos, dispEnd, borderCol, DS::RadiusMedium, 0, 1.3f);
+
+    float headerY = dispPos.y + 8.0f;
+    dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.78f,
+                ImVec2(dispPos.x + 10.0f, headerY), textCol, modeBadge);
+
+    ImVec2 sbSz = ImGui::CalcTextSize(statusBadge);
+    dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.78f,
+                ImVec2(dispEnd.x - 10.0f - sbSz.x * 0.78f, headerY), statusDotCol, statusBadge);
+
+    std::string activeTitle = GetCurrentTitle();
+    float timeCenterY = dispPos.y + 44.0f;
+    if (!activeTitle.empty()) {
+        std::string titleWrapped = "« " + activeTitle + " »";
+        ImVec2 tSz = ImGui::CalcTextSize(titleWrapped.c_str());
+        dl->AddText(ImVec2(dispPos.x + (w - tSz.x) * 0.5f, dispPos.y + 22.0f),
+                    IM_COL32(235, 190, 80, 220), titleWrapped.c_str());
+        timeCenterY += 4.0f;
+    }
+
+    ImFont* font = ImGui::GetFont();
+    const float clockFontSize = 36.0f;
+    ImVec2 textSz = font->CalcTextSizeA(clockFontSize, FLT_MAX, 0.0f, timeStr.c_str());
+    ImVec2 textPos(dispPos.x + (w - textSz.x) * 0.5f, timeCenterY - textSz.y * 0.5f);
+
+    dl->AddText(font, clockFontSize, ImVec2(textPos.x + 1.0f, textPos.y + 1.0f), IM_COL32(0, 0, 0, 160), timeStr.c_str());
+    dl->AddText(font, clockFontSize, textPos, textCol, timeStr.c_str());
+
+    if (m_Mode == OClockMode::Timer) {
+        float barH = 4.0f;
+        float barPad = 12.0f;
+        float barY = dispEnd.y - 20.0f;
+        ImVec2 bMin(dispPos.x + barPad, barY);
+        ImVec2 bMax(dispEnd.x - barPad, barY + barH);
+
+        if (m_ShowProgressBar) {
+            dl->AddRectFilled(bMin, bMax, IM_COL32(255, 255, 255, 14), 2.0f);
+
+            if (m_IsOvertime) {
+                float pulse = 0.5f + 0.5f * std::sin(t * 6.0f);
+                dl->AddRectFilled(bMin, bMax, ColA(IM_COL32(255, 60, 70, 255), static_cast<int>(170 + 85 * pulse)), 2.0f);
+            } else {
+                float ratio = GetProgressRatio();
+                float fillX = bMin.x + (bMax.x - bMin.x) * ratio;
+                if (fillX > bMin.x) {
+                    dl->AddRectFilled(bMin, ImVec2(fillX, bMax.y), IM_COL32(35, 210, 150, 240), 2.0f);
+                }
             }
-            ImGui::EndCombo();
         }
 
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor(2);
+        int tgtSecs = static_cast<int>(m_TargetTime.count());
+        int elapsedSecs = std::max(0, static_cast<int>(m_ElapsedTime.count()));
+        int remainingSecs = std::max(0, tgtSecs - elapsedSecs);
 
-        if (target.empty()) {
-            ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextHint));
-            ImGui::TextWrapped("%s", emptyHint);
-            ImGui::PopStyleColor();
-        }
-    };
-
-    renderCombo("Estilo (LAN)", "##oclockStyle", m_StyleName,
-        "Hereda el ultimo estilo activo.");
-
-    renderCombo("Estilo al finalizar (LAN)", "##oclockFinalStyle", m_FinalStyleName,
-        "Usa el estilo normal + color de peligro.");
-}
-
-// ── Selector de modo: Cronómetro vs Hora actual ─────────────────────────
-
-void OClock::RenderModeSelector() {
-    ImGui::TextColored(ToVec4(DS::TextHint), "Modo");
-    ImGui::Spacing();
-
-    float w    = ImGui::GetContentRegionAvail().x;
-    float gap  = kGapNormal;
-    float half = (w - gap) * 0.5f;
-
-    struct ModeOpt { const char* label; const char* sub; OClockMode mode; };
-    ModeOpt opts[2] = {
-        { "Cronómetro",  "Cuenta con objetivo (arriba o abajo)", OClockMode::Timer     },
-        { "Hora actual", "Muestra la hora del dispositivo",      OClockMode::WallClock },
-    };
-
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImVec2 rowStart = ImGui::GetCursorScreenPos();
-
-    for (int i = 0; i < 2; ++i) {
-        auto& opt   = opts[i];
-        bool active = (m_Mode == opt.mode);
-
-        ImVec2 p0 = ImVec2(rowStart.x + i * (half + gap), rowStart.y);
-        ImVec2 p1 = ImVec2(p0.x + half, p0.y + kCardH);
-
-        ImU32 bg  = active ? ColA(DS::AccentColor, 45) : ImU32(IM_COL32(255, 255, 255, 10));
-        ImU32 bdr = active ? ColA(DS::AccentColor, 200) : ColA(DS::TextHint, 120);
-
-        dl->AddRectFilled(p0, p1, bg, DS::RadiusMedium);
-        dl->AddRect(p0, p1, bdr, DS::RadiusMedium, 0, active ? 1.5f : 1.0f);
-
-        ImGui::SetCursorScreenPos(p0);
-        ImGui::PushID(i);
-        bool clicked = ImGui::InvisibleButton("##oclockMode", ImVec2(half, kCardH));
-        ImGui::PopID();
-
-        if (clicked && m_Mode != opt.mode) {
-            m_Mode = opt.mode;
-            // Cambiar a "Hora actual" corta cualquier cronometro en curso:
-            // evita que quede corriendo (y consumiendo overtime) de forma
-            // invisible mientras se muestra la hora del dispositivo.
-            if (opt.mode == OClockMode::WallClock)
-                Stop();
+        char statsBuf[64];
+        if (m_IsOvertime) {
+            int extraSecs = elapsedSecs - tgtSecs;
+            snprintf(statsBuf, sizeof(statsBuf), "+%02d:%02d sobre el tiempo", extraSecs / 60, extraSecs % 60);
+        } else if (m_Direction == OClockDirection::CountDown) {
+            snprintf(statsBuf, sizeof(statsBuf), "Meta: %02d:%02d  •  Restante: %02d:%02d",
+                     tgtSecs / 60, tgtSecs % 60, remainingSecs / 60, remainingSecs % 60);
+        } else {
+            snprintf(statsBuf, sizeof(statsBuf), "Meta: %02d:%02d  •  Transcurrido: %02d:%02d",
+                     tgtSecs / 60, tgtSecs % 60, elapsedSecs / 60, elapsedSecs % 60);
         }
 
-        ImU32 labelCol = active ? DS::AccentLight : DS::TextSecondary;
-        dl->AddText(ImVec2(p0.x + 10.0f, p0.y + 8.0f), labelCol, opt.label);
-
-        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.80f,
-                    ImVec2(p0.x + 10.0f, p0.y + 28.0f),
-                    ColA(DS::TextHint, 210), opt.sub, nullptr, half - 20.0f);
+        ImVec2 statSz = ImGui::CalcTextSize(statsBuf);
+        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.74f,
+                    ImVec2(dispPos.x + (w - statSz.x * 0.74f) * 0.5f, dispEnd.y - 14.0f),
+                    m_IsOvertime ? IM_COL32(255, 100, 115, 230) : ColA(DS::TextHint, 200), statsBuf);
+    } else {
+        const char* wcInfo = m_WallClock24h ? "Formato 24 Horas" : "Formato 12 Horas (AM/PM)";
+        ImVec2 wcSz = ImGui::CalcTextSize(wcInfo);
+        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.74f,
+                    ImVec2(dispPos.x + (w - wcSz.x * 0.74f) * 0.5f, dispEnd.y - 14.0f),
+                    ColA(DS::TextHint, 190), wcInfo);
     }
 
-    ImGui::SetCursorScreenPos(ImVec2(rowStart.x, rowStart.y + kCardH));
-    ImGui::Dummy(ImVec2(w, kCardH));
+    ImGui::Dummy(ImVec2(w, dispH));
 }
 
-void OClock::RenderDirectionSelector() {
-    ImGui::Spacing();
-    ImGui::TextColored(ToVec4(DS::TextHint), "Sentido del conteo");
-    ImGui::Spacing();
+void OClock::RenderTransportControls(float w) {
+    if (m_Mode != OClockMode::Timer) return;
 
-    float w    = ImGui::GetContentRegionAvail().x;
-    float gap  = kGapNormal;
-    float half = (w - gap) * 0.5f;
+    const float btnH   = 36.0f;
+    const float gap    = 6.0f;
+    const float bumpW  = 48.0f;
+    const float resetW = 48.0f;
+    const float playW  = std::max(70.0f, w - bumpW - resetW - gap * 2.0f);
 
-    struct DirOpt { const char* label; const char* sub; OClockDirection dir; };
-    DirOpt opts[2] = {
-        { "Ascendente",  "Cuenta desde 0 hacia el objetivo",   OClockDirection::CountUp   },
-        { "Descendente", "Cuenta regresiva desde el objetivo", OClockDirection::CountDown },
-    };
+    ImGui::PushID("transport");
 
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImVec2 rowStart = ImGui::GetCursorScreenPos();
-
-    for (int i = 0; i < 2; ++i) {
-        auto& opt   = opts[i];
-        bool active = (m_Direction == opt.dir);
-
-        ImVec2 p0 = ImVec2(rowStart.x + i * (half + gap), rowStart.y);
-        ImVec2 p1 = ImVec2(p0.x + half, p0.y + kCardH);
-
-        ImU32 bg  = active ? ColA(DS::AccentColor, 45) : ImU32(IM_COL32(255, 255, 255, 10));
-        ImU32 bdr = active ? ColA(DS::AccentColor, 200) : ColA(DS::TextHint, 120);
-
-        dl->AddRectFilled(p0, p1, bg, DS::RadiusMedium);
-        dl->AddRect(p0, p1, bdr, DS::RadiusMedium, 0, active ? 1.5f : 1.0f);
-
-        ImGui::SetCursorScreenPos(p0);
-        ImGui::PushID(i);
-        bool clicked = ImGui::InvisibleButton("##dir", ImVec2(half, kCardH));
-        ImGui::PopID();
-        if (clicked) m_Direction = opt.dir;
-
-        ImU32 labelCol = active ? DS::AccentLight : DS::TextSecondary;
-        dl->AddText(ImVec2(p0.x + 10.0f, p0.y + 8.0f), labelCol, opt.label);
-
-        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.80f,
-                    ImVec2(p0.x + 10.0f, p0.y + 28.0f),
-                    ColA(DS::TextHint, 210), opt.sub, nullptr, half - 20.0f);
+    if (!m_IsRunning) {
+        bool isPaused = (m_PausedElapsed.count() > 0.0);
+        const char* label = isPaused ? "▶ REANUDAR" : "▶ INICIAR";
+        ImU32 col = isPaused ? IM_COL32(35, 185, 225, 255) : DS::SuccessColor;
+        if (DS::GlassButton(label, ImVec2(playW, btnH), col)) {
+            Start(m_InputMin, m_InputSec);
+        }
+    } else {
+        if (DS::GlassButton("⏸ PAUSAR", ImVec2(playW, btnH), IM_COL32(235, 155, 25, 255))) {
+            Stop();
+        }
     }
 
-    ImGui::SetCursorScreenPos(ImVec2(rowStart.x, rowStart.y + kCardH));
-    ImGui::Dummy(ImVec2(w, kCardH));
+    ImGui::SameLine(0, gap);
+
+    if (DS::GlassButton("⟳", ImVec2(resetW, btnH), DS::AccentColorDim)) {
+        Reset();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Reiniciar al tiempo establecido");
+    }
+
+    ImGui::SameLine(0, gap);
+
+    if (DS::GlassButton("+1m", ImVec2(bumpW, btnH), IM_COL32(35, 155, 215, 255))) {
+        AddExtraTime(60);
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Sumar 1 minuto en vivo sin reiniciar");
+    }
+
+    ImGui::PopID();
 }
 
-// ── Opciones de formato para el modo reloj de pared ─────────────────────
+void OClock::RenderModeSelector(float w) {
+    float gap   = 4.0f;
+    float halfW = (w - gap) * 0.5f;
+    float h     = 32.0f;
 
-void OClock::RenderWallClockOptions() {
-    ImGui::Spacing();
-    ImGui::TextColored(ToVec4(DS::TextHint), "Formato");
-    ImGui::Spacing();
+    ImVec2 p0 = ImGui::GetCursorScreenPos();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    ImGui::Checkbox("Formato 24 horas", &m_WallClock24h);
-    ImGui::SameLine(0, kGapWide);
-    ImGui::Checkbox("Mostrar segundos", &m_WallClockShowSeconds);
+    ImVec2 m0Min = p0;
+    ImVec2 m0Max = ImVec2(p0.x + halfW, p0.y + h);
+    if (DrawSegmentTab(dl, "##modeTimer", "⏱️ Temporizador",
+                       m_Mode == OClockMode::Timer, m0Min, m0Max, DS::AccentColor)) {
+        m_Mode = OClockMode::Timer;
+    }
+
+    ImVec2 m1Min = ImVec2(p0.x + halfW + gap, p0.y);
+    ImVec2 m1Max = ImVec2(m1Min.x + halfW, p0.y + h);
+    if (DrawSegmentTab(dl, "##modeWallClock", "🕒 Hora Local",
+                       m_Mode == OClockMode::WallClock, m1Min, m1Max, IM_COL32(35, 175, 215, 255))) {
+        if (m_Mode != OClockMode::WallClock) {
+            m_Mode = OClockMode::WallClock;
+            Stop();
+        }
+    }
+
+    ImGui::SetCursorScreenPos(ImVec2(p0.x, p0.y + h));
+    ImGui::Dummy(ImVec2(w, h));
 }
 
-void OClock::RenderTitleSection() {
+void OClock::RenderTimeConfig(float w) {
+    ImGui::TextColored(ToVec4(DS::TextHint), "DURACIÓN:");
     ImGui::Spacing();
-    DS::GlassSectionHeader("TÍTULO / MENSAJE");
-    ImGui::Spacing();
 
-    float w       = ImGui::GetContentRegionAvail().x;
-    float addBtnW = 90.0f;
+    float gap = 4.0f;
+    float colonW = 12.0f;
+    float inputW = (w - colonW - gap * 2.0f) * 0.5f;
 
-    ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImVec4(0.05f, 0.09f, 0.13f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.07f, 0.12f, 0.17f, 1.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32(14, 18, 26, 255));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, IM_COL32(20, 28, 40, 255));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
 
-    ImGui::SetNextItemWidth(w - addBtnW - kGapNormal);
-    ImGui::InputTextWithHint("##oclock_title_input", "Nuevo mensaje...",
-        m_TitleInputBuf, sizeof(m_TitleInputBuf));
+    ImGui::SetNextItemWidth(inputW);
+    if (ImGui::InputInt("##min", &m_InputMin, 0, 0)) {
+        if (m_InputMin < 0) m_InputMin = 0;
+        if (!m_IsRunning && m_PausedElapsed.count() <= 0.0)
+            m_TargetTime = std::chrono::minutes(m_InputMin) + std::chrono::seconds(m_InputSec);
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Minutos");
+
+    ImGui::SameLine(0, gap);
+    ImGui::TextColored(ToVec4(DS::TextSecondary), ":");
+    ImGui::SameLine(0, gap);
+
+    ImGui::SetNextItemWidth(inputW);
+    if (ImGui::InputInt("##sec", &m_InputSec, 0, 0)) {
+        if (m_InputSec < 0) m_InputSec = 0;
+        if (m_InputSec > 59) m_InputSec = 59;
+        if (!m_IsRunning && m_PausedElapsed.count() <= 0.0)
+            m_TargetTime = std::chrono::minutes(m_InputMin) + std::chrono::seconds(m_InputSec);
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Segundos");
 
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(2);
 
-    ImGui::SameLine(0, kGapNormal);
-    if (DS::GlassButton("Agregar", ImVec2(addBtnW, 0.0f), DS::AccentColorDim)) {
+    ImGui::Spacing();
+
+    ImGui::PushID("steppers");
+    float stepW = (w - gap * 3.0f) * 0.25f;
+    if (DS::GlassButton("-5m", ImVec2(stepW, 28.0f), DS::AccentColorDim)) {
+        m_InputMin = std::max(0, m_InputMin - 5);
+        if (!m_IsRunning && m_PausedElapsed.count() <= 0.0)
+            m_TargetTime = std::chrono::minutes(m_InputMin) + std::chrono::seconds(m_InputSec);
+    }
+    ImGui::SameLine(0, gap);
+    if (DS::GlassButton("-1m", ImVec2(stepW, 28.0f), DS::AccentColorDim)) {
+        m_InputMin = std::max(0, m_InputMin - 1);
+        if (!m_IsRunning && m_PausedElapsed.count() <= 0.0)
+            m_TargetTime = std::chrono::minutes(m_InputMin) + std::chrono::seconds(m_InputSec);
+    }
+    ImGui::SameLine(0, gap);
+    if (DS::GlassButton("+1m", ImVec2(stepW, 28.0f), DS::AccentColorDim)) {
+        m_InputMin += 1;
+        if (!m_IsRunning && m_PausedElapsed.count() <= 0.0)
+            m_TargetTime = std::chrono::minutes(m_InputMin) + std::chrono::seconds(m_InputSec);
+    }
+    ImGui::SameLine(0, gap);
+    if (DS::GlassButton("+5m", ImVec2(stepW, 28.0f), DS::AccentColorDim)) {
+        m_InputMin += 5;
+        if (!m_IsRunning && m_PausedElapsed.count() <= 0.0)
+            m_TargetTime = std::chrono::minutes(m_InputMin) + std::chrono::seconds(m_InputSec);
+    }
+    ImGui::PopID();
+
+    ImGui::Spacing();
+    ImGui::TextColored(ToVec4(DS::TextHint), "PRESETS:");
+    ImGui::Spacing();
+
+    ImGui::PushID("presets");
+    const int presets[] = { 3, 5, 10, 15, 20, 30, 45, 60 };
+    for (int row = 0; row < 2; ++row) {
+        for (int col = 0; col < 4; ++col) {
+            int idx = row * 4 + col;
+            int mins = presets[idx];
+            bool active = (m_InputMin == mins && m_InputSec == 0);
+            char lbl[16];
+            snprintf(lbl, sizeof(lbl), "%d'", mins);
+            if (DrawChip(lbl, active, ImVec2(stepW, 24.0f), DS::AccentColor)) {
+                ApplyPreset(mins);
+            }
+            if (col < 3) ImGui::SameLine(0, gap);
+        }
+    }
+    ImGui::PopID();
+
+    ImGui::Spacing();
+
+    RenderDirectionSelector(w);
+}
+
+void OClock::RenderDirectionSelector(float w) {
+    ImGui::TextColored(ToVec4(DS::TextHint), "DIRECCIÓN:");
+    ImGui::Spacing();
+
+    float gap   = 4.0f;
+    float halfW = (w - gap) * 0.5f;
+    float h     = 30.0f;
+
+    ImVec2 p0 = ImGui::GetCursorScreenPos();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    ImVec2 c0Min = p0;
+    ImVec2 c0Max = ImVec2(p0.x + halfW, p0.y + h);
+    if (DrawSegmentTab(dl, "##dirDown", "⬇️ Regresiva",
+                       m_Direction == OClockDirection::CountDown, c0Min, c0Max, DS::AccentColor)) {
+        m_Direction = OClockDirection::CountDown;
+    }
+
+    ImVec2 c1Min = ImVec2(p0.x + halfW + gap, p0.y);
+    ImVec2 c1Max = ImVec2(c1Min.x + halfW, p0.y + h);
+    if (DrawSegmentTab(dl, "##dirUp", "⬆️ Ascendente",
+                       m_Direction == OClockDirection::CountUp, c1Min, c1Max, DS::AccentColor)) {
+        m_Direction = OClockDirection::CountUp;
+    }
+
+    ImGui::SetCursorScreenPos(ImVec2(p0.x, p0.y + h));
+    ImGui::Dummy(ImVec2(w, h));
+}
+
+void OClock::RenderWallClockOptions(float w) {
+    ImGui::TextColored(ToVec4(DS::TextHint), "OPCIONES DE RELOJ:");
+    ImGui::Spacing();
+
+    float gap   = 4.0f;
+    float halfW = (w - gap) * 0.5f;
+    float h     = 30.0f;
+
+    ImVec2 p0 = ImGui::GetCursorScreenPos();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    ImVec2 b0Min = p0;
+    ImVec2 b0Max = ImVec2(p0.x + halfW, p0.y + h);
+    const char* lbl24 = m_WallClock24h ? "✔ 24 Horas" : "12 Horas";
+    if (DrawSegmentTab(dl, "##wc24h", lbl24, m_WallClock24h, b0Min, b0Max, IM_COL32(35, 175, 215, 255))) {
+        m_WallClock24h = !m_WallClock24h;
+    }
+
+    ImVec2 b1Min = ImVec2(p0.x + halfW + gap, p0.y);
+    ImVec2 b1Max = ImVec2(b1Min.x + halfW, p0.y + h);
+    const char* lblSec = m_WallClockShowSeconds ? "✔ Segundos" : "Solo Hora";
+    if (DrawSegmentTab(dl, "##wcSec", lblSec, m_WallClockShowSeconds, b1Min, b1Max, IM_COL32(35, 175, 215, 255))) {
+        m_WallClockShowSeconds = !m_WallClockShowSeconds;
+    }
+
+    ImGui::SetCursorScreenPos(ImVec2(p0.x, p0.y + h));
+    ImGui::Dummy(ImVec2(w, h));
+}
+
+void OClock::RenderTitleSection(float w) {
+    std::string curTitle = GetCurrentTitle();
+    if (curTitle.empty()) {
+        DS::GlassSectionHeader("RÓTULO DE ESCENARIO");
+    } else {
+        char hdr[128];
+        snprintf(hdr, sizeof(hdr), "RÓTULO: « %s »", curTitle.c_str());
+        DS::GlassSectionHeader(hdr);
+    }
+    ImGui::Spacing();
+
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32(14, 18, 26, 255));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, IM_COL32(20, 28, 40, 255));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+    ImGui::SetNextItemWidth(w);
+    bool enterPressed = ImGui::InputTextWithHint("##oclock_title_input", "Escribir rótulo de escenario...",
+                                                  m_TitleInputBuf, sizeof(m_TitleInputBuf), ImGuiInputTextFlags_EnterReturnsTrue);
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(2);
+
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2.0f);
+
+    float gap = 3.0f;
+    float btnW = (w - gap) * 0.5f;
+
+    ImGui::PushID("title_actions");
+    if (DS::GlassButton("+ Asignar", ImVec2(btnW, 26.0f), DS::AccentColor) || enterPressed) {
         std::string text(m_TitleInputBuf);
         if (!text.empty()) {
-            m_Titles.push_back(text);
-            if (m_TitleIndex < 0) m_TitleIndex = 0; // el primer mensaje se activa solo
+            SetTitle(text);
             m_TitleInputBuf[0] = '\0';
         }
     }
+    ImGui::SameLine(0, gap);
+    if (DS::GlassButton("✕ Quitar", ImVec2(btnW, 26.0f), DS::DangerColorDim)) {
+        ClearTitle();
+    }
+    ImGui::PopID();
 
     if (!m_Titles.empty()) {
         ImGui::Spacing();
-
-        // Ancho del boton de borrar fijo, y el Selectable ocupa exactamente
-        // el resto del ancho disponible. Antes el Selectable media
-        // "w - 60" pero el boton se posicionaba a mano en "w - 50" con
-        // ancho 40, dejando un hueco de 10px sin usar entre ambos y el
-        // boton sin llegar al borde derecho real. Calculando todo a partir
-        // del mismo "w" y encadenando con SameLine(0, gap) en vez de
-        // coordenadas absolutas, ambos quedan perfectamente alineados y
-        // ocupan el ancho completo sin importar el tamano de fuente.
-        const float delBtnW = 40.0f;
-        const float selW    = w - delBtnW - kGapNormal;
+        const float delBtnW = 26.0f;
+        const float selW = w - delBtnW - 4.0f;
 
         for (int i = 0; i < (int)m_Titles.size(); ++i) {
             ImGui::PushID(i);
             bool isActive = (i == m_TitleIndex);
 
-            ImGui::PushStyleColor(ImGuiCol_Text,
-                isActive ? ToVec4(DS::AccentLight) : ToVec4(DS::TextSecondary));
-            if (ImGui::Selectable(m_Titles[i].c_str(), isActive, 0, ImVec2(selW, 0.0f)))
+            ImGui::PushStyleColor(ImGuiCol_Text, isActive ? ToVec4(DS::AccentLight) : ToVec4(DS::TextSecondary));
+            char rowLabel[160];
+            snprintf(rowLabel, sizeof(rowLabel), "%s %s", isActive ? "✔" : "  ", m_Titles[i].c_str());
+            if (ImGui::Selectable(rowLabel, isActive, 0, ImVec2(selW, 22.0f))) {
                 m_TitleIndex = i;
+            }
             ImGui::PopStyleColor();
 
-            ImGui::SameLine(0, kGapNormal);
-            if (DS::GlassButton("X", ImVec2(delBtnW, 0.0f), DS::DangerColor)) {
+            ImGui::SameLine(0, 4.0f);
+            if (DS::GlassButton("✕", ImVec2(delBtnW, 22.0f), DS::DangerColor)) {
                 m_Titles.erase(m_Titles.begin() + i);
                 if (m_TitleIndex == i)
                     m_TitleIndex = m_Titles.empty() ? -1 : std::min(i, (int)m_Titles.size() - 1);
                 else if (m_TitleIndex > i)
                     m_TitleIndex--;
                 ImGui::PopID();
-                break; // el vector cambio de tamano: cortamos el loop de este frame
+                break;
             }
             ImGui::PopID();
         }
     }
-
-    ImGui::Spacing();
-    float btnW = (w - kGapNormal) * 0.5f;
-
-    ImGui::BeginDisabled(m_Titles.empty());
-    if (DS::GlassButton("Avanzar >", ImVec2(btnW, 34.0f), DS::AccentColor))
-        AdvanceTitle();
-    ImGui::SameLine(0, kGapNormal);
-    if (DS::GlassButton("Quitar título", ImVec2(btnW, 34.0f), DS::AccentColorDim))
-        m_TitleIndex = -1;
-    ImGui::EndDisabled();
 }
 
-// ── Render ───────────────────────────────────────────────────────────────
+void OClock::RenderOutputsSection(float w) {
+    auto& core = Core::PresentationCore::Get();
+    DS::GlassSectionHeader("DESTINOS DE SALIDA");
+    ImGui::Spacing();
 
-void OClock::Render(GlassRenderer& glass) {
-    const auto& str  = ProyecThor::UI::GetUIStrings();
-    auto&       core = Core::PresentationCore::Get();
-
-    // Se llama tambien aca (ademas de la llamada global obligatoria desde
-    // el tick de la aplicacion) para que, mientras el panel este visible,
-    // el numero dibujado en este mismo frame sea el mas reciente posible.
-    // Llamarlo dos veces en el mismo frame no tiene efectos secundarios
-    // acumulativos: todo se recalcula desde cero a partir de los relojes
-    // del sistema, nunca se incrementa nada.
-    Update();
-
-    (void)glass;
-    std::string timeStr = GetFormattedTime();
-    float       t       = static_cast<float>(ImGui::GetTime());
-
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.157f, 0.784f, 0.847f, 1.0f)); // acento cian
-    ImGui::TextUnformatted(str.oclockTitle);
-    ImGui::PopStyleColor();
-    DS::GlassSeparator();
-
-    float w = ImGui::GetContentRegionAvail().x;
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    // ── Título / mensaje activo, arriba del display ─────────────────────
-    std::string activeTitle = GetCurrentTitle();
-    if (!activeTitle.empty()) {
-        ImVec2 titleSz = ImGui::CalcTextSize(activeTitle.c_str());
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, (w - titleSz.x) * 0.5f));
-        ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::AccentLight));
-        ImGui::TextUnformatted(activeTitle.c_str());
-        ImGui::PopStyleColor();
-        ImGui::Spacing();
-    }
-
-    // ── Display grande del tiempo ──────────────────────────────────────────
-    {
-        ImVec2 dispPos = ImGui::GetCursorScreenPos();
-        float  dispH   = 92.0f;
-        ImVec2 dispEnd = ImVec2(dispPos.x + w, dispPos.y + dispH);
-
-        DrawSoftShadow(dl, dispPos, dispEnd, DS::RadiusLarge);
-
-        ImU32 bgCol, borderCol, textCol;
-        if (m_Mode == OClockMode::WallClock) {
-            // El reloj de pared esta siempre "vivo": usamos el mismo
-            // estilo que el cronometro corriendo, de forma permanente.
-            bgCol     = ColU32(0.04f, 0.16f, 0.17f);
-            borderCol = ColA(DS::AccentColor, 130);
-            textCol   = DS::AccentLight;
-        } else if (m_IsOvertime) {
-            float pulse = 0.55f + 0.35f * std::sin(t * 3.0f);
-            bgCol     = ColU32(0.22f, 0.05f, 0.06f);
-            borderCol = ColA(DS::DangerColor, static_cast<int>(90 + 90 * pulse));
-            textCol   = DS::DangerColor;
-        } else if (m_IsRunning) {
-            bgCol     = ColU32(0.04f, 0.16f, 0.17f);
-            borderCol = ColA(DS::AccentColor, 130);
-            textCol   = DS::AccentLight;
-        } else {
-            bgCol     = ColU32(0.08f, 0.09f, 0.12f);
-            borderCol = ColA(DS::TextHint, 150);
-            textCol   = DS::TextSecondary;
-        }
-
-        dl->AddRectFilled(dispPos, dispEnd, bgCol, DS::RadiusLarge);
-        dl->AddRect(dispPos, dispEnd, borderCol, DS::RadiusLarge, 0, 1.5f);
-
-        bool bigFont = (ImGui::GetIO().Fonts->Fonts.Size > 1);
-        if (bigFont) ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[1]);
-
-        bool showProgressBar = (m_Mode == OClockMode::Timer) && m_ShowProgressBar;
-
-        ImVec2 textSz  = ImGui::CalcTextSize(timeStr.c_str());
-        ImVec2 textPos = ImVec2(
-            dispPos.x + (w - textSz.x) * 0.5f,
-            dispPos.y + (dispH - textSz.y) * 0.5f - (showProgressBar ? 6.0f : 0.0f));
-
-        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(), textPos, textCol, timeStr.c_str());
-
-        if (bigFont) ImGui::PopFont();
-
-        // ── Barra de progreso (objetivo) — solo tiene sentido en modo Timer ──
-        if (showProgressBar) {
-            float barH   = 6.0f;
-            float barPad = 16.0f;
-            ImVec2 bMin(dispPos.x + barPad, dispEnd.y - barH - 10.0f);
-            ImVec2 bMax(dispEnd.x - barPad, bMin.y + barH);
-
-            dl->AddRectFilled(bMin, bMax, ColA(DS::TextHint, 90), barH * 0.5f);
-
-            if (m_IsOvertime) {
-                dl->AddRectFilled(bMin, bMax, ColA(DS::DangerColor, 220), barH * 0.5f);
-            } else {
-                float ratio = GetProgressRatio();
-                float fillX = bMin.x + (bMax.x - bMin.x) * ratio;
-                if (fillX > bMin.x)
-                    dl->AddRectFilled(bMin, ImVec2(fillX, bMax.y), ColA(DS::AccentColor, 230), barH * 0.5f);
-            }
-        }
-
-        ImGui::Dummy(ImVec2(w, dispH));
-
-        // Debajo del display: objetivo + estado (Timer) o etiqueta fija (WallClock)
-        if (m_Mode == OClockMode::Timer) {
-            char targetBuf[32];
-            int  tgtSecs = static_cast<int>(m_TargetTime.count());
-            snprintf(targetBuf, sizeof(targetBuf), "Objetivo: %02d:%02d", tgtSecs / 60, tgtSecs % 60);
-            ImGui::TextColored(ToVec4(DS::TextSecondary), "%s", targetBuf);
-
-            if (m_IsOvertime) {
-                ImGui::SameLine();
-                ImGui::TextColored(ToVec4(DS::DangerColor), "  •  Tiempo excedido");
-            }
-        } else {
-            ImGui::TextColored(ToVec4(DS::TextSecondary), "Hora local del dispositivo");
-        }
-    }
-
-    ImGui::Spacing();
-    DS::GlassSeparator();
-
-    // ── Configuración ────────────────────────────────────────────────────
-    DS::GlassSectionHeader("CONFIGURACIÓN");
-    ImGui::Spacing();
-
-    RenderModeSelector();
-
-    if (m_Mode == OClockMode::Timer) {
-        ImGui::Spacing();
-
-        ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImVec4(0.05f, 0.09f, 0.13f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.07f, 0.12f, 0.17f, 1.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
-
-        float halfW = (w - kGapNormal) * 0.5f;
-
-        ImGui::BeginGroup();
-        ImGui::TextColored(ToVec4(DS::TextHint), "%s", str.minutes);
-        ImGui::SetNextItemWidth(halfW);
-        ImGui::InputInt("##oclock_min", &m_InputMin, 0, 0);
-        ImGui::EndGroup();
-
-        ImGui::SameLine(0, kGapNormal);
-
-        ImGui::BeginGroup();
-        ImGui::TextColored(ToVec4(DS::TextHint), "%s", str.seconds);
-        ImGui::SetNextItemWidth(halfW);
-        ImGui::InputInt("##oclock_sec", &m_InputSec, 0, 0);
-        ImGui::EndGroup();
-
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor(2);
-
-        if (m_InputMin < 0)  m_InputMin = 0;
-        if (m_InputSec < 0)  m_InputSec = 0;
-        if (m_InputSec > 59) m_InputSec = 59;
-
-        // ── Sentido del conteo ───────────────────────────────────────────
-        RenderDirectionSelector();
-
-        // ── Presets rápidos ─────────────────────────────────────────────
-        ImGui::Spacing();
-        ImGui::TextColored(ToVec4(DS::TextHint), "Presets rápidos");
-        ImGui::Spacing();
-
-        int presetCount = static_cast<int>(sizeof(kPresetMinutes) / sizeof(kPresetMinutes[0]));
-        float presetGap = kGapTight;
-        float presetW   = (w - presetGap * (presetCount - 1)) / presetCount;
-
-        for (int i = 0; i < presetCount; ++i) {
-            bool active = (m_InputMin == kPresetMinutes[i] && m_InputSec == 0);
-            char label[8];
-            snprintf(label, sizeof(label), "%d'", kPresetMinutes[i]);
-            if (DS::GlassButton(label, ImVec2(presetW, 30.0f), active ? DS::AccentColor : DS::AccentColorDim))
-                ApplyPreset(kPresetMinutes[i]);
-            if (i != presetCount - 1) ImGui::SameLine(0, presetGap);
-        }
-
-        ImGui::Spacing();
-
-        // ── Opciones de visualización ─────────────────────────────────
-        ImGui::Checkbox("Barra de progreso", &m_ShowProgressBar);
-        ImGui::SameLine(0, kGapWide);
-        ImGui::Checkbox("Prefijo signo en overtime", &m_ShowSignPrefix);
-    } else {
-        RenderWallClockOptions();
-    }
-
-    RenderStyleSelector();
-
-    // ── Título / mensaje editable ────────────────────────────────────────
-    RenderTitleSection();
-
-    ImGui::Spacing();
-
-    // ── Botones de control (solo modo Timer: en WallClock no hay nada que
-    //    iniciar/pausar, el reloj del dispositivo corre siempre solo) ────
-    if (m_Mode == OClockMode::Timer) {
-        float btnW = (w - kGapNormal) * 0.5f;
-        float btnH = 40.0f;
-
-        if (!m_IsRunning) {
-            const char* startLabel = (m_PausedElapsed.count() > 0.0) ? "Reanudar" : str.start;
-            if (DS::GlassButton(startLabel, ImVec2(btnW, btnH), DS::SuccessColor))
-                Start(m_InputMin, m_InputSec);
-        } else {
-            if (DS::GlassButton(str.pause, ImVec2(btnW, btnH), ColU32(0.85f, 0.6f, 0.1f)))
-                Stop();
-        }
-
-        ImGui::SameLine(0, kGapNormal);
-        if (DS::GlassButton(str.reset, ImVec2(btnW, btnH), DS::DangerColor))
-            Reset();
-
-        ImGui::Spacing();
-    }
-
-    DS::GlassSeparator();
-
-    // ── En pantalla (overlay) ────────────────────────────────────────────
-    // Ya no es un modo a elegir aca: aparece solo si el overlay activo
-    // (Biblioteca > Overlays) tiene un cuadro de reloj configurado.
     {
         std::string overlayPath = core.GetOverlayPath();
         bool hasOverlay = !overlayPath.empty();
         bool hasClockBox = core.HasOverlayClockLayer();
+        bool isShowingOnPublic = hasOverlay && hasClockBox;
 
-        if (hasOverlay && hasClockBox) {
-            ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::SuccessColor));
-            ImGui::TextUnformatted("●");
-            ImGui::PopStyleColor();
-            ImGui::SameLine(0, 6);
-            ImGui::TextColored(ToVec4(DS::AccentLight), "Mostrando en overlay activo");
-        } else {
-            const char* msg = !hasOverlay
-                ? "● Sin overlay activo — activa uno con un cuadro de reloj para mostrarlo en pantalla."
-                : "● El overlay activo no tiene un cuadro de reloj — agregalo desde el editor de Overlays.";
-            ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextHint));
-            ImGui::TextWrapped("%s", msg);
-            ImGui::PopStyleColor();
+        ImVec2 p0 = ImGui::GetCursorScreenPos();
+        float cardH = 34.0f;
+        ImVec2 p1 = ImVec2(p0.x + w, p0.y + cardH);
+
+        ImU32 bg = isShowingOnPublic ? IM_COL32(10, 24, 20, 255) : IM_COL32(16, 18, 24, 255);
+        ImU32 border = isShowingOnPublic ? IM_COL32(40, 195, 130, 160) : IM_COL32(50, 58, 72, 120);
+
+        dl->AddRectFilled(p0, p1, bg, DS::RadiusMedium);
+        dl->AddRect(p0, p1, border, DS::RadiusMedium, 0, 1.0f);
+
+        dl->AddCircleFilled(ImVec2(p0.x + 12.0f, p0.y + cardH * 0.5f), 4.0f,
+                            isShowingOnPublic ? DS::SuccessColor : DS::TextHint);
+
+        dl->AddText(ImVec2(p0.x + 24.0f, p0.y + (cardH - ImGui::GetFontSize()) * 0.5f),
+                    isShowingOnPublic ? DS::TextPrimary : DS::TextSecondary,
+                    "📺 Proyector (Overlay)");
+
+        const char* statusTxt = isShowingOnPublic ? "EN PANTALLA" : "NO ACTIVO";
+        ImVec2 sSz = ImGui::CalcTextSize(statusTxt);
+        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.78f,
+                    ImVec2(p1.x - 10.0f - sSz.x * 0.78f, p0.y + (cardH - ImGui::GetFontSize() * 0.78f) * 0.5f),
+                    isShowingOnPublic ? DS::SuccessColor : ColA(DS::TextHint, 180), statusTxt);
+
+        ImGui::SetCursorScreenPos(ImVec2(p0.x, p0.y + cardH));
+        ImGui::Dummy(ImVec2(w, cardH));
+    }
+
+    ImGui::Spacing();
+
+    {
+        bool netAvailable = core.IsStreamingNet();
+        bool isLAN = (m_TransmitMode == OClockTransmitMode::LAN);
+
+        ImVec2 p0 = ImGui::GetCursorScreenPos();
+        float cardH = 34.0f;
+        ImVec2 p1 = ImVec2(p0.x + w, p0.y + cardH);
+
+        ImU32 bg = isLAN ? IM_COL32(10, 24, 20, 255) : IM_COL32(16, 18, 24, 255);
+        ImU32 border = isLAN ? IM_COL32(40, 195, 130, 160) : IM_COL32(50, 58, 72, 120);
+
+        dl->AddRectFilled(p0, p1, bg, DS::RadiusMedium);
+        dl->AddRect(p0, p1, border, DS::RadiusMedium, 0, 1.0f);
+
+        dl->AddCircleFilled(ImVec2(p0.x + 12.0f, p0.y + cardH * 0.5f), 4.0f,
+                            isLAN ? DS::SuccessColor : DS::TextHint);
+
+        dl->AddText(ImVec2(p0.x + 24.0f, p0.y + (cardH - ImGui::GetFontSize()) * 0.5f),
+                    isLAN ? DS::TextPrimary : DS::TextSecondary,
+                    "📡 Red LAN (Stage)");
+
+        float btnW = 68.0f;
+        float btnH = 24.0f;
+        ImVec2 bPos(p1.x - btnW - 6.0f, p0.y + (cardH - btnH) * 0.5f);
+
+        const char* toggleLbl = isLAN ? "● EN VIVO" : "APAGADO";
+        ImU32 toggleCol = isLAN ? DS::SuccessColor : DS::AccentColorDim;
+
+        ImGui::BeginDisabled(!netAvailable);
+        if (DrawSegmentTab(dl, "##lanToggle", toggleLbl, isLAN, bPos, ImVec2(bPos.x + btnW, bPos.y + btnH), toggleCol)) {
+            m_TransmitMode = isLAN ? OClockTransmitMode::Off : OClockTransmitMode::LAN;
         }
+        ImGui::EndDisabled();
+
+        ImGui::SetCursorScreenPos(ImVec2(p0.x, p0.y + cardH));
+        ImGui::Dummy(ImVec2(w, cardH));
+
+        if (!netAvailable) {
+            ImGui::Spacing();
+            ImGui::TextColored(ToVec4(DS::TextHint), "Inicia el servidor en Transmisión para habilitar salida LAN.");
+        }
+    }
+}
+
+void OClock::RenderStyleSelector() {
+    auto& core = Core::PresentationCore::Get();
+    std::vector<std::string> styleNames = core.GetSavedStyleNames();
+
+    if (ImGui::CollapsingHeader("⚙️ Opciones Avanzadas")) {
+        ImGui::Spacing();
+
+        auto renderCombo = [&](const char* label, const char* comboId,
+                               std::string& target, const char* emptyHint) {
+            ImGui::TextColored(ToVec4(DS::TextHint), "%s", label);
+
+            std::string preview = target.empty() ? "Usar estilo actual" : target;
+
+            ImGui::PushStyleColor(ImGuiCol_FrameBg,        IM_COL32(14, 18, 26, 255));
+            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, IM_COL32(20, 28, 40, 255));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+            ImGui::SetNextItemWidth(-1.0f);
+
+            if (ImGui::BeginCombo(comboId, preview.c_str())) {
+                bool noneSelected = target.empty();
+                if (ImGui::Selectable("Usar estilo actual", noneSelected))
+                    target.clear();
+                if (noneSelected) ImGui::SetItemDefaultFocus();
+
+                for (const auto& name : styleNames) {
+                    bool sel = (target == name);
+                    if (ImGui::Selectable(name.c_str(), sel))
+                        target = name;
+                    if (sel) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(2);
+
+            if (target.empty()) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextHint));
+                ImGui::TextWrapped("%s", emptyHint);
+                ImGui::PopStyleColor();
+            }
+            ImGui::Spacing();
+        };
+
+        renderCombo("Estilo tipográfico normal (LAN)", "##oclockStyle", m_StyleName,
+            "Hereda la tipografía y color del estilo activo en la app.");
+
+        renderCombo("Estilo al exceder tiempo (LAN)", "##oclockFinalStyle", m_FinalStyleName,
+            "Aplica estilo especial o color de peligro automático al llegar a overtime.");
+
+        ImGui::Spacing();
+        ImGui::TextColored(ToVec4(DS::TextHint), "OPCIONES VISUALES");
+        ImGui::Spacing();
+
+        ImGui::Checkbox("Mostrar barra de progreso en el display", &m_ShowProgressBar);
+        ImGui::Checkbox("Mostrar signo '+' en sobretiempo", &m_ShowSignPrefix);
+
+        ImGui::Spacing();
+    }
+}
+
+void OClock::Render(GlassRenderer& glass) {
+    Update();
+    (void)glass;
+    std::string timeStr = GetFormattedTime();
+
+    float w = ImGui::GetContentRegionAvail().x;
+
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::AccentColor));
+        ImGui::TextUnformatted("RELOJ & CRONÓMETRO");
+        ImGui::PopStyleColor();
+
+        ImGui::SameLine();
+        Wiki::InfoButton(Wiki::Topic::OClock);
+    }
+
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    RenderDisplayCard(w, timeStr);
+
+    ImGui::Spacing();
+
+    RenderTransportControls(w);
+
+    ImGui::Spacing();
+
+    RenderModeSelector(w);
+
+    ImGui::Spacing();
+
+    if (m_Mode == OClockMode::Timer) {
+        RenderTimeConfig(w);
+    } else {
+        RenderWallClockOptions(w);
     }
 
     ImGui::Spacing();
     DS::GlassSeparator();
+    ImGui::Spacing();
 
-    // ── Transmitir a LAN ─────────────────────────────────────────────────
-    DS::GlassSectionHeader("TRANSMITIR A RED (LAN)");
+    RenderTitleSection(w);
 
-    bool netAvailable = core.IsStreamingNet();
+    ImGui::Spacing();
+    DS::GlassSeparator();
+    ImGui::Spacing();
 
-    struct ModeOpt { const char* label; OClockTransmitMode mode; bool needsNet; };
-    ModeOpt opts[2] = {
-        { "Apagado", OClockTransmitMode::Off, false },
-        { "Solo LAN", OClockTransmitMode::LAN, true  },
-    };
+    RenderOutputsSection(w);
 
-    float cardGap = kGapNormal;
-    float cardW   = (w - cardGap) * 0.5f;
-    float cardH   = 40.0f;
+    ImGui::Spacing();
+    DS::GlassSeparator();
+    ImGui::Spacing();
 
-    ImVec2 rowStart = ImGui::GetCursorScreenPos();
-
-    for (int i = 0; i < 2; ++i) {
-        auto& opt = opts[i];
-        bool  disabled = opt.needsNet && !netAvailable;
-        bool  active   = (m_TransmitMode == opt.mode) && !disabled;
-
-        ImVec2 p0 = ImVec2(rowStart.x + i * (cardW + cardGap), rowStart.y);
-        ImVec2 p1 = ImVec2(p0.x + cardW, p0.y + cardH);
-
-        ImU32 bg  = active ? ColA(DS::AccentColor, 45) : ImU32(IM_COL32(255, 255, 255, 10));
-        ImU32 bdr = active ? ColA(DS::AccentColor, 200) : ColA(DS::TextHint, disabled ? 60 : 120);
-
-        dl->AddRectFilled(p0, p1, bg, DS::RadiusMedium);
-        dl->AddRect(p0, p1, bdr, DS::RadiusMedium, 0, active ? 1.5f : 1.0f);
-
-        ImGui::SetCursorScreenPos(p0);
-        ImGui::PushID(i);
-        ImGui::BeginDisabled(disabled);
-        bool clicked = ImGui::InvisibleButton("##mode", ImVec2(cardW, cardH));
-        ImGui::EndDisabled();
-        ImGui::PopID();
-
-        if (clicked && !disabled) m_TransmitMode = opt.mode;
-
-        ImU32 labelCol = disabled ? ColA(DS::TextHint, 130) : (active ? DS::AccentLight : DS::TextSecondary);
-        ImVec2 labelSz = ImGui::CalcTextSize(opt.label);
-        dl->AddText(ImVec2(p0.x + (cardW - labelSz.x) * 0.5f, p0.y + (cardH - labelSz.y) * 0.5f), labelCol, opt.label);
-    }
-
-    ImGui::SetCursorScreenPos(ImVec2(rowStart.x, rowStart.y + cardH));
-    ImGui::Dummy(ImVec2(w, cardH));
-
-    if (!netAvailable) {
-        ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextHint));
-        ImGui::TextWrapped("Inicia el servidor en Transmisión para habilitar \"Solo LAN\".");
-        ImGui::PopStyleColor();
-        if (m_TransmitMode == OClockTransmitMode::LAN) m_TransmitMode = OClockTransmitMode::Off;
-    } else if (m_TransmitMode == OClockTransmitMode::LAN) {
-        ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::DangerColor));
-        ImGui::TextUnformatted("● Transmitiendo a la red local");
-        ImGui::PopStyleColor();
-    }
+    RenderStyleSelector();
 }
 
-} // namespace ProyecThor::UI
+}
+

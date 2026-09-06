@@ -5,41 +5,14 @@
 
 namespace ProyecThor::UI {
 
-// =============================================================================
-//  SongEditView — editor unificado de canciones (rework total del editor).
-//
-//  Reemplaza tanto SongView::RenderEditorModal (popup flotante viejo, solo
-//  Autor + una caja de texto) como LibrarySongs::RenderSongEditor (popup de
-//  cancion nueva, Titulo+Autor+Contenido) por una sola pantalla SIN ventana
-//  flotante: split izquierda (metadatos + letra) / derecha (preview fiel de
-//  las diapositivas), con autoguardado y undo/redo de un solo paso.
-//
-//  Layout calcado del editor de referencia (Holyrics): Titulo+Autor siempre
-//  a la vista (el resto de los metadatos vive detras de un icono de
-//  informacion, para no restarle espacio a la letra) + una sola caja de
-//  letra continua debajo, y a la derecha una grilla de diapositivas de
-//  preview. El estilo/fondo por verso individual se saco a proposito: ya
-//  existe un preset de estilo/fondo por CANCION ENTERA (la tarjeta
-//  "Ajustes" del grid de estrofas en SongView, ver GetSongStyle/
-//  GetSongBackground en LibrarySongs.h) y tener los dos era redundante.
-// =============================================================================
 class SongEditView {
 public:
     SongEditView() = default;
 
-    // Carga letra + metadatos de <filename> (nombre de archivo, con .txt) y
-    // reinicia undo/redo. Llamar una vez al entrar al editor (ver
-    // SongView::Render, transicion Browse->Edit).
     void Open(const std::string& filename);
 
-    // Renderiza el editor completo. Devuelve false cuando el usuario aprieta
-    // "Volver" (SongView debe entonces volver a mostrar la grilla). Hace
-    // flush del autoguardado pendiente antes de devolver false.
     bool Render();
 
-    // Fuerza el volcado a disco de cualquier cambio pendiente — llamado por
-    // SongView antes de destruir/reusar la instancia (cambio de cancion,
-    // cierre de la app) para no perder los ultimos ~1.2s de edicion.
     void FlushIfDirty();
 
     const std::string& GetFilename() const { return m_Filename; }
@@ -49,17 +22,9 @@ private:
         std::string title, author, note, copyright, extra;
         std::string lyrics;
 
-        // Letra "base" (sin el corte de lineas-por-diapositiva aplicado) —
-        // se mantiene sincronizada con "lyrics" mientras el usuario escribe
-        // a mano, pero NO se toca cuando se aplica el filtro 1/2/3 (ver
-        // panel "Excepciones"). Gracias a esto, aplicar "2" y despues "3"
-        // siempre parte de la misma letra sin cortes, en vez de intentar
-        // re-cortar un texto que ya tiene lineas en blanco insertadas por
-        // una aplicacion anterior del filtro (lo que antes impedia UNIR
-        // lineas ya separadas, solo separar mas).
         std::string baseLyrics;
 
-        int linesPerSlide = 0; // 0 = centinela legacy (ver LibrarySongMeta.h)
+        int linesPerSlide = 0;
     };
 
     void PushUndoSnapshot();
@@ -73,8 +38,8 @@ private:
 
     std::vector<std::string> ComputePreviewSlides() const;
 
-    std::string m_Filename;   // "Cancion.txt"
-    std::string m_FilePath;   // ruta absoluta al .txt
+    std::string m_Filename;
+    std::string m_FilePath;
 
     EditSnapshot m_Current;
     EditSnapshot m_Undo;
@@ -89,25 +54,15 @@ private:
 
     float m_PreviewZoom = 1.0f;
 
-    // ── Duracion por diapositiva (icono de reloj, ver RenderRightPane) ──────
-    // Fuera de EditSnapshot/undo-redo a proposito: no son "texto" que el
-    // operador este redactando, son un ajuste aparte (mismo criterio que el
-    // color de estrofa en SongView, que tampoco pasa por undo). Se
-    // persisten igual que el resto de LibrarySongMeta via MarkDirty() +
-    // FlushIfDirty() -- por eso FlushIfDirty() SIEMPRE debe volcar estos dos
-    // campos junto con el resto, o un autoguardado disparado por otra
-    // edicion (letra/titulo) los pisaria con el valor por defecto.
-    int              m_TempoBpm = 0; // solo lectura aca -- se edita en SongView
+    int              m_TempoBpm = 0;
     std::vector<int> m_VerseDurationOverrideMs;
 
-    // Popup del reloj: se abre una sola vez en el frame del click (mismo
-    // idioma que el color-picker de SongView), no en cada frame mientras
-    // esta abierto.
     int    m_DurationPopupForSlide  = -1;
     bool   m_OpenDurationPopupRequest = false;
-    int    m_DurationPopupValueMs     = 0; // buffer editable del popup
+    int    m_DurationPopupValueMs     = 0;
 
     void RenderVerseDurationPopup(const std::vector<std::string>& slides);
 };
 
-} // namespace ProyecThor::UI
+}
+

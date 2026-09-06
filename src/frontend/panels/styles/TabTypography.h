@@ -14,13 +14,13 @@ public:
     explicit TabTypography(std::vector<std::string>* fontList,
                            OnFontImportedCallback onFontImported = nullptr);
 
-    void Render(StyleData& data, float colWidth);
+    void Render(ProyecThor::Core::TextBoxStyle& box, float colWidth);
 
 private:
-    void RenderFontSelector    (StyleData& data, float colWidth);
-    void RenderColorPicker     (StyleData& data, float colWidth);
-    void RenderSizeSlider      (StyleData& data, float colWidth);
-    void RenderAutoScaleCheckbox(StyleData& data);
+    void RenderFontSelector    (ProyecThor::Core::TextBoxStyle& box, float colWidth);
+    void RenderColorPicker     (ProyecThor::Core::TextBoxStyle& box, float colWidth);
+    void RenderSizeSlider      (ProyecThor::Core::TextBoxStyle& box, float colWidth);
+    void RenderAutoScaleCheckbox(ProyecThor::Core::TextBoxStyle& box);
     void ImportFont();
 
     std::vector<std::string>* m_FontList       = nullptr;

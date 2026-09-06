@@ -32,7 +32,7 @@ public:
     UIManager*  m_UIManagerRef  = nullptr;
 
 private:
-    void RenderHomeContent(); // contenido de la seccion "Home" (preview en vivo)
+    void RenderHomeContent(); // contenido de la sección "Home" (preview en vivo)
 
     AudioPanel* m_AudioPanelRef = nullptr;
     MonitorView  m_MonitorView;

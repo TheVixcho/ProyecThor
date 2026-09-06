@@ -2,7 +2,12 @@
 
 #include <chrono>
 #include <array>
+#include <thread>
+#include <mutex>
+#include <optional>
+#include <string>
 #include <imgui.h>
+#include "backend/core/SubtitleImporter.h"
 
 struct GLFWmonitor;
 
@@ -11,6 +16,7 @@ namespace ProyecThor::UI {
 class Hub {
 public:
     Hub();
+    ~Hub(); // une m_DownloadSubsThread si sigue viva -- ver definicion en Hub.cpp
 
     bool Render();
     void ForceOpen();
@@ -21,9 +27,13 @@ public:
     int  GetActiveTab()         const { return m_ActiveTab; }
 
 private:
-    void RenderSidebar(float w, float h);
-    void RenderMainContent(float w, float h);
-    void RenderWhatsNewIfNeeded();
+    // Layout de un solo flujo central de paneles, con las acciones principales
+    // apiladas y las utilidades compactas debajo.
+    void RenderContent(float w, float h);
+    void RenderNovedadesPanel();
+    void RenderUpdateDetailModal();
+    void RenderDownloadSubtitlesPanel();
+    void RenderTutorialModal();
 
     void UpdateAnimations(float dt);
 
@@ -38,6 +48,39 @@ private:
     int   m_ActiveTab             = 0;
     int   m_SelectedMonitor       = -1;
 
+    // --- Panel "Novedades" (parche destacado + historial de versiones),
+    // abierto a demanda con la tecla N o la tarjeta del mismo nombre ---
+    bool  m_NovedadesOpen         = false;
+    float m_NovedadesAnim         = 0.0f;
+
+    // --- Modal de Tutorial / Tour Guiado Profesional (Estilo Adobe) ---
+    bool  m_TutorialOpen          = false;
+    int   m_TutorialStep          = 0;
+    float m_TutorialAnim          = 0.0f;
+
+    // --- Modal universal de detalle de actualizacion -- compartido entre
+    // el hero de Novedades ("Ver todo el detalle") y su lista de historial ---
+    bool  m_IsUpdateModalOpen     = false;
+    int   m_SelectedUpdateVer     = 18; // id de kUpdateRegistry; arranca en la version 1.0.0 estable
+    float m_UpdateModalAnim       = 0.0f;
+    bool  m_ShowBetaHistory       = false; // oculto por defecto para versiones pre-1.0 (beta)
+
+    // --- "Descargar subtitulos" -- utilidad independiente de la Biblioteca:
+    // baja los subtitulos de una URL (mismo fetch que "Importar desde URL"
+    // del menu Archivo, ver SubtitleImporter.h) y los guarda como .txt
+    // suelto, sin crear una cancion. Corre en un hilo de fondo por la
+    // misma razon que UIManager::RenderUrlImportModal (depende de la red).
+    bool        m_DownloadSubsOpen           = false;
+    bool        m_DownloadSubsRunning        = false;
+    char        m_DownloadSubsUrlBuf[512]    = {};
+    bool        m_DownloadSubsAskEachTime    = true;
+    std::string m_DownloadSubsPresetFolder;
+    std::string m_DownloadSubsLastError;
+    std::string m_DownloadSubsSavedPath; // no vacio tras un exito -- se muestra "Guardado en: ..."
+    std::thread m_DownloadSubsThread;
+    std::mutex  m_DownloadSubsMutex;
+    std::optional<ProyecThor::Core::SubtitleFetchResult> m_DownloadSubsResult;
+
     // --- Canvas de particulas (fondo animado) ---
     struct BgParticle {
         float x, y;
@@ -47,7 +90,7 @@ private:
         bool  isCyan;
     };
 
-    static constexpr int   BG_PARTICLE_COUNT = 40;
+    static constexpr int   BG_PARTICLE_COUNT = 70;
     static constexpr float BG_CONNECT_DIST   = 130.0f;
     static constexpr float BG_GRID_SIZE      = 80.0f;
 

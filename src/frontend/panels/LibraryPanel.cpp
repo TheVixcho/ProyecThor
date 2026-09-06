@@ -17,12 +17,15 @@
 #include <imgui_internal.h>
 
 #include "backend/core/PresentationCore.h"
+#include "backend/core/FileDeletionManager.h"
 #include "UIStrings.h"
 #include "frontend/ui/UIManager.h"
 #include "frontend/ui/IconRail.h"
 #include "frontend/ui/FilePicker.h"
 #include "ui/DesignSystem.h"
 #include "biblio/LibraryPlaylists.h"
+#include "frontend/panels/model3d/Model3DPanel.h"
+#include "PanelPickerFullscreen.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -209,7 +212,8 @@ Library::LibraryContext LibraryPanel::BuildContext()
         [this](const std::string& pl, int idx) { SelectPlaylistSong(pl, idx); },
         m_EditTags,
         [](const std::string& f) { return Library::GetSongTags(f); },
-        [](const std::string& f, const std::vector<std::string>& t) { Library::SetSongTags(f, t); }
+        [](const std::string& f, const std::vector<std::string>& t) { Library::SetSongTags(f, t); },
+        [this]() { OpenPanelPickerFullscreen(); }
     };
 }
 
@@ -239,6 +243,8 @@ LibraryPanel::LibraryPanel()
     LoadStreamURLs();
 }
 
+LibraryPanel::~LibraryPanel() = default;
+
 // El editor de Overlays necesita UIManager (para pedirle el modo pantalla
 // completa, ver UIManager::EnterFullscreenEditor) -- se crea aca en vez de
 // en el constructor porque SetUIManager corre despues (ver main.cpp).
@@ -247,6 +253,62 @@ void LibraryPanel::SetUIManager(UIManager* manager)
     m_UIManagerRef = manager;
     if (!m_OverlayTab && m_UIManagerRef)
         m_OverlayTab = std::make_unique<OverlayLibraryTab>(m_UIManagerRef);
+    if (!m_WebBrowserPanel)
+        m_WebBrowserPanel = std::make_unique<WebBrowserPanel>();
+    if (!m_Model3DPanel) {
+        m_Model3DPanel = std::make_unique<Model3DPanel>();
+        m_Model3DPanel->SetUIManager(m_UIManagerRef);
+    }
+    if (!m_LabPanel) {
+        m_LabPanel = std::make_unique<LabPanel>();
+        m_LabPanel->SetUIManager(m_UIManagerRef);
+    }
+    if (!m_PanelPicker && m_UIManagerRef) {
+        m_PanelPicker = std::make_unique<PanelPickerFullscreen>(this, m_UIManagerRef);
+    }
+}
+
+void LibraryPanel::SetMediaOnlyMode(bool v)
+{
+    m_MediaOnlyMode = v;
+    if (v)
+    {
+        m_CurrentCategory = LibraryCategory::Multimedia;
+        m_PrevCategory    = LibraryCategory::Multimedia;
+        m_SideMode        = LibrarySideMode::Categories;
+    }
+}
+
+void LibraryPanel::SetRenderOnlyMode(bool v)
+{
+    m_RenderOnlyMode = v;
+    if (v)
+        m_SideMode = LibrarySideMode::Render;
+}
+
+void LibraryPanel::SelectCategory(LibraryCategory cat)
+{
+    m_CurrentCategory = cat;
+    m_SideMode        = LibrarySideMode::Categories;
+    m_SelectedIndex   = -1;
+    RefreshList();
+}
+
+void LibraryPanel::SelectSideMode(LibrarySideMode mode)
+{
+    m_SideMode = mode;
+}
+
+void LibraryPanel::OpenPanelPickerFullscreen()
+{
+    if (m_UIManagerRef && m_PanelPicker) {
+        m_PanelPicker->Open();
+        m_UIManagerRef->EnterFullscreenEditor([this]() {
+            if (m_PanelPicker) {
+                m_PanelPicker->Render();
+            }
+        }, true);
+    }
 }
 
 // =============================================================================
@@ -366,37 +428,25 @@ void LibraryPanel::DeleteSelectedItem()
     const bool isCurrentlySelected =
         (currentSelection.title == itemName) || isDocumentInUse;
 
-    const bool isVideoCategory = (m_CurrentCategory == LibraryCategory::Videos);
-
-    if (isVideoCategory)
-    {
-        // Bloquea la ruta ANTES de detener la reproduccion. Mientras el
-        // bloqueo esta activo, VLCBasePlayer::Play() ignora cualquier
-        // intento de volver a abrir este archivo, sin importar quien lo
-        // dispare (cola automatica, boton manual, etc.). Esto es lo que
-        // evita que el video se reabra justo despues del Stop() y deje el
-        // archivo bloqueado para el borrado.
-        core.BlockBackgroundPath(fullPath);
-        core.StopBackgroundMedia();
-    }
-
     if (isCurrentlySelected)
     {
         core.SetProjecting(false);
         core.ClearLayer2();
     }
 
-    if (m_CurrentCategory == LibraryCategory::Documents && isDocumentInUse)
+    if (m_CurrentCategory == LibraryCategory::Documents)
         m_LoadedDocPath.clear();
 
-    const bool removed = TryRemoveWithRetry(U8Path(fullPath));
-
-    if (isVideoCategory)
-        core.UnblockBackgroundPath();
+    bool removed = false;
+    if (m_CurrentCategory == LibraryCategory::Documents) {
+        removed = Core::FileDeletionManager::ForceDeleteDirectory(fullPath);
+    } else {
+        removed = Core::FileDeletionManager::ForceDeleteFile(fullPath);
+    }
 
     if (!removed)
     {
-        std::cerr << "[LibraryPanel] No se pudo eliminar, el archivo sigue en uso: "
+        std::cerr << "[LibraryPanel] No se pudo eliminar el archivo: "
                   << fullPath << '\n';
         ShowFileInUseToast(itemName);
         return;
@@ -487,6 +537,28 @@ void LibraryPanel::Render()
     // ahora.
     m_OClock.Update();
 
+    // Alt Gr + 1: si Biblioteca esta colapsada (o pasando el punto medio de
+    // la animacion), no dibujar la ventana ni su toolbar/sidebar -- el pump
+    // de arriba ya corrio, asi que el Reloj sigue alimentando LAN/pantalla
+    // igual que si el panel estuviera visible.
+    if (m_UIManagerRef && m_UIManagerRef->IsPanelCollapsedForRender(GetName()))
+        return;
+
+    // Un archivo pudo haber cambiado de nombre en disco desde un lugar sin
+    // acceso directo a este ctx (ver SongEditView::FlushIfDirty /
+    // RenameNewSongToTitleIfApplicable) -- reescanea de verdad (RefreshList)
+    // en vez de solo reordenar lo ya cargado, y sigue apuntando m_SelectedIndex
+    // a la cancion actualmente seleccionada bajo su nombre nuevo.
+    if (ForceLibraryRescan())
+    {
+        ForceLibraryRescan() = false;
+        RefreshList();
+
+        const std::string currentTitle = Core::PresentationCore::Get().PeekSelection().title;
+        auto it = std::find(m_Items.begin(), m_Items.end(), currentTitle);
+        m_SelectedIndex = (it != m_Items.end()) ? (int)std::distance(m_Items.begin(), it) : -1;
+    }
+
     const auto& str = ProyecThor::UI::GetUIStrings();
 
     if (m_CurrentCategory != m_PrevCategory)
@@ -498,7 +570,10 @@ void LibraryPanel::Render()
     }
     
     ImGuiIO& io = ImGui::GetIO();
-    if (io.KeyShift) // Solo si Shift está presionado
+    // Los presets "Biblioteca"/"Render" bloquean la categoria/side-mode --
+    // sin este guard, Shift+1..6 seguiria dejando saltar a Canciones/Video/
+    // etc. en esos workspaces reducidos (ver SetMediaOnlyMode/SetRenderOnlyMode).
+    if (io.KeyShift && !m_MediaOnlyMode && !m_RenderOnlyMode) // Solo si Shift está presionado
     {
         // Revisamos teclas del 1 al 6 (código ASCII '1' a '6')
         for (int i = 0; i < 6; ++i)
@@ -516,6 +591,11 @@ void LibraryPanel::Render()
                 break;
             }
         }
+    }
+
+    if (ImGui::IsKeyPressed(ImGuiKey_F8) && !io.KeyCtrl && !io.KeyAlt)
+    {
+        OpenPanelPickerFullscreen();
     }
     
     bool visible = false;
@@ -546,6 +626,13 @@ void LibraryPanel::Render()
     const float k_SidebarW = IconRailThickness(true);
     const float     totalH     = ImGui::GetContentRegionAvail().y;
 
+    // Presets "Biblioteca"/"Render" (ver SetMediaOnlyMode/SetRenderOnlyMode):
+    // sin sidebar de categorias -- solo hay una opcion posible, no tiene
+    // sentido un selector. El contenido de abajo (ancho 0 = todo lo
+    // disponible) ocupa automaticamente el espacio que el sidebar+divisor
+    // hubieran usado.
+    if (!m_MediaOnlyMode && !m_RenderOnlyMode)
+    {
     // ── Sidebar izquierdo ──────────────────────────────────────────────────
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
@@ -578,6 +665,7 @@ void LibraryPanel::Render()
             colMid, colMid, colBot, colBot);
     }
     ImGui::SameLine(0.f, 1.0f);
+    }
 
     // ── Panel de contenido derecho ─────────────────────────────────────────
     // Margen unificado para TODAS las categorias (Canciones, Video, Documentos,
@@ -595,6 +683,11 @@ void LibraryPanel::Render()
     {
         Library::LibraryContext ctx = BuildContext();
 
+        if (m_SideMode != LibrarySideMode::Web && m_WebBrowserPanel)
+        {
+            m_WebBrowserPanel->Hide();
+        }
+
         if (m_SideMode == LibrarySideMode::Render)
         {
             RenderConverterSection();
@@ -602,6 +695,18 @@ void LibraryPanel::Render()
         else if (m_SideMode == LibrarySideMode::Overlay)
         {
             if (m_OverlayTab) m_OverlayTab->Render();
+        }
+        else if (m_SideMode == LibrarySideMode::Web)
+        {
+            if (m_WebBrowserPanel) m_WebBrowserPanel->Render();
+        }
+        else if (m_SideMode == LibrarySideMode::Model3D)
+        {
+            if (m_Model3DPanel) m_Model3DPanel->Render();
+        }
+        else if (m_SideMode == LibrarySideMode::Lab)
+        {
+            if (m_LabPanel) m_LabPanel->Render();
         }
         else if (m_CurrentCategory == LibraryCategory::Audio)
         {
@@ -655,7 +760,7 @@ void LibraryPanel::Render()
 // SongEditView permite renombrar el titulo visible desde adentro.
 void LibraryPanel::CreateNewSong()
 {
-    const std::string base = "Nueva cancion";
+    const std::string base = "Nueva canción";
     std::string filename = base + ".txt";
     int suffix = 2;
     while (fs::exists(U8Path(GetAssetsPath() + "/songs/" + filename))) {
@@ -746,7 +851,7 @@ void LibraryPanel::SelectPlaylistSong(const std::string& playlistName, int index
 void LibraryPanel::ImportFile()
 {
 #ifdef _WIN32
-    wchar_t filename[MAX_PATH] = {};
+    std::vector<wchar_t> buffer(65536, 0);
     OPENFILENAMEW ofn;
     ZeroMemory(&ofn, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
@@ -755,7 +860,7 @@ void LibraryPanel::ImportFile()
     if      (m_CurrentCategory == LibraryCategory::Videos)
         ofn.lpstrFilter = L"Videos\0*.mp4;*.mkv;*.avi;*.mov\0Todos\0*.*\0";
     else if (m_CurrentCategory == LibraryCategory::Images)
-        ofn.lpstrFilter = L"Imagenes\0*.jpg;*.png;*.jpeg\0Todos\0*.*\0";
+        ofn.lpstrFilter = L"Imágenes\0*.jpg;*.png;*.jpeg\0Todos\0*.*\0";
     else if (m_CurrentCategory == LibraryCategory::Multimedia)
         ofn.lpstrFilter = L"Video, audio o imagen\0*.mp4;*.mkv;*.avi;*.mov;*.mp3;*.flac;*.wav;*.ogg;*.aac;*.m4a;*.wma;*.opus;*.aiff;*.jpg;*.jpeg;*.png\0Todos\0*.*\0";
     else if (m_CurrentCategory == LibraryCategory::Songs)
@@ -765,13 +870,30 @@ void LibraryPanel::ImportFile()
     else
         ofn.lpstrFilter = L"Todos los archivos\0*.*\0";
 
-    ofn.lpstrFile = filename;
-    ofn.nMaxFile  = MAX_PATH;
-    ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+    ofn.lpstrFile = buffer.data();
+    ofn.nMaxFile  = static_cast<DWORD>(buffer.size());
+    ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR | OFN_ALLOWMULTISELECT;
 
     if (!GetOpenFileNameW(&ofn)) return;
 
-    fs::path src(filename);
+    const wchar_t* p = buffer.data();
+    std::wstring first(p);
+    p += first.length() + 1;
+
+    if (*p == 0) {
+        // Solo un archivo seleccionado
+        fs::path src(first);
+        ImportSelectedFileToLibrary(src, m_CurrentCategory, GetAssetsPath());
+    } else {
+        // Multiples archivos: 'first' es el directorio base
+        fs::path dir(first);
+        while (*p != 0) {
+            std::wstring filename(p);
+            fs::path src = dir / filename;
+            ImportSelectedFileToLibrary(src, m_CurrentCategory, GetAssetsPath());
+            p += filename.length() + 1;
+        }
+    }
 #else
     std::string filter;
     switch (m_CurrentCategory) {
@@ -779,7 +901,7 @@ void LibraryPanel::ImportFile()
             filter = "--file-filter=Videos | *.mp4 *.mkv *.avi *.mov";
             break;
         case LibraryCategory::Images:
-            filter = "--file-filter=Imagenes | *.jpg *.jpeg *.png";
+            filter = "--file-filter=Imágenes | *.jpg *.jpeg *.png";
             break;
         case LibraryCategory::Multimedia:
             filter = "--file-filter=Video, audio o imagen | *.mp4 *.mkv *.avi *.mov "
@@ -796,11 +918,11 @@ void LibraryPanel::ImportFile()
             break;
     }
 
-    std::string command = "zenity --file-selection --title=\"Importar archivo\" \"" +
+    std::string command = "zenity --file-selection --multiple --separator=\"|\" --title=\"Importar archivos\" \"" +
                           filter + "\" 2>/dev/null";
 
     std::string result;
-    char buffer[1024];
+    char buffer[4096];
     FILE* pipe = popen(command.c_str(), "r");
     if (!pipe) {
         std::cerr << "[LibraryPanel] No se pudo abrir el selector de archivos (zenity).\n";
@@ -815,16 +937,30 @@ void LibraryPanel::ImportFile()
         result.pop_back();
     if (result.empty()) return;
 
-    fs::path src(result);
+    size_t start = 0, end = 0;
+    while ((end = result.find('|', start)) != std::string::npos) {
+        std::string pathStr = result.substr(start, end - start);
+        if (!pathStr.empty()) {
+            fs::path src(pathStr);
+            ImportSelectedFileToLibrary(src, m_CurrentCategory, GetAssetsPath());
+        }
+        start = end + 1;
+    }
+    if (start < result.size()) {
+        std::string pathStr = result.substr(start);
+        if (!pathStr.empty()) {
+            fs::path src(pathStr);
+            ImportSelectedFileToLibrary(src, m_CurrentCategory, GetAssetsPath());
+        }
+    }
 #endif
 
-    ImportSelectedFileToLibrary(src, m_CurrentCategory, GetAssetsPath());
     RefreshList();
 }
 
 // =============================================================================
 //  Render (conversor de formato) — migrado tal cual desde LibraryManagerPanel
-//  (seccion "Biblioteca" del workspace, retirada del todo: ver LibrarySideMode
+//  (sección "Biblioteca" del workspace, retirada del todo: ver LibrarySideMode
 //  ::Render en LibraryPanel.h y el grupo "Red"/"Reloj"/"Render" del sidebar en
 //  LibrarySidebar.cpp). Convierte Video/Audio ya importados a otro formato
 //  aprovechando ffmpeg (ver MediaConverter.h) — Video vive en assets/videos,
@@ -1025,7 +1161,7 @@ void LibraryPanel::RenderConverterSection()
         ImGui::Dummy(ImVec2(0.0f, 16.0f));
         DS::GlassSectionHeader("CODEC");
         static const char* kCodecLabels[] = {
-            "Automatico (sin recodificar)", "H.264", "H.265 (mas compresion)", "VP9", "AV1 (mas compresion, mas lento)"
+            "Automático (sin recodificar)", "H.264", "H.265 (mas compresion)", "VP9", "AV1 (mas compresion, mas lento)"
         };
         constexpr int kCodecCount = (int)(sizeof(kCodecLabels) / sizeof(kCodecLabels[0]));
         int codecIdx = (int)m_ConvertCodec;
@@ -1075,8 +1211,10 @@ void LibraryPanel::RenderConverterSection()
     // ── Donde guardar ────────────────────────────────────────────────────
     ImGui::Dummy(ImVec2(0.0f, 16.0f));
     DS::GlassSectionHeader("GUARDAR EN");
+    // Apilados verticalmente (no SameLine): con el panel angosto de
+    // Biblioteca, "Preguntar cada vez" + "Carpeta fija" en una sola linea
+    // no entraban y "Carpeta fija" quedaba cortado contra el borde.
     if (ImGui::RadioButton("Preguntar cada vez", m_ConvertAskEachTime)) m_ConvertAskEachTime = true;
-    ImGui::SameLine(0.0f, 18.0f);
     if (ImGui::RadioButton("Carpeta fija", !m_ConvertAskEachTime)) m_ConvertAskEachTime = false;
 
     if (!m_ConvertAskEachTime) {
@@ -1154,7 +1292,7 @@ void LibraryPanel::RenderConverterSection()
             outputPath = UI::PickSaveVideoPath(suggested);
             cancelled  = outputPath.empty();
         } else {
-            // Carpeta fija: mismo criterio de nombre unico "nunca pisa un
+            // Carpeta fija: mismo criterio de nombre único "nunca pisa un
             // archivo existente" que antes, pero resuelto contra esa
             // carpeta en vez de la carpeta de origen.
             fs::path    presetDir = U8Path(m_ConvertPresetFolder);

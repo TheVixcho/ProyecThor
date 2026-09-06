@@ -22,7 +22,7 @@ namespace ProyecThor::UI::Settings {
 
 // Icono mínimo por categoría, dibujado a mano con primitivas de ImDrawList
 // (sin depender de ningún PNG/asset externo) -- ver DrawCategoryIcon.
-enum class CatIcon { Palette, Sliders, Monitor, Cast, Speaker, MusicNote, Keyboard, Globe, Download };
+enum class CatIcon { Palette, Sliders, Monitor, Cast, Speaker, MusicNote, Keyboard, Globe, Download, Storage };
 
 struct Category {
     const char* tag;
@@ -35,27 +35,16 @@ struct Category {
 static const Category k_Categories[] = {
     { "UI",  "Apariencia",      "Colores, fuentes y efectos visuales",     CatIcon::Palette,   IM_COL32(185, 130, 245, 255) }, // 0
     { "PRY", "Proyección",      "Monitor, texto y márgenes",               CatIcon::Monitor,   IM_COL32( 70, 195, 220, 255) }, // 1
-    { "STG", "Pantallas",       "Monitor de confianza para el equipo",     CatIcon::Cast,      IM_COL32( 80, 205, 165, 255) }, // 2
-    { "SOU", "Audio",           "Volumen, dispositivo y fade",             CatIcon::Speaker,   IM_COL32(245, 165,  75, 255) }, // 3
-    { "SNG", "Canciones",       "Etiquetas y opciones de canciones",       CatIcon::MusicNote, IM_COL32(235, 105, 165, 255) }, // 4
-    { "KEY", "Teclas rápidas",  "Atajos de teclado disponibles",           CatIcon::Keyboard,  IM_COL32(230, 190,  70, 255) }, // 5
-    { "LNG", "Idioma",          "Idioma de la interfaz",                   CatIcon::Globe,     IM_COL32(100, 205, 110, 255) }, // 6
-    { "UPD", "Actualizaciones", "Versión instalada y canales",             CatIcon::Download,  IM_COL32(230, 100,  95, 255) }, // 7
-    // "General" (Inicio/Guardado automatico/Carpetas por defecto) se quito
-    // del todo -- pedido explicito, no se usaba. Los campos siguen viviendo
-    // en SettingsManager.h (GeneralSettings) con sus valores actuales, solo
-    // que ya no hay UI para editarlos.
-    //
-    // Red/Mobile/Streaming/OSC NO son categorías propias -- son
-    // subcategorías (SectionTitle) DENTRO de "Proyección" (ver
-    // CategoryProjection.cpp), igual que Monitor de Salida/Calidad de
-    // Salida/Logo. Separarlas en categorías de nivel superior fue un error
-    // (quedaban sueltas de la categoría a la que en realidad pertenecen);
-    // lo que sí vale la pena de esa idea es que cada tema tenga su propia
-    // entrada navegable en el sidebar -- eso ya lo resuelve el mecanismo de
-    // subcategorías (m_SectionAnchors) sin inventar categorías nuevas.
+    { "CNX", "Conexiones",      "Red, app movil, streaming y OSC",         CatIcon::Cast,      IM_COL32(120, 160, 235, 255) }, // 2
+    { "STG", "Pantallas",       "Monitor de confianza para el equipo",     CatIcon::Sliders,   IM_COL32( 80, 205, 165, 255) }, // 3
+    { "SOU", "Audio",           "Volumen, dispositivo y fade",             CatIcon::Speaker,   IM_COL32(245, 165,  75, 255) }, // 4
+    { "SNG", "Canciones",       "Etiquetas y opciones de canciones",       CatIcon::MusicNote, IM_COL32(235, 105, 165, 255) }, // 5
+    { "KEY", "Teclas rápidas",  "Atajos de teclado disponibles",           CatIcon::Keyboard,  IM_COL32(230, 190,  70, 255) }, // 6
+    { "LNG", "Idioma",          "Idioma de la interfaz",                   CatIcon::Globe,     IM_COL32(100, 205, 110, 255) }, // 7
+    { "UPD", "Actualizaciones", "Versión instalada y canales",             CatIcon::Download,  IM_COL32(230, 100,  95, 255) }, // 8
+    { "DAT", "Datos",           "Ubicación de archivos y carpetas vinculadas", CatIcon::Storage, IM_COL32(245, 185,  65, 255) }, // 9
 };
-static constexpr int k_CategoryCount = 8;
+static constexpr int k_CategoryCount = 10;
 
 // Dibuja un glifo simple y reconocible para 'icon', centrado en 'c', con
 // radio aproximado 'r' -- pensado para verse bien a ~8-9px de radio (18px
@@ -150,18 +139,28 @@ static void DrawCategoryIcon(ImDrawList* dl, CatIcon icon, ImVec2 c, float r, Im
             dl->AddLine(ImVec2(c.x - r * 0.6f, c.y + r * 0.65f), ImVec2(c.x + r * 0.6f, c.y + r * 0.65f), color, 1.5f);
             break;
         }
+        case CatIcon::Storage: {
+            float w = r * 1.30f, h = r * 0.40f;
+            float ys[3] = { c.y - r * 0.50f, c.y, c.y + r * 0.50f };
+            for (int i = 0; i < 3; i++) {
+                dl->AddRectFilled(ImVec2(c.x - w * 0.5f, ys[i] - h * 0.5f),
+                                  ImVec2(c.x + w * 0.5f, ys[i] + h * 0.5f), color, 2.0f);
+                dl->AddCircleFilled(ImVec2(c.x + w * 0.30f, ys[i]), r * 0.12f, IM_COL32(20, 20, 25, 255));
+            }
+            break;
+        }
     }
 }
 
 // Orden y agrupación visual del sidebar (por índice real de k_Categories).
 // Reagrupa temas relacionados (p.ej. Stage/Canciones junto a Proyección)
 // sin tocar los índices reales, así ningún QuickBtn/m_ActiveTab se rompe.
-struct NavGroup { const char* label; const int items[3]; int count; };
+struct NavGroup { const char* label; const int items[4]; int count; };
 static const NavGroup k_NavGroups[] = {
-    { "APARIENCIA", { 0,       }, 1 },
-    { "PANTALLAS",  { 1, 2,    }, 2 }, // Proyección + Pantallas (Stage) -- mismo grupo, pedido explicito
-    { "AUDIO",      { 3, 4,    }, 2 },
-    { "SISTEMA",    { 5, 6, 7  }, 3 },
+    { "APARIENCIA",      { 0,          }, 1 },
+    { "PANTALLAS",       { 1, 2, 3     }, 3 }, // Proyección + Conexiones + Pantallas (Stage)
+    { "AUDIO",           { 4, 5        }, 2 },
+    { "SISTEMA Y DATOS", { 6, 7, 8, 9  }, 4 }, // Teclas + Idioma + Actualizaciones + Datos
 };
 static constexpr int k_NavGroupCount = 4;
 
@@ -216,7 +215,12 @@ void SettingsPanel::Render(bool* isOpen) {
     const bool justOpened = !m_WasOpenLastFrame;
     m_WasOpenLastFrame = true;
 
-    const ImVec2 baseSize(900.0f, 650.0f);
+    // Ancho base subido de 900 a 1040: algunas subcategorias (Conexiones >
+    // Red/Mobile/Streaming) embeben tarjetas en grilla (selector de modo a
+    // 3 columnas, contenedor de resolucion, QR) pensadas para un panel
+    // ancho -- con 900px + sidebar de 240 + padding quedaban aplastadas
+    // contra el borde. 1040 les da un ancho de contenido util de ~670px.
+    const ImVec2 baseSize(1040.0f, 700.0f);
 
     ImGuiViewport* vp = ImGui::GetMainViewport();
     ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f,
@@ -234,7 +238,7 @@ void SettingsPanel::Render(bool* isOpen) {
         ImGui::SetNextWindowSize(baseSize, ImGuiCond_Always);
     }
 
-    ImGui::SetNextWindowSizeConstraints(ImVec2(720, 500), ImVec2(FLT_MAX, FLT_MAX));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(820, 560), ImVec2(FLT_MAX, FLT_MAX));
 
     // Este panel es una utilidad flotante independiente: nunca debe poder
     // acoplarse (dock) a otras ventanas ni aceptar que otras se acoplen a
@@ -669,21 +673,17 @@ void SettingsPanel::RenderContent() {
         ImGui::SetScrollY(0.0f);
     }
 
-    // Título de la sección
+    // Título de la sección. Sin subtítulo/descripción debajo -- pedido
+    // explícito de sacarlo (sobraba: cada categoría ya explica lo suyo en
+    // el cuerpo, y el nombre de la categoría + la subcategoría activa en el
+    // sidebar ya dicen dónde está parado el usuario).
     ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textPrimary));
     ImGui::SetWindowFontScale(1.6f);
     ImGui::TextUnformatted(k_Categories[m_SelectedCategory].label);
     ImGui::SetWindowFontScale(1.0f);
     ImGui::PopStyleColor();
 
-    ImGui::Dummy(ImVec2(0.0f, 2.0f));
-
-    // Subtítulo
-    ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textDim));
-    ImGui::TextUnformatted(k_Categories[m_SelectedCategory].description);
-    ImGui::PopStyleColor();
-
-    ImGui::Dummy(ImVec2(0.0f, 20.0f));
+    ImGui::Dummy(ImVec2(0.0f, 16.0f));
 
     // Separador líquido (degradado que se desvanece), color = acento del tema
     ImVec2 p = ImGui::GetCursorScreenPos();
@@ -698,14 +698,16 @@ void SettingsPanel::RenderContent() {
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, theme.frameRounding);
 
     switch (m_SelectedCategory) {
-        case 0: RenderCategoryTheme();      break;
-        case 1: RenderCategoryProjection(); break;
-        case 2: RenderCategoryStage();      break;
-        case 3: RenderCategoryAudio();      break;
-        case 4: RenderCategorySongs();      break;
-        case 5: RenderCategoryShortcuts();  break;
-        case 6: RenderCategoryLanguage();   break;
-        case 7: RenderCategoryUpdates();    break;
+        case 0: RenderCategoryTheme();       break;
+        case 1: RenderCategoryProjection();  break;
+        case 2: RenderCategoryConnections(); break;
+        case 3: RenderCategoryStage();       break;
+        case 4: RenderCategoryAudio();       break;
+        case 5: RenderCategorySongs();       break;
+        case 6: RenderCategoryShortcuts();   break;
+        case 7: RenderCategoryLanguage();    break;
+        case 8: RenderCategoryUpdates();     break;
+        case 9: RenderCategoryData();        break;
         default: ImGui::TextDisabled("Categoría no implementada."); break;
     }
 

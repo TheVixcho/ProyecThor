@@ -1,0 +1,1940 @@
+1 0 #include "Hub.h"
+2 0 #include <GL/glew.h>
+3 0 #include <imgui.h>
+4 0 #include <GLFW/glfw3.h>
+5 0 #include <algorithm>
+6 0 #include <chrono>
+7 0 #include <cmath>
+8 0 #include <cstdio>
+9 0 #include <random>
+10 0 #include <string>
+11 0 #include <unordered_map>
+12 0 #include <vector>
+13 0 #include <fstream>
+14 0 #include <filesystem>
+15 0 #include "settings/SettingsManager.h"
+16 0 #include "../external/tools/OpenURL.h"
+17 0 #include "Version.h"
+18 0 #include "DesignSystem.h"
+19 0 #include "HubTheme.h"
+20 0 #include "SongPlayStats.h"
+21 0 #include "FilePicker.h"
+22 0 
+23 0 extern GLuint LoadTextureFromFile(const char* filename);
+24 0 
+25 0 static void RenderSplashScreen(GLFWwindow *splashWindow, const std::st
+26 0 
+27 0 static constexpr float HUB_APPEAR_SPD  = 3.0f;
+28 0 
+29 0 namespace DS = ProyecThor::UI::DS;
+30 0 namespace HT = ProyecThor::UI::HubTheme;
+31 0 
+32 1 namespace ProyecThor::UI {
+33 1 
+34 1 // Reemplaza el canal alfa de un color existente, preservando su tinte
+35 1 // (RGB). Se usa para reutilizar los colores derivados del tema (HT::*
+36 1 // con las intensidades variables que antes usaban IM_COL32 hardcodead
+37 2 static ImU32 ColA(ImU32 col, int alpha) {
+38 2     alpha = std::clamp(alpha, 0, 255);
+39 2     return (col & 0x00FFFFFFu) | (static_cast<ImU32>(alpha) << IM_COL3
+40 1 }
+41 2 static ImU32 ColAf(ImU32 col, float alpha01) {
+42 2     return ColA(col, static_cast<int>(std::clamp(alpha01, 0.0f, 1.0f) 
+43 1 }
+44 1 
+45 1 // Mismo patron que LPHoverLerp (src/frontend/panels/layers/LayersThem
+46 1 // anima un 0..1 suavizado entre frames usando el ImGuiStorage del con
+47 1 // actual en vez de floats miembro. No se puede incluir LayersTheme.h 
+48 1 // frontend/ui (evita la dependencia cruzada con frontend/panels/layer
+49 1 // mismo motivo documentado en DesignSystem.cpp), asi que se replica l
+50 2 static float HubHoverLerp(ImGuiID id, bool hovered, float speed = 12.0
+51 2     ImGuiStorage* storage = ImGui::GetStateStorage();
+52 2     float* pT = storage->GetFloatRef(id ^ 0x48554248u, 0.0f); // salt 
+53 2     const float target = hovered ? 1.0f : 0.0f;
+54 2     *pT += (target - *pT) * std::min(1.0f, ImGui::GetIO().DeltaTime * 
+55 2     return *pT;
+56 1 }
+57 1 
+58 1 // ── Registro de versiones y portadas ───────────────────────────────
+59 1 //  Cada entrada define su propia imagen de portada, de forma que agre
+60 1 //  nueva actualizacion con una foto distinta sea tan simple como anad
+61 1 //  linea aquí. "id" es el mismo valor que usa el modal (selectedUpdat
+62 1 // ───────────────────────────────────────────────────────────────────
+63 2 struct UpdateVersionInfo {
+64 2     int         id;         // Identificador interno (coincide con sel
+65 2     const char* version;    // "0.3.1"
+66 2     const char* modalBadge; // Texto de insignia mostrado dentro del m
+67 2     const char* cardBadge;  // Texto de insignia mostrado en la tarjet
+68 2     const char* coverFile;  // Imagen de portada especifica de esta ve
+69 2     const char* summary;    // Resumen corto mostrado en la tarjeta
+70 1 };
+71 1 
+72 2 static const std::vector<UpdateVersionInfo> kUpdateRegistry = {
+73 3     {
+74 3         13, "0.6.0",
+75 3         "GRAN ACTUALIZACION", "GRAN ACTUALIZACION",
+76 3         "splash_bg5.png",  // TODO: reemplazar por portada propia cuan
+77 3         "Editor de overlays completo en la app movil (mover, redimensi
+78 3         "seleccion multiple con guias de iman, Borrador y Degradado, e
+79 3         "enviar a la PC), panel Render renovado en Biblioteca (codecs 
+80 3         "VP9/AV1, control de compresion, cancelar a mitad de camino, b
+81 3         "progreso real, estimacion y comparacion de peso, elegir donde
+82 3         "soporte real para Linux/CachyOS (paquete de Arch validado por
+83 3         "via XWayland) y la app ahora respeta el escalado de pantalla 
+84 3         "(150%, etc). Actualizacion grande todavia en curso: revisa el
+85 3         "completo antes de considerarla cerrada."
+86 2     },
+87 3     {
+88 3         12, "0.5.1",
+89 3         "ACTUALIZACIÓN", "ACTUALIZACIÓN",
+90 3         "splash_bg5.png",  // TODO: reemplazar por portada propia cuan
+91 3         "Reloj y Contadores ahora es solo \"Contadores\". Nuevo cuadro
+92 3         "editor de Overlays: lo posicionas y le das estilo una sola ve
+93 3         "por la hora/cronómetro activo — la transmisión a pantalla aho
+94 3         "tengas activo, en vez de un modo aparte. Overlays con reorden
+95 3         "reloj predeterminados listos para probar. Corregido un bug po
+96 3         "de \"sin fondo\" del editor de Overlays podia quedar horneado
+97 3         "guardar."
+98 2     },
+99 3     {
+100 3         11, "0.5.0",
+101 3         "GRAN ACTUALIZACIÓN", "GRAN ACTUALIZACIÓN",
+102 3         "splash_bg5.png",  // TODO: reemplazar por portada propia cuan
+103 3         "Ajustes reorganizado por completo: cada configuración ahora e
+104 3         "buscador incluido, Proyección y Pantallas agrupadas juntas, y
+105 3         "viviendo dentro de Proyección. Nueva opción \"Bucle falso\" p
+106 3         "hacia adelante y hacia atras en vez de cortar siempre al mism
+107 3         "Overlays: crea textos, formas e imágenes en un editor a panta
+108 3         "como una capa transparente encima del fondo y la letra (antes
+109 3         "error). Vista en Vivo renovada: reproductor más simple, Overl
+110 3         "se abren dentro del mismo panel en vez de ventanas flotantes 
+111 3         "colores que quedaban fijos sin importar el tema elegido y los
+112 3         "ahora son solidos en vez de verse transparentes."
+113 2     },
+114 3     {
+115 3         10, "0.4.3",
+116 3         "ACTUALIZACIÓN PREELIMINAR", "ACTUALIZACIÓN PREELIMINAR",
+117 3         "bg_splash3.png",  // TODO: reemplazar por portada propia cuan
+118 3         "Nueva sección Conexiones (OSC, Red, Chat y Streaming en vivo 
+119 3         "Biblioteca para gestionar tus archivos con conversor de forma
+120 3         "Biblia a pantalla completa, selector rápido (Alt+Espacio), Mo
+121 3         "en Vivo más compacto, editor de Estilos renovado, nuevo insta
+122 3         "Windows, Biblioteca con Biblias y canción de bienvenida inclu
+123 3         "corregido el título de las canciones al guardarlas, y varias 
+124 3         "estabilidad."
+125 2     },
+126 3     {
+127 3         9, "0.4.2",
+128 3         "ACTUALIZACIÓN PREELIMINAR", "ACTUALIZACIÓN PREELIMINAR",
+129 3         "bg_splash3.png",  // TODO: reemplazar por portada propia cuan
+130 3         "Pads de Vista en Vivo arreglados y renovados con escenas de C
+131 3         "transporte y volumen rediseñados tipo consola/MIDI, buscador 
+132 3         "palabras en la Biblia, editor de Estilos acoplado dentro de H
+133 3         "fuentes en grilla y nuevos efectos de texto (fondo, borde, so
+134 3         "subrayado), y un monton de efectos nuevos en Shaders: NIS (NV
+135 3         "Contraste, Luminosidad, Blur, Sharpen, Bloom, Aberración crom
+136 2     },
+137 3     {
+138 3         8, "0.4.1",
+139 3         "ACTUALIZACIÓN", "ACTUALIZACIÓN",
+140 3         "bg_splash3.png",
+141 3         "Nuevo panel de Shaders (FSR, CRT, grano, saturación, vinetado
+142 3         "relleno desenfocado tipo Smart TV) para el video de fondo, mi
+143 3         "y vista en grilla/lista en Biblioteca > Videos, escenas rápid
+144 3         "guardadas para Captura, fuente de interfaz personalizable, un
+145 3         "motor de renderizado alternativo (libvlc en ventana nativa) p
+146 3         "videos, editor de canciones rediseñado por completo y menu "
+147 3         "principal reorganizado, con una corrección importante de "
+148 3         "sincronización de audio/video en equipos de bajos recursos."
+149 2     },
+150 3     {
+151 3         7, "0.4.0",
+152 3         "GRAN ACTUALIZACIÓN", "GRAN ACTUALIZACIÓN",
+153 3         "bg_splash3.png",  // TODO: reemplazar por portada propia cuan
+154 3         "Cola de videos mucho más estable, nueva sección de Overlays, 
+155 3         "Vista en Vivo con acciones rápidas, panel de Rendimiento y un
+156 3         "rediseño más compacto de Fondos y Estilos."
+157 2     },
+158 3     {
+159 3         6, "0.3.5",
+160 3         "ACTUALIZACIÓN PREELIMINAR", "ACTUALIZACIÓN PREELIMINAR",
+161 3         "splash_bg1.png",  // TODO: reemplazar por portada propia cuan
+162 3         "Versión estable: Audio Rework completo, biblioteca renovada c
+163 3         "etiquetas, soporte oficial para Linux, estadisticas locales, 
+164 3         "teclado globales y mejoras de estabilidad en toda la aplicaci
+165 2     },
+166 3     {
+167 3         2, "0.3.0",
+168 3         "GRAN ACTUALIZACIÓN", "GRAN ACTUALIZACIÓN",
+169 3         "splash_bg1.png",
+170 3         "Nuevas herramientas de transmisión, optimizaciones y estabili
+171 2     },
+172 1 };
+173 1 
+174 2 static const UpdateVersionInfo* FindUpdateVersion(int id) {
+175 2     for (const auto& v : kUpdateRegistry)
+176 2         if (v.id == id) return &v;
+177 2     return kUpdateRegistry.empty() ? nullptr : &kUpdateRegistry[0];
+178 1 }
+179 1 
+180 2 struct GLTextureInfo {
+181 2     GLuint id     = 0;
+182 2     int    width  = 0;
+183 2     int    height = 0;
+184 1 };
+185 1 
+186 2 static GLTextureInfo GetCoverTexture(const char* filename) {
+187 2     static std::unordered_map<std::string, GLTextureInfo> s_Cache;
+188 2     auto it = s_Cache.find(filename);
+189 2     if (it != s_Cache.end())
+190 2         return it->second;
+191 2 
+192 2     GLTextureInfo info;
+193 2     info.id = LoadTextureFromFile(filename);
+194 3     if (info.id != 0) {
+195 3         glBindTexture(GL_TEXTURE_2D, info.id);
+196 3         glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH,  
+197 3         glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, 
+198 3         glBindTexture(GL_TEXTURE_2D, 0);
+199 2     }
+200 2     s_Cache.emplace(filename, info);
+201 2     return info;
+202 1 }
+203 1 
+204 1 // ── Parallax de portadas ───────────────────────────────────────────
+205 1 //  Estado (offset/zoom) por imagen, identificado con una key propia
+206 1 //  (p.ej. "card_0.3.1", "modal_0.3.0") para poder interpolarlo suavem
+207 1 //  cuadro a cuadro en vez de saltar de golpe.
+208 1 struct ParallaxState { float ox = 0.0f, oy = 0.0f, zoom = 1.0f; };
+209 1 
+210 2 static std::unordered_map<std::string, ParallaxState>& GetParallaxStat
+211 2     static std::unordered_map<std::string, ParallaxState> s_States;
+212 2     return s_States;
+213 1 }
+214 1 
+215 1 // Dibuja una imagen llenando por completo el rectangulo [pMin, pMax] 
+216 1 // deformarla -- recorte tipo "cover" (como background-size:cover en C
+217 1 // con esquinas redondeadas y un efecto sutil de profundidad/parallax:
+218 1 // al pasar el mouse por encima la imagen hace un zoom leve y se despl
+219 1 // dentro de su propio recorte siguiendo al cursor, en vez de mostrar 
+220 1 // corte estatico y "duro" al entrar en hover.
+221 1 static void DrawCoverImageCover(ImDrawList* dl, GLuint texId, int texW
+222 1                                  ImVec2 pMin, ImVec2 pMax,
+223 1                                  float rounding, ImDrawFlags roundFlag
+224 1                                  const char* stateKey, float dt,
+225 1                                  bool hovered, float maxZoom)
+226 2 {
+227 3     if (texId == 0 || texW <= 0 || texH <= 0) {
+228 3         dl->AddRectFilled(pMin, pMax, ColA(HT::CardAlt, 255), rounding
+229 3         return;
+230 2     }
+231 2 
+232 2     ParallaxState& st = GetParallaxStates()[stateKey];
+233 2 
+234 2     const float boxW = std::max(1.0f, pMax.x - pMin.x);
+235 2     const float boxH = std::max(1.0f, pMax.y - pMin.y);
+236 2 
+237 2     // Objetivo de zoom y desplazamiento segun el hover actual
+238 2     float targetZoom = hovered ? maxZoom : 1.0f;
+239 2     float targetOX   = 0.0f, targetOY = 0.0f;
+240 3     if (hovered) {
+241 3         const ImVec2 mouse = ImGui::GetMousePos();
+242 3         targetOX = std::clamp(((mouse.x - pMin.x) / boxW) * 2.0f - 1.0
+243 3         targetOY = std::clamp(((mouse.y - pMin.y) / boxH) * 2.0f - 1.0
+244 2     }
+245 2 
+246 2     // Interpolacion suave (tipo resorte) para que el movimiento no se
+247 2     const float speed = 9.0f;
+248 2     const float t = std::clamp(dt * speed, 0.0f, 1.0f);
+249 2     st.zoom += (targetZoom - st.zoom) * t;
+250 2     st.ox   += (targetOX   - st.ox)   * t;
+251 2     st.oy   += (targetOY   - st.oy)   * t;
+252 2 
+253 2     // ── Recorte "cover": la imagen llena la caja completa sin deform
+254 2     const float boxAspect = boxW / boxH;
+255 2     const float imgAspect = static_cast<float>(texW) / static_cast<flo
+256 2 
+257 2     float baseUW, baseUH;
+258 3     if (imgAspect > boxAspect) {
+259 3         // Imagen mas ancha que la caja -> se recortan los lados, se v
+260 3         baseUH = 1.0f;
+261 3         baseUW = boxAspect / imgAspect;
+262 3     } else {
+263 3         // Imagen mas alta que la caja -> se recorta arriba/abajo, se 
+264 3         baseUW = 1.0f;
+265 3         baseUH = imgAspect / boxAspect;
+266 2     }
+267 2 
+268 2     const float zoom = std::max(1.0f, st.zoom);
+269 2     const float uw = baseUW / zoom;
+270 2     const float uh = baseUH / zoom;
+271 2 
+272 2     // Margen disponible dentro de la textura para "pasear" la ventana
+273 2     const float marginX = std::max(0.0f, (1.0f - uw) * 0.5f);
+274 2     const float marginY = std::max(0.0f, (1.0f - uh) * 0.5f);
+275 2 
+276 2     const float centerU = 0.5f + st.ox * marginX;
+277 2     const float centerV = 0.5f + st.oy * marginY;
+278 2 
+279 2     const ImVec2 uv0(centerU - uw * 0.5f, centerV - uh * 0.5f);
+280 2     const ImVec2 uv1(centerU + uw * 0.5f, centerV + uh * 0.5f);
+281 2 
+282 2     dl->AddImageRounded((ImTextureID)(intptr_t)texId, pMin, pMax, uv0,
+283 2         IM_COL32(255, 255, 255, 255), rounding, roundFlags);
+284 1 }
+285 1 
+286 2 static float EaseOut(float t) {
+287 2     t = std::clamp(t, 0.0f, 1.0f);
+288 2     return 1.0f - (1.0f - t) * (1.0f - t);
+289 1 }
+290 1 
+291 1 // Textura de fondo de la tarjeta "Abrir configuracion" -- reusa el ca
+292 1 // ancho/alto de GetCoverTexture (necesarios para el recorte tipo "cov
+293 1 // DrawTiltTextureCard, ver mas abajo).
+294 1 static const char* kConfigCardTextureFile = "bin/assets/ui/textures/20
+295 1 
+296 1 // Tarjeta con inclinacion 3D al estilo "tilt" de sitios web: en repos
+297 1 // queda plana, y solo mientras el mouse esta encima las esquinas se
+298 1 // distorsionan en perspectiva segun la posicion del cursor dentro de 
+299 1 // tarjeta (con una sombra que se despega y un brillo diagonal que sig
+300 1 // inclinacion). Devuelve el estado de hover/click via los punteros --
+301 1 // llamador dibuja su propio contenido (texto, overlay) encima.
+302 1 static void DrawTiltTextureCard(ImDrawList* dl, GLuint texId, int texW
+303 2                                  ImGuiID id, bool* outHovered, bool* o
+304 2     const ImVec2 size = ImVec2(pMax.x - pMin.x, pMax.y - pMin.y);
+305 2 
+306 2     ImGui::SetCursorScreenPos(pMin);
+307 2     ImGui::InvisibleButton("##tiltCardHit", size);
+308 2     const bool hovered = ImGui::IsItemHovered();
+309 2     if (outHovered) *outHovered = hovered;
+310 2     if (outClicked) *outClicked = ImGui::IsItemClicked();
+311 2     if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+312 2 
+313 2     ImGuiStorage* storage = ImGui::GetStateStorage();
+314 2     float* tiltX = storage->GetFloatRef(id ^ 0x54494C31u, 0.0f); // "T
+315 2     float* tiltY = storage->GetFloatRef(id ^ 0x54494C32u, 0.0f); // "T
+316 2     float* lift  = storage->GetFloatRef(id ^ 0x54494C33u, 0.0f); // "T
+317 2 
+318 2     const ImVec2 center = ImVec2(pMin.x + size.x * 0.5f, pMin.y + size
+319 2     const ImVec2 mouse  = ImGui::GetIO().MousePos;
+320 2     const float nx = hovered ? std::clamp((mouse.x - center.x) / (size
+321 2     const float ny = hovered ? std::clamp((mouse.y - center.y) / (size
+322 2 
+323 2     // Interpolacion lenta a proposito (pedido explicito: "mucho mas s
+324 2     // mas sutil") -- un factor de suavizado chico en vez de que el ti
+325 2     // "salte" a la posicion del mouse casi de golpe.
+326 2     const float speed = std::min(1.0f, ImGui::GetIO().DeltaTime * 4.5f
+327 2     *tiltX += (nx - *tiltX) * speed;
+328 2     *tiltY += (ny - *tiltY) * speed;
+329 2     *lift  += ((hovered ? 1.0f : 0.0f) - *lift) * speed;
+330 2 
+331 2     const float maxAngle = 0.055f; // ~3 grados -- apenas perceptible,
+332 2     const float rotY =  (*tiltX) * maxAngle;
+333 2     const float rotX = -(*tiltY) * maxAngle;
+334 2     const float focal = 900.0f; // mas alto = menos distorsion de pers
+335 2 
+336 2     const float halfW = size.x * 0.5f, halfH = size.y * 0.5f;
+337 3     const ImVec2 local[4] = {
+338 3         ImVec2(-halfW, -halfH), ImVec2(halfW, -halfH),
+339 3         ImVec2(halfW,   halfH), ImVec2(-halfW,  halfH),
+340 2     };
+341 2     ImVec2 screen[4];
+342 3     for (int i = 0; i < 4; i++) {
+343 3         const float x = local[i].x, y = local[i].y, z = 0.0f;
+344 3         const float x1 =  x * std::cos(rotY) + z * std::sin(rotY);
+345 3         const float z1 = -x * std::sin(rotY) + z * std::cos(rotY);
+346 3         const float y2 =  y * std::cos(rotX) - z1 * std::sin(rotX);
+347 3         const float z2 =  y * std::sin(rotX) + z1 * std::cos(rotX);
+348 3         const float persp = focal / (focal + z2);
+349 3         screen[i] = ImVec2(center.x + x1 * persp, center.y + y2 * pers
+350 2     }
+351 2 
+352 2     // Base solida detras del quad inclinado: al rotar en "3D falso" l
+353 2     // esquinas del quad ya no coinciden exactamente con el rectangulo
+354 2     // original -- sin este relleno, los huecos dejaban ver el fondo o
+355 2     // del Hub detras de la tarjeta en vez del color del panel.
+356 2     dl->AddRectFilled(pMin, pMax, ColA(HT::CardAlt, 255), HT::RadiusMd
+357 2 
+358 2     // Sombra que se despega debajo de la tarjeta al inclinarse -- des
+359 2     // reducido, apenas insinuado en vez de un salto notorio.
+360 2     const ImVec2 shadowCenter = ImVec2(center.x + (*tiltX) * 3.0f, cen
+361 2     dl->AddEllipseFilled(shadowCenter, ImVec2(halfW * 0.94f, halfH * 0
+362 2                           IM_COL32(0, 0, 0, (int)(50 + (*lift) * 35)),
+363 2 
+364 3     if (texId != 0 && texW > 0 && texH > 0) {
+365 3         // Recorte tipo "cover" (igual que DrawCoverImageCover): la im
+366 3         // llena el rectangulo sin deformarse -- una tarjeta ancha y b
+367 3         // como esta forzaria un stretch feo si se mapeara el UV 0..1 
+368 3         const float boxAspect = size.x / size.y;
+369 3         const float imgAspect = static_cast<float>(texW) / static_cast
+370 3         float baseUW, baseUH;
+371 3         if (imgAspect > boxAspect) { baseUH = 1.0f; baseUW = boxAspect
+372 3         else                       { baseUW = 1.0f; baseUH = imgAspect
+373 3         const float u0 = (1.0f - baseUW) * 0.5f, u1 = u0 + baseUW;
+374 3         const float v0 = (1.0f - baseUH) * 0.5f, v1 = v0 + baseUH;
+375 3 
+376 3         dl->AddImageQuad((ImTextureID)(intptr_t)texId,
+377 3             screen[0], screen[1], screen[2], screen[3],
+378 3             ImVec2(u0, v0), ImVec2(u1, v0), ImVec2(u1, v1), ImVec2(u0,
+379 3             IM_COL32(255, 255, 255, 255));
+380 3     } else {
+381 3         dl->AddQuadFilled(screen[0], screen[1], screen[2], screen[3], 
+382 2     }
+383 2 
+384 2     dl->AddQuad(screen[0], screen[1], screen[2], screen[3],
+385 2         ColAf(HT::TextPri, 0.12f + (*lift) * 0.14f), 1.5f);
+386 1 }
+387 1 
+388 2 Hub::Hub() : m_LastFrameTime(std::chrono::steady_clock::now()) {
+389 2     const auto& settings = ProyecThor::Settings::SettingsManager::Get(
+390 2     m_SelectedMonitor = settings.projection.targetMonitor;
+391 1 }
+392 1 
+393 2 Hub::~Hub() {
+394 2     // Puede bloquear un instante si una descarga de subtitulos seguia
+395 2     // curso -- preferible a std::terminate() por destruir un std::thr
+396 2     // todavia joinable (mismo criterio que UIManager::Shutdown()).
+397 2     if (m_DownloadSubsThread.joinable())
+398 2         m_DownloadSubsThread.join();
+399 1 }
+400 1 
+401 2 void Hub::ForceOpen() {
+402 2     m_Open                  = true;
+403 2     m_Appearing             = true;
+404 2     m_AppearProgress        = 0.0f;
+405 2     m_LaunchRequested       = false;
+406 2     m_OpenSettingsRequested = false;
+407 2     m_LastFrameTime         = std::chrono::steady_clock::now();
+408 1 }
+409 1 
+410 2 void Hub::UpdateAnimations(float dt) {
+411 3     if (m_Appearing) {
+412 3         m_AppearProgress += dt * HUB_APPEAR_SPD;
+413 4         if (m_AppearProgress >= 1.0f) {
+414 4             m_AppearProgress = 1.0f;
+415 4             m_Appearing      = false;
+416 3         }
+417 2     }
+418 1 }
+419 1 
+420 1 // Carrusel de novedades — se muestra una vez por version nueva.
+421 2 void Hub::RenderWhatsNewIfNeeded() {
+422 2     auto& general = ProyecThor::Settings::SettingsManager::Get().GetSe
+423 2     if (general.dismissedChangelog == PROYECTHOR_VERSION_STRING) retur
+424 2 
+425 2     struct Slide { const char* title; const char* body; };
+426 3     static const Slide kSlides[] = {
+427 4         { "Bienvenido a ProyecThor v" PROYECTHOR_VERSION_STRING,
+428 3           "Este es un resumen rapido de lo nuevo en esta version. Reco
+429 4         { "Ajustes reorganizado",
+430 3           "Cada configuracion ahora es su propia pagina, con buscador 
+431 4         { "Fondos: bucle falso",
+432 3           "Nueva opcion en Ajustes > Proyeccion > Fondos: el video rep
+433 4         { "Overlays",
+434 3           "Crea textos, formas e imagenes en un editor a pantalla comp
+435 4         { "Vista en Vivo renovada",
+436 3           "Reproductor mas simple: Overlays, Chat, Pads y Reloj ahora 
+437 4         { "Nueva seccion: Pantallas",
+438 3           "La configuracion de Stage ahora tiene su propio menu \"Pant
+439 4         { "Correcciones de tema y apariencia",
+440 3           "Varios menus y ventanas que ignoraban el tema elegido ahora
+441 2     };
+442 2     constexpr int kSlideCount = (int)(sizeof(kSlides) / sizeof(kSlides
+443 2 
+444 2     static int  s_Index         = 0;
+445 2     static bool s_OpenedOnce    = false;
+446 2     // Desmarcado por default: si el operador cierra sin marcarlo, el
+447 2     // carrusel vuelve a aparecer en el proximo arranque (dismissedCha
+448 2     // NO se persiste). Solo marcando la casilla se guarda la version 
+449 2     // en dismissedChangelog y deja de mostrarse.
+450 2     static bool s_DontShowAgain = false;
+451 3     if (!s_OpenedOnce) {
+452 3         ImGui::OpenPopup("##WhatsNewCarousel");
+453 3         s_OpenedOnce     = true;
+454 3         s_Index          = 0;
+455 3         s_DontShowAgain  = false;
+456 2     }
+457 2 
+458 2     ImGuiViewport* vp      = ImGui::GetMainViewport();
+459 2     const ImVec2   winSize = ImVec2(580.0f, 434.0f);
+460 2     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + (vp->WorkSize.x - w
+461 2                                     vp->WorkPos.y + (vp->WorkSize.y - 
+462 2     ImGui::SetNextWindowSize(winSize);
+463 2 
+464 2     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 16.0f);
+465 2     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(30.0f, 28
+466 2     ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.055f, 0.060f, 0.0
+467 2 
+468 2     bool vis = ImGui::Begin("##NovedadesPanel", nullptr,
+469 2         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+470 2         ImGuiWindowFlags_NoResize   | ImGuiWindowFlags_NoSavedSettings
+471 2         ImGuiWindowFlags_NoMove);
+472 2 
+473 3     if (vis) {
+474 3         if (ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_E
+475 3             m_NovedadesOpen = false;
+476 3 
+477 3         const float headerW = ImGui::GetContentRegionAvail().x;
+478 3 
+479 3         ImGui::SetWindowFontScale(1.3f);
+480 3         ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+481 3         ImGui::TextUnformatted("Novedades");
+482 3         ImGui::PopStyleColor();
+483 3         ImGui::Spacing();
+484 3         ImGui::Separator();
+485 3         ImGui::Spacing();
+486 3         ImGui::Spacing();
+487 3 
+488 3         const Slide& slide = kSlides[s_Index];
+489 3 
+490 3         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.92f, 0.93f, 0.97
+491 3         ImGui::SetWindowFontScale(1.18f);
+492 3         ImGui::TextWrapped("%s", slide.title);
+493 3         ImGui::SetWindowFontScale(1.0f);
+494 3         ImGui::PopStyleColor();
+495 3         ImGui::Spacing();
+496 3 
+497 3         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.72f, 0.74f, 0.85
+498 3         ImGui::TextWrapped("%s", slide.body);
+499 3         ImGui::PopStyleColor();
+500 3 
+501 3         ImGui::SetCursorPosY(winSize.y - 130.0f);
+502 3         float dotsW = kSlideCount * 16.0f;
+503 3         ImGui::SetCursorPosX((winSize.x - dotsW) * 0.5f);
+504 3         ImDrawList* dl = ImGui::GetWindowDrawList();
+505 3         ImVec2      dp = ImGui::GetCursorScreenPos();
+506 4         for (int i = 0; i < kSlideCount; i++) {
+507 4             ImU32 col = (i == s_Index) ? IM_COL32(120, 150, 255, 255) 
+508 4             dl->AddCircleFilled(ImVec2(dp.x + i * 16.0f + 5.0f, dp.y +
+509 3         }
+510 3         ImGui::Dummy(ImVec2(dotsW, 14.0f));
+511 3 
+512 3         ImGui::SetCursorPosY(winSize.y - 96.0f);
+513 3         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.62f, 0.64f, 0.76
+514 3         ImGui::Checkbox("No volver a mostrar", &s_DontShowAgain);
+515 3         ImGui::PopStyleColor();
+516 3 
+517 3         ImGui::SetCursorPosY(winSize.y - 60.0f);
+518 3 
+519 4         if (ImGui::Button("Configuracion inicial", ImVec2(170, 34))) {
+520 3         }
+521 3         if (ImGui::IsItemHovered())
+522 3             ImGui::SetTooltip("Proximamente");
+523 3 
+524 3         ImGui::SameLine();
+525 3         if (s_Index == 0) ImGui::BeginDisabled();
+526 3         if (ImGui::Button("< Anterior", ImVec2(100, 34))) s_Index--;
+527 3         if (s_Index == 0) ImGui::EndDisabled();
+528 3 
+529 3         ImGui::SameLine();
+530 3         // "No volver a mostrar" sin marcar (default): dismissedChange
+531 3         // se toca, asi que el carrusel vuelve a aparecer en el proxim
+532 3         // arranque -- cerrar (con cualquiera de los dos botones) solo
+533 3         // saca de la vista por esta sesion.
+534 4         auto closeCarousel = [&]() {
+535 5             if (s_DontShowAgain) {
+536 5                 general.dismissedChangelog = PROYECTHOR_VERSION_STRING
+537 5                 ProyecThor::Settings::SettingsManager::Get().Save();
+538 4             }
+539 4             ImGui::CloseCurrentPopup();
+540 3         };
+541 3 
+542 4         if (s_Index == kSlideCount - 1) {
+543 4             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.66f
+544 4             if (ImGui::Button("Entendido", ImVec2(110, 34)))
+545 4                 closeCarousel();
+546 4             ImGui::PopStyleColor();
+547 4             ImGui::SetWindowFontScale(1.1f);
+548 4             ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+549 4             ImGui::Text("Version v%s", info.version);
+550 4             ImGui::PopStyleColor();
+551 4             ImGui::SetWindowFontScale(1.0f);
+552 4             ImGui::Dummy(ImVec2(0.0f, 8.0f));
+553 4             ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+554 4             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + headerW - 
+555 4             ImGui::TextWrapped("%s", info.summary);
+556 4             ImGui::PopTextWrapPos();
+557 4             ImGui::PopStyleColor();
+558 4             ImGui::EndGroup();
+559 4 
+560 4             ImGui::EndGroup();
+561 4 
+562 4             ImGui::SetCursorScreenPos(cardStartPos);
+563 5             if (ImGui::InvisibleButton(info.version, ImVec2(headerW, 1
+564 5                 m_SelectedUpdateVer = info.id;
+565 5                 m_IsUpdateModalOpen = true;
+566 4             }
+567 4             if (ImGui::IsItemHovered())
+568 4                 ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+569 4 
+570 4             ImDrawList* cardDl = ImGui::GetWindowDrawList();
+571 5             if (hoverT > 0.001f) {
+572 5                 cardDl->AddRectFilled(cardStartPos, cardEndPos,
+573 5                     ColAf(HT::TextPri, 0.05f * hoverT), HT::RadiusMd);
+574 5                 cardDl->AddRectFilled(cardStartPos, ImVec2(cardStartPo
+575 5                     ColAf(HT::AccentBlue, hoverT), HT::RadiusMd, ImDra
+576 4             }
+577 4 
+578 4             ImGui::EndChild();
+579 4             ImGui::PopStyleVar();
+580 4             ImGui::PopStyleColor();
+581 4             ImGui::Dummy(ImVec2(0.0f, 15.0f));
+582 3         };
+583 3 
+584 3         const float historyH = ImGui::GetContentRegionAvail().y;
+585 3         ImGui::BeginChild("##NovedadesHistory", ImVec2(headerW, histor
+586 3         for (const auto& info : kUpdateRegistry)
+587 3             RenderUpdateCard(info);
+588 3         ImGui::EndChild();
+589 2     }
+590 2 
+591 2     ImGui::End();
+592 2     ImGui::PopStyleVar(4); // Alpha, WindowRounding, WindowBorderSize,
+593 2     ImGui::PopStyleColor(2);
+594 1 }
+595 1 
+596 2 bool Hub::Render() {
+597 2     if (!m_Open) return false;
+598 2 
+599 2     const auto now = std::chrono::steady_clock::now();
+600 2     float dt = std::chrono::duration<float>(now - m_LastFrameTime).cou
+601 2     m_LastFrameTime = now;
+602 2     dt = std::min(dt, 0.05f);
+603 2 
+604 2     m_Time += dt;
+605 2 
+606 2     static int fpsFrames = 0;
+607 2     static float fpsAccum = 0.0f;
+608 2     fpsFrames++;
+609 2     fpsAccum += dt;
+610 3     if (fpsAccum >= 0.5f) {
+611 3         const int fps = std::max(1, static_cast<int>(fpsFrames / fpsAc
+612 3         ProyecThor::UI::RecordPerformanceSample(fps);
+613 3         fpsFrames = 0;
+614 3         fpsAccum = 0.0f;
+615 2     }
+616 2 
+617 2     UpdateAnimations(dt);
+618 2 
+619 2     // Abrir/cerrar el panel "Novedades" con N -- mismo criterio que e
+620 2     // del codebase (cada panel/pantalla chequea sus propias teclas
+621 2     // localmente, no hay un archivo central de input). Se ignora mien
+622 2     // modal de detalle esta abierto para que una sola tecla no contro
+623 2     // dos a la vez.
+624 2     if (!m_IsUpdateModalOpen && ImGui::IsKeyPressed(ImGuiKey_N, false)
+625 2         m_NovedadesOpen = !m_NovedadesOpen;
+626 2 
+627 2     ImGuiViewport* vp = ImGui::GetMainViewport();
+628 2 
+629 2     if (!m_BgParticlesInit)
+630 2         InitBgParticles(vp->WorkSize.x, vp->WorkSize.y);
+631 2 
+632 2     UpdateBgParticles(dt, vp->WorkSize.x, vp->WorkSize.y);
+633 2     UpdateNebulas(dt, vp->WorkSize.x, vp->WorkSize.y);
+634 2 
+635 2     ImGui::SetNextWindowPos(vp->WorkPos);
+636 2     ImGui::SetNextWindowSize(vp->WorkSize);
+637 2     ImGui::SetNextWindowBgAlpha(0.0f);
+638 2 
+639 2     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,    ImVec2(0.0f, 0
+640 2     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+641 2 
+642 2     constexpr ImGuiWindowFlags rootFlags =
+643 2         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+644 2         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToF
+645 2         ImGuiWindowFlags_NoDocking;
+646 2 
+647 2     ImGui::Begin("##HubRoot", nullptr, rootFlags);
+648 2 
+649 2     // Fade-in real al abrir el Hub: m_AppearProgress ya se calculaba 
+650 2     // UpdateAnimations pero antes no se usaba en ningun lado.
+651 2     const float appearA = EaseOut(m_AppearProgress);
+652 2     ImGui::PushStyleVar(ImGuiStyleVar_Alpha, appearA);
+653 2 
+654 2     ImDrawList* dl = ImGui::GetWindowDrawList();
+655 2     ImVec2      wp = ImGui::GetWindowPos();
+656 2 
+657 2     // El canvas de fondo (grilla/particulas/nebulosas + imagen splash
+658 2     // ahora cubre TODA la ventana -- antes quedaba solo a la derecha 
+659 2     // sidebar, con un relleno solido separado a la izquierda y una li
+660 2     // divisoria entre ambos. Las tres columnas de abajo dibujan su pr
+661 2     // tarjeta semi-translucida encima de este mismo fondo compartido,
+662 2     // de paneles opacos aparte.
+663 2     dl->AddRectFilled(wp, ImVec2(wp.x + vp->WorkSize.x, wp.y + vp->Wor
+664 2     RenderBgCanvas(dl, wp, vp->WorkSize.x, vp->WorkSize.y);
+665 2 
+666 2     static GLuint s_HubBgTex      = 0;
+667 2     static bool   s_HubBgTexTried = false;
+668 3     if (!s_HubBgTexTried) {
+669 3         s_HubBgTexTried = true;
+670 3         s_HubBgTex      = LoadTextureFromFile("splash_bg2.png");
+671 2     }
+672 2     if (s_HubBgTex != 0)
+673 2         dl->AddImage((ImTextureID)(intptr_t)s_HubBgTex, wp, ImVec2(wp.
+674 2             ImVec2(0, 0), ImVec2(1, 1), ColAf(IM_COL32_WHITE, HT::BgIm
+675 2 
+676 2     RenderContent(vp->WorkSize.x, vp->WorkSize.y);
+677 2 
+678 2     ImGui::PopStyleVar(); // Alpha
+679 2     ImGui::End();
+680 2     ImGui::PopStyleVar(2);
+681 2 
+682 2     RenderNovedadesPanel();
+683 2     RenderUpdateDetailModal();
+684 2     RenderDownloadSubtitlesPanel();
+685 2 
+686 3     if (m_LaunchRequested || m_LibraryOnlyRequested) {
+687 3         m_LaunchRequested = false;
+688 3         // m_LibraryOnlyRequested se deja tal cual -- UIManager lo lee
+689 3         // saber a que fue que se salio del Hub) y lo limpia el mismo 
+690 3         // ClearLibraryOnlyRequest(), mismo patron que SettingsRequest
+691 3         m_Open            = false;
+692 3         return true;
+693 2     }
+694 2 
+695 2     return false;
+696 1 }
+697 1 
+698 1 // Flujo unico de paneles, centrado y usando todo el ancho del Hub --
+699 1 // reemplaza el viejo layout de 3 columnas fijas (izquierda/centro/der
+700 1 // Cada seccion (logo, hero "Empezar a proyectar", config con textura,
+701 1 // Biblioteca/Novedades, accesos rapidos, resumen local) es su propia
+702 1 // tarjeta redondeada apilada verticalmente, con scroll si no entra to
+703 1 // alto -- ya no hay bloques de fondo solido por columna.
+704 2 void Hub::RenderContent(float w, float h) {
+705 2     // Sin scroll a proposito (pedido explicito): todas las secciones 
+706 2     // abajo estan dimensionadas para entrar juntas en una ventana nor
+707 2     // Hub sin necesitar desplazarse.
+708 2     ImGui::BeginChild("##HubContent", ImVec2(w, h), false, ImGuiWindow
+709 2 
+710 2     ImDrawList* dl = ImGui::GetWindowDrawList();
+711 2 
+712 2     // Ancho maximo de contenido acotado a proposito: dejar que los pa
+713 2     // se estiren al ancho completo de la ventana los deja viendose co
+714 2     // barras chatas y desproporcionadas (pedido explicito: "menos anc
+715 2     const float margin   = 50.0f;
+716 2     const float contentW = std::min(720.0f, std::max(320.0f, w - margi
+717 2     const float contentX = (w - contentW) * 0.5f;
+718 2 
+719 2     ImGui::SetCursorPos(ImVec2(contentX, 24.0f));
+720 2     ImGui::BeginGroup();
+721 2 
+722 2     // ── Logo + version, centrados arriba de todo ───────────────────
+723 3     {
+724 3         ImFont*     font         = ImGui::GetFont();
+725 3         const float logoFontSize = ImGui::GetFontSize() * 1.25f;
+726 3 
+727 3         const ImVec2 sizeProyec = font->CalcTextSizeA(logoFontSize, FL
+728 3         const ImVec2 sizeThor   = font->CalcTextSizeA(logoFontSize, FL
+729 3         const float  totalW     = sizeProyec.x + sizeThor.x;
+730 3 
+731 3         ImGui::SetCursorPosX(contentX + (contentW - totalW) * 0.5f);
+732 3         const ImVec2 logoScreenPos = ImGui::GetCursorScreenPos();
+733 3         const ImVec2 posProyec = logoScreenPos;
+734 3         const ImVec2 posThor   = ImVec2(logoScreenPos.x + sizeProyec.x
+735 3 
+736 4         for (int ox = -3; ox <= 3; ox++) {
+737 5             for (int oy = -3; oy <= 3; oy++) {
+738 5                 if (ox == 0 && oy == 0) continue;
+739 5                 const float dist = sqrtf(static_cast<float>(ox * ox + 
+740 5                 if (dist > 3.5f) continue;
+741 5                 const int glowAlpha = static_cast<int>(18.0f * (1.0f -
+742 5                 dl->AddText(font, logoFontSize,
+743 5                     ImVec2(posThor.x + static_cast<float>(ox),
+744 5                            posThor.y + static_cast<float>(oy)),
+745 5                     ColA(HT::AccentSoft, glowAlpha), "Thor");
+746 4             }
+747 3         }
+748 4         for (int ox = -1; ox <= 1; ox++) {
+749 5             for (int oy = -1; oy <= 1; oy++) {
+750 5                 if (ox == 0 && oy == 0) continue;
+751 5                 dl->AddText(font, logoFontSize,
+752 5                     ImVec2(posThor.x + static_cast<float>(ox),
+753 5                            posThor.y + static_cast<float>(oy)),
+754 5                     ColA(HT::AccentSoft, 35), "Thor");
+755 4             }
+756 3         }
+757 3 
+758 3         dl->AddText(font, logoFontSize, posProyec, HT::TextPri, "Proye
+759 3         dl->AddText(font, logoFontSize, posThor,   HT::AccentSoft, "Th
+760 3 
+761 3         ImGui::Dummy(ImVec2(totalW, logoFontSize));
+762 3 
+763 3         const std::string verText = std::string("v") + PROYECTHOR_VERS
+764 3         const ImVec2      vSize   = ImGui::CalcTextSize(verText.c_str(
+765 3         ImGui::SetCursorPosX(contentX + (contentW - vSize.x) * 0.5f);
+766 3         ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+767 3         ImGui::TextUnformatted(verText.c_str());
+768 3         ImGui::PopStyleColor();
+769 2     }
+770 2 
+771 2     ImGui::Dummy(ImVec2(0.0f, 32.0f));
+772 2 
+773 2     dl->AddLine(
+774 2         ImVec2(wp.x + 20.0f, wp.y + ImGui::GetCursorPosY()),
+775 2         ImVec2(wp.x + w - 20.0f, wp.y + ImGui::GetCursorPosY()),
+776 2         HT::Divider, 1.0f);
+777 2 
+778 2     ImGui::Dummy(ImVec2(0.0f, 16.0f));
+779 2 
+780 2     ImGui::SetCursorPosX(30.0f);
+781 2     ImGui::PushStyleColor(ImGuiCol_Button,        HT::AccentBlue);
+782 2     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::ColorConvertF
+783 2         ImVec4(ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).x + 0.08
+784 2                ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).y + 0.08
+785 2                ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).z + 0.08
+786 2     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImGui::ColorConvertF
+787 2         ImVec4(ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).x - 0.08
+788 2                ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).y - 0.08
+789 2                ImGui::ColorConvertU32ToFloat4(HT::AccentBlue).z - 0.08
+790 2     ImGui::PushStyleColor(ImGuiCol_Text, HT::OnAccent);
+791 2     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusMd);
+792 2 
+793 2     if (ImGui::Button("Empezar a proyectar", ImVec2(w - 60.0f, 45.0f))
+794 2         m_LaunchRequested = true;
+795 2 
+796 2     ImGui::PopStyleVar();
+797 2     ImGui::PopStyleColor(4);
+798 2 
+799 2     ImGui::Dummy(ImVec2(0.0f, 10.0f));
+800 2 
+801 2     ImGui::SetCursorPosX(30.0f);
+802 2     ImGui::PushStyleColor(ImGuiCol_Button,        HT::Surface);
+803 2     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HT::SurfaceHover);
+804 2     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  HT::SurfaceActive);
+805 2     ImGui::PushStyleColor(ImGuiCol_Text,          HT::TextPri);
+806 2     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusMd);
+807 2 
+808 2     if (ImGui::Button("Abrir configuracion", ImVec2(w - 60.0f, 36.0f))
+809 2         m_OpenSettingsRequested = true;
+810 2 
+811 2     ImGui::PopStyleVar();
+812 2     ImGui::PopStyleColor(4);
+813 2 
+814 2     ImGui::Dummy(ImVec2(0.0f, 14.0f));
+815 2 
+816 2     // Tarjeta chica clickeable generica -- usada para Biblioteca y
+817 2     // Novedades, misma altura, dos por fila.
+818 3     auto PanelButtonCard = [&](float pw, float ph, const char* title, 
+819 3         ImGui::PushID(title);
+820 3         const ImVec2 pMin = ImGui::GetCursorScreenPos();
+821 3         const ImVec2 pMax = ImVec2(pMin.x + pw, pMin.y + ph);
+822 3 
+823 3         ImGui::InvisibleButton("##hit", ImVec2(pw, ph));
+824 3         const bool  hovered = ImGui::IsItemHovered();
+825 3         if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+826 3         const bool  clicked = ImGui::IsItemClicked();
+827 3         const float hoverT  = HubHoverLerp(ImGui::GetID("##hit"), hove
+828 3 
+829 3         dl->AddRectFilled(pMin, pMax, ColAf(HT::CardAlt, 0.95f), HT::R
+830 3         dl->AddRect(pMin, pMax, ColAf(HT::AccentBlue, 0.10f + hoverT *
+831 3         if (hoverT > 0.001f)
+832 3             dl->AddRectFilled(pMin, pMax, ColAf(HT::TextPri, 0.04f * h
+833 3 
+834 3         ImGui::SetCursorScreenPos(ImVec2(pMin.x + 18.0f, pMin.y + 14.0
+835 3         ImGui::PushStyleColor(ImGuiCol_Text, HT::AccentBlue);
+836 3         ImGui::SetWindowFontScale(1.08f);
+837 3         ImGui::TextUnformatted(title);
+838 3         ImGui::SetWindowFontScale(1.0f);
+839 3         ImGui::PopStyleColor();
+840 3         ImGui::SetCursorScreenPos(ImVec2(pMin.x + 18.0f, pMin.y + 40.0
+841 3         ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+842 3         ImGui::TextUnformatted(subtitle.c_str());
+843 3         ImGui::PopStyleColor();
+844 3 
+845 3         ImGui::SetCursorScreenPos(ImVec2(pMin.x, pMax.y));
+846 3         ImGui::Dummy(ImVec2(0.0f, 0.0f));
+847 3         ImGui::PopID();
+848 3         return clicked;
+849 2     };
+850 2 
+851 2     // ── Fila: Biblioteca + Novedades + Descargar subtitulos ────────
+852 3     {
+853 3         const float rowGap = 16.0f;
+854 3         const float thirdW = (contentW - rowGap * 2.0f) / 3.0f;
+855 3         const float rowH   = 62.0f;
+856 3 
+857 3         ImGui::SetCursorPosX(contentX);
+858 3         const ImVec2 rowStart = ImGui::GetCursorScreenPos();
+859 3 
+860 3         // Acceso rapido a Biblioteca: entra al workspace pero mostran
+861 3         // solo el panel de Biblioteca (con Render incluido, ya es una
+862 3         // pestaña de ese mismo panel), sin Home/Vista en Vivo/Diseño
+863 3         // alrededor.
+864 3         if (PanelButtonCard(thirdW, rowH, "Biblioteca", "Solo el panel
+865 3             m_LibraryOnlyRequested = true;
+866 3 
+867 3         ImGui::SetCursorScreenPos(ImVec2(rowStart.x + thirdW + rowGap,
+868 3         const UpdateVersionInfo* latestForRow = kUpdateRegistry.empty(
+869 3         const std::string novSub = std::string("v") +
+870 3             (latestForRow ? latestForRow->version : PROYECTHOR_VERSION
+871 3         if (PanelButtonCard(thirdW, rowH, "Novedades", novSub))
+872 3             m_NovedadesOpen = true;
+873 3 
+874 3         ImGui::SetCursorScreenPos(ImVec2(rowStart.x + (thirdW + rowGap
+875 3         if (PanelButtonCard(thirdW, rowH, "Descargar subtitulos", "Baj
+876 3             m_DownloadSubsOpen = true;
+877 3 
+878 3         ImGui::SetCursorScreenPos(ImVec2(rowStart.x, rowStart.y + rowH
+879 3         ImGui::Dummy(ImVec2(0.0f, 0.0f));
+880 2     }
+881 2 
+882 2     ImGui::Dummy(ImVec2(0.0f, 14.0f));
+883 2 
+884 2     ImGui::SetCursorPosX(30.0f);
+885 2     ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+886 2     ImGui::TextUnformatted("Accesos rapidos");
+887 2     ImGui::PopStyleColor();
+888 2 
+889 2     // Indices de k_Categories en SettingsPanel.cpp (0=Apariencia,
+890 2     // 1=Proyeccion, 2=Stage, 3=Audio, 4=Canciones, 5=Teclas, 6=Idioma
+891 2     // 7=Actualizaciones). "General" se quito del todo (pedido
+892 2     // explicito, no se usaba), de ahi que ya no aparezca aca.
+893 2     struct QuickItem { const char* label; int tab; };
+894 3     static const QuickItem items[] = {
+895 3         { "Apariencia",      0 },
+896 3         { "Proyección",      1 },
+897 3         { "Stage",           2 },
+898 3         { "Idioma",          6 },
+899 3         { "Actualizaciones", 7 },
+900 2     };
+901 2     const int   count  = (int)(sizeof(items) / sizeof(items[0]));
+902 2     const float btnGap = 10.0f;
+903 2     const float btnW   = (contentW - 36.0f - btnGap * (count - 1)) / c
+904 2 
+905 2     ImGui::SetCursorPosX(30.0f);
+906 2     ImGui::PushStyleColor(ImGuiCol_Button,        HT::Surface);
+907 2     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HT::SurfaceHover);
+908 2     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  HT::SurfaceActive);
+909 2     ImGui::PushStyleColor(ImGuiCol_Text,          HT::TextPri);
+910 2     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::RadiusSm);
+911 3     for (int i = 0; i < count; i++) {
+912 3         if (i > 0) ImGui::SameLine(0.0f, btnGap);
+913 3         char id[64];
+914 3         snprintf(id, sizeof(id), "%s##qb%d", items[i].label, items[i].
+915 4         if (ImGui::Button(id, ImVec2(btnW, 26.0f))) {
+916 4             m_ActiveTab             = items[i].tab;
+917 4             m_OpenSettingsRequested = true;
+918 3         }
+919 2     }
+920 2     ImGui::PopStyleVar();
+921 2     ImGui::PopStyleColor(4);
+922 2 
+923 2     ImGui::Dummy(ImVec2(0.0f, 14.0f));
+924 2 
+925 2     // ── Resumen local -- un solo panel compacto (pedido explicito: n
+926 2     // mostrar todo de una con tarjetas y lista de canciones expandida
+927 2     RenderResumenLocalSection(contentW);
+928 2 
+929 2     ImGui::EndGroup();
+930 2     ImGui::EndChild();
+931 1 }
+932 1 
+933 2 void Hub::InitBgParticles(float w, float h) {
+934 2     std::mt19937 rng(static_cast<uint32_t>(
+935 2         reinterpret_cast<uintptr_t>(m_BgParticles.data()) ^ 0xDEADBEEF
+936 2 
+937 3     auto frand = [&](float lo, float hi) -> float {
+938 3         return lo + (hi - lo) * (static_cast<float>(rng()) / static_ca
+939 2     };
+940 2 
+941 3     for (auto& p : m_BgParticles) {
+942 3         p.x      = frand(0.0f, w);
+943 3         p.y      = frand(0.0f, h);
+944 3         p.vx     = frand(-0.18f, 0.18f);
+945 3         p.vy     = frand(-0.18f, 0.18f);
+946 3         p.r      = frand(0.6f, 2.2f);
+947 3         p.phase  = frand(0.0f, 6.28318530717958647f);
+948 3         p.isCyan = (frand(0.0f, 1.0f) > 0.72f);
+949 2     }
+950 2 
+951 2     m_BgParticlesInit = true;
+952 1 }
+953 1 
+954 2 void Hub::UpdateBgParticles(float dt, float w, float h) {
+955 3     for (auto& p : m_BgParticles) {
+956 3         p.x += p.vx * dt * 60.0f;
+957 3         p.y += p.vy * dt * 60.0f;
+958 3 
+959 3         if (p.x < 0.0f) p.x += w;
+960 3         if (p.x > w)    p.x -= w;
+961 3         if (p.y < 0.0f) p.y += h;
+962 3         if (p.y > h)    p.y -= h;
+963 2     }
+964 1 }
+965 1 
+966 2 void Hub::InitNebulas(float w, float h) {
+967 2     std::mt19937 rng(static_cast<uint32_t>(
+968 2         reinterpret_cast<uintptr_t>(m_Nebulas.data()) ^ 0x9E3779B9u));
+969 3     auto frand = [&](float lo, float hi) -> float {
+970 3         return lo + (hi - lo) * (static_cast<float>(rng()) / static_ca
+971 2     };
+972 3     for (auto& n : m_Nebulas) {
+973 3         n.x  = frand(0.0f, w);
+974 3         n.y  = frand(0.0f, h);
+975 3         n.r  = frand(160.0f, 320.0f);
+976 3         n.vx = frand(-0.04f, 0.04f);
+977 3         n.vy = frand(-0.03f, 0.03f);
+978 2     }
+979 2     m_NebulasInit = true;
+980 1 }
+981 1 
+982 2 void Hub::UpdateNebulas(float dt, float w, float h) {
+983 3     for (auto& n : m_Nebulas) {
+984 3         n.x += n.vx * dt * 60.0f;
+985 3         n.y += n.vy * dt * 60.0f;
+986 3         if (n.x < -n.r) n.x = w + n.r;
+987 3         if (n.x > w + n.r) n.x = -n.r;
+988 3         if (n.y < -n.r) n.y = h + n.r;
+989 3         if (n.y > h + n.r) n.y = -n.r;
+990 2     }
+991 1 }
+992 1 
+993 2 void Hub::RenderBgCanvas(ImDrawList* dl, ImVec2 origin, float w, float
+994 2     using ProyecThor::Settings::ThemePreset;
+995 2     const bool isGalaxy = ProyecThor::Settings::SettingsManager::Get()
+996 2         == ThemePreset::Galaxy;
+997 2 
+998 2     // ── Nebulosas (solo Galaxia) — se dibujan primero, detras de tod
+999 3     if (isGalaxy) {
+1000 3         if (!m_NebulasInit) InitNebulas(w, h);
+1001 3 
+1002 3         ImVec4 accentV = ImGui::ColorConvertU32ToFloat4(HT::AccentBlue
+1003 3         ImVec4 softV   = ImGui::ColorConvertU32ToFloat4(HT::AccentSoft
+1004 4         for (int i = 0; i < NEBULA_COUNT; i++) {
+1005 4             const auto& n     = m_Nebulas[i];
+1006 4             const ImVec4& tint = (i % 2 == 0) ? accentV : softV;
+1007 4             // Varios circulos concentricos con alpha decreciente = gl
+1008 4             // sin textura ni assets externos (mismo truco que DrawSof
+1009 5             for (int layer = 4; layer >= 1; layer--) {
+1010 5                 float t     = (float)layer / 4.0f;
+1011 5                 float rad   = n.r * t;
+1012 5                 float alpha = 0.030f * (1.0f - t * 0.6f);
+1013 5                 dl->AddCircleFilled(ImVec2(origin.x + n.x, origin.y + 
+1014 5                     ImGui::ColorConvertFloat4ToU32(ImVec4(tint.x, tint
+1015 4             }
+1016 3         }
+1017 2     }
+1018 2 
+1019 2     // Grilla: solo en los temas "normales" — en Galaxia una cuadricul
+1020 2     // geometrica desentona con el look de nebulosa/estrellas.
+1021 3     if (!isGalaxy) {
+1022 3         // Tinte muy tenue del color de texto primario: se ve sutil ta
+1023 3         // temas oscuros (linea clara) como claros (linea oscura).
+1024 3         const ImU32 gridCol = ColA(HT::TextPri, 6);
+1025 3         for (float x = 0.0f; x < w; x += BG_GRID_SIZE)
+1026 3             dl->AddLine(ImVec2(origin.x + x, origin.y), ImVec2(origin.
+1027 3         for (float y = 0.0f; y < h; y += BG_GRID_SIZE)
+1028 3             dl->AddLine(ImVec2(origin.x, origin.y + y), ImVec2(origin.
+1029 2     }
+1030 2 
+1031 2     // ── Particulas — en Galaxia se ven como estrellas: mas grandes, 
+1032 2     //    contraste de brillo (centelleo) y un halo suave en el pico d
+1033 2     //    "parpadeo" en vez del punto chico y parejo de las demas pale
+1034 3     for (const auto& p : m_BgParticles) {
+1035 3         const float sinVal = sinf(m_Time * 0.75f + p.phase);
+1036 3         const float alpha  = isGalaxy ? (0.32f + 0.34f * sinVal) : (0.
+1037 3         const ImU32 col    = p.isCyan
+1038 3             ? ColAf(HT::ParticleA, alpha)
+1039 3             : ColAf(HT::ParticleB, alpha);
+1040 3         const float r = isGalaxy ? p.r * 1.5f : p.r;
+1041 3         const ImVec2 pos = ImVec2(origin.x + p.x, origin.y + p.y);
+1042 3         dl->AddCircleFilled(pos, r, col, 8);
+1043 3 
+1044 4         if (isGalaxy && sinVal > 0.80f) {
+1045 4             const float haloAlpha = (sinVal - 0.80f) * 0.9f;
+1046 4             dl->AddCircleFilled(pos, r * 3.2f,
+1047 4                 ColAf(p.isCyan ? HT::ParticleA : HT::ParticleB, haloAl
+1048 3         }
+1049 2     }
+1050 2 
+1051 2     // Lineas de conexión tipo "red/constelación": se sacan en Galaxia
+1052 2     // mas a cableado de red que a cielo estrellado sin ellas).
+1053 3     if (!isGalaxy) {
+1054 4         for (int i = 0; i < BG_PARTICLE_COUNT; i++) {
+1055 5             for (int j = i + 1; j < BG_PARTICLE_COUNT; j++) {
+1056 5                 const float dx   = m_BgParticles[i].x - m_BgParticles[
+1057 5                 const float dy   = m_BgParticles[i].y - m_BgParticles[
+1058 5                 const float dist = sqrtf(dx * dx + dy * dy);
+1059 6                 if (dist < BG_CONNECT_DIST) {
+1060 6                     const float t       = 1.0f - (dist / BG_CONNECT_DI
+1061 6                     const float alpha   = t * t * 0.09f;
+1062 6                     const ImU32 lineCol = ColAf(HT::ParticleB, alpha);
+1063 6                     dl->AddLine(
+1064 6                         ImVec2(origin.x + m_BgParticles[i].x, origin.y
+1065 6                         ImVec2(origin.x + m_BgParticles[j].x, origin.y
+1066 6                         lineCol, 0.5f);
+1067 5                 }
+1068 4             }
+1069 3         }
+1070 2     }
+1071 1 }
+1072 1 
+1073 2 void Hub::RenderMainContent(float w, float h) {
+1074 2     static GLuint bgTex             = 0;
+1075 2     static bool   texLoaded         = false;
+1076 2     static bool   isUpdateModalOpen = false;
+1077 2     static int    selectedUpdateVer = 12; // id de kUpdateRegistry (12
+1078 2 
+1079 3     if (!texLoaded) {
+1080 3         bgTex     = LoadTextureFromFile("splash_bg2.png");
+1081 3         texLoaded = true;
+1082 2     }
+1083 2 
+1084 2     if (!m_BgParticlesInit)
+1085 2         InitBgParticles(w, h);
+1086 2 
+1087 2     // dt propio para las animaciones de parallax de esta funcion (no 
+1088 2     // de m_Time para poder reutilizar el helper de forma autonoma).
+1089 2     float parallaxDt;
+1090 3     {
+1091 3         static std::chrono::steady_clock::time_point s_LastParallaxT =
+1092 3         const auto now = std::chrono::steady_clock::now();
+1093 3         parallaxDt = std::chrono::duration<float>(now - s_LastParallax
+1094 3         s_LastParallaxT = now;
+1095 3         parallaxDt = std::clamp(parallaxDt, 0.0f, 0.05f);
+1096 2     }
+1097 2 
+1098 2     ImGui::BeginChild("##MainContent", ImVec2(w, h), false);
+1099 2 
+1100 3     {
+1101 3         ImDrawList* dl = ImGui::GetWindowDrawList();
+1102 3         ImVec2      wp = ImGui::GetWindowPos();
+1103 3         RenderBgCanvas(dl, wp, w, h);
+1104 3         if (bgTex != 0)
+1105 3             dl->AddImage((ImTextureID)(intptr_t)bgTex, wp, ImVec2(wp.x
+1106 3                 ImVec2(0,0), ImVec2(1,1), ColAf(IM_COL32_WHITE, HT::Bg
+1107 2     }
+1108 2 
+1109 2     const float marginX       = 50.0f;
+1110 2     const float marginTop     = 40.0f;
+1111 2     const float spacingX      = 40.0f;
+1112 2     const float totalWidth    = w - (marginX * 2.0f);
+1113 2     const float leftColWidth  = totalWidth * 0.55f;
+1114 2     const float rightColWidth = totalWidth * 0.45f - spacingX;
+1115 2 
+1116 2     ImGui::SetCursorPos(ImVec2(marginX, marginTop));
+1117 2 
+1118 2     // Encabezado de seccion con una linea sutil debajo (mismo estilo 
+1119 2     // que ya usa el modal de actualizacion), para dar jerarquia visua
+1120 2     // consistente entre ambas columnas.
+1121 3     auto SectionHeader = [&](const char* title, float width) {
+1122 3         ImGui::SetWindowFontScale(1.3f);
+1123 3         ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+1124 3         ImGui::Text("%s", title);
+1125 3         ImGui::PopStyleColor();
+1126 3         ImGui::SetWindowFontScale(1.0f);
+1127 3         const ImVec2 p = ImGui::GetCursorScreenPos();
+1128 3         ImGui::GetWindowDrawList()->AddLine(ImVec2(p.x, p.y + 2.0f), I
+1129 3         ImGui::Dummy(ImVec2(0.0f, 13.0f));
+1130 2     };
+1131 2 
+1132 2     // ── Columna izquierda ──────────────────────────────────────────
+1133 2     ImGui::BeginGroup();
+1134 2 
+1135 2     SectionHeader("Actualizaciones", leftColWidth);
+1136 2 
+1137 2     // Altura del bloque de acciones que va debajo de la lista (boton 
+1138 2     // actualizaciones" + "Foro / Soporte"), para poder descontarla de
+1139 2     // del scroll y que este siempre termine justo antes de dichos bot
+1140 2     const float actionsRowH   = 36.0f;
+1141 2     const float gapBeforeList = ImGui::GetCursorPosY(); // lo ya consu
+1142 2     const float gapAfterList  = 15.0f;                  // Dummy entre
+1143 2     const float bottomMargin  = 55.0f;                  // espacio fin
+1144 2 
+1145 2     // Alto restante disponible para la lista scrolleable: ocupa todo 
+1146 2     // sobra hasta el final del panel, dejando lugar para los botones 
+1147 2     // y un margen inferior comodo.
+1148 2     const float updatesListH = std::max(
+1149 2         220.0f,
+1150 2         h - marginTop - gapBeforeList - gapAfterList - actionsRowH - b
+1151 2     );
+1152 2 
+1153 2     // Contenedor scrolleable para la lista de actualizaciones
+1154 2     ImGui::BeginChild("##UpdatesList", ImVec2(leftColWidth, updatesLis
+1155 2 
+1156 2     // Función auxiliar para dibujar tarjetas de actualización.
+1157 2     // Cada tarjeta usa la portada especifica de su propia entrada en 
+1158 2     // con recorte tipo "cover" + parallax al hover y esquinas redonde
+1159 3     auto RenderUpdateCard = [&](const UpdateVersionInfo& info) {
+1160 3         const GLTextureInfo cardCover = GetCoverTexture(info.coverFile
+1161 3 
+1162 3         ImGui::PushStyleColor(ImGuiCol_ChildBg, HT::CardAlt);
+1163 3         ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, HT::RadiusMd)
+1164 3         ImGui::BeginChild(info.version, ImVec2(leftColWidth, 140.0f), 
+1165 3 
+1166 3         ImVec2 cardStartPos = ImGui::GetCursorScreenPos();
+1167 3         ImVec2 cardEndPos   = ImVec2(cardStartPos.x + leftColWidth, ca
+1168 3         const bool cardHovered = ImGui::IsMouseHoveringRect(cardStartP
+1169 3         const float hoverT = HubHoverLerp(ImGui::GetID(info.version), 
+1170 3 
+1171 3         ImGui::SetCursorPos(ImVec2(10.0f, 10.0f));
+1172 3         ImGui::BeginGroup();
+1173 3 
+1174 3         const float thumbW = 180.0f, thumbH = 120.0f;
+1175 4         if (cardCover.id != 0) {
+1176 4             const ImVec2 thumbMin = ImGui::GetCursorScreenPos();
+1177 4             const ImVec2 thumbMax = ImVec2(thumbMin.x + thumbW, thumbM
+1178 4 
+1179 4             char stateKey[96];
+1180 4             snprintf(stateKey, sizeof(stateKey), "card_%s", info.versi
+1181 4 
+1182 4             DrawCoverImageCover(ImGui::GetWindowDrawList(), cardCover.
+1183 4                 thumbMin, thumbMax, HT::RadiusMd, ImDrawFlags_RoundCor
+1184 4                 stateKey, parallaxDt, cardHovered, 1.10f);
+1185 4 
+1186 4             ImGui::Dummy(ImVec2(thumbW, thumbH));
+1187 4             ImGui::SameLine(0.0f, 15.0f);
+1188 3         }
+1189 3 
+1190 3         ImGui::BeginGroup();
+1191 3         ImGui::Dummy(ImVec2(0.0f, 5.0f));
+1192 3         ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+1193 3         ImGui::Text("%s", info.cardBadge);
+1194 3         ImGui::PopStyleColor();
+1195 3         ImGui::SetWindowFontScale(1.1f);
+1196 3         ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+1197 3         ImGui::Text("Version v%s", info.version);
+1198 3         ImGui::PopStyleColor();
+1199 3         ImGui::SetWindowFontScale(1.0f);
+1200 3         ImGui::PopStyleColor();
+1201 3         ImGui::SetCursorScreenPos(ImVec2(x, pMin.y + 52.0f));
+1202 3         ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+1203 3         ImGui::TextUnformatted(label);
+1204 3         ImGui::PopStyleColor();
+1205 2     };
+1206 2 
+1207 2     const float colW = (w - 36.0f) / 3.0f;
+1208 2     Stat(pMin.x + 18.0f,               "Proyecciones totales", std::to
+1209 2     Stat(pMin.x + 18.0f + colW,        "FPS promedio",         std::to
+1210 2 
+1211 2     std::string topLabel = "Cancion mas proyectada";
+1212 2     std::string topValue = "Sin datos aun";
+1213 3     if (!topSongs.empty()) {
+1214 3         topValue = topSongs[0].first;
+1215 4         if (topValue.size() > 20) {
+1216 4             topValue.resize(20);
+1217 4             // Evita cortar a mitad de un caracter UTF-8 multibyte (ti
+1218 4             while (!topValue.empty() && (static_cast<unsigned char>(to
+1219 4                 topValue.pop_back();
+1220 4             topValue += "...";
+1221 3         }
+1222 3         topLabel = "Mas proyectada (" + std::to_string(topSongs[0].sec
+1223 2     }
+1224 2     Stat(pMin.x + 18.0f + colW * 2.0f, topLabel.c_str(), topValue, HT:
+1225 2 
+1226 2     ImGui::SetCursorScreenPos(ImVec2(pMin.x, pMax.y));
+1227 2     ImGui::Dummy(ImVec2(0.0f, 0.0f));
+1228 1 }
+1229 1 
+1230 1 // "Descargar subtitulos" -- utilidad standalone del Hub: pega una URL
+1231 1 // se bajan sus subtitulos (mismo fetch que "Importar desde URL" del m
+1232 1 // Archivo, ver SubtitleImporter.h) y se guardan como .txt suelto, sin
+1233 1 // una cancion. "Guardar en" sigue el mismo patron de Biblioteca > Ren
+1234 1 // (preguntar cada vez via dialogo nativo, o una carpeta fija).
+1235 2 void Hub::RenderDownloadSubtitlesPanel() {
+1236 2     // Se consume el resultado (y se une el hilo) apenas esta listo, S
+1237 2     // -- mismo motivo que UIManager::RenderUrlImportModal: si no, un
+1238 2     // intento nuevo mas tarde pisaria con "=" un std::thread todavia 
+1239 2     // unido y std::terminate() explota.
+1240 2     bool resultReady = false;
+1241 2     ProyecThor::Core::SubtitleFetchResult resultCopy;
+1242 3     {
+1243 3         std::lock_guard<std::mutex> lk(m_DownloadSubsMutex);
+1244 4         if (m_DownloadSubsResult.has_value() && !m_DownloadSubsRunning
+1245 4             resultCopy  = *m_DownloadSubsResult;
+1246 4             resultReady = true;
+1247 4             m_DownloadSubsResult.reset();
+1248 3         }
+1249 2     }
+1250 3     if (resultReady) {
+1251 3         if (m_DownloadSubsThread.joinable())
+1252 3             m_DownloadSubsThread.join();
+1253 3 
+1254 4         if (resultCopy.success) {
+1255 4             std::string savePath;
+1256 5             if (m_DownloadSubsAskEachTime || m_DownloadSubsPresetFolde
+1257 5                 std::string suggested = resultCopy.title.empty() ? "su
+1258 5                 savePath = ProyecThor::UI::PickSaveTextPath(
+1259 5                     (m_DownloadSubsPresetFolder.empty() ? suggested : 
+1260 5             } else {
+1261 5                 // Carpeta fija: nombre automatico a partir del titulo
+1262 5                 // el mismo criterio anti-colision que ya usa el conve
+1263 5                 // de Render (agrega " (2)", " (3)"... si ya existe).
+1264 5                 std::string base = resultCopy.title.empty() ? "subtitu
+1265 5                 std::string candidate = m_DownloadSubsPresetFolder + "
+1266 5                 int suffix = 2;
+1267 6                 while (std::filesystem::exists(candidate)) {
+1268 6                     candidate = m_DownloadSubsPresetFolder + "/" + bas
+1269 6                     ++suffix;
+1270 5                 }
+1271 5                 savePath = candidate;
+1272 4             }
+1273 4 
+1274 5             if (!savePath.empty()) {
+1275 5                 std::ofstream f(savePath, std::ios::binary);
+1276 6                 if (f.is_open()) {
+1277 6                     f << "\xEF\xBB\xBF" << resultCopy.lyrics;
+1278 6                     f.close();
+1279 6                     m_DownloadSubsSavedPath = savePath;
+1280 6                     m_DownloadSubsLastError.clear();
+1281 6                 } else {
+1282 6                     m_DownloadSubsLastError = "No se pudo escribir el 
+1283 5                 }
+1284 4             }
+1285 4             // savePath vacio == el operador cancelo el dialogo -- no 
+1286 4             // error, simplemente no se guarda nada y queda listo para
+1287 4             // reintentar sin perder el texto ya descargado.
+1288 4         } else {
+1289 4             m_DownloadSubsLastError = resultCopy.error;
+1290 3         }
+1291 2     }
+1292 2 
+1293 2     if (!m_DownloadSubsOpen) return;
+1294 2 
+1295 2     const ImVec2 baseSize(480.0f, 260.0f);
+1296 2     ImGuiViewport* vp = ImGui::GetMainViewport();
+1297 2     ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkP
+1298 2     ImGui::SetNextWindowPos(workCenter, ImGuiCond_Appearing, ImVec2(0.
+1299 2     ImGui::SetNextWindowSize(baseSize, ImGuiCond_Appearing);
+1300 2 
+1301 2     ImGuiWindowClass floatingClass;
+1302 2     floatingClass.DockingAllowUnclassed = false;
+1303 2     ImGui::SetNextWindowClass(&floatingClass);
+1304 2 
+1305 2     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 16.
+1306 2     bool open = ImGui::Begin("Descargar subtitulos", &m_DownloadSubsOp
+1307 2         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings
+1308 2         ImGuiWindowFlags_AlwaysAutoResize);
+1309 2 
+1310 3     if (open) {
+1311 3         ImGui::TextWrapped("Pega el link de un video. Se buscan sus su
+1312 3                             "no ingles) y se guardan como un .txt suel
+1313 3         ImGui::Dummy(ImVec2(0.0f, 8.0f));
+1314 3 
+1315 3         ImGui::BeginDisabled(m_DownloadSubsRunning);
+1316 3         ImGui::SetNextItemWidth(-1.0f);
+1317 3         bool enterPressed = ImGui::InputTextWithHint("##dlSubsUrl", "h
+1318 3             m_DownloadSubsUrlBuf, sizeof(m_DownloadSubsUrlBuf), ImGuiI
+1319 3         ImGui::EndDisabled();
+1320 3 
+1321 3         ImGui::Dummy(ImVec2(0.0f, 10.0f));
+1322 3 
+1323 3         // ── Guardar en -- mismo patron que Biblioteca > Render ─────
+1324 3         ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+1325 3         ImGui::TextUnformatted("Guardar en");
+1326 3         ImGui::PopStyleColor();
+1327 3         if (ImGui::RadioButton("Preguntar cada vez", m_DownloadSubsAsk
+1328 3             m_DownloadSubsAskEachTime = true;
+1329 3         if (ImGui::RadioButton("Carpeta fija", !m_DownloadSubsAskEachT
+1330 3             m_DownloadSubsAskEachTime = false;
+1331 3 
+1332 4         if (!m_DownloadSubsAskEachTime) {
+1333 4             ImGui::Dummy(ImVec2(0.0f, 4.0f));
+1334 4             char folderBuf[512];
+1335 4             std::snprintf(folderBuf, sizeof(folderBuf), "%s",
+1336 4                 m_DownloadSubsPresetFolder.empty() ? "Sin elegir..." :
+1337 4             ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x -
+1338 4             ImGui::InputText("##dlSubsPresetFolder", folderBuf, sizeof
+1339 4             ImGui::SameLine();
+1340 5             if (ImGui::Button("Elegir...", ImVec2(86.0f, 0.0f))) {
+1341 5                 std::string chosen = ProyecThor::UI::PickFolder("Elegi
+1342 5                 if (!chosen.empty()) m_DownloadSubsPresetFolder = chos
+1343 4             }
+1344 3         }
+1345 3 
+1346 3         ImGui::Dummy(ImVec2(0.0f, 10.0f));
+1347 3 
+1348 3         bool wantStart = false;
+1349 4         if (m_DownloadSubsRunning) {
+1350 4             ImGui::TextColored(ImVec4(0.6f, 0.75f, 0.9f, 1.0f), "Busca
+1351 4         } else {
+1352 4             if (ImGui::Button("Descargar", ImVec2(120.0f, 32.0f)))
+1353 4                 wantStart = true;
+1354 4             if (enterPressed)
+1355 4                 wantStart = true;
+1356 4             ImGui::SameLine();
+1357 5             if (ImGui::Button("Cerrar", ImVec2(100.0f, 32.0f))) {
+1358 5                 m_DownloadSubsOpen = false;
+1359 5                 m_DownloadSubsLastError.clear();
+1360 4             }
+1361 3         }
+1362 3 
+1363 4         if (!m_DownloadSubsLastError.empty()) {
+1364 4             ImGui::Dummy(ImVec2(0.0f, 8.0f));
+1365 4             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.93f, 0.35f, 
+1366 4             ImGui::TextWrapped("%s", m_DownloadSubsLastError.c_str());
+1367 4             ImGui::PopStyleColor();
+1368 3         }
+1369 4         if (!m_DownloadSubsSavedPath.empty()) {
+1370 4             ImGui::Dummy(ImVec2(0.0f, 8.0f));
+1371 4             ImGui::PushStyleColor(ImGuiCol_Text, HT::Success);
+1372 4             ImGui::TextWrapped("Guardado en: %s", m_DownloadSubsSavedP
+1373 4             ImGui::PopStyleColor();
+1374 3         }
+1375 3 
+1376 4         if (wantStart && !m_DownloadSubsRunning && m_DownloadSubsUrlBu
+1377 4             if (m_DownloadSubsThread.joinable()) m_DownloadSubsThread.
+1378 4             m_DownloadSubsLastError.clear();
+1379 4             m_DownloadSubsSavedPath.clear();
+1380 4             m_DownloadSubsRunning = true;
+1381 5             {
+1382 5                 std::lock_guard<std::mutex> lk(m_DownloadSubsMutex);
+1383 5                 m_DownloadSubsResult.reset();
+1384 4             }
+1385 4             std::string urlCopy = m_DownloadSubsUrlBuf;
+1386 5             m_DownloadSubsThread = std::thread([this, urlCopy]() {
+1387 5                 ProyecThor::Core::SubtitleFetchResult res = ProyecThor
+1388 5                 std::lock_guard<std::mutex> lk(m_DownloadSubsMutex);
+1389 5                 m_DownloadSubsResult  = std::move(res);
+1390 5                 m_DownloadSubsRunning = false;
+1391 4             });
+1392 3         }
+1393 2     }
+1394 2 
+1395 2     ImGui::End();
+1396 2     ImGui::PopStyleVar();
+1397 1 }
+1398 1 
+1399 1 // Modal universal de detalle de actualizacion -- sin cambios de logic
+1400 1 // respecto a la version anterior, solo movido a su propio metodo (ant
+1401 1 // vivia al final de RenderMainContent) y usando m_SelectedUpdateVer /
+1402 1 // m_IsUpdateModalOpen (miembros) en vez de estaticos locales, para qu
+1403 1 // el hero como la lista de historial dentro de RenderNovedadesPanel p
+1404 1 // abrirlo.
+1405 2 void Hub::RenderUpdateDetailModal() {
+1406 2     // selectedUpdateVer queda como alias de solo lectura del miembro:
+1407 2     // resto de este metodo (el gran if/else por version) lo referenci
+1408 2     // cual estaba antes, sin necesidad de tocar ese bloque.
+1409 2     const int selectedUpdateVer = m_SelectedUpdateVer;
+1410 2 
+1411 2     // m_UpdateModalAnim se aproxima a 1 mientras m_IsUpdateModalOpen 
+1412 2     // a 0 al cerrar; el modal sigue dibujandose (con escala/alpha
+1413 2     // decrecientes) hasta que la animacion termina, en vez de desapar
+1414 2     // golpe.
+1415 3     {
+1416 3         const float target = m_IsUpdateModalOpen ? 1.0f : 0.0f;
+1417 3         m_UpdateModalAnim += (target - m_UpdateModalAnim) * std::min(1
+1418 3         m_UpdateModalAnim = std::clamp(m_UpdateModalAnim, 0.0f, 1.0f);
+1419 3         if (m_UpdateModalAnim < 0.001f) m_UpdateModalAnim = 0.0f;
+1420 2     }
+1421 2 
+1422 3     if (m_IsUpdateModalOpen || m_UpdateModalAnim > 0.0f) {
+1423 3         const UpdateVersionInfo* selInfo = FindUpdateVersion(selectedU
+1424 3         const GLTextureInfo modalCover = selInfo ? GetCoverTexture(sel
+1425 3 
+1426 3         ImGuiViewport* vp     = ImGui::GetMainViewport();
+1427 3         const float     fadeA = EaseOut(m_UpdateModalAnim);
+1428 3 
+1429 3         ImGui::PushStyleVar(ImGuiStyleVar_Alpha, fadeA);
+1430 3 
+1431 3         ImGui::SetNextWindowPos(vp->Pos);
+1432 3         ImGui::SetNextWindowSize(vp->Size);
+1433 3         ImGui::PushStyleColor(ImGuiCol_WindowBg, IM_COL32(0, 0, 0, 170
+1434 3         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+1435 3         ImGui::Begin("##DimOverlay", nullptr,
+1436 3             ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | 
+1437 3             ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSet
+1438 3             ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoFocusOnAppe
+1439 3             ImGuiWindowFlags_NoBringToFrontOnFocus);
+1440 3         ImGui::End();
+1441 3         ImGui::PopStyleVar();
+1442 3         ImGui::PopStyleColor();
+1443 3 
+1444 3         // Leve "pop" de escala al abrir (0.96 -> 1.0) con la misma cu
+1445 3         const float scale         = 0.96f + 0.04f * fadeA;
+1446 3         const float modalW        = 780.0f * scale, modalH = 660.0f * 
+1447 3         const float headerH       = 200.0f * scale, footerH = 62.0f * 
+1448 3         const float modalRounding = HT::RadiusLg;
+1449 3 
+1450 3         ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImV
+1451 3         ImGui::SetNextWindowSize(ImVec2(modalW, modalH), ImGuiCond_Alw
+1452 3         ImGui::PushStyleColor(ImGuiCol_WindowBg, ColA(HT::Card, 255));
+1453 3         ImGui::PushStyleColor(ImGuiCol_Border,   HT::Divider);
+1454 3         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,   modalRound
+1455 3         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.5f);
+1456 3         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,    ImVec2(0.0
+1457 3 
+1458 3         bool vis = ImGui::Begin("##UpdateModal", nullptr,
+1459 3             ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse 
+1460 3             ImGuiWindowFlags_NoResize   | ImGuiWindowFlags_NoSavedSett
+1461 3             ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMove);
+1462 3 
+1463 4         if (vis) {
+1464 4             ImDrawList* dl     = ImGui::GetWindowDrawList();
+1465 4             ImVec2      winP   = ImGui::GetWindowPos();
+1466 4             const ImU32 modalBg = ColA(HT::Card, 255);
+1467 4 
+1468 4             const ImVec2 headerMin = winP;
+1469 4             const ImVec2 headerMax = ImVec2(winP.x + modalW, winP.y + 
+1470 4 
+1471 5             if (modalCover.id != 0) {
+1472 5                 char stateKey[96];
+1473 5                 snprintf(stateKey, sizeof(stateKey), "modal_%s", selIn
+1474 5                 const bool headerHovered = ImGui::IsMouseHoveringRect(
+1475 5 
+1476 5                 // Solo se redondean las esquinas superiores: coincide
+1477 5                 // borde del modal, mientras que abajo continua el con
+1478 5                 DrawCoverImageCover(dl, modalCover.id, modalCover.widt
+1479 5                     headerMin, headerMax, modalRounding, ImDrawFlags_R
+1480 5                     stateKey, ImGui::GetIO().DeltaTime, headerHovered,
+1481 5                 ImGui::Dummy(ImVec2(modalW, headerH));
+1482 5             } else {
+1483 5                 dl->AddRectFilled(headerMin, headerMax, ColA(HT::CardA
+1484 5                     modalRounding, ImDrawFlags_RoundCornersTop);
+1485 5                 ImGui::Dummy(ImVec2(modalW, headerH));
+1486 4             }
+1487 4 
+1488 4             dl->AddRectFilledMultiColor(
+1489 4                 ImVec2(winP.x, winP.y+headerH-60), ImVec2(winP.x+modal
+1490 4                 ColA(modalBg, 0), ColA(modalBg, 0), modalBg, modalBg);
+1491 4 
+1492 4             ImGui::SetCursorPos(ImVec2(0, headerH));
+1493 4             ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(0,0,0,0))
+1494 4             ImGui::BeginChild("##ModalScroll", ImVec2(modalW, modalH-h
+1495 4 
+1496 4             const float mg = 36.0f, cw = modalW - mg*2;
+1497 4             ImGui::SetCursorPos(ImVec2(mg, 18.0f));
+1498 4             ImGui::BeginGroup();
+1499 4 
+1500 4             // Badge tipo "pill": mide el texto real y dibuja el paddi
+1501 4             // el rect, en vez del hack anterior de espacios embebidos
+1502 4             // string (" ACTUALIZACIÓN MAYOR ") para simular relleno.
+1503 5             auto DrawPillBadge = [&](const char* text) {
+1504 5                 ImGui::SetWindowFontScale(0.8f);
+1505 5                 const ImVec2 bs = ImGui::CalcTextSize(text);
+1506 5                 ImGui::SetWindowFontScale(1.0f);
+1507 5                 const ImVec2 pad(8.0f, 3.0f);
+1508 5                 const ImVec2 bp = ImGui::GetCursorScreenPos();
+1509 5                 ImGui::GetWindowDrawList()->AddRectFilled(
+1510 5                     ImVec2(bp.x - pad.x, bp.y - pad.y), ImVec2(bp.x + 
+1511 5                     HT::AccentBlue, HT::RadiusSm);
+1512 5                 ImGui::Dummy(ImVec2(pad.x, 0.0f));
+1513 5                 ImGui::SameLine(0.0f, 0.0f);
+1514 5                 ImGui::PushStyleColor(ImGuiCol_Text, HT::OnAccent);
+1515 5                 ImGui::SetWindowFontScale(0.8f); ImGui::Text("%s", tex
+1516 5                 ImGui::PopStyleColor();
+1517 5                 ImGui::SameLine(0.0f, pad.x);
+1518 4             };
+1519 4             DrawPillBadge(selInfo ? selInfo->modalBadge : "ACTUALIZACI
+1520 4             ImGui::SameLine(0, 40);
+1521 4 
+1522 4             ImGui::SetWindowFontScale(0.8f);
+1523 4             ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+1524 4             ImGui::Text("HISTORIAL DE VERSIONES");
+1525 4             ImGui::PopStyleColor();
+1526 4             ImGui::SetWindowFontScale(1.0f);
+1527 4             ImGui::Dummy(ImVec2(0,6));
+1528 4 
+1529 4             ImGui::SetWindowFontScale(1.7f);
+1530 4             ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+1531 4             ImGui::Text("Actualización v%s", selInfo ? selInfo->versio
+1532 4             ImGui::PopStyleColor();
+1533 4             ImGui::SetWindowFontScale(1.0f);
+1534 4             ImGui::Dummy(ImVec2(0,20));
+1535 4 
+1536 5             auto Cat = [&](const char* t) {
+1537 5                 ImGui::PushStyleColor(ImGuiCol_Text, HT::TextPri);
+1538 5                 ImGui::SetWindowFontScale(1.05f); ImGui::Text("%s",t);
+1539 5                 ImGui::PopStyleColor();
+1540 5                 ImVec2 p = ImGui::GetCursorScreenPos();
+1541 5                 ImGui::GetWindowDrawList()->AddLine(
+1542 5                     ImVec2(p.x,p.y+1), ImVec2(p.x+cw,p.y+1), HT::Borde
+1543 5                 ImGui::Dummy(ImVec2(0,10));
+1544 4             };
+1545 5             auto Bul = [&](const char* t) {
+1546 5                 ImVec2 bp = ImGui::GetCursorScreenPos();
+1547 5                 ImGui::GetWindowDrawList()->AddCircleFilled(
+1548 5                     ImVec2(bp.x+6, bp.y+ImGui::GetTextLineHeight()*0.5
+1549 5                 ImGui::SetCursorPosX(ImGui::GetCursorPosX()+18);
+1550 5                 ImGui::PushStyleColor(ImGuiCol_Text, HT::TextMuted);
+1551 5                 ImGui::PushTextWrapPos(ImGui::GetCursorPosX()+cw-22);
+1552 5                 ImGui::TextWrapped("%s",t);
+1553 5                 ImGui::PopTextWrapPos(); ImGui::PopStyleColor();
+1554 5                 ImGui::Dummy(ImVec2(0,4));
+1555 4             };
+1556 4 
+1557 5             if (selectedUpdateVer == 13) { // v0.6.0
+1558 5                 Cat("App movil: editor de overlays");
+1559 5                 Bul("Edicion completa de overlays desde el celular: mo
+1560 5                 Bul("Seleccion multiple con recuadro de arrastre (rubb
+1561 5                 Bul("Panel de capas reordenable arrastrando (igual que
+1562 5                 Bul("Boton \"Enviar al PC\": exporta el overlay y lo s
+1563 5                 ImGui::Dummy(ImVec2(0,12));
+1564 5 
+1565 5                 Cat("Biblioteca > Render");
+1566 5                 Bul("Eleccion de codec de video al convertir (H.264, H
+1567 5                 Bul("Boton para cancelar una conversion a mitad de cam
+1568 5                 Bul("Estimacion del peso final antes de convertir, y c
+1569 5                 Bul("Podes elegir si guardar siempre en una carpeta fi
+1570 5                 ImGui::Dummy(ImVec2(0,12));
+1571 5 
+1572 5                 Cat("Soporte real para Linux y CachyOS");
+1573 5                 Bul("ProyecThor ahora compila y corre en Linux de verd
+1574 5                 Bul("Funciona tanto en X11 como en Wayland (via XWayla
+1575 5                 ImGui::Dummy(ImVec2(0,12));
+1576 5 
+1577 5                 Cat("Windows: escalado de pantalla (DPI)");
+1578 5                 Bul("La app ahora respeta el porcentaje de escalado de
+1579 5                 ImGui::Dummy(ImVec2(0,12));
+1580 5 
+1581 5                 Cat("Aviso");
+1582 5                 Bul("Esta es una actualizacion grande y todavia esta e
+1583 5                 ImGui::Dummy(ImVec2(0,12));
+1584 5             } else if (selectedUpdateVer == 12) { // v0.5.1
+1585 5                 Cat("Contadores (antes \"Reloj y Contadores\")");
+1586 5                 Bul("Se acorto el nombre de la sección a secas \"Conta
+1587 5                 ImGui::Dummy(ImVec2(0,12));
+1588 5 
+1589 5                 Cat("Reloj dentro de Overlays");
+1590 5                 Bul("Nuevo cuadro de Reloj en el editor de Overlays (b
+1591 5                 Bul("Ese cuadro es solo un marcador de posición: al pr
+1592 5                 Bul("La transmisión a pantalla del reloj ya no es un m
+1593 5                 Bul("La transmisión a dispositivos en red (LAN) sigue 
+1594 5                 Bul("Se agregaron overlays de reloj predeterminados (b
+1595 5                 ImGui::Dummy(ImVec2(0,12));
+1596 5 
+1597 5                 Cat("Editor de Overlays");
+1598 5                 Bul("Las capas ahora se pueden reordenar (subir/bajar)
+1599 5                 Bul("Encabezado del editor más plano y compacto (se sa
+1600 5                 Bul("Corregido: el cuadriculado que indica \"sin fondo
+1601 5                 ImGui::Dummy(ImVec2(0,12));
+1602 5 
+1603 5                 Cat("Correcciones en Contadores");
+1604 5                 Bul("El aviso de \"overlay activo sin cuadro de reloj\
+1605 5                 Bul("Corregido un icono roto en el botón \"Avanzar\" d
+1606 5                 ImGui::Dummy(ImVec2(0,12));
+1607 5             } else if (selectedUpdateVer == 11) { // v0.5.0
+1608 5                 Cat("Ajustes reorganizado");
+1609 5                 Bul("Cada configuración ahora es su propia página: al 
+1610 5                 Bul("Nuevo buscador arriba del menu de Ajustes, para e
+1611 5                 Bul("Proyección y Pantallas ahora estan agrupadas junt
+1612 5                 Bul("Se saco la categoría General (Inicio, Guardado au
+1613 5                 ImGui::Dummy(ImVec2(0,12));
+1614 5 
+1615 5                 Cat("Fondos: bucle falso");
+1616 5                 Bul("Nueva opción en Ajustes > Proyección > Fondos: en
+1617 5                 ImGui::Dummy(ImVec2(0,12));
+1618 5 
+1619 5                 Cat("Biblioteca > Render");
+1620 5                 Bul("El conversor de formato tiene un diseño más moder
+1621 5                 Bul("Se saco el botón de Reloj del sidebar de Bibliote
+1622 5                 ImGui::Dummy(ImVec2(0,12));
+1623 5 
+1624 5                 Cat("Nueva sección: Overlays");
+1625 5                 Bul("Crea overlays (textos, formas e imágenes) en un e
+1626 5                 Bul("Un overlay se guarda como imagen PNG con transpar
+1627 5                 Bul("El editor tiene una barra flotante para agregar t
+1628 5                 Bul("Acceso rápido tambien desde Vista en Vivo (botón 
+1629 5                 ImGui::Dummy(ImVec2(0,12));
+1630 5 
+1631 5                 Cat("Vista en Vivo renovada");
+1632 5                 Bul("Reproductor más simple: se saco el encabezado \"P
+1633 5                 Bul("Overlays, Chat, Pads y Reloj ahora se abren DENTR
+1634 5                 Bul("La barra de botones de abajo quedo pegada justo d
+1635 5                 Bul("Se saco la tira de Stage que aparecia arriba del 
+1636 5                 ImGui::Dummy(ImVec2(0,12));
+1637 5 
+1638 5                 Cat("Nueva sección: Pantallas");
+1639 5                 Bul("La configuración de Stage (que monitor usa, si es
+1640 5                 ImGui::Dummy(ImVec2(0,12));
+1641 5 
+1642 5                 Cat("Correcciones de tema y apariencia");
+1643 5                 Bul("Varias ventanas y menus (el menu superior, los po
+1644 5                 Bul("Los fondos de los paneles eran levemente transpar
+1645 5                 ImGui::Dummy(ImVec2(0,12));
+1646 5             } else if (selectedUpdateVer == 10) { // v0.4.3
+1647 5                 Cat("Nueva sección: Conexiones");
+1648 5                 Bul("Toolbar nueva arriba de todo (Hub / Proyector / C
+1649 5                 Bul("OSC: enviar mensajes a luces/controladores extern
+1650 5                 Bul("Red y Chat, disponibles ahora en dos lugares a la
+1651 5                 Bul("Streaming en vivo real por RTMP (Twitch, YouTube,
+1652 5                 ImGui::Dummy(ImVec2(0,12));
+1653 5 
+1654 5                 Cat("Nueva sección: Biblioteca");
+1655 5                 Bul("Ver, renombrar y borrar tus archivos de Video, Im
+1656 5                 Bul("Nuevo panel \"Render\": convierte tus videos y au
+1657 5                 ImGui::Dummy(ImVec2(0,12));
+1658 5 
+1659 5                 Cat("Biblia a pantalla completa");
+1660 5                 Bul("El mismo buscador de Biblia de siempre, ahora tam
+1661 5                 ImGui::Dummy(ImVec2(0,12));
+1662 5 
+1663 5                 Cat("Selector rápido y novedades");
+1664 5                 Bul("Alt+Espacio abre un selector para saltar entre Hu
+1665 5                 Bul("Al abrir una versión nueva de ProyecThor aparece 
+1666 5                 ImGui::Dummy(ImVec2(0,12));
+1667 5 
+1668 5                 Cat("Monitor de Vista en Vivo, más compacto");
+1669 5                 Bul("El panel de Preview del Monitor ocupaba mucho más
+1670 5                 Bul("El botón de Play/Pausa se integro en la misma fil
+1671 5                 Bul("Botones e iconos del Preview más chicos y prolijo
+1672 5                 Bul("Sacado el botón de Contener/Estirar de esa column
+1673 5                 ImGui::Dummy(ImVec2(0,12));
+1674 5 
+1675 5                 Cat("Editor de Estilos renovado");
+1676 5                 Bul("Se le bajo el tono \"arcoiris\" que tenia (cada p
+1677 5                 Bul("Encabezado, bordes y esquinas más sobrios y recto
+1678 5                 ImGui::Dummy(ImVec2(0,12));
+1679 5 
+1680 5                 Cat("Nuevo instalador para Windows");
+1681 5                 Bul("ProyecThor ahora se instala con un instalador mod
+1682 5                 Bul("Si ya tenias ProyecThor instalado con una versión
+1683 5                 Bul("Corregido: el icono de la aplicacion no se veia b
+1684 5                 Bul("Las actualizaciones automáticas de esta pantalla 
+1685 5                 Bul("Nuevo aviso en Ajustes > Actualizaciones, con un 
+1686 5                 ImGui::Dummy(ImVec2(0,12));
+1687 5 
+1688 5                 Cat("Biblioteca con contenido de entrada");
+1689 5                 Bul("Canciones y Biblias ya no arrancan vacias en una 
+1690 5                 Bul("Corregido: al ponerle Título a una canción nueva 
+1691 5                 Bul("Corregido: renombrar una canción desde el menu co
+1692 5                 ImGui::Dummy(ImVec2(0,12));
+1693 5 
+1694 5                 Cat("Correcciones de estabilidad");
+1695 5                 Bul("Corregido un cierre inesperado de la app relacion
+1696 5                 ImGui::Dummy(ImVec2(0,12));
+1697 5             } else if (selectedUpdateVer == 9) { // v0.4.2
+1698 5                 Cat("Pads de Vista en Vivo");
+1699 5                 Bul("Corregido el problema por el cual guardar un pad 
+1700 5                 Bul("El panel de Pads se reorganizo en dos secciones: 
+1701 5                 Bul("El texto de ayuda de \"Escenas rápidas\" se reemp
+1702 5                 ImGui::Dummy(ImVec2(0,12));
+1703 5 
+1704 5                 Cat("Transporte y volumen de Vista en Vivo");
+1705 5                 Bul("Los botones de Play/Pausa, Retroceder, Avanzar y 
+1706 5                 Bul("El control de volumen pasa a ser un fader horizon
+1707 5                 Bul("Corregido un icono roto en el botón de silenciar 
+1708 5                 ImGui::Dummy(ImVec2(0,12));
+1709 5 
+1710 5                 Cat("Biblia: buscador por palabras");
+1711 5                 Bul("Nuevo botón (lupa + \"Aa\") junto al buscador ráp
+1712 5                 ImGui::Dummy(ImVec2(0,12));
+1713 5 
+1714 5                 Cat("Editor de Estilos renovado");
+1715 5                 Bul("El editor de un estilo ya no abre una ventana flo
+1716 5                 Bul("El selector de fuente pasa de una lista de texto 
+1717 5                 Bul("Nueva pestaña \"Efectos\": fondo, borde, sombra, 
+1718 5                 ImGui::Dummy(ImVec2(0,12));
+1719 5 
+1720 5                 Cat("Shaders: muchos efectos nuevos");
+1721 5                 Bul("NIS: escalador alternativo a FSR, exclusivo para 
+1722 5                 Bul("VHS: sangrado de color, scanlines, bamboleo y rui
+1723 5                 Bul("Cine: gradacion de color tipo cine, con tinte a e
+1724 5                 Bul("Contraste y Luminosidad: ajuste directo de contra
+1725 5                 Bul("Blur, Sharpen, Bloom y Aberración cromática: dese
+1726 5                 Bul("TAA (antialiasing temporal): suaviza bordes mezcl
+1727 5                 ImGui::Dummy(ImVec2(0,12));
+1728 5             } else if (selectedUpdateVer == 8) { // v0.4.1
+1729 5                 Cat("Editor de canciones (rediseño total)");
+1730 5                 Bul("Editar una canción ya no abre una ventana flotant
+1731 5                 Bul("Título y Autor quedan siempre a la vista; Nota, D
+1732 5                 Bul("Todo se guarda solo mientras se escribe (sin botó
+1733 5                 Bul("Nuevo filtro de \"Lineas por diapositiva\" (1/2/3
+1734 5                 ImGui::Dummy(ImVec2(0,12));
+1735 5 
+1736 5                 Cat("Menu principal reorganizado");
+1737 5                 Bul("Nuevo menu \"ProyecThor\" (primero, a la izquierd
+1738 5                 Bul("Archivo ahora es la categoría Importar, con una o
+1739 5                 Bul("\"Base de datos\" y \"Wiki\" se movieron al menu 
+1740 5                 Bul("Nuevo menu \"Ventana\" con Pantalla completa (tam
+1741 5                 ImGui::Dummy(ImVec2(0,12));
+1742 5 
+1743 5                 Cat("Efectos de video (rediseñado + nuevos)");
+1744 5                 Bul("El panel de Shaders (al lado de Overlays, en Dise
+1745 5                 Bul("Dos efectos nuevos: Saturación (colores más vivos
+1746 5                 Bul("Nuevo efecto \"Rellenado\" (recomendado): llena l
+1747 5                 Bul("Cada efecto se prende o apaga por separado y se v
+1748 5                 ImGui::Dummy(ImVec2(0,12));
+1749 5 
+1750 5                 Cat("Biblioteca > Videos");
+1751 5                 Bul("Los videos ahora muestran una miniatura real (un 
+1752 5                 Bul("Nuevo botón para alternar entre vista en lista y 
+1753 5                 ImGui::Dummy(ImVec2(0,12));
+1754 5 
+1755 5                 Cat("Biblioteca > Playlists");
+1756 5                 Bul("El panel de \"Agregar canciones\" a una playlist 
+1757 5                 ImGui::Dummy(ImVec2(0,12));
+1758 5 
+1759 5                 Cat("Captura (camara / pantalla)");
+1760 5                 Bul("Nuevas \"Escenas rápidas\": 8 botones de color do
+1761 5                 Bul("Click derecho sobre un botón para guardar la posi
+1762 5                 ImGui::Dummy(ImVec2(0,12));
+1763 5 
+1764 5                 Cat("Ajustes > Apariencia");
+1765 5                 Bul("Nueva fuente de interfaz personalizable: se puede
+1766 5                 Bul("El menu de Ajustes se reordeno con iconos por cat
+1767 5                 ImGui::Dummy(ImVec2(0,12));
+1768 5 
+1769 5                 Cat("Nuevo motor de video (experimental)");
+1770 5                 Bul("En Ajustes > Proyección, opción para elegir el mo
+1771 5                 Bul("Pensado para equipos con poca placa de video — lo
+1772 5                 ImGui::Dummy(ImVec2(0,12));
+1773 5 
+1774 5                 Cat("Estabilidad");
+1775 5                 Bul("Corregido un problema por el cual el video de fon
+1776 5                 Bul("Corregido: el control de FSR en Ajustes > Proyecc
+1777 5                 ImGui::Dummy(ImVec2(0,12));
+1778 5             } else if (selectedUpdateVer == 7) { // v0.4.0
+1779 5                 Cat("Cola de videos y video en vivo");
+1780 5                 Bul("La cola de videos es mucho más confiable: los cli
+1781 5                 Bul("Corregido: la app ya no se traba si hacias clic v
+1782 5                 Bul("Los videos de la cola ahora siempre arrancan desd
+1783 5                 Bul("Corregido un cierre inesperado de la app en Windo
+1784 5                 Bul("La Vista Previa de la Biblioteca ya no puede trab
+1785 5                 ImGui::Dummy(ImVec2(0,12));
+1786 5 
+1787 5                 Cat("Nuevo panel de Rendimiento");
+1788 5                 Bul("Panel opcional (menu Vista > Rendimiento) que mue
+1789 5                 ImGui::Dummy(ImVec2(0,12));
+1790 5 
+1791 5                 Cat("Overlays (nuevo)");
+1792 5                 Bul("Nueva sección para crear tus propios overlays: im
+1793 5                 Bul("Guardá tus overlays y usalos despues con un solo 
+1794 5                 Bul("Podes editar o borrar los overlays guardados desd
+1795 5                 ImGui::Dummy(ImVec2(0,12));
+1796 5 
+1797 5                 Cat("Vista en Vivo");
+1798 5                 Bul("Nuevos botones rápidos al costado de Vista en Viv
+1799 5                 Bul("El panel de Control quedo más simple: solo inicia
+1800 5                 ImGui::Dummy(ImVec2(0,12));
+1801 5 
+1802 5                 Cat("Fondos y Estilos");
+1803 5                 Bul("Los Fondos ahora se organizan en carpetas, más fá
+1804 5                 Bul("Nuevo control para agrandar o achicar las miniatu
+1805 5                 Bul("Animaciones más suaves al pasar el mouse y cambia
+1806 5                 ImGui::Dummy(ImVec2(0,12));
+1807 5 
+1808 5                 Cat("Interfaz general");
+1809 5                 Bul("Los 4 menus de iconos (Biblioteca, Control, Home 
+1810 5                 Bul("Podes ocultar los titulos debajo de los iconos (m
+1811 5                 ImGui::Dummy(ImVec2(0,12));
+1812 5 
+1813 5                 Cat("Biblioteca y fuentes");
+1814 5                 Bul("Corregido: al importar una fuente nueva la app se
+1815 5                 Bul("Al cambiar de categoría en la Biblioteca (Letra, 
+1816 5                 Bul("El fondo de cada canción ahora se elige de tu bib
+1817 5                 ImGui::Dummy(ImVec2(0,12));
+1818 5 
+1819 5                 Cat("Monitor de Control (Stage)");
+1820 5                 Bul("Nuevo botón en Vista en Vivo para alternar la pre
+1821 5                 Bul("[Experimental] Opción para que el Monitor de Cont
+1822 5                 ImGui::Dummy(ImVec2(0,12));
+1823 5             } else if (selectedUpdateVer == 6) { // v0.3.5 — version e
+1824 5                 Cat("Audio");
+1825 5                 Bul("Sonido renovado: nueva pantalla de audio, portada
+1826 5                 Bul("Ahora podes asignar autores a las canciones.");
+1827 5                 Bul("Cambiar de canción es más rápido y con menos cort
+1828 5                 ImGui::Dummy(ImVec2(0,12));
+1829 5 
+1830 5                 Cat("Reproducción y previsualizacion");
+1831 5                 Bul("La Vista Previa y el video en vivo ahora son tota
+1832 5                 Bul("Corregidas las pantallas negras en el segundo mon
+1833 5                 ImGui::Dummy(ImVec2(0,12));
+1834 5 
+1835 5                 Cat("Cola de reproducción");
+1836 5                 Bul("La cola avanza de forma más confiable entre video
+1837 5                 Bul("Corregidos casos donde la cola podia desincroniza
+1838 5                 ImGui::Dummy(ImVec2(0,12));
+1839 5 
+1840 5                 Cat("Biblioteca");
+1841 5                 Bul("Biblioteca renovada, con listas y playlists más f
+1842 5                 Bul("Nuevo sistema de etiquetas de colores para organi
+1843 5                 Bul("Busqueda mejorada y navegación con las flechas de
+1844 5                 ImGui::Dummy(ImVec2(0,12));
+1845 5 
+1846 5                 Cat("Biblia");
+1847 5                 Bul("Nuevos atajos de teclado para buscar libro, capít
+1848 5                 Bul("Nueva sección en Ajustes con todos los atajos dis
+1849 5                 ImGui::Dummy(ImVec2(0,12));
+1850 5 
+1851 5                 Cat("Control de proyección");
+1852 5                 Bul("Mejor soporte para varios monitores (proyector y 
+1853 5                 Bul("Panel de control más simple, todo en una sola fil
+1854 5                 Bul("El mute y el volumen ahora se mantienen sincroniz
+1855 5                 ImGui::Dummy(ImVec2(0,12));
+1856 5 
+1857 5                 Cat("Red local y streaming");
+1858 5                 Bul("Transmisión por red local (LAN) más estable, con 
+1859 5                 Bul("Corregidos errores de imagen y de marca de agua e
+1860 5                 ImGui::Dummy(ImVec2(0,12));
+1861 5 
+1862 5                 Cat("Estadisticas locales");
+1863 5                 Bul("Nuevo resumen en el Hub con el total de proyeccio
+1864 5                 ImGui::Dummy(ImVec2(0,12));
+1865 5 
+1866 5                 Cat("Soporte para Linux");
+1867 5                 Bul("ProyecThor ahora funciona de forma nativa en Linu
+1868 5                 ImGui::Dummy(ImVec2(0,12));
+1869 5 
+1870 5                 Cat("Atajos de teclado globales");
+1871 5                 Bul("Ctrl+P, F1 y Alt+F4 ahora funcionan desde cualqui
+1872 5                 ImGui::Dummy(ImVec2(0,12));
+1873 5 
+1874 5                 Cat("Interfaz y experiencia");
+1875 5                 Bul("Nuevo logo y mejoras visuales en varias secciones
+1876 5                 Bul("Animaciones más fluidas en el Hub principal.");
+1877 5                 ImGui::Dummy(ImVec2(0,12));
+1878 5 
+1879 5                 Cat("Sistema y ajustes");
+1880 5                 Bul("Tus ajustes y preferencias se guardan y cargan co
+1881 5                 Bul("Podes personalizar el idioma y la apariencia de l
+1882 5                 ImGui::Dummy(ImVec2(0,12));
+1883 5 
+1884 5                 Cat("Estabilidad general");
+1885 5                 Bul("Multiples correcciones para evitar que la app se 
+1886 5                 ImGui::Dummy(ImVec2(0,12));
+1887 5 
+1888 5                 Cat("Soporte y comunidad");
+1889 5                 Bul("Canal oficial de comunicación y soporte en WhatsA
+1890 5             } else { // v0.3.0
+1891 5                 Cat("General");
+1892 5                 Bul("Nuevo Hub central para administrar la app.");
+1893 5                 Bul("Código QR automático para ver la transmisión desd
+1894 5                 Bul("Nuevas pantallas de bienvenida al iniciar la app.
+1895 5                 ImGui::Dummy(ImVec2(0,12));
+1896 5 
+1897 5                 Cat("Multimedia y Streaming");
+1898 5                 Bul("Mejoras en la transmisión LAN y en la conexión de
+1899 5                 Bul("Estilos de letras predeterminados segun el tipo d
+1900 5                 Bul("Reproducción de video más fluida.");
+1901 5                 Bul("Nueva opción para transmitir fondos con la orient
+1902 5                 Bul("Mejor rendimiento en la biblioteca y la vista pre
+1903 5                 ImGui::Dummy(ImVec2(0,12));
+1904 5 
+1905 5                 Cat("Soporte y Estabilidad");
+1906 5                 Bul("Mejor manejo de archivos y más estabilidad genera
+1907 5                 Bul("Podes editar canciones sin perder el foco en pant
+1908 5                 Bul("Correcciones en la cola de reproducción y en las 
+1909 5                 Bul("Varias correcciones para evitar que la app se cue
+1910 4             }
+1911 4 
+1912 4             ImGui::Dummy(ImVec2(0,24));
+1913 4             ImGui::EndGroup();
+1914 4             ImGui::EndChild();
+1915 4             ImGui::PopStyleColor();
+1916 4 
+1917 4             ImGui::SetCursorPos(ImVec2(0, modalH-footerH));
+1918 4             ImVec2 flp = ImGui::GetCursorScreenPos();
+1919 4             dl->AddLine(ImVec2(flp.x,flp.y), ImVec2(flp.x+modalW,flp.y
+1920 4 
+1921 4             const float bw=130, bh=34;
+1922 4             ImGui::SetCursorPos(ImVec2((modalW-bw)*0.5f, (modalH-foote
+1923 4             ImGui::PushStyleColor(ImGuiCol_Button,        HT::Surface)
+1924 4             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HT::SurfaceH
+1925 4             ImGui::PushStyleColor(ImGuiCol_ButtonActive,  HT::SurfaceA
+1926 4             ImGui::PushStyleColor(ImGuiCol_Text,          HT::TextPri)
+1927 4             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, HT::Radiu
+1928 4             if (ImGui::Button("Cerrar", ImVec2(bw, bh)))
+1929 4                 m_IsUpdateModalOpen = false;
+1930 4             ImGui::PopStyleVar();
+1931 4             ImGui::PopStyleColor(4);
+1932 3         }
+1933 3 
+1934 3         ImGui::End();
+1935 3         ImGui::PopStyleVar(4); // Alpha, WindowRounding, WindowBorderS
+1936 3         ImGui::PopStyleColor(2);
+1937 2     }
+1938 1 }
+1939 1 
+1940 0 } // namespace ProyecThor::UI

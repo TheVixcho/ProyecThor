@@ -2,39 +2,33 @@
 
 #include "IPanel.h"
 #include "audio/AudioAlbumArt.h"
+#include "backend/media/VLCBasePlayer.h"
+#include "backend/core/SubtitleImporter.h"
 #include <string>
 #include <vector>
 #include <cstdint>
-#include <atomic>
-
-struct libvlc_instance_t;
-struct libvlc_media_player_t;
-struct libvlc_media_t;
-struct libvlc_event_t;
-
-static void OnMediaEndReached(const libvlc_event_t* event, void* userData);
+#include <thread>
+#include <mutex>
+#include <optional>
 
 namespace ProyecThor::UI {
-
-// ─── Datos de una pista ───────────────────────────────────────────────────────
 
 struct AudioTrack {
     std::string filename;
     std::string displayName;
     std::string fullPath;
 
-    // Color de acento procedural (hash del nombre, estable por pista)
     float accentH = 0.0f;
 
-    // Portada embebida. Se extrae de forma lazy al reproducir la pista.
-    // coverLoaded = false hasta que se intente la extraccion.
     ProyecThor::Audio::AlbumArt coverArt;
-    bool coverLoaded = false;   // true = ya intentamos extraer (puede estar vacia)
+    bool coverLoaded = false;
+
+    std::string sourceUrl;
+    std::string lyricsText;
+    bool        lyricsEnabled = false;
 };
 
 enum class AudioRepeatMode { None, One, All };
-
-// ─── Disco giratorio ──────────────────────────────────────────────────────────
 
 struct SpinningDiscParams {
     float rotationAngle = 0.0f;
@@ -44,65 +38,44 @@ struct SpinningDiscParams {
     bool  needleLifted  = true;
 };
 
-// ─── Panel de audio ───────────────────────────────────────────────────────────
+enum class AudioVisualStyle {
+    Vinyl = 0,
+    Minimal,
+    Bars,
+};
+
+const char* AudioVisualStyleName(AudioVisualStyle style);
 
 class AudioPanel : public IPanel {
-    friend void ::OnMediaEndReached(const libvlc_event_t* event, void* userData);
-
 public:
     AudioPanel();
     ~AudioPanel() override;
 
+    static AudioPanel* GetActiveInstance();
+
     void Render() override;
     std::string GetName() const override { return "Audio"; }
 
-    // Actualiza progreso, animaciones y waveform. Llamar cada frame.
     void Update();
 
-    // Vista de biblioteca (lista de pistas + header)
     void RenderLibraryList();
 
-    // Vista del reproductor (disco, controles, EQ) — se usa en HomePanel
     void RenderPlayerView();
 
-    // ── "En vivo" en el proyector real ───────────────────────────────────
-    // true mientras este panel es la fuente del fondo del proyector (ver
-    // PresentationCore::SetBackgroundAudio/SetBgTypeLocked, que llama
-    // SetLiveBackground(false) automaticamente si el operador manda otra
-    // cosa en vivo desde otro lado — video, cancion, biblia).
     bool IsLiveBackground()      const { return m_IsLiveBackground; }
-    void SetLiveBackground(bool v)     { m_IsLiveBackground = v;    }
+    void SetLiveBackground(bool v);
 
-    // Busca <filename> en la biblioteca de audio (releyendo la carpeta si
-    // hace falta), lo reproduce y lo manda en vivo al proyector -- mismo
-    // resultado que elegir la pista en RenderLibraryList y despues apretar
-    // "En vivo", pero en un solo llamado. Usado por el control remoto del
-    // celular (ver SyncServer.cpp POST /remote/multimedia/select). false si
-    // el archivo no existe en la carpeta de audio.
     bool PlayFileLive(const std::string& filename);
 
-    // Dibuja el fondo "now playing" (disco + caratula + ondas) en el
-    // drawlist de la ventana ACTUAL — pensado para llamarse desde dentro
-    // del Begin("ProjectorLive") de UIManager (ver ese archivo), asi el
-    // ImGui::GetWindowDrawList() que usa RenderSpinningDisc() cae en el
-    // proyector real. (x,y,w,h) es el rectangulo completo del proyector.
     void RenderLiveBackground(float x, float y, float w, float h);
 
-    // Acceso a los datos del waveform para que el proyector los dibuje
     const std::vector<float>& GetWaveBars()  const { return m_WaveVec; }
     float                     GetAccentHue() const;
     float                     GetTime()      const { return m_LastTime; }
     bool                      GetIsPlaying() const { return m_IsPlaying && !m_IsPaused; }
-
-    // Acceso publico para el callback de fin de pista
-    volatile bool m_TrackEndedFlag = false;
+    void                      StopIfPathMatches(const std::string& path);
 
 private:
-    // ── VLC ───────────────────────────────────────────────────────────────
-    void InitVLC();
-    void ShutdownVLC();
-
-    // ── Reproduccion ─────────────────────────────────────────────────────
     void Play(int trackIndex);
     void PlayCurrent();
     void Stop();
@@ -110,56 +83,70 @@ private:
     void TogglePlayPause();
     void Next();
     void Previous();
+    void SkipSeconds(int seconds);
     void SeekTo(float normalizedPosition);
     void SetVolume(int volume);
     void ApplyGain(float gainDb);
+    void ApplyEqualizerToPlayer();
 
-    // Extrae y sube a GPU la portada de la pista actual (lazy, solo una vez)
     void EnsureCoverLoaded(int trackIndex);
 
-    // ── Biblioteca ────────────────────────────────────────────────────────
     void RefreshLibrary();
     void ImportAudioFile();
 
-    // ── Render por secciones ──────────────────────────────────────────────
+    void AddToQueue(int trackIndex);
+    void AddToQueue(const std::string& fullPath);
+    void PlayQueueIndex(int queueIdx);
+    void RemoveFromQueue(int queueIdx);
+    void MoveQueueItem(int from, int to);
+    void ClearQueue();
+
     void RenderHeader();
     void RenderSpinningDisc(float cx, float cy, float radius);
     void RenderNowPlayingCard();
     void RenderProgressBar();
     void RenderTransportControls();
     void RenderVolumeRow();
-    void RenderEqualizerSection();
+    void RenderEqualizerButton();
+    void RenderEqualizerPopup();
     void RenderPlaylist();
+    void RenderQueueList();
+    void RenderStylePopup();
 
-    // ── Helpers ───────────────────────────────────────────────────────────
+    void RenderLyricsButton();
+    void RenderLyricsPopup();
+    void RequestLyricsImport(const std::string& url);
+    void LoadTrackLyricsSidecar(AudioTrack& track) const;
+    void SaveTrackLyricsSidecar(const AudioTrack& track) const;
+    void RefreshLiveLyrics();
+
     std::string FormatTime(int64_t ms) const;
     static float DbToLinear(float dB);
     int  ComputeEffectiveVolume() const;
     static void ComputeTrackAccent(AudioTrack& track);
+    int  FindTrackIndexByPath(const std::string& path) const;
 
-    // ── VLC ───────────────────────────────────────────────────────────────
-    libvlc_instance_t*     m_VLC    = nullptr;
-    libvlc_media_player_t* m_Player = nullptr;
-    libvlc_media_t*        m_Media  = nullptr;
+    Core::VLCBasePlayer m_VlcPlayer;
 
-    // ── Pistas ────────────────────────────────────────────────────────────
-    std::vector<AudioTrack> m_Tracks;
-    int  m_CurrentTrack = -1;
-    bool m_IsPlaying    = false;
-    bool m_IsPaused     = false;
+    std::vector<AudioTrack>  m_Tracks;
+    std::vector<std::string> m_AudioQueue;
+    int  m_CurrentTrack       = -1;
+    int  m_QueueCurrentIndex  = -1;
+    bool m_ViewQueueTab       = false;
+    bool m_IsPlaying          = false;
+    bool m_IsPaused           = false;
+    char m_SearchBuffer[128]  = {};
 
     float   m_Progress      = 0.0f;
     int64_t m_CurrentTimeMs = 0;
     int64_t m_TotalTimeMs   = 0;
     bool    m_IsSeeking     = false;
 
-    // ── Audio ─────────────────────────────────────────────────────────────
     int   m_Volume           = 80;
     float m_GainDb           = 0.0f;
     bool  m_Muted            = false;
     int   m_VolumeBeforeMute = 80;
 
-    // ── Ecualizador ───────────────────────────────────────────────────────
     static constexpr int kEqBands = 10;
     float m_EqBands[kEqBands] = { 0.0f };
     float m_EqPreamp          = 0.0f;
@@ -169,27 +156,37 @@ private:
         "31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"
     };
 
-    // ── Modos ─────────────────────────────────────────────────────────────
     AudioRepeatMode m_RepeatMode = AudioRepeatMode::None;
     bool            m_Shuffle    = false;
 
-    // ── Disco giratorio ───────────────────────────────────────────────────
     SpinningDiscParams m_Disc;
 
-    // ── Waveform ──────────────────────────────────────────────────────────
+    AudioVisualStyle m_VisualStyle    = AudioVisualStyle::Vinyl;
+    bool             m_ShowStylePopup = false;
+
+    bool m_ShowWaveform = true;
+
+    bool        m_ShowLyricsPopup     = false;
+    bool        m_LyricsImportRunning = false;
+    char        m_LyricsUrlBuffer[512] = {};
+    std::string m_LyricsImportError;
+    std::thread m_LyricsImportThread;
+    std::mutex  m_LyricsImportMutex;
+    std::optional<Core::SubtitleFetchResult> m_LyricsImportResult;
+
     static constexpr int kWaveBars = 32;
     float m_WaveBars[kWaveBars]    = { 0.0f };
     float m_WaveTargets[kWaveBars] = { 0.0f };
     float m_WaveTimer              = 0.0f;
 
-    // Vector para exponer el waveform al exterior (proyector)
     std::vector<float> m_WaveVec;
 
-    // ── "En vivo" en el proyector real (ver IsLiveBackground/SetLiveBackground) ──
     bool m_IsLiveBackground = false;
 
-    // Tiempo de la ultima animacion
+    std::string m_LastExternalSelection;
+
     float m_LastTime = 0.0f;
 };
 
-} // namespace ProyecThor::UI
+}
+

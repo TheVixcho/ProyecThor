@@ -19,57 +19,75 @@ inline ImVec2 IcPt(ImVec2 o, float sz, float rx, float ry)
 // =============================================================================
 inline void DrawIcon_Music(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 {
-    dl->AddEllipseFilled(IcPt(o, sz, 0.28f, 0.72f),
-                         ImVec2(sz * 0.16f, sz * 0.11f), col, 0.f, 12);
-    dl->AddLine(IcPt(o, sz, 0.43f, 0.72f), IcPt(o, sz, 0.43f, 0.20f), col, sz * 0.07f);
-    dl->AddBezierCubic(
-        IcPt(o, sz, 0.43f, 0.20f), IcPt(o, sz, 0.80f, 0.20f),
-        IcPt(o, sz, 0.80f, 0.44f), IcPt(o, sz, 0.43f, 0.48f),
-        col, sz * 0.065f, 8);
+    float thick = sz * 0.08f;
+    // Dos notas musicales enlazadas (corchea doble clásica)
+    dl->AddEllipseFilled(IcPt(o, sz, 0.28f, 0.74f), ImVec2(sz * 0.15f, sz * 0.11f), col, -0.35f, 16);
+    dl->AddEllipseFilled(IcPt(o, sz, 0.70f, 0.64f), ImVec2(sz * 0.15f, sz * 0.11f), col, -0.35f, 16);
+    dl->AddLine(IcPt(o, sz, 0.40f, 0.72f), IcPt(o, sz, 0.40f, 0.24f), col, thick);
+    dl->AddLine(IcPt(o, sz, 0.82f, 0.62f), IcPt(o, sz, 0.82f, 0.14f), col, thick);
+    // Viga superior conectora
+    ImVec2 beam[4] = {
+        IcPt(o, sz, 0.36f, 0.26f), IcPt(o, sz, 0.86f, 0.16f),
+        IcPt(o, sz, 0.86f, 0.06f), IcPt(o, sz, 0.36f, 0.16f),
+    };
+    dl->AddConvexPolyFilled(beam, 4, col);
 }
 
 inline void DrawIcon_Play(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 {
     dl->AddTriangleFilled(
-        IcPt(o, sz, 0.22f, 0.17f),
-        IcPt(o, sz, 0.22f, 0.83f),
-        IcPt(o, sz, 0.85f, 0.50f), col);
+        IcPt(o, sz, 0.24f, 0.18f),
+        IcPt(o, sz, 0.24f, 0.82f),
+        IcPt(o, sz, 0.84f, 0.50f), col);
 }
 
 inline void DrawIcon_Image(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 {
     float thick = sz * 0.07f;
-    float r     = sz * 0.08f;
-    dl->AddRect(IcPt(o, sz, 0.10f, 0.16f), IcPt(o, sz, 0.90f, 0.84f),
+    float r     = sz * 0.09f;
+    dl->AddRect(IcPt(o, sz, 0.12f, 0.16f), IcPt(o, sz, 0.88f, 0.84f),
                 col, r, ImDrawFlags_RoundCornersAll, thick);
-    dl->AddCircleFilled(IcPt(o, sz, 0.32f, 0.35f), sz * 0.09f, col, 10);
+    dl->AddCircleFilled(IcPt(o, sz, 0.34f, 0.36f), sz * 0.09f, col, 12);
     dl->AddTriangleFilled(
-        IcPt(o, sz, 0.12f, 0.82f),
+        IcPt(o, sz, 0.16f, 0.80f),
         IcPt(o, sz, 0.52f, 0.46f),
-        IcPt(o, sz, 0.88f, 0.82f), col);
+        IcPt(o, sz, 0.84f, 0.80f), col);
 }
 
 inline void DrawIcon_Multimedia(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 {
-    float thick = sz * 0.07f;
-    float r     = sz * 0.08f;
-    dl->AddRect(IcPt(o, sz, 0.10f, 0.10f), IcPt(o, sz, 0.90f, 0.68f),
-                col, r, ImDrawFlags_RoundCornersAll, thick);
+    float thick = sz * 0.075f;
+    // Marco de claqueta / pantalla multimedia con Play central
+    dl->AddRect(IcPt(o, sz, 0.12f, 0.16f), IcPt(o, sz, 0.88f, 0.84f),
+                col, sz * 0.10f, ImDrawFlags_RoundCornersAll, thick);
+    dl->AddLine(IcPt(o, sz, 0.14f, 0.36f), IcPt(o, sz, 0.86f, 0.36f), col, sz * 0.06f);
+    dl->AddLine(IcPt(o, sz, 0.32f, 0.18f), IcPt(o, sz, 0.32f, 0.34f), col, sz * 0.05f);
+    dl->AddLine(IcPt(o, sz, 0.50f, 0.18f), IcPt(o, sz, 0.50f, 0.34f), col, sz * 0.05f);
+    dl->AddLine(IcPt(o, sz, 0.68f, 0.18f), IcPt(o, sz, 0.68f, 0.34f), col, sz * 0.05f);
+    // Triángulo Play central
     dl->AddTriangleFilled(
-        IcPt(o, sz, 0.38f, 0.26f),
-        IcPt(o, sz, 0.38f, 0.52f),
-        IcPt(o, sz, 0.60f, 0.39f), col);
-    dl->AddEllipseFilled(IcPt(o, sz, 0.28f, 0.90f),
-                         ImVec2(sz * 0.11f, sz * 0.08f), col, 0.f, 10);
-    dl->AddLine(IcPt(o, sz, 0.38f, 0.90f), IcPt(o, sz, 0.38f, 0.66f), col, sz * 0.055f);
+        IcPt(o, sz, 0.42f, 0.48f),
+        IcPt(o, sz, 0.42f, 0.74f),
+        IcPt(o, sz, 0.66f, 0.61f), col);
 }
 
 inline void DrawIcon_Cross(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 {
-    float thick = sz * 0.18f;
-    float r     = thick * 0.45f;
-    dl->AddRectFilled(IcPt(o, sz, 0.41f, 0.09f), IcPt(o, sz, 0.59f, 0.91f), col, r);
-    dl->AddRectFilled(IcPt(o, sz, 0.16f, 0.28f), IcPt(o, sz, 0.84f, 0.46f), col, r);
+    float thick = sz * 0.07f;
+    // Libro Sagrado / Biblia abierta con páginas y cinta de marcador
+    dl->AddRect(IcPt(o, sz, 0.12f, 0.20f), IcPt(o, sz, 0.48f, 0.82f),
+                col, sz * 0.06f, ImDrawFlags_RoundCornersLeft, thick);
+    dl->AddRect(IcPt(o, sz, 0.52f, 0.20f), IcPt(o, sz, 0.88f, 0.82f),
+                col, sz * 0.06f, ImDrawFlags_RoundCornersRight, thick);
+    // Líneas de texto bíblico
+    dl->AddLine(IcPt(o, sz, 0.20f, 0.36f), IcPt(o, sz, 0.40f, 0.36f), col, sz * 0.05f);
+    dl->AddLine(IcPt(o, sz, 0.20f, 0.50f), IcPt(o, sz, 0.40f, 0.50f), col, sz * 0.05f);
+    dl->AddLine(IcPt(o, sz, 0.20f, 0.64f), IcPt(o, sz, 0.36f, 0.64f), col, sz * 0.05f);
+    dl->AddLine(IcPt(o, sz, 0.60f, 0.36f), IcPt(o, sz, 0.80f, 0.36f), col, sz * 0.05f);
+    dl->AddLine(IcPt(o, sz, 0.60f, 0.50f), IcPt(o, sz, 0.80f, 0.50f), col, sz * 0.05f);
+    dl->AddLine(IcPt(o, sz, 0.60f, 0.64f), IcPt(o, sz, 0.76f, 0.64f), col, sz * 0.05f);
+    // Cinta central
+    dl->AddLine(IcPt(o, sz, 0.50f, 0.16f), IcPt(o, sz, 0.50f, 0.88f), col, sz * 0.075f);
 }
 
 inline void DrawIcon_Document(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
@@ -77,31 +95,31 @@ inline void DrawIcon_Document(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
     float thick = sz * 0.07f;
     float fold  = sz * 0.22f;
     ImVec2 pts[6] = {
-        IcPt(o, sz, 0.15f, 0.08f), IcPt(o, sz, 0.65f, 0.08f),
-        IcPt(o, sz, 0.85f, 0.08f + fold / sz), IcPt(o, sz, 0.85f, 0.92f),
-        IcPt(o, sz, 0.15f, 0.92f), IcPt(o, sz, 0.15f, 0.08f),
+        IcPt(o, sz, 0.16f, 0.10f), IcPt(o, sz, 0.62f, 0.10f),
+        IcPt(o, sz, 0.84f, 0.10f + fold / sz), IcPt(o, sz, 0.84f, 0.90f),
+        IcPt(o, sz, 0.16f, 0.90f), IcPt(o, sz, 0.16f, 0.10f),
     };
     dl->AddPolyline(pts, 6, col, ImDrawFlags_None, thick);
-    dl->AddLine(IcPt(o, sz, 0.65f, 0.08f),
-                IcPt(o, sz, 0.65f, 0.08f + fold / sz), col, thick);
-    dl->AddLine(IcPt(o, sz, 0.65f, 0.08f + fold / sz),
-                IcPt(o, sz, 0.85f, 0.08f + fold / sz), col, thick);
-    const float lx0 = 0.28f, lx1 = 0.76f, ly0 = 0.44f, lgap = 0.14f;
+    dl->AddLine(IcPt(o, sz, 0.62f, 0.10f),
+                IcPt(o, sz, 0.62f, 0.10f + fold / sz), col, thick);
+    dl->AddLine(IcPt(o, sz, 0.62f, 0.10f + fold / sz),
+                IcPt(o, sz, 0.84f, 0.10f + fold / sz), col, thick);
+    const float lx0 = 0.28f, lx1 = 0.72f, ly0 = 0.44f, lgap = 0.14f;
     for (int i = 0; i < 3; i++) {
         float y  = ly0 + i * lgap;
-        float x1 = lx1 - (i == 2 ? 0.16f : 0.f);
+        float x1 = lx1 - (i == 2 ? 0.18f : 0.f);
         dl->AddLine(IcPt(o, sz, lx0, y), IcPt(o, sz, x1, y), col, thick * 0.80f);
     }
 }
 
 inline void DrawIcon_Audio(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 {
-    float thick = sz * 0.07f;
+    float thick = sz * 0.075f;
     float cx    = o.x + sz * 0.50f;
     float cy    = o.y + sz * 0.50f;
     ImVec2 spk[4] = {
-        IcPt(o, sz, 0.14f, 0.34f), IcPt(o, sz, 0.14f, 0.66f),
-        IcPt(o, sz, 0.36f, 0.76f), IcPt(o, sz, 0.36f, 0.24f),
+        IcPt(o, sz, 0.16f, 0.36f), IcPt(o, sz, 0.16f, 0.64f),
+        IcPt(o, sz, 0.38f, 0.78f), IcPt(o, sz, 0.38f, 0.22f),
     };
     dl->AddConvexPolyFilled(spk, 4, col);
     float radii[2] = { sz * 0.18f, sz * 0.30f };
@@ -110,6 +128,15 @@ inline void DrawIcon_Audio(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
                       -IM_PI * 0.34f, IM_PI * 0.34f, 10);
         dl->PathStroke(col, ImDrawFlags_None, thick);
     }
+}
+
+inline void DrawIcon_Video(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = sz * 0.07f;
+    dl->AddRect(IcPt(o, sz, 0.12f, 0.20f), IcPt(o, sz, 0.88f, 0.80f),
+                col, sz * 0.08f, ImDrawFlags_RoundCornersAll, thick);
+    dl->AddTriangleFilled(
+        IcPt(o, sz, 0.42f, 0.36f), IcPt(o, sz, 0.42f, 0.64f), IcPt(o, sz, 0.66f, 0.50f), col);
 }
 
 // =============================================================================

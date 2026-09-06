@@ -85,6 +85,14 @@ namespace ProyecThor::Core {
         void EnforceSilenceIfNeeded();
         bool IsForceSilent() const { return m_ForceSilent.load(std::memory_order_relaxed); }
 
+        // Escape de la garantia "fijada una sola vez" de arriba -- SOLO
+        // para el player de Preview de biblioteca, que por pedido explicito
+        // puede sonar si el operador lo activa a mano (opt-in, apagado por
+        // default para no duplicar audio al escuchar Preview mientras algo
+        // ya suena en vivo). Los demas players forceSilent (BackgroundLayer,
+        // NativePlayback) siguen sin exponer esto -- nadie los llama.
+        void SetForceSilent(bool v) { m_ForceSilent.store(v, std::memory_order_relaxed); }
+
         // Ecualizador de 10 bandas (libvlc_audio_equalizer_*, ver
         // VLCBasePlayer.cpp). enabled=false quita el filtro por completo
         // (libvlc_media_player_set_equalizer(nullptr)) en vez de dejarlo

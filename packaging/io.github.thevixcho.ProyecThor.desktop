@@ -2,7 +2,8 @@
 Type=Application
 Name=ProyecThor
 Comment=Software de proyeccion de letras y presentaciones
-Exec=proyecthor
+Exec=proyecthor %U
 Icon=io.github.thevixcho.ProyecThor
 Categories=AudioVideo;Presentation;
 Terminal=false
+MimeType=audio/mpeg;audio/flac;audio/x-flac;audio/x-wav;audio/wav;audio/ogg;audio/aac;audio/mp4;audio/x-ms-wma;audio/opus;audio/x-aiff;video/mp4;video/x-matroska;video/x-msvideo;video/quicktime;video/webm;

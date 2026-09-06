@@ -19,7 +19,8 @@ ProyecThor's own source code is released under the MIT License (see `LICENSE`), 
 | **PDFium** | BSD 3-Clause | Permissive | [chromium.googlesource.com/.../pdfium](https://chromium.googlesource.com/chromium/src/+/main/third_party/pdfium) | Keep copyright notice; do not use the project's name for promotion without permission. |
 | **LibVLC SDK** | LGPL 2.1 | Weak copyleft | [videolan.org](https://www.videolan.org) | See special section below. |
 | **TagLib** | LGPL 2.1 / MPL 1.1 | Weak copyleft | [taglib.github.io](https://taglib.github.io) | See special section below. |
-| **FFmpeg** (Windows builds, `ffmpeg.exe`) | GPL v3 (essentials build, includes libx264) | Strong copyleft | [ffmpeg.org](https://ffmpeg.org) | See "FFmpeg" section below. Bundled as a separate executable, invoked as a subprocess (not linked) for the Streaming/RTMP feature. |
+| **FFmpeg** (Windows builds, `ffmpeg.exe`) | GPL v3 (essentials build, includes libx264) | Strong copyleft | [ffmpeg.org](https://ffmpeg.org) | See "FFmpeg" section below. Bundled as a separate executable, invoked as a subprocess (not linked) for the Streaming/RTMP feature and Biblioteca > Render. |
+| **yt-dlp** (Windows builds, `yt-dlp.exe`) | The Unlicense (public domain) | Permissive (public domain) | [github.com/yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) | No practical obligation. Bundled as a separate executable, invoked as a subprocess (not linked) to resolve playable stream URLs and for Archivo > Importar > Importar desde URL (subtitle-as-lyrics import). |
 
 ---
 

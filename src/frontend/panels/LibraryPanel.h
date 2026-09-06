@@ -13,9 +13,12 @@
 #include "biblio/LibraryMultimedia.h"
 #include "backend/core/MediaConverter.h"
 #include "overlay/OverlayLibraryTab.h"
+#include "WebBrowserPanel.h"
+#include "model3d/Model3DPanel.h"
+#include "lab/LabPanel.h"
 #include <memory>
 
-namespace ProyecThor::UI { class UIManager; class MonitorView; }
+namespace ProyecThor::UI { class UIManager; class MonitorView; class PanelPickerFullscreen; }
 enum class ActiveLeftPanel;
 
 namespace ProyecThor::UI {
@@ -34,36 +37,76 @@ enum class LibraryCategory {
     Multimedia
 };
 
-// Grupo aparte, abajo del todo en el sidebar izquierdo (ver LibrarySidebar.cpp),
+// ── Modos extra del sidebar de Biblioteca ────────────────────────────────────
+// Items que antes vivian en secciones dedicadas del workspace o en paneles
+// flotantes y que el operador pidió tener directamente en el rail izquierdo,
 // separado de las categorias de contenido de arriba por una linea. No toca
 // LibraryCategory/m_CurrentCategory -- es un modo de vista independiente.
 enum class LibrarySideMode {
     Categories = 0,
     // Red y Mobile se mudaron a Ajustes > Conexiones (ver
     // CategoryConnections.cpp), junto con Streaming (RTMP) y OSC -- una
-    // sola pagina para "todo lo que conecta ProyecThor con el exterior",
+    // sola página para "todo lo que conecta ProyecThor con el exterior",
     // en vez de repartido entre aca y el rail de Conexiones (retirado).
     // "Reloj" (antes indice 2) se saco de aca -- ya vive en el toolbar
     // inline de ViewPanel (ver ViewPanel::InlineTool::Clock), duplicaba
     // el acceso.
     Render     = 3, // "Render" — conversor de formato (ver MediaConverter.h),
-                     // mudado desde la seccion "Biblioteca" del workspace
+                     // mudado desde la sección "Biblioteca" del workspace
                      // (LibraryManagerPanel, retirada del todo).
     Overlay    = 4, // "Overlay" — galeria + editor de overlays PNG (ver
                      // OverlayLibraryTab), se abre a pantalla completa
                      // (UIManager::EnterFullscreenEditor) al crear/editar uno.
+    Web        = 5, // "Web" — navegador embebido generico (ver WebBrowserPanel),
+                     // con "Enviar a Público" para mostrar cualquier pagina en
+                     // la salida real, no solo contenido de la Biblioteca.
+    Model3D    = 6, // "3D" — visor y catálogo de modelos y recursos 3D (OBJ, STL, PLY, GLTF, GLB)
+    Lab        = 7, // "Lab" — laboratorio matemático de fórmulas y graficador de funciones en vivo
+    Picker     = 8,
 };
 
 class LibraryPanel : public IPanel {
 public:
     LibraryPanel();
-    ~LibraryPanel() override = default;
+    ~LibraryPanel() override;
 
     std::string GetName() const override { return "Library"; }
     AudioPanel* GetAudioPanel() { return &m_AudioPanel; }
     void Render() override;
     void SetUIManager(UIManager* manager);
     void SetMonitorView(MonitorView* monitor) { m_MonitorRef = monitor; }
+
+    void SelectCategory(LibraryCategory cat);
+    void SelectSideMode(LibrarySideMode mode);
+    void OpenPanelPickerFullscreen();
+
+    // Preset de workspace "Biblioteca" (ver Settings::WorkspaceLayoutPreset::
+    // Library / UIManager::BuildWorkspaceLayoutLibrary): bloquea Biblioteca
+    // en la categoria Medios y oculta el selector de categorias del sidebar
+    // (Canciones/Video/Biblia/Documentos/Reloj/Render/Overlay), asi el
+    // operador solo ve la grilla de Medios -- nada mas para navegar a otro
+    // lado por accidente en ese workspace reducido. UIManager la llama cada
+    // frame segun el preset activo, no hace falta llamarla a mano.
+    void SetMediaOnlyMode(bool v);
+
+    // Preset de workspace "Render" (ver Settings::WorkspaceLayoutPreset::
+    // Render / UIManager::BuildWorkspaceLayoutRender): bloquea Biblioteca en
+    // el conversor de formato (LibrarySideMode::Render) y oculta el
+    // sidebar -- pantalla completa dedicada solo a codificar/decodificar
+    // video, sin nada mas para navegar a otro lado por accidente. UIManager
+    // la llama cada frame segun el preset activo, no hace falta llamarla a
+    // mano. Mutuamente excluyente con SetMediaOnlyMode (UIManager nunca
+    // activa las dos a la vez, son presets distintos).
+    void SetRenderOnlyMode(bool v);
+
+    // Migrado tal cual desde LibraryManagerPanel (seccion "Biblioteca" del
+    // workspace, retirada del todo) -- convierte Video/Audio ya importados a
+    // otro formato aprovechando ffmpeg (ver MediaConverter.h). Publico
+    // porque VideoEditorPanel lo llama directo como una de sus pestañas
+    // (ver Settings::WorkspaceLayoutPreset::Video) -- el ex-preset "Render"
+    // ya no bloquea toda la ventana de Biblioteca, ahora esto se embebe
+    // inline en otro panel, misma instancia de LibraryPanel de siempre.
+    void RenderConverterSection();
 
 private:
     Library::LibraryContext BuildContext();
@@ -81,14 +124,13 @@ private:
     void RenderFileInUseToast();
 
     // ── Render (conversor de formato, ver LibrarySideMode::Render) ───────
-    // Migrado tal cual desde LibraryManagerPanel (seccion "Biblioteca" del
-    // workspace, retirada del todo) — convierte Video/Audio ya importados a
-    // otro formato aprovechando ffmpeg (ver MediaConverter.h).
-    void RenderConverterSection();
+    // RenderConverterSection() ahora es publico, ver mas arriba.
     void RefreshConvertibleItems();
 
-    LibraryCategory          m_CurrentCategory     = LibraryCategory::Songs;
-    LibraryCategory          m_PrevCategory        = LibraryCategory::Songs;
+    LibraryCategory          m_CurrentCategory     = LibraryCategory::Multimedia;
+    LibraryCategory          m_PrevCategory        = LibraryCategory::Multimedia;
+    bool                     m_MediaOnlyMode       = false;
+    bool                     m_RenderOnlyMode      = false;
     Library::MultimediaFilter m_MultimediaFilter   = Library::MultimediaFilter::All;
     // Flag: evita llamar SetSelection cada frame cuando estamos en Audio.
     // Solo se llama una vez al entrar a la categoria.
@@ -112,6 +154,16 @@ private:
 
     // ── Grupo "Overlay" del sidebar (ver LibrarySideMode) ─────────────────
     std::unique_ptr<OverlayLibraryTab> m_OverlayTab;
+
+    // ── Grupo "Web" del sidebar (ver LibrarySideMode) ─────────────────────
+    std::unique_ptr<WebBrowserPanel> m_WebBrowserPanel;
+
+    // ── Grupo "3D" del sidebar (ver LibrarySideMode::Model3D) ────────────
+    std::unique_ptr<Model3DPanel>    m_Model3DPanel;
+
+    // ── Grupo "Lab" del sidebar (ver LibrarySideMode::Lab) ────────────────
+    std::unique_ptr<LabPanel>         m_LabPanel;
+    std::unique_ptr<PanelPickerFullscreen> m_PanelPicker;
 
     // ── Render (conversor de formato) ─────────────────────────────────────
     struct ConvertibleItem { std::string filename; bool isVideo; };

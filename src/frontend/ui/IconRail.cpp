@@ -25,7 +25,7 @@ float IconRailThickness(bool vertical)
     return *cur;
 }
 
-// Progreso animado (0..1) de "mostrar titulo" — compartido por Vertical/Horizontal
+// Progreso animado (0..1) de "mostrar título" — compartido por Vertical/Horizontal
 // para que el fade del texto y el recentrado del icono avancen sincronizados
 // con el cambio de grosor de arriba.
 static float RailLabelProgress()
@@ -173,13 +173,12 @@ static void RenderHorizontal(const IconRailItem* items, int count, int& currentI
     dl->AddRectFilled(winPos, { winPos.x + winW, winPos.y + railH },
                       DS::GlassFillTop);
 
-    ImGui::Dummy({ 4.0f, railH });
+    ImGui::Dummy({ 6.0f, railH });
     ImGui::SameLine(0.0f, 0.0f);
 
-    constexpr float btnGapX  = 1.0f;
-    constexpr float rounding = 5.0f;
-    const float     btnW    = kIconRailHorizontalItemW;
-    const float      iconSz  = std::floor(railH * 0.38f);
+    constexpr float btnGapX  = 4.0f;
+    constexpr float rounding = 6.0f;
+    const float     iconSz   = std::clamp(std::floor(railH * 0.36f), 15.0f, 18.0f);
 
     ImGuiStorage* storage = ImGui::GetStateStorage();
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(btnGapX, 0.f));
@@ -191,10 +190,13 @@ static void RenderHorizontal(const IconRailItem* items, int count, int& currentI
         const float* cc    = categoryColor[i];
         const ImU32 accent = ImGui::ColorConvertFloat4ToU32(ImVec4(cc[0], cc[1], cc[2], cc[3]));
 
+        ImVec2 lblDim = ImGui::CalcTextSize(item.label);
+        float btnW = (lt > 0.01f) ? std::max(lblDim.x + 28.0f, 68.0f) : 46.0f;
+
         if (i > 0) ImGui::SameLine();
         ImVec2 cursor = ImGui::GetCursorScreenPos();
-        ImVec2 bMin   = cursor;
-        ImVec2 bMax   = { cursor.x + btnW, cursor.y + railH };
+        ImVec2 bMin   = { cursor.x, cursor.y + 3.0f };
+        ImVec2 bMax   = { cursor.x + btnW, cursor.y + railH - 3.0f };
 
         ImGuiID hovId = ImGui::GetID(item.label);
         float*  pT    = storage->GetFloatRef(hovId ^ 0xABCD1234u, 0.0f);
@@ -204,25 +206,26 @@ static void RenderHorizontal(const IconRailItem* items, int count, int& currentI
 
         if (active) {
             ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accent);
-            ac.w = 0.12f;
+            ac.w = 0.14f;
             dl->AddRectFilled(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding);
+            ac.w = 0.28f;
+            dl->AddRect(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding, 0, 1.0f);
         } else if (t > 0.01f) {
-            dl->AddRectFilled(bMin, bMax, IM_COL32(255, 255, 255, (int)(t * 14.f)), rounding);
+            dl->AddRectFilled(bMin, bMax, IM_COL32(255, 255, 255, (int)(t * 18.f)), rounding);
         }
 
-        // Barra inferior (indicador de seleccion, equivalente horizontal de
-        // la barra lateral del rail vertical)
+        // Barra inferior (indicador de seleccion)
         {
-            float barW     = btnW * 0.60f * (active ? 1.0f : t);
+            float barW     = (btnW - 20.0f) * (active ? 1.0f : t);
             float barX0    = cursor.x + (btnW - barW) * 0.5f;
-            float barAlpha = active ? 1.0f : t * 0.55f;
+            float barAlpha = active ? 1.0f : t * 0.60f;
             ImVec4 ac      = ImGui::ColorConvertU32ToFloat4(accent);
             ac.w           = barAlpha;
-            dl->AddRectFilled({ barX0, bMax.y - 3.0f }, { barX0 + barW, bMax.y },
-                              ImGui::ColorConvertFloat4ToU32(ac), 2.0f);
+            dl->AddRectFilled({ barX0, bMax.y - 2.5f }, { barX0 + barW, bMax.y },
+                              ImGui::ColorConvertFloat4ToU32(ac), 1.5f);
         }
 
-        ImGui::SetCursorScreenPos(bMin);
+        ImGui::SetCursorScreenPos(cursor);
         const std::string btnId = std::string("##rail_") + item.label;
         bool clicked = ImGui::InvisibleButton(btnId.c_str(), { btnW, railH });
 
@@ -246,9 +249,8 @@ static void RenderHorizontal(const IconRailItem* items, int count, int& currentI
                 icF.w = 1.0f;
             }
 
-            ImVec2 lblDim       = ImGui::CalcTextSize(item.label);
-            float  totalContent = iconSz + lt * (5.0f + lblDim.y);
-            float  startY       = cursor.y + (railH - totalContent) * 0.5f;
+            float  totalContent = iconSz + lt * (4.0f + lblDim.y);
+            float  startY       = cursor.y + (railH - totalContent) * 0.5f - (lt > 0.01f ? 1.0f : 0.0f);
             float  iconX        = cursor.x + (btnW - iconSz) * 0.5f;
 
             item.drawIcon(dl, { iconX, startY }, iconSz, ImGui::ColorConvertFloat4ToU32(icF));
@@ -268,7 +270,7 @@ static void RenderHorizontal(const IconRailItem* items, int count, int& currentI
                 }
 
                 float lblX = cursor.x + (btnW - lblDim.x) * 0.5f;
-                float lblY = startY + iconSz + 5.0f;
+                float lblY = startY + iconSz + 4.0f;
                 dl->AddText({ lblX, lblY }, ImGui::ColorConvertFloat4ToU32(lblF), item.label);
             }
         }

@@ -8,7 +8,7 @@ namespace ProyecThor::UI {
         const char* appTitle;
         const char* close;
         const char* save;
-        const char* reset; 
+        const char* reset;
         const char* cancel;
         const char* edit;
         const char* deleteLabel;
@@ -70,7 +70,8 @@ namespace ProyecThor::UI {
         const char* mediaProjectImage;
         const char* mediaVideoReady;
         const char* mediaVideoHint;
-// ── TransitionPanel ───────────────────────────────────────────────────
+
+        // ── TransitionPanel ───────────────────────────────────────────────────
         const char* transTitle;
         const char* transNone;
         const char* transFade;
@@ -78,6 +79,7 @@ namespace ProyecThor::UI {
         const char* transZoomOut;
         const char* transDuration;
         const char* transTip;
+
         // ── DocumentView ──────────────────────────────────────────────────────
         const char* docNoPages;
         const char* docTitle;
@@ -157,6 +159,65 @@ namespace ProyecThor::UI {
         const char* preferences;
         const char* search;
         const char* clearHistory;
+
+        // ── Hub (pantalla de inicio) ────────────────────────────────────────────
+        const char* hubStartProjecting;
+        const char* hubOpenSettings;
+        const char* hubLibraryCardDesc;
+        const char* hubNovedadesTitle;
+        const char* hubNovedadesCardSubFmt;   // "v%s disponible ..." -- %s = version
+        const char* hubDownloadSubsTitle;
+        const char* hubDownloadSubsCardDesc;
+        const char* hubQuickAccess;
+        const char* hubStatProjections;
+        const char* hubStatFps;
+        const char* hubStatTopSong;
+        const char* hubStatNoData;
+        const char* hubStatTopSongFmt;         // "Más proyectada (%d)" -- %d = veces
+        const char* hubVersionHistory;
+        const char* hubVersionFmt;             // "Versión v%s" -- %s = versión
+
+        // ── Hub: "Descargar subtitulos" ──────────────────────────────────────────
+        const char* hubDlSubsHint;
+        const char* hubDlSubsSaveIn;
+        const char* hubDlSubsAskEachTime;
+        const char* hubDlSubsFixedFolder;
+        const char* hubDlSubsNoFolder;
+        const char* hubDlSubsChoose;
+        const char* hubDlSubsChooseDialogTitle;
+        const char* hubDlSubsSearching;
+        const char* hubDlSubsDownloadBtn;
+        const char* hubDlSubsSavedFmt;        // "Guardado en: %s" -- %s = ruta
+        const char* hubDlSubsWriteError;
+
+        // ── LibrarySongs (Canciones + Playlists) ─────────────────────────────────
+        const char* libPlaylistsTab;
+        const char* libNoPlaylistsYet;
+        const char* libRename;
+        const char* libBackShort;
+        const char* libSongCountOneFmt;     // "%d canción" -- %d = 1
+        const char* libSongCountManyFmt;    // "%d canciones" -- %d = cantidad
+        const char* libNoSongsInPlaylist;
+        const char* libAddSongsBtn;
+        const char* libNewPlaylistBtn;
+        const char* libPlaylistNameLabel;
+        const char* libCreateBtn;
+        const char* libNewNameLabel;
+        const char* libAddSongsTitle;
+        const char* libAddSongsSearchHint;
+        const char* libAddedBadge;
+        const char* libAddToPlaylistTooltip;
+        const char* libNoResults;
+        const char* libDoneBtn;
+        const char* libSongsFoundOneFmt;    // "%d canción encontrada" -- %d = 1
+        const char* libSongsFoundManyFmt;   // "%d canciones encontradas" -- %d = cantidad
+        const char* libAssignTag;
+        const char* libRemoveAllTags;
+
+        // ── LibrarySidebar (riel de categorías, icono + label corto) ─────────────
+        const char* libRailSongs;
+        const char* libRailMultimedia;
+        const char* libRailDocs;
     };
 
     const UIStrings& GetUIStrings();

@@ -1,4 +1,7 @@
 #pragma once
+#ifndef PROYECTHOR_SETTINGS_SETTINGS_MANAGER_H
+#define PROYECTHOR_SETTINGS_SETTINGS_MANAGER_H
+
 #include <string>
 #include <vector>
 #include <imgui.h>
@@ -22,6 +25,12 @@ namespace ProyecThor::Settings {
     // ── Proyección ───────────────────────────────────────────────────────
     struct ProjectionSettings {
         int   targetMonitor   = -1;
+
+        // Monitores de salida publica ADICIONALES (opcional) -- todos
+        // muestran exactamente lo mismo que targetMonitor. Ver
+        // PresentationCore::SetTargetMonitor / UIManager::RenderProjectorOutput.
+        std::vector<int> extraMonitors;
+
         int   outputWidth     = 0;
         int   outputHeight    = 0;
         float contentScale    = 1.0f;
@@ -119,6 +128,59 @@ namespace ProyecThor::Settings {
         float luminosityAmount      = 1.2f;
         bool  taaEnabled            = false;
         float taaIntensity          = 0.5f;
+
+        // ── Nuevos Shaders & Efectos ──
+        bool  glitchEnabled         = false;
+        float glitchIntensity       = 0.40f;
+        float glitchSpeed           = 1.0f;
+        int   glitchMode            = 0; // 0=Sutil, 1=Cyberpunk RGB, 2=Cinta Analógica
+
+        bool  colorGradingEnabled   = false;
+        float colorGradingIntensity = 0.75f;
+        int   colorGradingPreset    = 1; // 0=Cálido, 1=Teal&Orange, 2=Cyber Neón, 3=Sepia, 4=Noir B&W, 5=Matrix, 6=Pastel
+
+        bool  pixelateEnabled       = false;
+        float pixelateSize          = 12.0f;
+        int   pixelateColorDepth    = 0; // 0=Real, 1=16-bit, 2=8-bit
+
+        bool  radialBlurEnabled     = false;
+        float radialBlurIntensity   = 0.35f;
+
+        bool  wavesEnabled          = false;
+        float wavesIntensity        = 0.35f;
+        float wavesSpeed            = 1.0f;
+        float wavesFrequency        = 8.0f;
+
+        bool  mirrorEnabled         = false;
+        int   mirrorMode            = 0; // 0=Horizontal, 1=Vertical, 2=Caleidoscopio 4x, 3=Radial 8x
+
+        bool  thermalEnabled        = false;
+        float thermalIntensity      = 0.85f;
+        int   thermalMode           = 0; // 0=Térmico, 1=Visión Nocturna, 2=Solarizado
+
+        bool  halftoneEnabled       = false;
+        float halftoneDotScale      = 10.0f;
+        int   halftoneMode          = 0; // 0=Pop-Art Color, 1=Monocromo B&W, 2=Periódico
+
+        // ── Efectos Volumétricos y por Zonas ──
+        bool  volumetricFogEnabled         = false;
+        float volumetricFogDensity         = 0.50f;
+        float volumetricFogSpeed           = 1.0f;
+        float volumetricFogScale           = 3.5f;
+        int   volumetricFogColorMode       = 0; // 0=Gris, 1=Cian, 2=Fuego, 3=Neón
+
+        bool  volumetricCloudsEnabled      = false;
+        float volumetricCloudsCoverage     = 0.55f;
+        float volumetricCloudsDensity      = 0.60f;
+        float volumetricCloudsSpeed        = 0.80f;
+        float volumetricCloudsSunIntensity = 0.65f;
+
+        bool  zonedDistortionEnabled       = false;
+        float zonedDistortionIntensity     = 0.45f;
+        float zonedDistortionSpeed         = 1.20f;
+        int   zonedDistortionZone          = 0; // 0=Inferior, 1=Superior, 2=Centro, 3=Izq, 4=Der
+        float zonedDistortionFeather       = 0.35f;
+
         // "Rellenado": llena las barras de letterbox/pillarbox con el
         // mismo fondo estirado y muy desenfocado en vez de negro. Ver
         // BackgroundLayer::GetBlurredFillTexture / UIManager.cpp.
@@ -171,13 +233,23 @@ namespace ProyecThor::Settings {
         // el menu Vista para operadores que no lo necesitan y prefieren mas
         // ancho para el video.
         bool        showViewQuickActions = true;
+        // Si es false, se inicia directo en modo Proyector tras la pantalla de carga (omite el Hub)
+        bool        openHubOnStartup     = true;
+
+        // Texto de la ventana flotante de Notas (ver QuickNotes) -- se
+        // guarda con debounce mientras el operador escribe y se fuerza al
+        // cerrar la ventana, para que nunca se pierda lo que iba tipeando
+        // aunque cierre la app sin borrarlo a mano.
+        std::string quickNotesText = "";
     };
 
     // ── Tema ─────────────────────────────────────────────────────────────
     // Set reducido de tokens de diseño. ApplyTheme() los expande a todos
     // los colores de ImGui, así que un solo token cambia toda la app.
     enum class ThemePreset {
-        Dark, Light, OrangeBlack, Jazz, Kofi, Deadlock, Galaxy, Custom
+        Dark, Light, OrangeBlack, Jazz, Kofi, Deadlock, Galaxy, Mek,
+        Cyberpunk, Emerald, Crimson, Midnight, Amethyst, Titanium,
+        Custom
     };
 
     const char* ThemePresetName(ThemePreset preset);
@@ -224,6 +296,41 @@ namespace ProyecThor::Settings {
 
     ThemeSettings MakeThemePreset(ThemePreset preset);
 
+    // ── Entorno de trabajo (Apariencia > Entorno de trabajo) ────────────────
+    // Ordenamiento de los 4 paneles dockeados (Biblioteca/Home/Vista en Vivo/
+    // Diseño) -- ver UIManager::BeginDockspace, que construye un arbol de
+    // DockBuilder distinto segun este valor. Cambiar el preset dispara un
+    // reset de layout automatico (UIManager compara contra el ultimo valor
+    // visto, ver m_LastWorkspacePreset), no hace falta pedirlo a mano.
+    enum class WorkspaceLayoutPreset {
+        Classic = 0,   // el de siempre: Biblioteca | Home/Diseño (arriba/abajo) | Vista en Vivo
+        Simple,        // estilo Holyrics: Diseño se apila con Vista en Vivo a la derecha,
+                       // Home ocupa todo el alto disponible en el centro
+        Broadcast,     // Streaming (Captura/Capa/Iniciar, ver StreamingWorkspacePanel) como
+                       // franja superior completa en vez de Vista en Vivo; Biblioteca/Home/
+                       // Diseño en tres columnas abajo
+        Library,       // Biblioteca (bloqueada en Medios) | Home (Preview) -- sin Vista en
+                       // Vivo/Diseño, para operar solo reproduciendo contenido de la
+                       // biblioteca. Tambien lo usa "Abrir con ProyecThor" para esa sesion
+                       // (ver UIManager::EnterLibraryWorkspaceMode), sin pisar este setting.
+        Video,         // "Producción" (nombre visible, ver WorkspaceLayoutPresetName) a
+                       // pantalla completa (ver VideoEditorPanel): toolbar interna con
+                       // Render (conversor de formato, LibraryPanel::RenderConverterSection) /
+                       // Colorimetria / Canales de trabajo (placeholders todavia) / Audio
+                       // (DAW real, ver AudioDawPanel) / Overlays (galeria+editor, ver
+                       // OverlayLibraryTab) -- ABSORBE a los ex-presets "Render", "Audio" e
+                       // "Imagen", que ya no existen como espacios de trabajo propios. El
+                       // nombre del enum se deja "Video" para no romper el ToKey/FromString
+                       // de settings.json ya guardados en disco.
+    };
+
+    const char*            WorkspaceLayoutPresetName(WorkspaceLayoutPreset preset);
+    WorkspaceLayoutPreset  WorkspaceLayoutPresetFromString(const std::string& s);
+
+    struct WorkspaceSettings {
+        WorkspaceLayoutPreset layoutPreset = WorkspaceLayoutPreset::Classic;
+    };
+
     // Valida que 'path' sea un archivo de fuente (.ttf/.otf) que ImGui pueda
     // parsear realmente, sin arriesgarse al IM_ASSERT fatal de
     // AddFontFromFileTTF ante un archivo inexistente/corrupto (ver
@@ -253,6 +360,10 @@ namespace ProyecThor::Settings {
         int  monitorIndex = -1;    // -1 = sin elegir aun -> default a la pantalla secundaria
         bool useLAN        = false;
         int  lanPort        = 8080;
+
+        // Monitores de Stage ADICIONALES (opcional) -- ver comentario
+        // equivalente en ProjectionSettings::extraMonitors.
+        std::vector<int> extraMonitors;
 
         // Si esta activo, Stage ignora la grilla de celdas y muestra
         // exactamente lo mismo que el operador ve en "Vista en Vivo"
@@ -392,6 +503,21 @@ namespace ProyecThor::Settings {
         PadSettings pads[kPadCount];
     };
 
+    // ── Catalogo de transiciones guardadas (Diseño > Transiciones) ─────────
+    // type: valor numerico de ProyecThor::UI::TransitionType -- no se usa
+    // ese enum aca directo, mismo criterio que CaptureSceneSettings arriba
+    // (backend/settings no depende de frontend/panels).
+    struct TransitionPresetSettings {
+        std::string name;
+        int         type              = 1;    // TransitionType::Fade
+        float       duration          = 1.0f;
+        bool        affectsBackground = false;
+        bool        affectsLyrics     = true;
+    };
+    struct TransitionSettings {
+        std::vector<TransitionPresetSettings> presets;
+    };
+
     // ── Yggdrasil: control de dispositivos externos (luces, etc.) por OSC ──
     // ProyecThor solo emite (no escucha) — ver OSCSender.h. Cada mensaje
     // guardado es una "cue" disparable a mano desde el panel: una direccion
@@ -454,11 +580,37 @@ namespace ProyecThor::Settings {
         std::string pairingPin = "";
     };
 
+    // ── Asistente de IA (chat + edicion de canciones con confirmacion) ───
+    // Por ahora solo Anthropic Claude (Messages API) -- pedido explicito de
+    // arrancar con un solo proveedor; Gemini/ChatGPT quedan para una pasada
+    // futura si hace falta (por eso no hay un enum de "proveedor" todavia,
+    // seria una UI de elegir entre una sola opcion). apiKey vive en
+    // settings.json igual que streamKey (ver StreamingSettings) -- ese
+    // archivo ya esta en .gitignore por guardar credenciales de usuario.
+    struct AISettings {
+        bool        enabled = false;
+        std::string apiKey  = "";
+        std::string model   = "claude-sonnet-5";
+    };
+
+    // ── Almacenamiento y Carpetas de Datos (Ajustes > Datos) ───────────
+    struct WatchedFolder {
+        std::string path;
+        bool        copyToDataDir = false; // false = reproducir original; true = copiar a AppData/carpeta de datos
+        bool        enabled       = true;
+    };
+
+    struct StorageSettings {
+        std::string                customDataRoot = "";
+        std::vector<WatchedFolder> watchedFolders;
+    };
+
     struct AppSettings {
         ProjectionSettings     projection;
         AudioSettings          audio;
         GeneralSettings        general;
         ThemeSettings          theme;
+        WorkspaceSettings      workspace;
         UpdatesSettings        updates;
         StageDisplaySettings   stageDisplay;
         LibrarySidebarSettings librarySidebar;
@@ -471,6 +623,9 @@ namespace ProyecThor::Settings {
         YggdrasilSettings      yggdrasil;
         StreamingSettings      streaming;
         SyncSettings           sync;
+        TransitionSettings     transitions;
+        AISettings             ai;
+        StorageSettings        storage;
     };
 
     class SettingsManager {
@@ -493,10 +648,9 @@ namespace ProyecThor::Settings {
         void ApplyTheme();
 
         // Aplica un preset y lo deja como tema activo (sin guardar a disco).
-        void ApplyPreset(ThemePreset preset) {
-            m_Settings.theme = MakeThemePreset(preset);
-            ApplyTheme();
-        }
+        // Para Mek, ademas intenta usar la fuente de waybar (Linux) -- ver
+        // implementacion en SettingsManager.cpp.
+        void ApplyPreset(ThemePreset preset);
 
         void ApplyProjection();
 
@@ -527,3 +681,5 @@ namespace ProyecThor::Settings {
     void RestartApplication();
 
 } // namespace ProyecThor::Settings
+
+#endif // PROYECTHOR_SETTINGS_SETTINGS_MANAGER_H

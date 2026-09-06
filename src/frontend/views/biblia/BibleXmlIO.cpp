@@ -9,8 +9,6 @@ namespace fs = std::filesystem;
 
 namespace ProyecThor::UI::XmlIO {
 
-// Extrae el valor de un atributo attr="..." dentro de [searchStart, searchEnd)
-// (mismo estilo de scanning por substrings que ya usa el resto del parser).
 static std::string ExtractAttr(const std::string& xml, size_t searchStart, size_t searchEnd,
                                 const std::string& attr) {
     std::string needle = attr + "=\"";
@@ -32,7 +30,6 @@ bool LoadBible(const std::string& path, BibleData& outBible) {
     buffer << file.rdbuf();
     std::string xml = buffer.str();
 
-    // Atributos de <bible ...> — se preservan para no perderlos al guardar.
     size_t biblePos = xml.find("<bible");
     if (biblePos != std::string::npos) {
         size_t bibleTagEnd = xml.find(">", biblePos);
@@ -115,9 +112,6 @@ bool SaveBible(const std::string& path, const BibleData& bible) {
     if (!bible.link.empty())        out << " link=\""        << bible.link        << "\"";
     out << ">\n";
 
-    // Envuelve los libros en <testament name="Old|New"> segun su numero
-    // canonico (1-39 Antiguo, 40-66 Nuevo, canon de 66 libros) — no se
-    // guarda por separado porque es 100% derivable del numero de libro.
     bool inTestament   = false;
     bool testamentIsNew = false;
     for (const auto& b : bible.books) {
@@ -149,4 +143,4 @@ bool SaveBible(const std::string& path, const BibleData& bible) {
     return true;
 }
 
-} // namespace ProyecThor::UI::XmlIO
+}

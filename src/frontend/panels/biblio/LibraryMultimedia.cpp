@@ -8,6 +8,9 @@
 #include "frontend/views/audio/AudioAlbumArt.h"
 #include "backend/core/ThumbnailWorker.h"
 #include "backend/core/PresentationCore.h"
+#include "backend/core/FileDeletionManager.h"
+#include "backend/settings/SettingsManager.h"
+#include "frontend/views/Audio.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -33,15 +36,23 @@ namespace ProyecThor::Library {
 struct MMItem {
     std::string    filename;
     Core::ItemType type;
+    std::string    customFullPath = "";
 };
 
 static std::vector<MMItem> s_Videos, s_Audios, s_Images;
+
+// ── Vista: grilla (miniaturas grandes) o lista (compacta) -- default grilla,
+//    mismo criterio que la galeria de Overlays. s_ThumbZoom solo aplica en
+//    grilla, igual que en LibraryVideos.
+static bool  s_GridMode  = true;
+static float s_ThumbZoom = 1.0f;
 
 static std::string VideoFolder() { return GetAssetsPath() + "/videos"; }
 static std::string ImageFolder() { return GetAssetsPath() + "/images"; }
 static std::string AudioFolder() { return ProyecThor::Audio::GetAudioPath(); }
 
 static std::string ItemFullPath(const MMItem& it) {
+    if (!it.customFullPath.empty()) return it.customFullPath;
     switch (it.type) {
         case Core::ItemType::Video: return VideoFolder() + "/" + it.filename;
         case Core::ItemType::Image: return ImageFolder() + "/" + it.filename;
@@ -52,7 +63,6 @@ static std::string ItemFullPath(const MMItem& it) {
 static void ScanFolder(const std::string& folder, const std::vector<std::string>& exts,
                         Core::ItemType type, std::vector<MMItem>& out)
 {
-    out.clear();
     std::error_code ec;
     fs::path dir = U8Path(folder);
     if (!fs::exists(dir, ec)) return;
@@ -63,19 +73,80 @@ static void ScanFolder(const std::string& folder, const std::vector<std::string>
         std::transform(ext.begin(), ext.end(), ext.begin(),
                        [](unsigned char c) { return (char)std::tolower(c); });
         if (std::find(exts.begin(), exts.end(), ext) == exts.end()) continue;
-        out.push_back({ PathToUtf8(entry.path().filename()), type });
+        out.push_back({ PathToUtf8(entry.path().filename()), type, "" });
     }
-    std::sort(out.begin(), out.end(),
-              [](const MMItem& a, const MMItem& b) { return a.filename < b.filename; });
 }
 
 void RefreshMultimediaLists()
 {
-    ScanFolder(VideoFolder(), { ".mp4", ".mkv", ".avi", ".mov" }, Core::ItemType::Video, s_Videos);
-    ScanFolder(ImageFolder(), { ".jpg", ".jpeg", ".png" }, Core::ItemType::Image, s_Images);
-    ScanFolder(AudioFolder(),
-              { ".mp3", ".flac", ".wav", ".ogg", ".aac", ".m4a", ".wma", ".opus", ".aiff" },
-              Core::ItemType::Audio, s_Audios);
+    s_Videos.clear();
+    s_Images.clear();
+    s_Audios.clear();
+
+    const std::vector<std::string> vidExts = { ".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v" };
+    const std::vector<std::string> imgExts = { ".jpg", ".jpeg", ".png", ".bmp", ".webp" };
+    const std::vector<std::string> audExts = { ".mp3", ".flac", ".wav", ".ogg", ".aac", ".m4a", ".wma", ".opus", ".aiff" };
+
+    // 1. Escaneo de carpetas internas de la aplicacion
+    ScanFolder(VideoFolder(), vidExts, Core::ItemType::Video, s_Videos);
+    ScanFolder(ImageFolder(), imgExts, Core::ItemType::Image, s_Images);
+    ScanFolder(AudioFolder(), audExts, Core::ItemType::Audio, s_Audios);
+
+    // 2. Escaneo de carpetas vinculadas (Watched Folders de Ajustes > Datos)
+    const auto& watched = ProyecThor::Settings::SettingsManager::Get().GetSettings().storage.watchedFolders;
+    for (const auto& wf : watched) {
+        if (!wf.enabled || wf.path.empty()) continue;
+        std::error_code ec;
+        fs::path dir = U8Path(wf.path);
+        if (!fs::exists(dir, ec) || !fs::is_directory(dir, ec)) continue;
+
+        for (const auto& entry : fs::directory_iterator(dir, ec)) {
+            if (ec) break;
+            if (!entry.is_regular_file()) continue;
+
+            std::string ext = entry.path().extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+
+            bool isVid = (std::find(vidExts.begin(), vidExts.end(), ext) != vidExts.end());
+            bool isImg = (std::find(imgExts.begin(), imgExts.end(), ext) != imgExts.end());
+            bool isAud = (std::find(audExts.begin(), audExts.end(), ext) != audExts.end());
+
+            if (!isVid && !isImg && !isAud) continue;
+
+            std::string fname = PathToUtf8(entry.path().filename());
+
+            if (wf.copyToDataDir) {
+                // Modo copiar: copiar a la carpeta de la app si no existe
+                std::string targetDir = isVid ? VideoFolder() : (isImg ? ImageFolder() : AudioFolder());
+                fs::path targetPath = fs::path(targetDir) / entry.path().filename();
+                if (!fs::exists(targetPath, ec)) {
+                    fs::copy_file(entry.path(), targetPath, fs::copy_options::overwrite_existing, ec);
+                    if (isVid) s_Videos.push_back({ fname, Core::ItemType::Video, "" });
+                    else if (isImg) s_Images.push_back({ fname, Core::ItemType::Image, "" });
+                    else s_Audios.push_back({ fname, Core::ItemType::Audio, "" });
+                }
+            } else {
+                // Modo cargar sin copiar: indexar directamente la ruta original
+                std::string fpath = PathToUtf8(entry.path());
+                if (isVid) s_Videos.push_back({ fname, Core::ItemType::Video, fpath });
+                else if (isImg) s_Images.push_back({ fname, Core::ItemType::Image, fpath });
+                else s_Audios.push_back({ fname, Core::ItemType::Audio, fpath });
+            }
+        }
+    }
+
+    auto SortAndDedupe = [](std::vector<MMItem>& list) {
+        std::sort(list.begin(), list.end(), [](const MMItem& a, const MMItem& b) {
+            return a.filename < b.filename;
+        });
+        list.erase(std::unique(list.begin(), list.end(), [](const MMItem& a, const MMItem& b) {
+            return a.filename == b.filename && a.customFullPath == b.customFullPath;
+        }), list.end());
+    };
+
+    SortAndDedupe(s_Videos);
+    SortAndDedupe(s_Images);
+    SortAndDedupe(s_Audios);
 }
 
 // =============================================================================
@@ -178,11 +249,42 @@ static ImTextureID GetAudioThumbnail(const std::string& path) {
     return t;
 }
 
+// ── Miniatura + icono/acento por tipo ────────────────────────────────────
+// El icono de respaldo (mientras no hay miniatura real, o el tipo no tiene)
+// reutiliza los MISMOS glifos que ya dibujan los botones de filtro de arriba
+// (Video/Audio/Imagen) -- reconocibles de un vistazo en vez de una letra
+// suelta. El acento de color sale de las categorias de color YA definidas en
+// Ajustes > Apariencia para Video/Imagen/Audio (categoryColor[1]/[2]/[5]) --
+// hoy sin uso real en el sidebar (ver LibrarySidebar.cpp, que indexa ese
+// array por posicion de boton, no por tipo), asi que esta es su primera
+// aplicacion util: cada tipo se distingue por color tanto en lista como en
+// grilla.
+static ImTextureID GetThumbAndAccent(const MMItem& item, UI::LPDrawIconFn& outIcon, ImU32& outAccent)
+{
+    const auto& cc = ProyecThor::Settings::SettingsManager::Get().GetSettings().librarySidebar.categoryColor;
+    switch (item.type) {
+        case Core::ItemType::Video:
+            outIcon   = DrawIcon_Play;
+            outAccent = ImGui::ColorConvertFloat4ToU32(ImVec4(cc[1][0], cc[1][1], cc[1][2], 1.0f));
+            return GetVideoThumbnail(ItemFullPath(item));
+        case Core::ItemType::Image:
+            outIcon   = DrawIcon_Image;
+            outAccent = ImGui::ColorConvertFloat4ToU32(ImVec4(cc[2][0], cc[2][1], cc[2][2], 1.0f));
+            return GetImageThumbnail(ItemFullPath(item));
+        default:
+            outIcon   = DrawIcon_Audio;
+            outAccent = ImGui::ColorConvertFloat4ToU32(ImVec4(cc[5][0], cc[5][1], cc[5][2], 1.0f));
+            return GetAudioThumbnail(ItemFullPath(item));
+    }
+}
+
 // =============================================================================
 //  Renombrar / Eliminar — estado propio (no reusa ctx.showRenameModal: ese
 //  modal resuelve la carpeta por m_CurrentCategory, que aca es "Multimedia"
 //  y no alcanza para saber a que carpeta pertenece el item).
 // =============================================================================
+
+static std::string s_SelectedFile;
 
 static bool        s_ShowRenameModal = false;
 static MMItem       s_RenameItem;
@@ -241,15 +343,19 @@ static void RenderDeleteModal() {
     ImGui::OpenPopup("Eliminar##mm");
     ImGui::SetNextWindowSize(ImVec2(360, 0));
     if (ImGui::BeginPopupModal("Eliminar##mm", &s_ShowDeleteModal, ImGuiWindowFlags_NoResize)) {
-        ImGui::TextWrapped("Eliminar \"%s\"? Esta accion no se puede deshacer.",
+        ImGui::TextWrapped("Eliminar \"%s\"? Esta acción no se puede deshacer.",
                            s_DeleteItem.filename.c_str());
         ImGui::Spacing();
 
         ImGui::PushStyleColor(ImGuiCol_Button,        DS::DangerColorDim);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  DS::DangerColor);
         if (ImGui::Button("Eliminar", ImVec2(160, 0))) {
-            std::error_code ec;
-            fs::remove(U8Path(ItemFullPath(s_DeleteItem)), ec);
+            std::string fullPath = ItemFullPath(s_DeleteItem);
+            if (s_SelectedFile == s_DeleteItem.filename) {
+                s_SelectedFile.clear();
+            }
+            s_VideoThumbCache.erase(fullPath);
+            Core::FileDeletionManager::ForceDeleteFile(fullPath);
             RefreshMultimediaLists();
             s_ShowDeleteModal = false;
             ImGui::CloseCurrentPopup();
@@ -265,21 +371,82 @@ static void RenderDeleteModal() {
 }
 
 // =============================================================================
-//  Fila de item — mismo lenguaje visual que RenderVideoRow (LibraryVideos.cpp)
+//  Interaccion compartida entre fila (lista) y tarjeta (grilla): seleccion,
+//  drag-drop de video y menu contextual son EXACTAMENTE los mismos en los
+//  dos modos de vista, asi que viven en un solo lugar en vez de duplicarse.
 // =============================================================================
 
-static std::string s_SelectedFile;
+static void SelectMMItem(const MMItem& item) {
+    s_SelectedFile = item.filename;
+    Core::LibrarySelection s;
+    s.title = ItemFullPath(item);
+    s.type  = item.type;
+    Core::PresentationCore::Get().SetSelection(s);
+}
+
+static void RenderMMDragSource(const MMItem& item, const std::string& disp) {
+    if (!ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) return;
+    std::string fullPath = ItemFullPath(item);
+    if (item.type == Core::ItemType::Video) {
+        ImGui::SetDragDropPayload("VIDEO_TO_QUEUE", fullPath.c_str(), fullPath.size() + 1);
+    }
+    ImGui::SetDragDropPayload("MEDIA_ITEM_PATH", fullPath.c_str(), fullPath.size() + 1);
+    ImGui::PushStyleColor(ImGuiCol_Text, DS::SuccessColor);
+    ImGui::TextUnformatted(disp.c_str());
+    ImGui::PopStyleColor();
+    ImGui::EndDragDropSource();
+}
+
+static void RenderMMContextMenu(const MMItem& item, const char* popupId) {
+    if (!ImGui::BeginPopupContextItem(popupId)) return;
+    if (item.type == Core::ItemType::Video) {
+        if (ImGui::MenuItem("Enviar al monitor")) {
+            Core::PresentationCore::Get().SetBackgroundMedia(ItemFullPath(item), true, /*allowAudio=*/true);
+            Core::PresentationCore::Get().SetProjecting(true);
+        }
+        ImGui::Separator();
+    }
+    if (item.type == Core::ItemType::Video || item.type == Core::ItemType::Image) {
+        if (ImGui::MenuItem("Mover a Fondos (Backgrounds)")) {
+            std::error_code ec;
+            std::string srcPath = ItemFullPath(item);
+            fs::path src(srcPath);
+            std::string targetDir = GetAssetsPath() + "/backgrounds";
+            fs::create_directories(targetDir, ec);
+            fs::path dst = fs::path(targetDir) / src.filename();
+            fs::rename(src, dst, ec);
+            RefreshMultimediaLists();
+        }
+        if (ImGui::MenuItem("Copiar a Fondos (Backgrounds)")) {
+            std::error_code ec;
+            std::string srcPath = ItemFullPath(item);
+            fs::path src(srcPath);
+            std::string targetDir = GetAssetsPath() + "/backgrounds";
+            fs::create_directories(targetDir, ec);
+            fs::path dst = fs::path(targetDir) / src.filename();
+            fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+        }
+        ImGui::Separator();
+    }
+    if (ImGui::MenuItem("Renombrar")) RequestRename(item);
+    ImGui::Separator();
+    ImGui::PushStyleColor(ImGuiCol_Text, DS::DangerColor);
+    if (ImGui::MenuItem("Eliminar")) RequestDelete(item);
+    ImGui::PopStyleColor();
+    ImGui::EndPopup();
+}
+
+// =============================================================================
+//  Fila de item (vista lista) — mismo lenguaje visual que RenderVideoRow
+//  (LibraryVideos.cpp), con el icono de respaldo real en vez de una letra.
+// =============================================================================
 
 static void RenderMMRow(const MMItem& item, int rowIdx) {
     ImGui::PushID(rowIdx);
 
-    ImTextureID thumb;
-    const char* fallbackGlyph;
-    switch (item.type) {
-        case Core::ItemType::Video: thumb = GetVideoThumbnail(ItemFullPath(item)); fallbackGlyph = "V"; break;
-        case Core::ItemType::Image: thumb = GetImageThumbnail(ItemFullPath(item)); fallbackGlyph = "I"; break;
-        default:                    thumb = GetAudioThumbnail(ItemFullPath(item)); fallbackGlyph = "A"; break;
-    }
+    UI::LPDrawIconFn icon   = nullptr;
+    ImU32            accent = DS::TextSecondary;
+    ImTextureID      thumb  = GetThumbAndAccent(item, icon, accent);
 
     const float thumbSz = 22.0f;
     const float indent  = thumbSz + 16.0f;
@@ -289,6 +456,7 @@ static void RenderMMRow(const MMItem& item, int rowIdx) {
     std::string disp   = StripExtension(item.filename);
 
     bool clicked = DS::GlassListRow(disp.c_str(), sel, indent);
+    bool hovered = ImGui::IsItemHovered();
 
     ImDrawList* dl     = ImGui::GetWindowDrawList();
     float       thumbY = rowPos.y + (DS::RowHeight - thumbSz) * 0.5f;
@@ -297,56 +465,123 @@ static void RenderMMRow(const MMItem& item, int rowIdx) {
                             {rowPos.x + 8.0f + thumbSz, thumbY + thumbSz},
                             {0,0}, {1,1}, IM_COL32_WHITE, DS::RadiusSmall);
     } else {
+        ImVec4 af = ImGui::ColorConvertU32ToFloat4(accent);
         dl->AddRectFilled({rowPos.x + 8.0f, thumbY},
                           {rowPos.x + 8.0f + thumbSz, thumbY + thumbSz},
-                          DS::BtnDefaultFill, DS::RadiusSmall);
-        ImVec2 ts = ImGui::CalcTextSize(fallbackGlyph);
-        dl->AddText({rowPos.x + 8.0f + (thumbSz-ts.x)*0.5f, thumbY + (thumbSz-ts.y)*0.5f},
-                    DS::TextSecondary, fallbackGlyph);
+                          ImGui::ColorConvertFloat4ToU32(ImVec4(af.x, af.y, af.z, 0.18f)), DS::RadiusSmall);
+        float pad = thumbSz * 0.18f;
+        if (icon) icon(dl, {rowPos.x + 8.0f + pad, thumbY + pad}, thumbSz - pad * 2.0f, accent);
     }
 
-    if (clicked) {
-        s_SelectedFile = item.filename;
-        Core::LibrarySelection s;
-        s.title = item.filename;
-        s.type  = item.type;
-        Core::PresentationCore::Get().SetSelection(s);
-    }
-
-    if (item.type == Core::ItemType::Video && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-        std::string fullPath = ItemFullPath(item);
-        ImGui::SetDragDropPayload("VIDEO_TO_QUEUE", fullPath.c_str(), fullPath.size() + 1);
-        ImGui::PushStyleColor(ImGuiCol_Text, DS::SuccessColor);
-        ImGui::TextUnformatted(disp.c_str());
-        ImGui::PopStyleColor();
-        ImGui::EndDragDropSource();
-    }
-
-    if (ImGui::BeginPopupContextItem(("##ctx_mm" + std::to_string(rowIdx)).c_str())) {
-        if (item.type == Core::ItemType::Video) {
-            if (ImGui::MenuItem("Enviar al monitor")) {
-                Core::PresentationCore::Get().SetBackgroundMedia(ItemFullPath(item), true, /*allowAudio=*/true);
-                Core::PresentationCore::Get().SetProjecting(true);
+    if (clicked) SelectMMItem(item);
+    if (hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+        SelectMMItem(item);
+        if (item.type == Core::ItemType::Audio) {
+            if (auto* ap = UI::AudioPanel::GetActiveInstance()) {
+                ap->PlayFileLive(item.filename);
             }
-            ImGui::Separator();
+        } else {
+            Core::PresentationCore::Get().SetBackgroundMedia(ItemFullPath(item), item.type == Core::ItemType::Video, /*allowAudio=*/true);
+            Core::PresentationCore::Get().SetProjecting(true);
         }
-        if (ImGui::MenuItem("Renombrar")) RequestRename(item);
-        ImGui::Separator();
-        ImGui::PushStyleColor(ImGuiCol_Text, DS::DangerColor);
-        if (ImGui::MenuItem("Eliminar")) RequestDelete(item);
-        ImGui::PopStyleColor();
-        ImGui::EndPopup();
     }
+
+    RenderMMDragSource(item, disp);
+    RenderMMContextMenu(item, ("##ctx_mm" + std::to_string(rowIdx)).c_str());
 
     ImGui::PopID();
 }
 
 // =============================================================================
-//  Seccion (encabezado + filas) — todas o solo el tipo filtrado
+//  Tarjeta de item (vista grilla) — mismo lenguaje visual que
+//  LibraryVideos::RenderVideoCard (miniatura grande + chip de tipo + franja
+//  de nombre), generalizado a los 3 tipos con el acento de color de cada uno.
+// =============================================================================
+
+static void RenderMMCard(const MMItem& item, int cardIdx, float W, float H, int col, int cols) {
+    ImGui::PushID(cardIdx);
+
+    UI::LPDrawIconFn icon   = nullptr;
+    ImU32            accent = DS::AccentColor;
+    ImTextureID      thumb  = GetThumbAndAccent(item, icon, accent);
+
+    ImVec2      pos    = ImGui::GetCursorScreenPos();
+    bool        hovRaw = ImGui::IsMouseHoveringRect(pos, {pos.x + W, pos.y + H});
+    float       t      = UI::LPHoverLerp(ImGui::GetID("##hov"), hovRaw);
+    ImDrawList* dl      = ImGui::GetWindowDrawList();
+    bool        sel     = (s_SelectedFile == item.filename);
+
+    float  inset = 2.0f * t;
+    ImVec2 p0    = { pos.x - inset, pos.y - inset };
+    ImVec2 p1    = { pos.x + W + inset, pos.y + H + inset };
+
+    dl->AddRectFilled(p0, p1, DS::BtnDefaultFill, DS::RadiusMedium);
+    if (thumb) {
+        dl->AddImageRounded(thumb, p0, p1, {0,0}, {1,1}, IM_COL32_WHITE, DS::RadiusMedium);
+    } else {
+        ImVec4 af = ImGui::ColorConvertU32ToFloat4(accent);
+        dl->AddRectFilled(p0, p1, ImGui::ColorConvertFloat4ToU32(ImVec4(af.x, af.y, af.z, 0.16f)), DS::RadiusMedium);
+        float iconSz = std::min(W, H) * 0.32f;
+        if (icon) icon(dl, { p0.x + (W - iconSz) * 0.5f, p0.y + (H - iconSz) * 0.5f - 6.0f }, iconSz, accent);
+    }
+
+    ImVec4 accentF = ImGui::ColorConvertU32ToFloat4(accent);
+    ImVec4 borderA = ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultBord);
+    float  bt      = sel ? 1.0f : t;
+    ImVec4 borderCol(
+        borderA.x + (accentF.x - borderA.x) * bt,
+        borderA.y + (accentF.y - borderA.y) * bt,
+        borderA.z + (accentF.z - borderA.z) * bt,
+        borderA.w + (1.0f - borderA.w) * bt);
+    dl->AddRect(p0, p1, ImGui::ColorConvertFloat4ToU32(borderCol), DS::RadiusMedium, 0, 1.0f + 0.8f * bt);
+
+    // Chip de tipo (VID/AUD/IMG) -- mismo lenguaje que RenderVideoCard, ahora
+    // con un color distinto por tipo en vez de un solo acento fijo.
+    {
+        const char* tag = item.type == Core::ItemType::Video ? "VID"
+                         : item.type == Core::ItemType::Audio ? "AUD" : "IMG";
+        ImVec2 ts = ImGui::CalcTextSize(tag);
+        float  bx = p0.x + 7.0f, by = p0.y + 7.0f;
+        ImU32  chipBg = ImGui::ColorConvertFloat4ToU32(ImVec4(accentF.x, accentF.y, accentF.z, 0.35f));
+        dl->AddRectFilled({bx, by}, {bx + ts.x + 8.0f, by + ts.y + 4.0f}, chipBg, DS::RadiusSmall);
+        dl->AddText({bx + 4.0f, by + 2.0f}, accent, tag);
+    }
+
+    std::string disp = StripExtension(item.filename);
+    std::string dn   = disp.length() > 18 ? disp.substr(0, 15) + "..." : disp;
+    dl->AddRectFilled({p0.x, p1.y - 26.0f}, {p1.x, p1.y}, IM_COL32(0, 0, 0, 200), DS::RadiusMedium, ImDrawFlags_RoundCornersBottom);
+    ImVec2 ns = ImGui::CalcTextSize(dn.c_str());
+    dl->AddText({p0.x + (W - ns.x) * 0.5f, p1.y - 21.0f}, DS::TextPrimary, dn.c_str());
+
+    bool cardClicked = ImGui::InvisibleButton(("##mmcard" + std::to_string(cardIdx)).c_str(), {W, H});
+    bool cardHovered = ImGui::IsItemHovered();
+    if (cardClicked)
+        SelectMMItem(item);
+    if (cardHovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+        SelectMMItem(item);
+        if (item.type == Core::ItemType::Audio) {
+            if (auto* ap = UI::AudioPanel::GetActiveInstance()) {
+                ap->PlayFileLive(item.filename);
+            }
+        } else {
+            Core::PresentationCore::Get().SetBackgroundMedia(ItemFullPath(item), item.type == Core::ItemType::Video, /*allowAudio=*/true);
+            Core::PresentationCore::Get().SetProjecting(true);
+        }
+    }
+
+    RenderMMDragSource(item, disp);
+    RenderMMContextMenu(item, ("##ctx_mmc" + std::to_string(cardIdx)).c_str());
+
+    if (col < cols - 1) ImGui::SameLine();
+    ImGui::PopID();
+}
+
+// =============================================================================
+//  Seccion (encabezado + filas/tarjetas) — todas o solo el tipo filtrado
 // =============================================================================
 
 static void RenderMMSection(const char* label, const std::vector<MMItem>& items,
-                            const std::string& searchLower, int& rowCounter)
+                            const std::string& searchLower, int& rowCounter, bool gridMode)
 {
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 8.0f);
     ImGui::PushStyleColor(ImGuiCol_Text, DS::TextSecondary);
@@ -354,7 +589,8 @@ static void RenderMMSection(const char* label, const std::vector<MMItem>& items,
     ImGui::PopStyleColor();
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
-    bool any = false;
+    std::vector<const MMItem*> filtered;
+    filtered.reserve(items.size());
     for (const auto& item : items) {
         if (!searchLower.empty()) {
             std::string lo = item.filename;
@@ -362,15 +598,40 @@ static void RenderMMSection(const char* label, const std::vector<MMItem>& items,
                            [](unsigned char c) { return (char)std::tolower(c); });
             if (lo.find(searchLower) == std::string::npos) continue;
         }
-        RenderMMRow(item, rowCounter++);
-        any = true;
+        filtered.push_back(&item);
     }
 
-    if (!any) {
+    if (filtered.empty()) {
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 8.0f);
         ImGui::PushStyleColor(ImGuiCol_Text, DS::TextHint);
         ImGui::TextUnformatted("(vacio)");
         ImGui::PopStyleColor();
+        ImGui::Dummy(ImVec2(0.0f, 16.0f));
+        return;
+    }
+
+    if (gridMode) {
+        const float cW     = 150.0f * s_ThumbZoom;
+        const float cH     = 100.0f * s_ThumbZoom;
+        const float minGap = 10.0f;
+
+        float availWidth = ImGui::GetContentRegionAvail().x;
+        int   cols        = std::max(1, (int)((availWidth + minGap) / (cW + minGap)));
+        int   currentCol  = 0;
+
+        for (const MMItem* item : filtered) {
+            RenderMMCard(*item, rowCounter++, cW, cH, currentCol, cols);
+            currentCol++;
+            if (currentCol < cols) {
+                ImGui::SameLine(0.0f, minGap);
+            } else {
+                currentCol = 0;
+                ImGui::Dummy({0.0f, minGap});
+            }
+        }
+    } else {
+        for (const MMItem* item : filtered)
+            RenderMMRow(*item, rowCounter++);
     }
 
     ImGui::Dummy(ImVec2(0.0f, 16.0f));
@@ -403,70 +664,70 @@ void RenderMultimediaSection(LibraryContext& ctx, MultimediaFilter& filter)
     ImGui::Spacing();
 
     // ── Filtros: Todos | Video | Audio | Imagen ─────────────────────────
-    // Mismo tamano de boton/celda para los 6 (LPCornerIconBtn ya centra y
-    // escala cada icono al mismo radio relativo, r = btnSz*0.42), y todos
-    // los glifos hechos a mano aca (Todos/Actualizar/Importar) usan el mismo
-    // grosor de trazo (~0.09*r) que el resto de iconos de LibraryIcons.h,
-    // para que no se vean mas "gruesos" que Video/Audio/Imagen.
     {
         const float btnSz = 26.0f;
         const float gap   = 4.0f;
 
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 2.0f);
         ImGui::PushID("mmfilters");
-        if (UI::LPCornerIconBtn("##mmall", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
-                float thick = r * 0.16f;
-                for (int i = 0; i < 3; i++) {
-                    float ang = i * (3.14159265f / 3.0f);
-                    ImVec2 d  = { std::cos(ang) * r * 0.55f, std::sin(ang) * r * 0.55f };
-                    dl->AddLine({ c.x - d.x, c.y - d.y }, { c.x + d.x, c.y + d.y }, col, thick);
-                }
-            }, "Todos", {btnSz,btnSz}, filter == MultimediaFilter::All))
+        if (UI::LPCornerIconBtn("##mmall", UI::LPDrawAll, "Todos los medios", {btnSz, btnSz}, filter == MultimediaFilter::All))
             filter = MultimediaFilter::All;
         ImGui::SameLine(0, gap);
-        if (UI::LPCornerIconBtn("##mmvid", DrawIcon_Play, "Solo video", {btnSz,btnSz},
-                                filter == MultimediaFilter::Video))
+        if (UI::LPCornerIconBtn("##mmvid", UI::LPDrawPlay, "Solo videos", {btnSz, btnSz}, filter == MultimediaFilter::Video))
             filter = MultimediaFilter::Video;
         ImGui::SameLine(0, gap);
-        if (UI::LPCornerIconBtn("##mmaud", DrawIcon_Audio, "Solo audio", {btnSz,btnSz},
-                                filter == MultimediaFilter::Audio))
+        if (UI::LPCornerIconBtn("##mmaud", UI::LPDrawAudio, "Solo audios", {btnSz, btnSz}, filter == MultimediaFilter::Audio))
             filter = MultimediaFilter::Audio;
         ImGui::SameLine(0, gap);
-        if (UI::LPCornerIconBtn("##mmimg", DrawIcon_Image, "Solo imagen", {btnSz,btnSz},
-                                filter == MultimediaFilter::Image))
+        if (UI::LPCornerIconBtn("##mmimg", UI::LPDrawImage, "Solo imágenes", {btnSz, btnSz}, filter == MultimediaFilter::Image))
             filter = MultimediaFilter::Image;
         ImGui::PopID();
 
-        // Separador chico entre los filtros y las utilidades (Actualizar/
-        // Importar), para que se lean como dos grupos distintos.
+        // Separador chico entre los filtros y las utilidades (Actualizar/Importar)
         ImGui::SameLine(0, gap * 2.0f);
         {
             ImVec2 p = ImGui::GetCursorScreenPos();
             ImGui::GetWindowDrawList()->AddLine(
                 { p.x, p.y + 4.0f }, { p.x, p.y + btnSz - 4.0f },
-                ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 1.0f, 1.0f, 0.10f)), 1.0f);
+                ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 1.0f, 1.0f, 0.12f)), 1.0f);
             ImGui::Dummy(ImVec2(1.0f, btnSz));
         }
         ImGui::SameLine(0, gap * 2.0f);
 
-        if (UI::LPCornerIconBtn("##mmrefresh", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
-                float thick = r * 0.11f;
-                dl->PathArcTo(c, r * 0.55f, -IM_PI * 0.15f, IM_PI * 1.55f, 16);
-                dl->PathStroke(col, ImDrawFlags_None, thick);
-                dl->AddTriangleFilled({c.x+r*0.55f,c.y-r*0.14f}, {c.x+r*0.85f,c.y+r*0.10f}, {c.x+r*0.25f,c.y+r*0.10f}, col);
-            }, "Actualizar", {btnSz,btnSz}))
+        if (UI::LPCornerIconBtn("##mmrefresh", UI::LPDrawRefresh, "Actualizar lista", {btnSz, btnSz}))
             RefreshMultimediaLists();
 
         ImGui::SameLine(0, gap);
-        if (UI::LPCornerIconBtn("##mmimport", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
-                float thick = r * 0.14f;
-                dl->AddLine({c.x, c.y-r*0.45f}, {c.x, c.y+r*0.45f}, col, thick);
-                dl->AddLine({c.x-r*0.45f, c.y}, {c.x+r*0.45f, c.y}, col, thick);
-            }, "Importar archivo", {btnSz,btnSz}))
+        if (UI::LPCornerIconBtn("##mmimport", UI::LPDrawPlus, "Importar archivo", {btnSz, btnSz}))
             ctx.importFile();
     }
 
-    ImGui::Spacing();
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+    // ── Fila 2: Modos de Vista (Grilla / Lista) + Slider de Zoom a la derecha ──
+    {
+        const float btnSz = 26.0f;
+        const float gap   = 4.0f;
+
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 2.0f);
+        ImGui::PushID("mmview");
+        if (UI::LPCornerIconBtn("##mmgridm", UI::LPDrawGrid, "Vista en cuadrícula", {btnSz, btnSz}, s_GridMode))
+            s_GridMode = true;
+        ImGui::SameLine(0, gap);
+        if (UI::LPCornerIconBtn("##mmlistm", UI::LPDrawList, "Vista en lista", {btnSz, btnSz}, !s_GridMode))
+            s_GridMode = false;
+        ImGui::PopID();
+
+        if (s_GridMode) {
+            const float zoomW = 76.0f;
+            const float avail = ImGui::GetWindowContentRegionMax().x;
+            const float sliderX = std::max(ImGui::GetCursorPosX() + gap, avail - zoomW - 2.0f);
+            ImGui::SameLine(sliderX);
+            UI::LPZoomSlider("##mmzoom", &s_ThumbZoom, 0.65f, 1.8f, zoomW);
+        }
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
     std::string searchLower(ctx.searchBuffer);
     std::transform(searchLower.begin(), searchLower.end(), searchLower.begin(),
@@ -481,15 +742,40 @@ void RenderMultimediaSection(LibraryContext& ctx, MultimediaFilter& filter)
     if (ImGui::BeginChild("##mm_list", { 0.f, 0.f }, true, ImGuiChildFlags_AlwaysUseWindowPadding)) {
         int rowCounter = 0;
         if (filter == MultimediaFilter::All) {
-            RenderMMSection("VIDEOS",   s_Videos, searchLower, rowCounter);
-            RenderMMSection("AUDIO",    s_Audios, searchLower, rowCounter);
-            RenderMMSection("IMAGENES", s_Images, searchLower, rowCounter);
+            RenderMMSection("VIDEOS",   s_Videos, searchLower, rowCounter, s_GridMode);
+            RenderMMSection("AUDIO",    s_Audios, searchLower, rowCounter, s_GridMode);
+            RenderMMSection("IMAGENES", s_Images, searchLower, rowCounter, s_GridMode);
         } else if (filter == MultimediaFilter::Video) {
-            RenderMMSection("VIDEOS", s_Videos, searchLower, rowCounter);
+            RenderMMSection("VIDEOS", s_Videos, searchLower, rowCounter, s_GridMode);
         } else if (filter == MultimediaFilter::Audio) {
-            RenderMMSection("AUDIO", s_Audios, searchLower, rowCounter);
+            RenderMMSection("AUDIO", s_Audios, searchLower, rowCounter, s_GridMode);
         } else {
-            RenderMMSection("IMAGENES", s_Images, searchLower, rowCounter);
+            RenderMMSection("IMAGENES", s_Images, searchLower, rowCounter, s_GridMode);
+        }
+
+        if (ImGui::BeginDragDropTarget()) {
+            auto HandleDrop = [](const ImGuiPayload* payload) {
+                const char* droppedPath = (const char*)payload->Data;
+                if (droppedPath && *droppedPath) {
+                    std::error_code ec;
+                    fs::path src(droppedPath);
+                    std::string ext = src.extension().string();
+                    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+                    bool isImg = (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp" || ext == ".webp");
+                    std::string targetDir = isImg ? ImageFolder() : VideoFolder();
+                    fs::create_directories(targetDir, ec);
+                    fs::path dst = fs::path(targetDir) / src.filename();
+                    fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+                    RefreshMultimediaLists();
+                }
+            };
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("BG_FILE")) {
+                HandleDrop(payload);
+            }
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("BG_ITEM_PATH")) {
+                HandleDrop(payload);
+            }
+            ImGui::EndDragDropTarget();
         }
     }
     ImGui::EndChild();

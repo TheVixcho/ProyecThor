@@ -84,8 +84,8 @@ modules:
         url: https://github.com/TheVixcho/ProyecThor.git
         branch: beta
       - type: file
-        path: packaging/proyecthor.png
+        path: proyecthor.png
     post-install:
-      - install -Dm644 packaging/proyecthor.png /app/share/icons/hicolor/256x256/apps/io.github.thevixcho.ProyecThor.png
-      - install -Dm644 packaging/io.github.thevixcho.ProyecThor.desktop /app/share/applications/io.github.thevixcho.ProyecThor.desktop
-      - install -Dm644 packaging/io.github.thevixcho.ProyecThor.metainfo.xml /app/share/metainfo/io.github.thevixcho.ProyecThor.metainfo.xml
+      - install -Dm644 proyecthor.png /app/share/icons/hicolor/256x256/apps/io.github.thevixcho.ProyecThor.png
+      - install -Dm644 io.github.thevixcho.ProyecThor.desktop /app/share/applications/io.github.thevixcho.ProyecThor.desktop
+      - install -Dm644 io.github.thevixcho.ProyecThor.metainfo.xml /app/share/metainfo/io.github.thevixcho.ProyecThor.metainfo.xml

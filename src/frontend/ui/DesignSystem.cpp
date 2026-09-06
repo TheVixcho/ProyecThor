@@ -75,32 +75,25 @@ void SyncFromTheme(const ProyecThor::Settings::ThemeSettings& t) {
 bool BeginGlassPanel(const char* name, GlassRenderer& /*glass*/, bool* open,
                      ImGuiWindowFlags flags, ImVec2 windowPadding)
 {
-    // Ventana con fondo sólido, dibujado a mano igual que antes, pero
-    // sin la capa de blur ni ningun canal de transparencia.
-    ImGui::PushStyleColor(ImGuiCol_WindowBg,    ImVec4(0.f, 0.f, 0.f, 0.f));
-    ImGui::PushStyleColor(ImGuiCol_Border,      ImVec4(0.f, 0.f, 0.f, 0.f));
-    ImGui::PushStyleColor(ImGuiCol_TitleBg,     ImVec4(0.f, 0.f, 0.f, 0.f));
-    ImGui::PushStyleColor(ImGuiCol_TitleBgActive,ImVec4(0.f, 0.f, 0.f, 0.f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,  RadiusLarge);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,    windowPadding);
+    ImVec4 bgCol      = ImGui::ColorConvertU32ToFloat4(GlassFillTop);
+    ImVec4 borderCol  = ImGui::ColorConvertU32ToFloat4(GlassBorder);
+    ImVec4 titleCol   = ImGui::ColorConvertU32ToFloat4(GlassFillTop);
+
+    ImGui::PushStyleColor(ImGuiCol_WindowBg,          bgCol);
+    ImGui::PushStyleColor(ImGuiCol_Border,            borderCol);
+    ImGui::PushStyleColor(ImGuiCol_TitleBg,           titleCol);
+    ImGui::PushStyleColor(ImGuiCol_TitleBgActive,     titleCol);
+    ImGui::PushStyleColor(ImGuiCol_TitleBgCollapsed,  titleCol);
+    ImGui::PushStyleColor(ImGuiCol_Button,            ImVec4(0.f, 0.f, 0.f, 0.f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,     ImVec4(0.8f, 0.2f, 0.2f, 0.6f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,      ImVec4(0.9f, 0.1f, 0.1f, 0.8f));
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,    RadiusLarge);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,  1.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,      windowPadding);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,      ImVec2(10.0f, 6.0f));
 
     bool visible = ImGui::Begin(name, open, flags);
-
-    if (visible)
-    {
-        ImVec2 winPos  = ImGui::GetWindowPos();
-        ImVec2 winSize = ImGui::GetWindowSize();
-        ImVec2 winMax  = ImVec2(winPos.x + winSize.x, winPos.y + winSize.y);
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-
-        // Plano: un solo tono de relleno (antes degrade top->bottom) y un
-        // borde fino, sin lineas de brillo/sombra arriba/abajo — ese combo
-        // era el "liquid glass" que se pidio sacar (mismo criterio que
-        // BeginCard en ControlWidgets.cpp).
-        dl->AddRectFilled(winPos, winMax, GlassFillTop, RadiusLarge);
-        dl->AddRect(winPos, winMax, GlassBorder, RadiusLarge, 0, 1.0f);
-    }
 
     return visible;
 }
@@ -108,8 +101,8 @@ bool BeginGlassPanel(const char* name, GlassRenderer& /*glass*/, bool* open,
 void EndGlassPanel()
 {
     ImGui::End();
-    ImGui::PopStyleVar(3);
-    ImGui::PopStyleColor(4);
+    ImGui::PopStyleVar(4);
+    ImGui::PopStyleColor(8);
 }
 
 // ── GlassButton ────────────────────────────────────────────────────────────
@@ -117,27 +110,31 @@ void EndGlassPanel()
 bool ModernSlider(const char* id, float* value, float minVal, float maxVal,
                   float width, ImU32 accentOverride, ImU32 trackOverride)
 {
-    ImGuiID     imId   = ImGui::GetID(id);
-    const float w      = width > 0.0f ? width : ImGui::GetContentRegionAvail().x;
-    const float thumbR = 7.0f;
+    const float w       = width > 0.0f ? width : ImGui::GetContentRegionAvail().x;
+    const float thumbR  = 7.0f;
     const float height  = thumbR * 2.0f + 6.0f;
 
     ImVec2 pos = ImGui::GetCursorScreenPos();
     ImGui::InvisibleButton(id, ImVec2(w, height));
+
+    ImGuiID imId   = ImGui::GetItemID();
     bool hovered = ImGui::IsItemHovered();
     bool active  = ImGui::IsItemActive();
     bool changed = false;
 
+    float trackLeft  = pos.x + thumbR;
+    float trackRight = pos.x + w - thumbR;
+    if (trackRight < trackLeft) { trackLeft = pos.x; trackRight = pos.x + w; }
+    float trackSpan  = std::max(1.0f, trackRight - trackLeft);
+
     if (active && ImGui::IsMouseDown(ImGuiMouseButton_Left) && maxVal > minVal)
     {
-        float t = std::clamp((ImGui::GetIO().MousePos.x - pos.x) / w, 0.0f, 1.0f);
-        float newVal = minVal + t * (maxVal - minVal);
+        float mouseT = std::clamp((ImGui::GetIO().MousePos.x - trackLeft) / trackSpan, 0.0f, 1.0f);
+        float newVal = minVal + mouseT * (maxVal - minVal);
         if (newVal != *value) { *value = newVal; changed = true; }
     }
 
-    // Animacion de hover/drag: el thumb crece un poco (mismo patron que
-    // LPHoverLerp en LayersTheme.h, reimplementado aca para no depender
-    // frontend/ui/ de frontend/panels/layers/).
+    // Animacion de hover/drag: el thumb crece un poco
     ImGuiStorage* storage = ImGui::GetStateStorage();
     float* pT = storage->GetFloatRef(imId ^ 0x4D534C44u, 0.0f); // salt "MSLD"
     float  target = (hovered || active) ? 1.0f : 0.0f;
@@ -155,16 +152,16 @@ bool ModernSlider(const char* id, float* value, float minVal, float maxVal,
     ImU32 trackCol = trackOverride ? trackOverride : IM_COL32(255, 255, 255, 26);
     ImU32 fillCol  = accentOverride ? accentOverride : AccentColor;
 
-    dl->AddRectFilled({ pos.x, cy - trackH * 0.5f }, { pos.x + w, cy + trackH * 0.5f },
+    dl->AddRectFilled({ trackLeft, cy - trackH * 0.5f }, { trackRight, cy + trackH * 0.5f },
                       trackCol, trackH * 0.5f);
 
-    float fillW = w * frac;
-    if (fillW > 0.5f)
-        dl->AddRectFilled({ pos.x, cy - trackH * 0.5f }, { pos.x + fillW, cy + trackH * 0.5f },
+    float thumbX = trackLeft + frac * trackSpan;
+    if (thumbX > trackLeft)
+        dl->AddRectFilled({ trackLeft, cy - trackH * 0.5f }, { thumbX, cy + trackH * 0.5f },
                           fillCol, trackH * 0.5f);
 
     float thumbRadius = thumbR * (1.0f + 0.2f * t);
-    ImVec2 thumbCenter = { pos.x + fillW, cy };
+    ImVec2 thumbCenter = { thumbX, cy };
 
     if (t > 0.01f) {
         ImU32 haloAlpha = ((ImU32)std::clamp((int)(50.0f * t), 0, 255)) << 24;
@@ -219,7 +216,8 @@ bool GlassButton(const char* label, const ImVec2& size, ImU32 accent)
     ImVec2 tp(
         bMin.x + std::floor((sz.x - textSize.x) * 0.5f),
         bMin.y + std::floor((sz.y - textSize.y) * 0.5f));
-    dl->AddText(tp, textCol, label);
+    const char* text_end = ImGui::FindRenderedTextEnd(label);
+    dl->AddText(tp, textCol, label, text_end);
 
     return clicked;
 }

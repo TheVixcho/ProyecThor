@@ -123,7 +123,9 @@ void DrawTimeRow(float innerW, float padLeft, int64_t curMs, int64_t lenMs)
     ImGui::PopStyleColor();
 }
 
-void DrawVideoFrame(Core::VLCBasePlayer* player, float w, float h, const char* placeholder, const char* badgeLabel, ImVec4 badgeAccent, bool pulseBorder)
+void DrawVideoFrame(Core::VLCBasePlayer* player, float w, float h, const char* placeholder,
+                    const char* badgeLabel, ImVec4 badgeAccent, bool pulseBorder,
+                    bool showBadge, ProyecThor::Shaders::PostProcessorFSR* fsr)
 {
     void* texID = player ? player->GetTextureID() : nullptr;
 
@@ -140,9 +142,31 @@ void DrawVideoFrame(Core::VLCBasePlayer* player, float w, float h, const char* p
         if (imgH > h - 4.0f) { imgH = h - 4.0f; imgW = imgH * ratio; }
         if (imgW > w - 4.0f) { imgW = w - 4.0f; imgH = imgW / ratio; }
 
+        ImTextureID finalTex = reinterpret_cast<ImTextureID>(texID);
+
+        // FSR: solo tiene sentido reescalando HACIA ARRIBA (fuente mas chica
+        // que el destino, ej. Preview en pantalla completa) -- Process() ya
+        // hace ese chequeo el mismo, pero Init/Resize al tamaño de destino
+        // exacto (imgW x imgH, YA con la relacion de aspecto correcta,
+        // calculada arriba) es responsabilidad de este call site.
+        if (fsr && fsr->IsEnabled() && vw > 0 && vh > 0)
+        {
+            int outW = std::max(1, static_cast<int>(imgW));
+            int outH = std::max(1, static_cast<int>(imgH));
+            if (vw < outW || vh < outH)
+            {
+                if (!fsr->IsInitialized() || fsr->GetOutputW() != outW || fsr->GetOutputH() != outH)
+                    fsr->Init(outW, outH);
+
+                GLuint upscaled = fsr->Process(static_cast<GLuint>(reinterpret_cast<uintptr_t>(texID)), vw, vh);
+                if (upscaled != 0)
+                    finalTex = reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(upscaled));
+            }
+        }
+
         ImGui::SetCursorPosX((w - imgW) * 0.5f);
         ImGui::SetCursorPosY((h - imgH) * 0.5f);
-        ImGui::Image(reinterpret_cast<ImTextureID>(texID), { imgW, imgH });
+        ImGui::Image(finalTex, { imgW, imgH });
     }
     else
     {
@@ -157,6 +181,7 @@ void DrawVideoFrame(Core::VLCBasePlayer* player, float w, float h, const char* p
     ImVec2      winPos = ImGui::GetWindowPos();
     ImDrawList* dl     = ImGui::GetWindowDrawList();
 
+    if (showBadge)
     {
         const char* label   = badgeLabel;
         ImVec2      labelSz = ImGui::CalcTextSize(label);

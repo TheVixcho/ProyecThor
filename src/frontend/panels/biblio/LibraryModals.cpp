@@ -172,7 +172,7 @@ void RenderRenameModal(LibraryContext& ctx)
 //  visible en el proyector sin tener que reseleccionar la canción o biblia.
 //
 //  trailingReserve permite dejar libre un espacio a la derecha del combo
-//  (por ejemplo para el boton de "Actualizar" en la misma fila, alineado
+//  (por ejemplo para el botón de "Actualizar" en la misma fila, alineado
 //  a la esquina). Se implementa con el truco de ancho negativo de ImGui:
 //  SetNextItemWidth(-N) hace que el widget termine N pixeles antes del
 //  borde derecho disponible.

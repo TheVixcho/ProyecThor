@@ -58,24 +58,24 @@ TabTypography::TabTypography(std::vector<std::string>* fontList,
 {
 }
 
-void TabTypography::Render(StyleData& data, float colWidth) {
+void TabTypography::Render(Core::TextBoxStyle& box, float colWidth) {
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
     CanvaStyleEditor::Badge("TIPOGRAFIA", CanvaPalette::Accent);
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
-    RenderFontSelector(data, colWidth);
+    RenderFontSelector(box, colWidth);
     ImGui::Dummy(ImVec2(0.0f, 10.0f));
 
-    RenderColorPicker(data, colWidth);
+    RenderColorPicker(box, colWidth);
     ImGui::Dummy(ImVec2(0.0f, 10.0f));
 
-    RenderSizeSlider(data, colWidth);
+    RenderSizeSlider(box, colWidth);
     ImGui::Dummy(ImVec2(0.0f, 10.0f));
 
-    RenderAutoScaleCheckbox(data);
+    RenderAutoScaleCheckbox(box);
 }
 
-void TabTypography::RenderFontSelector(StyleData& data, float colWidth) {
+void TabTypography::RenderFontSelector(Core::TextBoxStyle& box, float colWidth) {
     CanvaStyleEditor::SectionLabel("Fuente");
 
     const float importBtnH = 26.0f;
@@ -114,7 +114,7 @@ void TabTypography::RenderFontSelector(StyleData& data, float colWidth) {
         if (i % cols != 0) ImGui::SameLine(0.0f, gap);
 
         const std::string& name = allFonts[i];
-        bool selected = (data.selectedFont == name);
+        bool selected = (box.fontName == name);
 
         ImGui::PushID(i);
         ImVec2 p0 = ImGui::GetCursorScreenPos();
@@ -142,7 +142,7 @@ void TabTypography::RenderFontSelector(StyleData& data, float colWidth) {
         else
             dl->AddText(tpos, textCol, name.c_str());
 
-        if (clicked) data.selectedFont = name;
+        if (clicked) box.fontName = name;
         ImGui::PopID();
     }
 
@@ -163,51 +163,35 @@ void TabTypography::RenderFontSelector(StyleData& data, float colWidth) {
     }
 }
 
-void TabTypography::RenderColorPicker(StyleData& data, float colWidth) {
+void TabTypography::RenderColorPicker(Core::TextBoxStyle& box, float colWidth) {
     CanvaStyleEditor::SectionLabel("Color del texto");
     ImGui::SetNextItemWidth(colWidth);
-    ImGui::ColorEdit4("##editColor", data.textColor,
+    ImGui::ColorEdit4("##editColor", box.color,
         ImGuiColorEditFlags_AlphaBar |
         ImGuiColorEditFlags_PickerHueWheel |
         ImGuiColorEditFlags_DisplayRGB);
 }
 
-void TabTypography::RenderSizeSlider(StyleData& data, float colWidth) {
+void TabTypography::RenderSizeSlider(Core::TextBoxStyle& box, float colWidth) {
     ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
-    ImGui::Text("Tamanio inicial   %.0f px", data.textSize);
+    ImGui::Text("Tamaño   %.0f px", box.textSize);
     ImGui::PopStyleColor();
 
-    DS::ModernSlider("##editSize", &data.textSize, 20.0f, 300.0f, colWidth);
-
-    ImGui::Dummy(ImVec2(0.0f, 8.0f));
-
-    ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
-    ImGui::Text("Referencia (nombre + version)   %.0f px", data.refTextSize);
-    ImGui::PopStyleColor();
-
-    DS::ModernSlider("##editRefSize", &data.refTextSize, 10.0f, 200.0f, colWidth);
-
-    ImGui::Dummy(ImVec2(0.0f, 8.0f));
-
-    ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
-    ImGui::Text("Versiculo (cuerpo del texto)   %.0f px", data.verseTextSize);
-    ImGui::PopStyleColor();
-
-    DS::ModernSlider("##editVerseSize", &data.verseTextSize, 10.0f, 300.0f, colWidth);
+    DS::ModernSlider("##editSize", &box.textSize, 10.0f, 300.0f, colWidth);
 }
 
-void TabTypography::RenderAutoScaleCheckbox(StyleData& data) {
+void TabTypography::RenderAutoScaleCheckbox(Core::TextBoxStyle& box) {
     ImGui::PushStyleColor(ImGuiCol_CheckMark,      CanvaPalette::Accent);
     ImGui::PushStyleColor(ImGuiCol_FrameBg,        CanvaPalette::Surface1);
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, CanvaPalette::Surface2);
-    ImGui::Checkbox("Auto-reducir si el texto no cabe", &data.autoScale);
+    ImGui::Checkbox("Auto-reducir si el texto no cabe", &box.autoScale);
     ImGui::PopStyleColor(3);
 
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
     ImGui::PushStyleColor(ImGuiCol_Text, CanvaPalette::TextMuted);
     ImGui::TextWrapped(
-        "Cuando el texto supera la zona segura, el tamanio se reduce automaticamente "
-        "hasta que entre. Util para presentaciones con contenido variable.");
+        "Cuando el texto supera la zona segura, el tamaño se reduce automáticamente "
+        "hasta que entre. Útil para presentaciones con contenido variable.");
     ImGui::PopStyleColor();
 }
 
@@ -264,4 +248,4 @@ void TabTypography::ImportFont() {
     }
 }
 
-} // namespace ProyecThor::UI
+} // namespace ProyecThor::UI

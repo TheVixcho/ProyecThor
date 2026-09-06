@@ -13,6 +13,13 @@ bool ParseSmartQuery(const BibleData& bible, const std::string& rawQuery,
     if (bible.books.empty() || rawQuery.empty()) return false;
 
     std::string q = TextUtils::StripAccents(TextUtils::ToLowerUTF8(rawQuery));
+
+    for (size_t i = 1; i + 1 < q.size(); ++i) {
+        if (q[i] == '.' && std::isdigit((unsigned char)q[i-1]) && std::isdigit((unsigned char)q[i+1])) {
+            q[i] = ':';
+        }
+    }
+
     int chapNum = -1, verseNum = -1;
 
     size_t colonPos = q.rfind(':');
@@ -24,23 +31,54 @@ bool ParseSmartQuery(const BibleData& bible, const std::string& rawQuery,
 
         std::string beforeColon = q.substr(0, colonPos);
         size_t lastSp = beforeColon.rfind(' ');
-        std::string chapStr = (lastSp != std::string::npos) ? beforeColon.substr(lastSp + 1) : "";
+        std::string chapStr = (lastSp != std::string::npos) ? beforeColon.substr(lastSp + 1) : beforeColon;
         chapStr.erase(std::remove_if(chapStr.begin(), chapStr.end(),
             [](char c){ return !std::isdigit((unsigned char)c); }), chapStr.end());
         if (!chapStr.empty()) try { chapNum = std::stoi(chapStr); } catch (...) {}
 
         q = (lastSp != std::string::npos) ? beforeColon.substr(0, lastSp) : beforeColon;
-        if (chapNum < 0)
-            while (!q.empty() && std::isdigit((unsigned char)q.back())) q.pop_back();
     } else {
-        size_t lastSp = q.rfind(' ');
-        if (lastSp != std::string::npos) {
-            std::string tail = q.substr(lastSp + 1);
-            bool allDigits = !tail.empty();
-            for (char c : tail) if (!std::isdigit((unsigned char)c)) { allDigits = false; break; }
-            if (allDigits) {
-                try { chapNum = std::stoi(tail); } catch (...) {}
-                q = q.substr(0, lastSp);
+        std::vector<std::string> tokens;
+        std::string cur;
+        for (char c : q) {
+            if (c == ' ') {
+                if (!cur.empty()) { tokens.push_back(cur); cur.clear(); }
+            } else {
+                cur += c;
+            }
+        }
+        if (!cur.empty()) tokens.push_back(cur);
+
+        if (!tokens.empty()) {
+            bool lastNumeric = true;
+            for (char c : tokens.back()) if (!std::isdigit((unsigned char)c)) { lastNumeric = false; break; }
+
+            if (lastNumeric) {
+                int lastVal = 0;
+                try { lastVal = std::stoi(tokens.back()); } catch (...) {}
+                tokens.pop_back();
+
+                bool secondNumeric = false;
+                if (!tokens.empty()) {
+                    secondNumeric = true;
+                    for (char c : tokens.back()) if (!std::isdigit((unsigned char)c)) { secondNumeric = false; break; }
+                }
+
+                if (secondNumeric && !tokens.empty()) {
+                    int secVal = 0;
+                    try { secVal = std::stoi(tokens.back()); } catch (...) {}
+                    tokens.pop_back();
+                    chapNum = secVal;
+                    verseNum = lastVal;
+                } else {
+                    chapNum = lastVal;
+                }
+
+                q.clear();
+                for (size_t t = 0; t < tokens.size(); ++t) {
+                    if (t > 0) q += " ";
+                    q += tokens[t];
+                }
             }
         }
     }
@@ -50,15 +88,10 @@ bool ParseSmartQuery(const BibleData& bible, const std::string& rawQuery,
 
     int resolvedBookNum = -1;
     {
-        std::string nosp = q;
-        nosp.erase(std::remove(nosp.begin(), nosp.end(), ' '), nosp.end());
+        std::string nosp = TextUtils::Normalize(q);
+        if (nosp == "salmo") nosp = "salmos";
 
-        // Primero se intenta una abreviatura exacta ("gn", "1co", etc).
         resolvedBookNum = BibleBooks::ResolveAbbrev(nosp);
-
-        // Si no hay coincidencia exacta, se usa el buscador por prefijo
-        // (mismo motor que usa el overlay de busqueda rapida) y se toma el
-        // mejor candidato, es decir, el de menor numero canonico.
         if (resolvedBookNum <= 0) {
             std::vector<int> candidates = BibleBooks::FindBookCandidates(nosp);
             if (!candidates.empty()) resolvedBookNum = candidates.front();
@@ -93,4 +126,4 @@ bool ParseSmartQuery(const BibleData& bible, const std::string& rawQuery,
     return outBook >= 0;
 }
 
-} // namespace ProyecThor::UI::Search
+}

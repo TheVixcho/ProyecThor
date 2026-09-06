@@ -33,7 +33,7 @@ bool VectorIconButton(const char* id, DrawIconFn drawIcon, const char* tooltip,
 
 // ── Boton grande de accion: icono + label centrados en una capsula, con
 //    hover animado y brillo pulsante opcional (halo) para estados "activos"
-//    — usado para "Iniciar/Detener Proyeccion", "Activar/Detener Stage". ───
+//    — usado para "Iniciar/Detener Proyección", "Activar/Detener Stage". ───
 bool IconLabelButton(const char* id, const char* label, DrawIconFn icon, ImVec2 size,
                      ImVec4 bgColor, ImVec4 hoverColor, ImVec4 activeColor, ImVec4 textColor,
                      bool pulseGlow = false);

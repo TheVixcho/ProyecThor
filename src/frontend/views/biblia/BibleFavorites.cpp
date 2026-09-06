@@ -8,8 +8,6 @@
 namespace ProyecThor::UI::Favorites {
 namespace {
 
-// Junto a los demas .ini de datos de usuario (mismo criterio que
-// LibrarySongs.cpp: GetAssetsPath() + "/../<archivo>.ini").
 std::string FavoritesFilePath() {
     return ProyecThor::GetAssetsPath() + "/../bible_favorites.ini";
 }
@@ -36,11 +34,8 @@ bool SplitKey(const std::string& key, std::string& bible, int& bookNum, int& cha
     return true;
 }
 
-// Cache en memoria — se carga una sola vez del disco y se mantiene
-// actualizada en cada Toggle, para no re-leer/parsear el archivo en cada
-// consulta de IsFavorite (llamada por fila de versiculo, cada frame).
 struct Cache {
-    std::unordered_map<std::string, std::string> entries; // clave -> texto
+    std::unordered_map<std::string, std::string> entries;
     bool loaded = false;
 };
 
@@ -67,7 +62,7 @@ void Persist(const Cache& cache) {
         f << k << "=" << v << "\n";
 }
 
-} // namespace
+}
 
 bool IsFavorite(const std::string& bible, int bookNum, int chapterNum, int verseNum) {
     auto& cache = GetCache();
@@ -104,4 +99,5 @@ std::vector<FavoriteVerse> GetAll() {
     return out;
 }
 
-} // namespace ProyecThor::UI::Favorites
+}
+

@@ -28,7 +28,7 @@ public:
 
     void RenderContent();
 
-    std::string GetName() const { return "Sincronizacion"; }
+    std::string GetName() const { return "Sincronización"; }
 
 private:
     void RenderServerControl();

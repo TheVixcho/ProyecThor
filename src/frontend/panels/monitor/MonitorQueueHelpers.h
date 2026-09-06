@@ -8,7 +8,9 @@
 #endif
 #include <cstdlib>
 #include <cmath>
+#include <algorithm>
 #include "MonitorTheme.h"
+#include "frontend/ui/bin/StyleGeneralApp.h"
 
 // =============================================================================
 //  MonitorQueueHelpers.h
@@ -124,34 +126,91 @@ inline void DrawPlayingBars(ImDrawList* dl, ImVec2 rowMin, float rowH, float bas
     }
 }
 
-// ── Boton coloreado para la cola ──────────────────────────────────────────────
-// Aplica colores base/hover/active y opcionalmente color de texto.
-// Siempre hace PopStyleColor/PopStyleVar correctamente.
-inline bool QueueColorBtn(
+// ── Animacion de hover/press reutilizable ────────────────────────────────────
+// ImGuiStorage + lerp con DeltaTime -- mismo patron que BroadcastAnimT
+// (BroadcastPanel.cpp) / AnimT (CategoryTheme.cpp), reescrito liviano aca
+// para no crear una dependencia cruzada entre paneles por un helper tan chico
+// (mismo criterio ya establecido en el resto de la app).
+inline float QueueAnimT(ImGuiID id, ImU32 salt, bool target, float speed = 14.0f)
+{
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    float*        t       = storage->GetFloatRef(id ^ salt, target ? 1.0f : 0.0f);
+    *t += ((target ? 1.0f : 0.0f) - *t) * std::min(1.0f, ImGui::GetIO().DeltaTime * speed);
+    return *t;
+}
+
+// ── Boton animado para la cola ────────────────────────────────────────────────
+// Reemplaza el viejo QueueColorBtn (ImGui::Button + PushStyleColor plano, sin
+// animacion, con el icono superpuesto aparte via DrawBtnIcon y el label
+// relleno de espacios al principio para dejarle lugar) -- pedido explicito
+// ("los botones son feos, la calidad de UI es horrible, pone animaciones y
+// mejora"). InvisibleButton + hover lerp, fondo con highlight superior sutil
+// (mismo truco que PillButton en LibraryIcons.h) e icono+texto centrados
+// juntos como un solo bloque en vez de dos elementos posicionados a mano por
+// separado.
+inline bool QueueActionButton(
+    const char* strId,
     const char* label,
+    const char* iconName,
     ImVec2      size,
     ImVec4      base,
     ImVec4      hov,
-    ImVec4      act,
-    ImVec4      textCol  = { -1.f, -1.f, -1.f, -1.f },
-    float       rounding = 6.0f)
+    ImVec4      textCol,
+    float       rounding = 8.0f)
 {
-    ImGui::PushStyleColor(ImGuiCol_Button,        base);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hov);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  act);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, rounding);
+    ImGui::PushID(strId);
+    ImVec2 p0 = ImGui::GetCursorScreenPos();
+    ImVec2 p1 = { p0.x + size.x, p0.y + size.y };
 
-    bool hasTextColor = (textCol.w >= 0.f);
-    if (hasTextColor)
-        ImGui::PushStyleColor(ImGuiCol_Text, textCol);
+    ImGui::InvisibleButton("##btn", size);
+    bool hovered = ImGui::IsItemHovered();
+    bool held    = ImGui::IsItemActive();
+    bool pressed = ImGui::IsItemClicked();
 
-    bool pressed = ImGui::Button(label, size);
+    float t = QueueAnimT(ImGui::GetID("##btn"), 0xA1u, hovered, 14.0f);
 
-    if (hasTextColor)
-        ImGui::PopStyleColor();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor(3);
+    ImVec4 fillC = {
+        base.x + (hov.x - base.x) * t, base.y + (hov.y - base.y) * t,
+        base.z + (hov.z - base.z) * t, base.w + (hov.w - base.w) * t
+    };
+    if (held) fillC.w *= 0.80f;
+
+    dl->AddRectFilled(p0, p1, ImGui::ColorConvertFloat4ToU32(fillC), rounding);
+
+    // Highlight superior sutil, crece un poco en hover -- le da algo de
+    // "cuerpo" al boton en vez de un rectangulo de color plano.
+    float hlAlpha = 0.08f + t * 0.10f;
+    dl->AddRectFilled(p0, { p1.x, p0.y + size.y * 0.42f },
+        ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 1.0f, 1.0f, hlAlpha)),
+        rounding, ImDrawFlags_RoundCornersTop);
+    dl->AddRect(p0, p1,
+        ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 1.0f, 1.0f, 0.07f + t * 0.10f)),
+        rounding);
+
+    // Icono + texto como un solo bloque centrado (icono a la izquierda del
+    // texto, con un gap fijo) -- reemplaza el truco de espacios al principio
+    // del label + DrawBtnIcon posicionado aparte que usaba el boton viejo.
+    bool hasIcon = iconName && StyleGeneralApp::Icons.count(iconName) &&
+                   StyleGeneralApp::Icons[iconName].textureID;
+    float  iconSz = std::min(16.0f, size.y - 12.0f);
+    ImVec2 textSz = ImGui::CalcTextSize(label);
+    float  gap    = hasIcon ? 8.0f : 0.0f;
+    float  blockW = (hasIcon ? iconSz : 0.0f) + gap + textSz.x;
+    float  blockX = p0.x + (size.x - blockW) * 0.5f;
+    float  cy     = p0.y + size.y * 0.5f;
+
+    if (hasIcon)
+    {
+        void* icon = StyleGeneralApp::Icons[iconName].textureID;
+        dl->AddImage(icon, { blockX, cy - iconSz * 0.5f }, { blockX + iconSz, cy + iconSz * 0.5f },
+            ImVec2(0, 0), ImVec2(1, 1), ImGui::ColorConvertFloat4ToU32(textCol));
+        blockX += iconSz + gap;
+    }
+    dl->AddText({ blockX, cy - textSz.y * 0.5f }, ImGui::ColorConvertFloat4ToU32(textCol), label);
+
+    ImGui::PopID();
     return pressed;
 }
 

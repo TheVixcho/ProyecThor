@@ -42,12 +42,12 @@ void SettingsPanel::RenderCategoryShortcuts() {
     ImGui::TextDisabled("Atajos de teclado disponibles en toda la aplicacion.");
     ImGui::Spacing();
 
-    if (SectionTitle("Navegacion en Biblioteca")) {
+    if (SectionTitle("Navegación en Biblioteca")) {
         DrawShortcutRow("Flecha arriba / abajo", "Mover la seleccion en la lista de la biblioteca");
         DrawShortcutRow("Click derecho",         "Abrir menu contextual (renombrar, eliminar, etiquetas)");
     }
 
-    if (SectionTitle("Navegacion en Biblia")) {
+    if (SectionTitle("Navegación en Biblia")) {
         DrawShortcutRow("Flecha izquierda / derecha", "Ir al versiculo anterior / siguiente");
         DrawShortcutRow("Ctrl (toque rapido)",         "Saltar a un capitulo por numero");
         DrawShortcutRow("Alt (toque rapido)",          "Saltar a un versiculo por numero");
@@ -66,8 +66,17 @@ void SettingsPanel::RenderCategoryShortcuts() {
 
     if (SectionTitle("General")) {
         DrawShortcutRow("Ctrl + P", "Abrir Configuraciones");
-        DrawShortcutRow("F1",       "Abrir documentacion");
+        DrawShortcutRow("F1",       "Abrir documentación");
+        DrawShortcutRow("Shift + Z", "Abrir / cerrar Notas Rápidas");
         DrawShortcutRow("Alt + F4", "Cerrar ProyecThor");
+    }
+
+    if (SectionTitle("Colapsar paneles (Alt Gr)")) {
+        DrawShortcutRow("Alt Gr + 1", "Colapsar / mostrar Biblioteca");
+        DrawShortcutRow("Alt Gr + 2", "Colapsar / mostrar Diseño");
+        DrawShortcutRow("Alt Gr + 3", "Colapsar / mostrar Vista en Vivo");
+        DrawShortcutRow("Alt Gr + 4", "Colapsar / mostrar Home");
+        DrawShortcutRow("Alt Gr + 0", "Restablecer el entorno de paneles");
     }
 }
 

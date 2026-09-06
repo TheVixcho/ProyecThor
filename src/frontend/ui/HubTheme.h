@@ -14,7 +14,7 @@ inline ImU32 TextPri    = IM_COL32(230, 230, 230, 255);
 inline ImU32 TextMuted  = IM_COL32(120, 120, 126, 255);
 inline ImU32 Divider    = IM_COL32(45, 45, 52, 255);
 
-// Botones "fantasma"/secundarios (ej. "Abrir configuracion", accesos rapidos).
+// Botones "fantasma"/secundarios (ej. "Abrir configuración", accesos rápidos).
 inline ImU32 Surface       = IM_COL32(38, 38, 46, 255);
 inline ImU32 SurfaceHover  = IM_COL32(52, 52, 62, 255);
 inline ImU32 SurfaceActive = IM_COL32(30, 30, 38, 255);
@@ -55,4 +55,4 @@ inline float BgImageAlpha = 30.0f / 255.0f;
 
 void Sync(const ProyecThor::Settings::ThemeSettings& theme);
 
-} // namespace ProyecThor::UI::HubTheme
+} // namespace ProyecThor::UI::HubTheme

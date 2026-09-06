@@ -1151,7 +1151,7 @@ void CapturePanel::RenderSceneButtons() {
     ImGui::TextUnformatted("(i)");
     ImGui::PopStyleColor();
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Click: aplicar.\nClick derecho: guardar la posicion libre actual o borrar.");
+        ImGui::SetTooltip("Click: aplicar.\nClick derecho: guardar la posición libre actual o borrar.");
     ImGui::Spacing();
 
     auto& scenes = Settings::SettingsManager::Get().GetSettings().capture.scenes;

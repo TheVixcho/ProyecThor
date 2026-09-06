@@ -1,6 +1,7 @@
 #include "LayersStyleTab.h"
 #include "LayersTheme.h"
-#include "../../backend/core/PresentationCore.h"
+#include "backend/core/PresentationCore.h"
+#include "backend/core/FileDeletionManager.h"
 #include "frontend/ui/UIManager.h"
 #include "frontend/ui/IconRail.h"
 #include <imgui.h>
@@ -56,14 +57,8 @@ static fs::path FontsDir()  { return GetAppDataDir() / "assets" / "fonts"; }
 //  Constructor
 // ─────────────────────────────────────────────────────────────────────────────
 LayersStyleTab::LayersStyleTab() {
-    m_CurrentStyle.vAlignment    = 1;
-    m_CurrentStyle.textAlignment = 1;
-    m_CurrentStyle.textSize      = 80.0f;
-    m_CurrentStyle.autoScale     = true;
-    m_CurrentStyle.selectedFont  = "Predeterminada";
-    for (int i=0;i<4;i++) m_CurrentStyle.textColor[i] = 1.0f;
-    for (int i=0;i<4;i++) m_CurrentStyle.margins[i]   = 60.0f;
-
+    // m_CurrentStyle.lyrics/index ya arrancan con defaults razonables (ver
+    // TextBoxStyle en PresentationCore.h).
     LoadThemeList();
     LoadFontsList();
 
@@ -113,7 +108,7 @@ void LayersStyleTab::OpenStyleEditorFullscreen(bool isNew, const std::string& na
                 m_SelectedTheme = n;
                 ApplyCurrentStyleToCore();
             }
-        }, /*embedded=*/true);
+        });
 
         ImGui::End();
 
@@ -156,6 +151,34 @@ void LayersStyleTab::ReloadFonts() { LoadFontsList(); }
 // ─────────────────────────────────────────────────────────────────────────────
 //  Serialización de temas
 // ─────────────────────────────────────────────────────────────────────────────
+// Mismo formato "key=value" y mismas claves ("lyrics*"/"index*") que el
+// parser independiente de PresentationCore.cpp (GetSavedStyle/SaveStyle,
+// ver comentario ahi) -- ambos leen/escriben los MISMOS archivos .theme.
+static void WriteBoxKeys(std::ofstream& f, const char* prefix, const Core::TextBoxStyle& box) {
+    f << prefix << "PosX="    << box.posX  << "\n";
+    f << prefix << "PosY="    << box.posY  << "\n";
+    f << prefix << "SizeW="   << box.sizeW << "\n";
+    f << prefix << "SizeH="   << box.sizeH << "\n";
+    f << prefix << "Font="    << box.fontName << "\n";
+    f << prefix << "Color="   << box.color[0] << "," << box.color[1] << ","
+                               << box.color[2] << "," << box.color[3] << "\n";
+    f << prefix << "Size="    << box.textSize << "\n";
+    f << prefix << "HAlign="  << box.hAlign << "\n";
+    f << prefix << "VAlign="  << box.vAlign << "\n";
+    f << prefix << "AutoScale=" << (box.autoScale ? 1 : 0) << "\n";
+    f << prefix << "BgMediaEnabled=" << (box.bgMediaEnabled ? 1 : 0) << "\n";
+    f << prefix << "BgMediaPath="    << box.bgMediaPath << "\n";
+    f << prefix << "BgMediaOpacity=" << box.bgMediaOpacity << "\n";
+    f << prefix << "Effects=" << Core::PackTextEffects(box.effects) << "\n";
+}
+
+static void BoxFromLegacyMargins(const float margins[4], Core::TextBoxStyle& box) {
+    box.sizeW = std::max(0.02f, (1920.0f - margins[0] - margins[2]) / 1920.0f);
+    box.sizeH = std::max(0.02f, (1080.0f - margins[1] - margins[3]) / 1080.0f);
+    box.posX  = margins[0] / 1920.0f + box.sizeW * 0.5f;
+    box.posY  = margins[1] / 1080.0f + box.sizeH * 0.5f;
+}
+
 bool LayersStyleTab::SaveTheme(const std::string& name, const StyleData& data) {
     if (name.empty()) return false;
     std::error_code ec;
@@ -166,22 +189,29 @@ bool LayersStyleTab::SaveTheme(const std::string& name, const StyleData& data) {
     std::ofstream f(dir / (name + ".theme"));
     if (!f.is_open()) return false;
 
-    f << "textColor="   << data.textColor[0] << "," << data.textColor[1] << ","
-                        << data.textColor[2] << "," << data.textColor[3] << "\n";
-    f << "textSize="    << data.textSize      << "\n";
-    f << "textAlign="   << data.textAlignment << "\n";
-    f << "vAlign="      << data.vAlignment    << "\n";
-    f << "margins="     << data.margins[0] << "," << data.margins[1] << ","
-                        << data.margins[2] << "," << data.margins[3] << "\n";
-    f << "autoScale="   << (data.autoScale ? 1 : 0) << "\n";
-    f << "font="        << data.selectedFont  << "\n";
-    f << "refTextSize=" << data.refTextSize   << "\n";
-    f << "verseTextSize=" << data.verseTextSize << "\n";
-    f << "songTextAlign="  << data.songTextAlignment << "\n";
-    f << "songVAlign="     << data.songVAlignment    << "\n";
-    f << "bibleTextAlign=" << data.bibleTextAlignment << "\n";
-    f << "bibleVAlign="    << data.bibleVAlignment   << "\n";
-    f << "textEffects="    << Core::PackTextEffects(data.effects) << "\n";
+    // Claves legacy -- derivadas de la caja de Letras, solo para que un
+    // .theme guardado con el editor nuevo siga siendo legible por codigo
+    // viejo que solo conozca el formato plano (ver PresentationCore::SaveStyle).
+    f << "textColor=" << data.lyrics.color[0] << "," << data.lyrics.color[1] << ","
+                       << data.lyrics.color[2] << "," << data.lyrics.color[3] << "\n";
+    f << "textSize="  << data.lyrics.textSize << "\n";
+    f << "textAlign=" << data.lyrics.hAlign   << "\n";
+    f << "vAlign="    << data.lyrics.vAlign   << "\n";
+    float legacyMargins[4] = {
+        (data.lyrics.posX - data.lyrics.sizeW * 0.5f) * 1920.0f,
+        (data.lyrics.posY - data.lyrics.sizeH * 0.5f) * 1080.0f,
+        (1.0f - (data.lyrics.posX + data.lyrics.sizeW * 0.5f)) * 1920.0f,
+        (1.0f - (data.lyrics.posY + data.lyrics.sizeH * 0.5f)) * 1080.0f,
+    };
+    f << "margins="   << legacyMargins[0] << "," << legacyMargins[1] << ","
+                       << legacyMargins[2] << "," << legacyMargins[3] << "\n";
+    f << "autoScale=" << (data.lyrics.autoScale ? 1 : 0) << "\n";
+    f << "font="      << data.lyrics.fontName << "\n";
+    f << "textEffects=" << Core::PackTextEffects(data.lyrics.effects) << "\n";
+
+    WriteBoxKeys(f, "lyrics", data.lyrics);
+    WriteBoxKeys(f, "index",  data.index);
+    f << "indexEnabled=" << (data.indexEnabled ? 1 : 0) << "\n";
     return true;
 }
 
@@ -191,6 +221,11 @@ bool LayersStyleTab::LoadThemeData(const std::string& name, StyleData& out) {
 
     out = StyleData{};
 
+    // Legacy (fallback de migracion, ver abajo).
+    float legacyMargins[4] = { 60.0f, 60.0f, 60.0f, 60.0f };
+    Core::TextBoxStyle legacy;
+    bool hasLyricsBoxKeys = false, hasIndexBoxKeys = false;
+
     std::string line;
     while (std::getline(f, line)) {
         std::istringstream ss(line);
@@ -199,28 +234,64 @@ bool LayersStyleTab::LoadThemeData(const std::string& name, StyleData& out) {
         v.erase(std::remove(v.begin(), v.end(), '\r'), v.end());
         v.erase(std::remove(v.begin(), v.end(), '\n'), v.end());
 
-        if      (k == "textSize")       out.textSize          = std::stof(v);
-        else if (k == "textAlign")      out.textAlignment     = std::stoi(v);
-        else if (k == "vAlign")         out.vAlignment        = std::stoi(v);
-        else if (k == "autoScale")      out.autoScale         = (std::stoi(v) != 0);
-        else if (k == "font")           out.selectedFont      = v;
-        else if (k == "refTextSize")    out.refTextSize       = std::stof(v);
-        else if (k == "verseTextSize")  out.verseTextSize     = std::stof(v);
-        else if (k == "songTextAlign")  out.songTextAlignment = std::stoi(v);
-        else if (k == "songVAlign")     out.songVAlignment    = std::stoi(v);
-        else if (k == "bibleTextAlign") out.bibleTextAlignment = std::stoi(v);
-        else if (k == "bibleVAlign")    out.bibleVAlignment   = std::stoi(v);
+        if      (k == "textSize")  legacy.textSize  = std::stof(v);
+        else if (k == "textAlign") legacy.hAlign     = std::stoi(v);
+        else if (k == "vAlign")    legacy.vAlign     = std::stoi(v);
+        else if (k == "autoScale") legacy.autoScale  = (std::stoi(v) != 0);
+        else if (k == "font")      legacy.fontName   = v;
         else if (k == "textColor")
             sscanf(v.c_str(), "%f,%f,%f,%f",
-                &out.textColor[0], &out.textColor[1],
-                &out.textColor[2], &out.textColor[3]);
+                &legacy.color[0], &legacy.color[1], &legacy.color[2], &legacy.color[3]);
         else if (k == "margins")
             sscanf(v.c_str(), "%f,%f,%f,%f",
-                &out.margins[0], &out.margins[1],
-                &out.margins[2], &out.margins[3]);
-        else if (k == "textEffects")
-            Core::UnpackTextEffects(v, out.effects);
+                &legacyMargins[0], &legacyMargins[1], &legacyMargins[2], &legacyMargins[3]);
+
+        else if (k == "lyricsPosX")    { out.lyrics.posX  = std::stof(v); hasLyricsBoxKeys = true; }
+        else if (k == "lyricsPosY")    out.lyrics.posY    = std::stof(v);
+        else if (k == "lyricsSizeW")   out.lyrics.sizeW   = std::stof(v);
+        else if (k == "lyricsSizeH")   out.lyrics.sizeH   = std::stof(v);
+        else if (k == "lyricsFont")    out.lyrics.fontName = v;
+        else if (k == "lyricsColor")
+            sscanf(v.c_str(), "%f,%f,%f,%f", &out.lyrics.color[0], &out.lyrics.color[1],
+                   &out.lyrics.color[2], &out.lyrics.color[3]);
+        else if (k == "lyricsSize")    out.lyrics.textSize = std::stof(v);
+        else if (k == "lyricsHAlign")  out.lyrics.hAlign   = std::stoi(v);
+        else if (k == "lyricsVAlign")  out.lyrics.vAlign   = std::stoi(v);
+        else if (k == "lyricsAutoScale") out.lyrics.autoScale = (std::stoi(v) != 0);
+        else if (k == "lyricsBgMediaEnabled") out.lyrics.bgMediaEnabled = (std::stoi(v) != 0);
+        else if (k == "lyricsBgMediaPath")    out.lyrics.bgMediaPath = v;
+        else if (k == "lyricsBgMediaOpacity") out.lyrics.bgMediaOpacity = std::stof(v);
+        else if (k == "lyricsEffects") Core::UnpackTextEffects(v, out.lyrics.effects);
+
+        else if (k == "indexPosX")     { out.index.posX  = std::stof(v); hasIndexBoxKeys = true; }
+        else if (k == "indexPosY")     out.index.posY    = std::stof(v);
+        else if (k == "indexSizeW")    out.index.sizeW   = std::stof(v);
+        else if (k == "indexSizeH")    out.index.sizeH   = std::stof(v);
+        else if (k == "indexFont")     out.index.fontName = v;
+        else if (k == "indexColor")
+            sscanf(v.c_str(), "%f,%f,%f,%f", &out.index.color[0], &out.index.color[1],
+                   &out.index.color[2], &out.index.color[3]);
+        else if (k == "indexSize")     out.index.textSize = std::stof(v);
+        else if (k == "indexHAlign")   out.index.hAlign   = std::stoi(v);
+        else if (k == "indexVAlign")   out.index.vAlign   = std::stoi(v);
+        else if (k == "indexAutoScale") out.index.autoScale = (std::stoi(v) != 0);
+        else if (k == "indexBgMediaEnabled") out.index.bgMediaEnabled = (std::stoi(v) != 0);
+        else if (k == "indexBgMediaPath")    out.index.bgMediaPath = v;
+        else if (k == "indexBgMediaOpacity") out.index.bgMediaOpacity = std::stof(v);
+        else if (k == "indexEffects")  Core::UnpackTextEffects(v, out.index.effects);
+        else if (k == "indexEnabled")  out.indexEnabled = (std::stoi(v) != 0);
     }
+
+    // Fallback de migracion: un .theme guardado antes de la reforma a cajas
+    // no tiene las claves "lyrics*"/"index*" -- se deriva una caja inicial
+    // desde los campos legacy ya leidos arriba. El indice arranca
+    // deshabilitado (los estilos viejos no tenian este concepto).
+    if (!hasLyricsBoxKeys) {
+        BoxFromLegacyMargins(legacyMargins, legacy);
+        out.lyrics = legacy;
+    }
+    if (!hasIndexBoxKeys) out.index = out.lyrics;
+
     return true;
 }
 
@@ -233,10 +304,9 @@ void LayersStyleTab::ApplyTheme(const std::string& name) {
 }
 
 void LayersStyleTab::DeleteTheme(const std::string& name) {
-    std::error_code ec;
-    fs::remove(ThemesDir()/(name+".theme"),ec);
+    Core::FileDeletionManager::ForceDeleteFile((ThemesDir() / (name + ".theme")).string());
     LoadThemeList();
-    if (m_SelectedTheme==name) m_SelectedTheme.clear();
+    if (m_SelectedTheme == name) m_SelectedTheme.clear();
 }
 
 // FIXED: also call SetProjecting(true) so the projector re-renders with the
@@ -245,26 +315,8 @@ void LayersStyleTab::DeleteTheme(const std::string& name) {
 void LayersStyleTab::ApplyCurrentStyleToCore() {
     auto& core = Core::PresentationCore::Get();
 
-    core.UpdateTextStyle(
-        m_CurrentStyle.textSize,
-        m_CurrentStyle.textColor,
-        m_CurrentStyle.textAlignment,
-        m_CurrentStyle.vAlignment,
-        m_CurrentStyle.margins,
-        m_CurrentStyle.autoScale,
-        m_CurrentStyle.selectedFont);
-
-    core.UpdateBibleStyle(
-        m_CurrentStyle.refTextSize,
-        m_CurrentStyle.verseTextSize,
-        m_CurrentStyle.bibleTextAlignment,
-        m_CurrentStyle.bibleVAlignment);
-
-    core.UpdateSongStyle(
-        m_CurrentStyle.songTextAlignment,
-        m_CurrentStyle.songVAlignment);
-
-    core.SetTextEffects(m_CurrentStyle.effects);
+    core.UpdateLyricsBoxStyle(m_CurrentStyle.lyrics);
+    core.UpdateIndexBoxStyle(m_CurrentStyle.index, m_CurrentStyle.indexEnabled);
 
     // FIXED: Notify projector that something changed so it re-draws.
     // Only do this if we're already projecting — don't start projection
@@ -276,58 +328,21 @@ void LayersStyleTab::ApplyCurrentStyleToCore() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Toolbar superior — compacta, solo iconos (estilo ProPresenter/Holyrics)
+//  Riel izquierdo — compacto, solo iconos, apilado vertical (antes era una
+//  barra horizontal arriba de la galeria; asi el alto disponible es todo
+//  para las tarjetas de tema, ver Render()).
 // ─────────────────────────────────────────────────────────────────────────────
-void LayersStyleTab::RenderTopBar() {
-    ImGui::AlignTextToFramePadding();
-    ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
-    ImGui::TextUnformatted("Estilos");
-    ImGui::PopStyleColor();
-
-    const float btnSz = 26.0f;
-    const float zoomW = 76.0f;
+void LayersStyleTab::RenderLeftRail() {
+    const float btnSz = 24.0f;
     const float gap   = 4.0f;
-    const float rowW  = zoomW + gap + btnSz*5 + gap*5; // +1 boton: "Ajustes rapidos"
-    const float avail = ImGui::GetWindowContentRegionMax().x;
-    ImGui::SameLine(std::max(ImGui::GetCursorPosX(), avail - rowW));
 
-    if (m_GridMode) {
-        LPZoomSlider("##stzoom", &m_ThumbZoom, 0.65f, 1.8f, zoomW);
-        ImGui::SameLine(0, gap);
-    } else {
-        ImGui::Dummy(ImVec2(zoomW, btnSz));
-        ImGui::SameLine(0, gap);
-    }
-
-    ImGui::PushID("styleview");
-    if (LPCornerIconBtn("##sgridm", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
-            float cs = r*0.42f, g = r*0.18f;
-            for (int rI=0; rI<2; rI++) for (int cI=0; cI<2; cI++) {
-                ImVec2 o = { c.x - cs - g*0.5f + cI*(cs+g), c.y - cs - g*0.5f + rI*(cs+g) };
-                dl->AddRectFilled(o, {o.x+cs, o.y+cs}, col, 1.5f);
-            }
-        }, "Vista en cuadricula", {btnSz,btnSz}, m_GridMode))
-        m_GridMode = true;
-    ImGui::SameLine(0, gap);
-    if (LPCornerIconBtn("##slistm", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
-            for (int i=0;i<3;i++) {
-                float y = c.y - r*0.5f + i*r*0.5f;
-                dl->AddRectFilled({c.x-r*0.7f, y}, {c.x+r*0.7f, y+r*0.22f}, col, 1.0f);
-            }
-        }, "Vista en lista", {btnSz,btnSz}, !m_GridMode))
-        m_GridMode = false;
-    ImGui::PopID();
-
-    ImGui::SameLine(0, gap*2);
-    if (LPCornerIconBtn("##reloadfonts", LPDrawRefresh, "Recargar fuentes", {btnSz,btnSz}))
-        LoadFontsList();
-    ImGui::SameLine(0, gap);
-    if (LPCornerIconBtn("##newstyle", LPDrawPlus, "Nuevo estilo", {btnSz,btnSz}, true))
+    // 1. Nuevo estilo (Acción principal arriba)
+    if (LPCornerIconBtn("##newstyle", LPDrawPlus, "Nuevo estilo", { btnSz, btnSz }, true))
         OpenStyleEditorFullscreen(true, "", m_CurrentStyle);
-    ImGui::SameLine(0, gap);
+    ImGui::Dummy(ImVec2(0.0f, gap));
+
+    // 2. Ajustes rápidos (Más accesible, directamente abajo de nuevo estilo)
     if (LPCornerIconBtn("##quickadjust", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
-            // Tres sliders verticales — mismo lenguaje visual que
-            // ControlIcons::DrawQuality, para "ajustes rapidos".
             float th = std::max(1.2f, r * 0.16f);
             const float xs[3]    = { -0.5f, 0.0f, 0.5f };
             const float knobY[3] = { 0.18f, -0.28f, 0.05f };
@@ -336,8 +351,36 @@ void LayersStyleTab::RenderTopBar() {
                 dl->AddLine({x, c.y - r*0.75f}, {x, c.y + r*0.75f}, col, th);
                 dl->AddCircleFilled({x, c.y + knobY[i]*r}, r*0.16f, col, 12);
             }
-        }, "Ajustes rapidos", {btnSz,btnSz}))
+        }, "Ajustes rápidos", { btnSz, btnSz }))
         ImGui::OpenPopup("##QuickAdjustPopup");
+
+    ImGui::Dummy(ImVec2(0.0f, gap + 2.0f));
+
+    // 3. Modos de vista (Cuadrícula / Lista)
+    ImGui::PushID("styleview");
+    if (LPCornerIconBtn("##sgridm", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
+            float cs = r*0.42f, g = r*0.18f;
+            for (int rI=0; rI<2; rI++) for (int cI=0; cI<2; cI++) {
+                ImVec2 o = { c.x - cs - g*0.5f + cI*(cs+g), c.y - cs - g*0.5f + rI*(cs+g) };
+                dl->AddRectFilled(o, {o.x+cs, o.y+cs}, col, 1.5f);
+            }
+        }, "Vista en cuadrícula", { btnSz, btnSz }, m_GridMode))
+        m_GridMode = true;
+    ImGui::Dummy(ImVec2(0.0f, gap));
+    if (LPCornerIconBtn("##slistm", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
+            for (int i=0;i<3;i++) {
+                float y = c.y - r*0.5f + i*r*0.5f;
+                dl->AddRectFilled({c.x-r*0.7f, y}, {c.x+r*0.7f, y+r*0.22f}, col, 1.0f);
+            }
+        }, "Vista en lista", { btnSz, btnSz }, !m_GridMode))
+        m_GridMode = false;
+    ImGui::PopID();
+
+    ImGui::Dummy(ImVec2(0.0f, gap + 2.0f));
+
+    // 4. Recargar fuentes
+    if (LPCornerIconBtn("##reloadfonts", LPDrawRefresh, "Recargar fuentes", { btnSz, btnSz }))
+        LoadFontsList();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -346,43 +389,69 @@ void LayersStyleTab::RenderTopBar() {
 void LayersStyleTab::RenderThemeCard(const std::string& name, float W, float H,
                                      int idx, int col, int cols) {
     ImGui::PushID(idx);
-    bool isSel = (m_SelectedTheme==name);
+    bool isSel = (m_SelectedTheme == name);
     ImVec2 pos = ImGui::GetCursorScreenPos();
-    bool hovRaw = ImGui::IsMouseHoveringRect(pos,{pos.x+W,pos.y+H});
+    bool hovRaw = ImGui::IsMouseHoveringRect(pos, { pos.x + W, pos.y + H });
     float t = LPHoverLerp(ImGui::GetID("##hov"), hovRaw);
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
     float inset = 2.0f * t;
-    ImVec2 p0 = {pos.x - inset, pos.y - inset};
-    ImVec2 p1 = {pos.x + W + inset, pos.y + H + inset};
+    ImVec2 p0 = { pos.x - inset, pos.y - inset };
+    ImVec2 p1 = { pos.x + W + inset, pos.y + H + inset };
 
-    ImU32 bg = isSel ? LPU32({0.18f,0.20f,0.36f,1.0f})
-                     : LPU32(ImVec4(LP::Surface1.x+(LP::Surface2.x-LP::Surface1.x)*t,
-                                    LP::Surface1.y+(LP::Surface2.y-LP::Surface1.y)*t,
-                                    LP::Surface1.z+(LP::Surface2.z-LP::Surface1.z)*t, 1.0f));
-    dl->AddRectFilled(p0,p1,bg,10.0f);
+    // Card background: subtle dark glass container
+    ImU32 bg = isSel ? LPU32({ 0.16f, 0.18f, 0.28f, 1.0f })
+                     : LPU32(ImVec4(LP::Surface1.x + (LP::Surface2.x - LP::Surface1.x) * t,
+                                    LP::Surface1.y + (LP::Surface2.y - LP::Surface1.y) * t,
+                                    LP::Surface1.z + (LP::Surface2.z - LP::Surface1.z) * t, 1.0f));
+    dl->AddRectFilled(p0, p1, bg, 10.0f);
 
+    // Glowing border
     ImVec4 borderC = isSel ? LP::Accent
-                     : ImVec4(LP::Border.x+(LP::Accent.x-LP::Border.x)*0.4f*t,
-                              LP::Border.y+(LP::Accent.y-LP::Border.y)*0.4f*t,
-                              LP::Border.z+(LP::Accent.z-LP::Border.z)*0.4f*t,
-                              LP::Border.w+(0.4f-LP::Border.w)*t);
-    dl->AddRect(p0,p1,LPU32(borderC),10.0f,0,isSel?2.0f:(1.0f+0.4f*t));
+                     : ImVec4(LP::Border.x + (LP::Accent.x - LP::Border.x) * 0.45f * t,
+                              LP::Border.y + (LP::Accent.y - LP::Border.y) * 0.45f * t,
+                              LP::Border.z + (LP::Accent.z - LP::Border.z) * 0.45f * t,
+                              LP::Border.w + (0.5f - LP::Border.w) * t);
+    dl->AddRect(p0, p1, LPU32(borderC), 10.0f, 0, isSel ? 2.0f : (1.0f + 0.5f * t));
 
-    ImVec2 pp = {p0.x+12.0f, p0.y+12.0f};
-    dl->AddText(ImGui::GetFont(),14.0f,pp,LPU32({1,1,1,0.95f}),"Aa Bb");
-    dl->AddText(ImGui::GetFont(),10.0f,{pp.x,pp.y+18.0f},LPU32({0.65f,0.65f,0.65f,0.75f}),"123 — Gz");
+    // Try loading theme data for real font & color preview
+    StyleData thData;
+    bool hasData = LoadThemeData(name, thData);
 
-    if (isSel) LPBadge(dl,{p1.x-52.0f,p0.y+7.0f},"ACTIVO",LP::Accent,{1,1,1,1});
+    ImVec4 textCol = hasData ? ImVec4(thData.lyrics.color[0], thData.lyrics.color[1], thData.lyrics.color[2], thData.lyrics.color[3])
+                             : ImVec4(1.0f, 1.0f, 1.0f, 0.95f);
+    std::string fontName = (hasData && !thData.lyrics.fontName.empty()) ? thData.lyrics.fontName : "Fuente Predeterminada";
 
-    std::string dn=name.length()>17?name.substr(0,14)+"...":name;
-    dl->AddRectFilled({p0.x,p1.y-24.0f},{p1.x,p1.y},
-        LPU32({0,0,0,0.52f}),10.0f,ImDrawFlags_RoundCornersBottom);
-    ImVec2 ns=ImGui::CalcTextSize(dn.c_str());
-    dl->AddText({p0.x+(W-ns.x)*0.5f,p1.y-20.0f},
-        isSel?LPU32(LP::Accent):LPU32(LP::Text),dn.c_str());
+    // Obtain the real assigned font
+    ImFont* customFont = hasData ? Core::PresentationCore::Get().GetImGuiFont(thData.lyrics.fontName, 22.0f) : nullptr;
+    if (!customFont) customFont = ImGui::GetFont();
+    float previewFontSize = 20.0f;
 
-    ImGui::InvisibleButton("##tcard",{W,H});
+    // Text preview area
+    ImVec2 pp = { p0.x + 14.0f, p0.y + 12.0f };
+    // Shadow
+    dl->AddText(customFont, previewFontSize, { pp.x + 1.0f, pp.y + 1.0f }, IM_COL32(0, 0, 0, 170), "Aa Bb Gg");
+    // Main sample text in real style font & color
+    dl->AddText(customFont, previewFontSize, pp, LPU32(textCol), "Aa Bb Gg");
+
+    // Font name badge / subtitle
+    std::string fontShort = fontName.length() > 16 ? fontName.substr(0, 14) + "..." : fontName;
+    dl->AddText(ImGui::GetFont(), 11.0f, { pp.x, pp.y + 26.0f }, LPU32(LP::TextMuted), fontShort.c_str());
+
+    // Active badge
+    if (isSel) {
+        LPBadge(dl, { p1.x - 56.0f, p0.y + 8.0f }, "ACTIVO", LP::Accent, { 1, 1, 1, 1 }, 6.0f, 2.5f);
+    }
+
+    // Bottom banner with theme name
+    std::string dn = name.length() > 18 ? name.substr(0, 15) + "..." : name;
+    dl->AddRectFilled({ p0.x, p1.y - 26.0f }, { p1.x, p1.y },
+                      LPU32({ 0, 0, 0, 0.65f }), 10.0f, ImDrawFlags_RoundCornersBottom);
+    ImVec2 ns = ImGui::CalcTextSize(dn.c_str());
+    dl->AddText({ p0.x + (W - ns.x) * 0.5f, p1.y - 21.0f },
+                isSel ? LPU32(LP::Accent) : LPU32(LP::Text), dn.c_str());
+
+    ImGui::InvisibleButton("##tcard", { W, H });
     if (ImGui::IsItemClicked()) ApplyTheme(name);
 
     if (ImGui::BeginPopupContextItem("ThCtx")) {
@@ -390,7 +459,7 @@ void LayersStyleTab::RenderThemeCard(const std::string& name, float W, float H,
         ImGui::Text("%s", name.c_str()); ImGui::PopStyleColor();
         ImGui::Separator();
         if (ImGui::Selectable("  Editar")) {
-            StyleData ed; if (LoadThemeData(name,ed)) OpenStyleEditorFullscreen(false, name, ed);
+            StyleData ed; if (LoadThemeData(name, ed)) OpenStyleEditorFullscreen(false, name, ed);
         }
         ImGui::PushStyleColor(ImGuiCol_Text, LP::Red);
         if (ImGui::Selectable("  Eliminar")) DeleteTheme(name);
@@ -398,7 +467,7 @@ void LayersStyleTab::RenderThemeCard(const std::string& name, float W, float H,
         ImGui::EndPopup();
     }
 
-    if (col<cols-1) ImGui::SameLine();
+    if (col < cols - 1) ImGui::SameLine();
     ImGui::PopID();
 }
 
@@ -409,31 +478,52 @@ void LayersStyleTab::RenderThemeRow(const std::string& name, float W, float rowH
     ImGui::PushID(idx);
     bool isSel = (m_SelectedTheme == name);
     ImVec2 pos = ImGui::GetCursorScreenPos();
-    bool hovRaw = ImGui::IsMouseHoveringRect(pos, {pos.x + W, pos.y + rowH});
+    bool hovRaw = ImGui::IsMouseHoveringRect(pos, { pos.x + W, pos.y + rowH });
     float t = LPHoverLerp(ImGui::GetID("##hov"), hovRaw);
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    ImU32 bg = LPU32(ImVec4(LP::Surface1.x+(LP::Surface2.x-LP::Surface1.x)*t,
-                             LP::Surface1.y+(LP::Surface2.y-LP::Surface1.y)*t,
-                             LP::Surface1.z+(LP::Surface2.z-LP::Surface1.z)*t, 1.0f));
-    if (isSel) bg = LPU32(ImVec4(0.15f, 0.16f, 0.20f, 1.0f));
-    dl->AddRectFilled(pos, {pos.x + W, pos.y + rowH}, bg, 3.0f);
+    ImU32 bg = LPU32(ImVec4(LP::Surface1.x + (LP::Surface2.x - LP::Surface1.x) * t,
+                             LP::Surface1.y + (LP::Surface2.y - LP::Surface1.y) * t,
+                             LP::Surface1.z + (LP::Surface2.z - LP::Surface1.z) * t, 1.0f));
+    if (isSel) bg = LPU32(ImVec4(0.16f, 0.18f, 0.26f, 1.0f));
+    dl->AddRectFilled(pos, { pos.x + W, pos.y + rowH }, bg, 6.0f);
 
     if (isSel) {
-        dl->AddRectFilled(pos, {pos.x + 4.0f, pos.y + rowH}, LPU32(LP::Accent), 3.0f, ImDrawFlags_RoundCornersLeft);
+        dl->AddRectFilled(pos, { pos.x + 3.5f, pos.y + rowH }, LPU32(LP::Accent), 6.0f, ImDrawFlags_RoundCornersLeft);
+        dl->AddRect(pos, { pos.x + W, pos.y + rowH }, LPU32(LP::Accent), 6.0f, 0, 1.0f);
     } else if (t > 0.01f) {
-        dl->AddRectFilled(pos, {pos.x + 4.0f, pos.y + rowH}, LPU32({LP::Accent.x, LP::Accent.y, LP::Accent.z, 0.3f*t}), 3.0f, ImDrawFlags_RoundCornersLeft);
+        dl->AddRectFilled(pos, { pos.x + 3.5f, pos.y + rowH }, LPU32({ LP::Accent.x, LP::Accent.y, LP::Accent.z, 0.4f * t }), 6.0f, ImDrawFlags_RoundCornersLeft);
     }
 
-    float px = pos.x + 16.0f, py = pos.y + 8.0f;
-    dl->AddText(ImGui::GetFont(), 14.0f, {px, py}, LPU32({1,1,1,0.9f}), "Aa");
-    dl->AddText(ImGui::GetFont(), 10.0f, {px, py + 18.0f}, LPU32({0.6f,0.6f,0.6f,0.7f}), "123");
+    StyleData thData;
+    bool hasData = LoadThemeData(name, thData);
+    ImVec4 textCol = hasData ? ImVec4(thData.lyrics.color[0], thData.lyrics.color[1], thData.lyrics.color[2], thData.lyrics.color[3])
+                             : ImVec4(1.0f, 1.0f, 1.0f, 0.95f);
+
+    ImFont* customFont = hasData ? Core::PresentationCore::Get().GetImGuiFont(thData.lyrics.fontName, 16.0f) : nullptr;
+    if (!customFont) customFont = ImGui::GetFont();
+
+    float px = pos.x + 14.0f, py = pos.y + (rowH - 26.0f) * 0.5f;
+    // Mini chip preview with real font
+    dl->AddRectFilled({ px, py }, { px + 36.0f, py + 26.0f }, IM_COL32(0, 0, 0, 140), 4.0f);
+    dl->AddText(customFont, 16.0f, { px + 6.0f, py + 3.0f }, LPU32(textCol), "Aa");
 
     std::string dn = name.length() > 28 ? name.substr(0, 25) + "..." : name;
-    float txtX = px + 44.0f, txtY = pos.y + (rowH - ImGui::GetTextLineHeight()) * 0.5f;
-    dl->AddText({txtX, txtY}, isSel ? LPU32(ImVec4(1,1,1,1)) : LPU32(LP::Text), dn.c_str());
+    float txtX = px + 46.0f, txtY = pos.y + (rowH - ImGui::GetTextLineHeight()) * 0.5f;
+    dl->AddText({ txtX, txtY }, isSel ? LPU32(LP::Accent) : LPU32(LP::Text), dn.c_str());
 
-    ImGui::InvisibleButton("##trow", {W, rowH});
+    if (hasData && !thData.lyrics.fontName.empty()) {
+        std::string fn = thData.lyrics.fontName;
+        if (fn.length() > 18) fn = fn.substr(0, 16) + "...";
+        ImVec2 fSz = ImGui::CalcTextSize(fn.c_str());
+        dl->AddText({ pos.x + W - fSz.x - (isSel ? 72.0f : 16.0f), txtY }, LPU32(LP::TextMuted), fn.c_str());
+    }
+
+    if (isSel) {
+        LPBadge(dl, { pos.x + W - 58.0f, pos.y + (rowH - 18.0f) * 0.5f }, "ACTIVO", LP::Accent, { 1, 1, 1, 1 }, 5.0f, 2.0f);
+    }
+
+    ImGui::InvisibleButton("##trow", { W, rowH });
     if (ImGui::IsItemClicked()) ApplyTheme(name);
 
     if (ImGui::BeginPopupContextItem("ThCtxL")) {
@@ -441,7 +531,7 @@ void LayersStyleTab::RenderThemeRow(const std::string& name, float W, float rowH
         ImGui::Text("%s", name.c_str()); ImGui::PopStyleColor();
         ImGui::Separator();
         if (ImGui::Selectable("  Editar")) {
-            StyleData ed; if (LoadThemeData(name,ed)) OpenStyleEditorFullscreen(false, name, ed);
+            StyleData ed; if (LoadThemeData(name, ed)) OpenStyleEditorFullscreen(false, name, ed);
         }
         ImGui::PushStyleColor(ImGuiCol_Text, LP::Red);
         if (ImGui::Selectable("  Eliminar")) DeleteTheme(name);
@@ -449,32 +539,43 @@ void LayersStyleTab::RenderThemeRow(const std::string& name, float W, float rowH
         ImGui::EndPopup();
     }
 
-    ImGui::Dummy({0, 4.0f});
+    ImGui::Dummy({ 0, 4.0f });
     ImGui::PopID();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  RenderThemeGrid (Ajustado para evitar márgenes negativos)
+//  RenderThemeGrid
 // ─────────────────────────────────────────────────────────────────────────────
 void LayersStyleTab::RenderThemeGrid() {
-    RenderTopBar();
-    ImGui::Dummy(ImVec2(0.0f, 6.0f));
-    LPSeparatorLine();
-    ImGui::Dummy(ImVec2(0.0f, 6.0f));
-
     if (m_AvailableThemes.empty()) {
         ImVec2 p = ImGui::GetCursorScreenPos();
         float w  = ImGui::GetContentRegionAvail().x;
         ImGui::GetWindowDrawList()->AddRectFilled(p, {p.x + w, p.y + 60}, LPU32(LP::Surface1), 12.0f);
         ImGui::Dummy({0, 18});
         ImGui::PushStyleColor(ImGuiCol_Text, LP::TextMuted);
-        const char* h = "Crea tu primer estilo con el boton + de arriba";
+        const char* h = "Crea tu primer estilo con el botón + de arriba";
         float tw = ImGui::CalcTextSize(h).x;
         ImGui::SetCursorPosX(std::max(0.0f, (w - tw) * 0.5f));
         ImGui::Text("%s", h);
         ImGui::PopStyleColor();
         ImGui::Dummy({0, 8});
         return;
+    }
+
+    // Header bar with count and Zoom Slider
+    {
+        ImGui::AlignTextToFramePadding();
+        ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
+        ImGui::Text("Estilos (%d)", (int)m_AvailableThemes.size());
+        ImGui::PopStyleColor();
+
+        if (m_GridMode) {
+            const float zoomW = 85.0f;
+            float avail = ImGui::GetWindowContentRegionMax().x;
+            ImGui::SameLine(std::max(ImGui::GetCursorPosX(), avail - zoomW - 10.0f));
+            LPZoomSlider("##styleZoom", &m_ThumbZoom, 0.65f, 1.8f, zoomW);
+        }
+        ImGui::Spacing();
     }
 
     if (m_GridMode) {
@@ -530,11 +631,11 @@ void LayersStyleTab::RenderQuickAdjust() {
         ImGui::TextColored(LP::TextMuted, "Fuente");
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
-        if (ImGui::BeginCombo("##qf", m_CurrentStyle.selectedFont.c_str())) {
+        if (ImGui::BeginCombo("##qf", m_CurrentStyle.lyrics.fontName.c_str())) {
             for (const auto& f : m_AvailableFonts) {
-                bool sel = (m_CurrentStyle.selectedFont == f);
+                bool sel = (m_CurrentStyle.lyrics.fontName == f);
                 if (ImGui::Selectable(f.c_str(), sel)) {
-                    m_CurrentStyle.selectedFont = f;
+                    m_CurrentStyle.lyrics.fontName = f;
                     changed = true;
                 }
                 if (sel) ImGui::SetItemDefaultFocus();
@@ -548,22 +649,22 @@ void LayersStyleTab::RenderQuickAdjust() {
         ImGui::TextColored(LP::TextMuted, "Color Base");
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
-        changed |= ImGui::ColorEdit4("##qc", m_CurrentStyle.textColor,
+        changed |= ImGui::ColorEdit4("##qc", m_CurrentStyle.lyrics.color,
             ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_NoInputs |
             ImGuiColorEditFlags_PickerHueWheel | ImGuiColorEditFlags_AlphaPreviewHalf);
 
         // --- TAMAÑO ---
         ImGui::TableNextRow(); ImGui::TableNextColumn();
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(LP::TextMuted, "Tamanio");
+        ImGui::TextColored(LP::TextMuted, "Tamaño");
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
-        changed |= ImGui::DragFloat("##qs", &m_CurrentStyle.textSize, 1.0f, 10.0f, 500.0f, "%.1f px");
+        changed |= ImGui::DragFloat("##qs", &m_CurrentStyle.lyrics.textSize, 1.0f, 10.0f, 500.0f, "%.1f px");
 
         // --- ALINEACIÓN HORIZONTAL ---
         ImGui::TableNextRow(); ImGui::TableNextColumn();
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(LP::TextMuted, "Alineacion H");
+        ImGui::TextColored(LP::TextMuted, "Alineación H");
         ImGui::TableNextColumn();
 
         const char* hA[] = {"Izq", "Cen", "Der"};
@@ -571,7 +672,7 @@ void LayersStyleTab::RenderQuickAdjust() {
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
         for (int a = 0; a < 3; a++) {
             if (a > 0) ImGui::SameLine();
-            bool act = (m_CurrentStyle.textAlignment == a);
+            bool act = (m_CurrentStyle.lyrics.hAlign == a);
             ImGui::PushStyleColor(ImGuiCol_Button,        act ? ImVec4(0.3f,0.3f,0.3f,1.0f) : LP::Surface0);
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, act ? ImVec4(0.35f,0.35f,0.35f,1.0f) : LP::Surface2);
             ImGui::PushStyleColor(ImGuiCol_Text,          act ? ImVec4(1,1,1,1) : LP::TextSub);
@@ -579,7 +680,7 @@ void LayersStyleTab::RenderQuickAdjust() {
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, rounding);
             std::string btnId = std::string(hA[a]) + "##qa" + std::to_string(a);
             if (ImGui::Button(btnId.c_str(), ImVec2(btnW, 26))) {
-                m_CurrentStyle.textAlignment = a;
+                m_CurrentStyle.lyrics.hAlign = a;
                 changed = true;
             }
             ImGui::PopStyleVar();
@@ -590,7 +691,7 @@ void LayersStyleTab::RenderQuickAdjust() {
         // --- ALINEACIÓN VERTICAL ---
         ImGui::TableNextRow(); ImGui::TableNextColumn();
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(LP::TextMuted, "Alineacion V");
+        ImGui::TextColored(LP::TextMuted, "Alineación V");
         ImGui::TableNextColumn();
 
         const char* vA[] = {"Arr", "Cen", "Aba"};
@@ -598,7 +699,7 @@ void LayersStyleTab::RenderQuickAdjust() {
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
         for (int a = 0; a < 3; a++) {
             if (a > 0) ImGui::SameLine();
-            bool act = (m_CurrentStyle.vAlignment == a);
+            bool act = (m_CurrentStyle.lyrics.vAlign == a);
             ImGui::PushStyleColor(ImGuiCol_Button,        act ? ImVec4(0.3f,0.3f,0.3f,1.0f) : LP::Surface0);
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, act ? ImVec4(0.35f,0.35f,0.35f,1.0f) : LP::Surface2);
             ImGui::PushStyleColor(ImGuiCol_Text,          act ? ImVec4(1,1,1,1) : LP::TextSub);
@@ -606,7 +707,7 @@ void LayersStyleTab::RenderQuickAdjust() {
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, rounding);
             std::string btnId = std::string(vA[a]) + "##qv" + std::to_string(a);
             if (ImGui::Button(btnId.c_str(), ImVec2(btnW, 26))) {
-                m_CurrentStyle.vAlignment = a;
+                m_CurrentStyle.lyrics.vAlign = a;
                 changed = true;
             }
             ImGui::PopStyleVar();
@@ -646,10 +747,35 @@ void LayersStyleTab::RenderQuickAdjustPopup() {
 //  Render principal del tab (AHORA CON LAYOUT DE 2 COLUMNAS)
 // ─────────────────────────────────────────────────────────────────────────────
 void LayersStyleTab::Render() {
-    // ── GALERÍA DE TEMAS — ahora ocupa todo el alto disponible. Ajustes
-    //    Rapidos se movio a un popup (icono de sliders en la toolbar) en
-    //    vez de robarle ~45% del espacio de forma fija (ver RenderTopBar /
-    //    RenderQuickAdjustPopup).
+    // ── Riel angosto a la izquierda (grid/lista, zoom, recargar fuentes,
+    //    nuevo estilo, ajustes rapidos) + galeria de temas a la derecha,
+    //    usando todo el alto disponible -- antes el mismo riel era una
+    //    barra horizontal arriba de la galeria, robandole alto util a las
+    //    tarjetas de tema (ver RenderLeftRail).
+    constexpr float kRailW = 28.0f;
+    const float     availH = ImGui::GetContentRegionAvail().y;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::BeginChild("##stylesLeftRail", ImVec2(kRailW, availH), false,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::Dummy(ImVec2(0.0f, 1.0f));
+    RenderLeftRail();
+    ImGui::EndChild();
+    ImGui::PopStyleVar();
+
+    ImGui::SameLine(0.0f, 8.0f);
+
+    // Divisor vertical -- mismo criterio que el divisor horizontal de
+    // StylesHubPanel entre su rail de arriba y el contenido.
+    {
+        ImVec2      p0 = ImGui::GetCursorScreenPos();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddLine(p0, { p0.x, p0.y + availH },
+            LPU32({ LP::Accent.x, LP::Accent.y, LP::Accent.z, 0.30f }), 1.0f);
+        ImGui::Dummy(ImVec2(1.0f, availH));
+    }
+    ImGui::SameLine(0.0f, 10.0f);
+
     ImGui::BeginChild("##ThemesListChild", ImGui::GetContentRegionAvail(), false);
     RenderThemeGrid();
     ImGui::EndChild();
@@ -661,4 +787,4 @@ void LayersStyleTab::Render() {
     // disparado desde "Nuevo estilo" / "Editar" arriba.
 }
 
-} // namespace ProyecThor::UI
+} // namespace ProyecThor::UI
