@@ -244,4 +244,19 @@ inline void DrawIcon_Formula(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
     dl->AddCircleFilled(IcPt(o, sz, 0.52f, 0.28f), sz * 0.07f, col, 10);
 }
 
+inline void DrawIcon_Grid(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = std::max(1.2f, sz * 0.065f);
+    float boxSz = sz * 0.28f;
+    float gap = sz * 0.12f;
+    float start = (sz - (boxSz * 2.0f + gap)) * 0.5f;
+    for (int y = 0; y < 2; ++y) {
+        for (int x = 0; x < 2; ++x) {
+            ImVec2 p0 = { o.x + start + x * (boxSz + gap), o.y + start + y * (boxSz + gap) };
+            ImVec2 p1 = { p0.x + boxSz, p0.y + boxSz };
+            dl->AddRect(p0, p1, col, sz * 0.05f, ImDrawFlags_RoundCornersAll, thick);
+        }
+    }
+}
+
 } // namespace ProyecThor::UI::AppIcons

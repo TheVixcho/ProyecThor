@@ -18,7 +18,7 @@
 #include "lab/LabPanel.h"
 #include <memory>
 
-namespace ProyecThor::UI { class UIManager; class MonitorView; }
+namespace ProyecThor::UI { class UIManager; class MonitorView; class PanelPickerFullscreen; }
 enum class ActiveLeftPanel;
 
 namespace ProyecThor::UI {
@@ -62,18 +62,23 @@ enum class LibrarySideMode {
                      // la salida real, no solo contenido de la Biblioteca.
     Model3D    = 6, // "3D" — visor y catálogo de modelos y recursos 3D (OBJ, STL, PLY, GLTF, GLB)
     Lab        = 7, // "Lab" — laboratorio matemático de fórmulas y graficador de funciones en vivo
+    Picker     = 8,
 };
 
 class LibraryPanel : public IPanel {
 public:
     LibraryPanel();
-    ~LibraryPanel() override = default;
+    ~LibraryPanel() override;
 
     std::string GetName() const override { return "Library"; }
     AudioPanel* GetAudioPanel() { return &m_AudioPanel; }
     void Render() override;
     void SetUIManager(UIManager* manager);
     void SetMonitorView(MonitorView* monitor) { m_MonitorRef = monitor; }
+
+    void SelectCategory(LibraryCategory cat);
+    void SelectSideMode(LibrarySideMode mode);
+    void OpenPanelPickerFullscreen();
 
     // Preset de workspace "Biblioteca" (ver Settings::WorkspaceLayoutPreset::
     // Library / UIManager::BuildWorkspaceLayoutLibrary): bloquea Biblioteca
@@ -158,6 +163,7 @@ private:
 
     // ── Grupo "Lab" del sidebar (ver LibrarySideMode::Lab) ────────────────
     std::unique_ptr<LabPanel>         m_LabPanel;
+    std::unique_ptr<PanelPickerFullscreen> m_PanelPicker;
 
     // ── Render (conversor de formato) ─────────────────────────────────────
     struct ConvertibleItem { std::string filename; bool isVideo; };

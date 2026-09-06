@@ -95,6 +95,7 @@ namespace ProyecThor {
     // rompen si el archivo original se mueve/borra/no existe en otra
     // maquina.
     inline std::string BrandingPath()  { return GetAssetsPath() + "/branding/";  }
+    inline std::string WebPath()       { return GetAssetsPath() + "/web/";       }
 
     // Raiz real de AppData\ProyecThor (un nivel arriba de assets/): ahi
     // tambien viven settings.json, songs_authors.ini, themes/, etc. Usada

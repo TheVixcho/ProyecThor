@@ -149,6 +149,11 @@ uint64_t m_LastTransitionTrigger = 0;
     SyncPanel&      GetSyncPanel()      { return m_Sync; }
     OSCPanel&       GetOSCPanel()       { return m_OSC; }
 
+    void ToggleNotesWindow();
+    void ToggleAIAssistant() { m_ShowAIAssistant = !m_ShowAIAssistant; }
+    void ToggleConnectionsWindow() { m_ShowConnectionsWindow = !m_ShowConnectionsWindow; }
+    void ToggleStageQuick(bool active);
+
 private:
     void BeginDockspace();
     void EndDockspace();
@@ -206,7 +211,6 @@ private:
     // superior (lado derecho) para liberarle mas espacio a "Vista en Vivo".
     void RenderModeToolbarStatusActions(float winW, float railH);
     void ToggleAudience(bool active);
-    void ToggleStageQuick(bool active);
 
     // Ventana flotante de Notas -- boton propio en RenderModeToolbar (junto
     // a los 5 modos) y atajo global Shift+Z, abre una ventana centrada tipo
@@ -216,29 +220,13 @@ private:
     // RenderUrlImportModal), asi queda disponible tanto en el Hub como en
     // el Proyector y nunca se interrumpe solo porque se esta proyectando.
     void         RenderNotesWindow();
-    // Abre/cierra la ventana de Notas y persiste el texto a disco al
-    // cerrarla (ver QuickNotes::PersistNow) -- usado tanto por el pill
-    // "Notas" de la toolbar como por el atajo global Shift+Z, asi ningun
-    // camino se olvida de guardar.
-    void         ToggleNotesWindow();
     bool         m_ShowNotes = false;
     QuickNotes   m_NotesPanel;
 
-    // Ventana flotante "Asistente IA" -- mismo patron que Notas arriba
-    // (boton propio en RenderModeToolbar, se somete siempre desde el bloque
-    // "siempre" de RenderAll() sin importar el modo, para que el navegador
-    // embebido reciba UpdateBounds(...) todos los frames incluso oculto).
     void            RenderAIAssistantWindow();
-    void            ToggleAIAssistant() { m_ShowAIAssistant = !m_ShowAIAssistant; }
     bool            m_ShowAIAssistant = false;
     AIAssistantPanel m_AIAssistant;
 
-    // "Importar desde URL" (Archivo > Importar) -- descarga subtitulos via
-    // yt-dlp (ver SubtitleImporter.h) en un hilo de fondo, ya que la
-    // descarga depende de la red y puede tardar varios segundos; congelar
-    // la UI mientras tanto no es aceptable. El resultado se entrega via
-    // m_UrlImportResult protegido por mutex y se consume una sola vez en
-    // RenderUrlImportModal, sin importar si la ventana sigue abierta.
     void        RenderUrlImportModal();
     bool        m_ShowUrlImport        = false;
     bool        m_UrlImportRunning     = false;
@@ -248,14 +236,8 @@ private:
     std::mutex  m_UrlImportMutex;
     std::optional<ProyecThor::Core::SubtitleFetchResult> m_UrlImportResult;
 
-    // Popup de acceso rápido a "Estilos" -- botón propio en RenderModeToolbar
-    // (junto a Notas), lista los estilos guardados (Diseño > Estilos, ver
-    // Core::PresentationCore::GetSavedStyleNames/ApplyStyleByName) para
-    // aplicar uno sin salir de donde este el operador.
     void RenderStylesPopup();
 
-    // Ventana flotante "Centro de Conexiones" (Red LAN, App Móvil, Transmisión, OSC, Chat)
-    void ToggleConnectionsWindow() { m_ShowConnectionsWindow = !m_ShowConnectionsWindow; }
     void RenderConnectionsWindow();
     bool m_ShowConnectionsWindow = false;
     int  m_ConnectionsActiveTab   = 0;

@@ -13,6 +13,7 @@ std::string PickImageOrVideoFile();
 // pantalla de carga (Ajustes > Proyeccion), donde un video no tendria
 // sentido.
 std::string PickImageFile();
+std::string PickHtmlFile();
 
 // Elegir una CARPETA (no un archivo) -- usado para fijar una carpeta de
 // salida fija en el conversor de Render (ver LibraryPanel::

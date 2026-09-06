@@ -177,7 +177,10 @@ AIWebViewPanel::~AIWebViewPanel() {
 
 void AIWebViewPanel::NavigateNow(AIWebViewPanel::Impl* impl, const std::string& url) {
     if (!impl->webview) { impl->pendingUrl = url; return; }
-    std::wstring wurl(url.begin(), url.end()); // URLs son ASCII, alcanza con esta conversion simple
+    int len = MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, nullptr, 0);
+    if (len <= 0) return;
+    std::wstring wurl(len, 0);
+    MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, &wurl[0], len);
     impl->webview->Navigate(wurl.c_str());
 }
 
@@ -333,6 +336,36 @@ void AIWebViewPanel::Reparent(void* newParentHwnd) {
 
 bool AIWebViewPanel::IsReady() const { return m_Impl->ready && m_Impl->webview.Get() != nullptr; }
 
+void AIWebViewPanel::NavigateToString(const std::string& htmlContent) {
+    if (m_Impl->failed) return;
+    if (m_Impl->ready && m_Impl->webview) {
+        int len = MultiByteToWideChar(CP_UTF8, 0, htmlContent.c_str(), -1, nullptr, 0);
+        if (len > 0) {
+            std::wstring whtml(len, 0);
+            MultiByteToWideChar(CP_UTF8, 0, htmlContent.c_str(), -1, &whtml[0], len);
+            m_Impl->webview->NavigateToString(whtml.c_str());
+        }
+    }
+}
+
+void AIWebViewPanel::Reload() {
+    if (m_Impl->ready && m_Impl->webview) {
+        m_Impl->webview->Reload();
+    }
+}
+
+void AIWebViewPanel::GoBack() {
+    if (m_Impl->ready && m_Impl->webview) {
+        m_Impl->webview->GoBack();
+    }
+}
+
+void AIWebViewPanel::GoForward() {
+    if (m_Impl->ready && m_Impl->webview) {
+        m_Impl->webview->GoForward();
+    }
+}
+
 } // namespace ProyecThor::UI
 
 #else // !_WIN32
@@ -343,6 +376,10 @@ struct AIWebViewPanel::Impl {};
 AIWebViewPanel::AIWebViewPanel() : m_Impl(nullptr) {}
 AIWebViewPanel::~AIWebViewPanel() {}
 void AIWebViewPanel::NavigateTo(const std::string&) {}
+void AIWebViewPanel::NavigateToString(const std::string&) {}
+void AIWebViewPanel::Reload() {}
+void AIWebViewPanel::GoBack() {}
+void AIWebViewPanel::GoForward() {}
 void AIWebViewPanel::UpdateBounds(int, int, int, int, bool) {}
 bool AIWebViewPanel::IsAvailable() const { return false; }
 bool AIWebViewPanel::HasError() const { return true; }

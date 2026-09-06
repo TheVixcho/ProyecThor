@@ -82,6 +82,7 @@ struct LibraryContext
     char* editTags; // buffer del modal de nueva cancion, separado por comas
     std::function<std::vector<std::string>(const std::string&)>                  getSongTags;
     std::function<void(const std::string&, const std::vector<std::string>&)>     setSongTags;
+    std::function<void()>                                                        openPanelPicker;
 };
 
 } // namespace ProyecThor::Library

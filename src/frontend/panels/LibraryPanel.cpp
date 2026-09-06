@@ -25,6 +25,7 @@
 #include "ui/DesignSystem.h"
 #include "biblio/LibraryPlaylists.h"
 #include "frontend/panels/model3d/Model3DPanel.h"
+#include "PanelPickerFullscreen.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -211,7 +212,8 @@ Library::LibraryContext LibraryPanel::BuildContext()
         [this](const std::string& pl, int idx) { SelectPlaylistSong(pl, idx); },
         m_EditTags,
         [](const std::string& f) { return Library::GetSongTags(f); },
-        [](const std::string& f, const std::vector<std::string>& t) { Library::SetSongTags(f, t); }
+        [](const std::string& f, const std::vector<std::string>& t) { Library::SetSongTags(f, t); },
+        [this]() { OpenPanelPickerFullscreen(); }
     };
 }
 
@@ -241,6 +243,8 @@ LibraryPanel::LibraryPanel()
     LoadStreamURLs();
 }
 
+LibraryPanel::~LibraryPanel() = default;
+
 // El editor de Overlays necesita UIManager (para pedirle el modo pantalla
 // completa, ver UIManager::EnterFullscreenEditor) -- se crea aca en vez de
 // en el constructor porque SetUIManager corre despues (ver main.cpp).
@@ -258,6 +262,9 @@ void LibraryPanel::SetUIManager(UIManager* manager)
     if (!m_LabPanel) {
         m_LabPanel = std::make_unique<LabPanel>();
         m_LabPanel->SetUIManager(m_UIManagerRef);
+    }
+    if (!m_PanelPicker && m_UIManagerRef) {
+        m_PanelPicker = std::make_unique<PanelPickerFullscreen>(this, m_UIManagerRef);
     }
 }
 
@@ -277,6 +284,31 @@ void LibraryPanel::SetRenderOnlyMode(bool v)
     m_RenderOnlyMode = v;
     if (v)
         m_SideMode = LibrarySideMode::Render;
+}
+
+void LibraryPanel::SelectCategory(LibraryCategory cat)
+{
+    m_CurrentCategory = cat;
+    m_SideMode        = LibrarySideMode::Categories;
+    m_SelectedIndex   = -1;
+    RefreshList();
+}
+
+void LibraryPanel::SelectSideMode(LibrarySideMode mode)
+{
+    m_SideMode = mode;
+}
+
+void LibraryPanel::OpenPanelPickerFullscreen()
+{
+    if (m_UIManagerRef && m_PanelPicker) {
+        m_PanelPicker->Open();
+        m_UIManagerRef->EnterFullscreenEditor([this]() {
+            if (m_PanelPicker) {
+                m_PanelPicker->Render();
+            }
+        }, true);
+    }
 }
 
 // =============================================================================
@@ -560,6 +592,11 @@ void LibraryPanel::Render()
             }
         }
     }
+
+    if (ImGui::IsKeyPressed(ImGuiKey_F8) && !io.KeyCtrl && !io.KeyAlt)
+    {
+        OpenPanelPickerFullscreen();
+    }
     
     bool visible = false;
 
@@ -645,6 +682,11 @@ void LibraryPanel::Render()
 
     {
         Library::LibraryContext ctx = BuildContext();
+
+        if (m_SideMode != LibrarySideMode::Web && m_WebBrowserPanel)
+        {
+            m_WebBrowserPanel->Hide();
+        }
 
         if (m_SideMode == LibrarySideMode::Render)
         {
@@ -1288,4 +1330,4 @@ void LibraryPanel::RenderConverterSection()
     if (!haveSource) { ImGui::EndDisabled(); }
 }
 
-} // namespace ProyecThor::UI
+} // namespace ProyecThor::UI

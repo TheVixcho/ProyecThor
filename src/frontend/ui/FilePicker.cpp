@@ -83,6 +83,40 @@ std::string PickImageFile() {
     return result;
 }
 
+std::string PickHtmlFile() {
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    IFileOpenDialog* dlg = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&dlg))))
+        return {};
+
+    COMDLG_FILTERSPEC filters[] = {
+        {L"Archivos HTML y Web (*.html, *.htm)", L"*.html;*.htm;*.xhtml"},
+        {L"Todos los archivos (*.*)",            L"*.*"},
+    };
+    dlg->SetFileTypes(2, filters);
+    dlg->SetFileTypeIndex(1);
+    dlg->SetTitle(L"Elegir archivo HTML o sitio web local");
+
+    std::string result;
+    if (SUCCEEDED(dlg->Show(nullptr))) {
+        IShellItem* item = nullptr;
+        if (SUCCEEDED(dlg->GetResult(&item))) {
+            PWSTR pp = nullptr;
+            if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &pp))) {
+                int len = WideCharToMultiByte(CP_UTF8, 0, pp, -1, nullptr, 0, nullptr, nullptr);
+                if (len > 0) {
+                    result.resize(len - 1);
+                    WideCharToMultiByte(CP_UTF8, 0, pp, -1, result.data(), len, nullptr, nullptr);
+                }
+                CoTaskMemFree(pp);
+            }
+            item->Release();
+        }
+    }
+    dlg->Release();
+    return result;
+}
+
 static std::wstring Utf8ToWide(const std::string& s) {
     if (s.empty()) return {};
     int wlen = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
@@ -246,6 +280,15 @@ std::string PickImageFile() {
         "zenity --file-selection --title=\"Elegir imagen\" "
         "--file-filter=\"Imágenes | *.jpg *.jpeg *.png\" 2>/dev/null",
         "kdialog --getopenfilename . \"*.jpg *.jpeg *.png|Imágenes\" 2>/dev/null"
+    };
+    return RunFilePickerCommands(commands, 2);
+}
+
+std::string PickHtmlFile() {
+    const char* commands[] = {
+        "zenity --file-selection --title=\"Elegir archivo HTML o sitio web local\" "
+        "--file-filter=\"Archivos HTML (*.html *.htm) | *.html *.htm *.xhtml\" 2>/dev/null",
+        "kdialog --getopenfilename . \"*.html *.htm *.xhtml|Archivos HTML\" 2>/dev/null"
     };
     return RunFilePickerCommands(commands, 2);
 }

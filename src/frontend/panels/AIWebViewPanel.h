@@ -29,6 +29,10 @@ public:
     // de nuevo con otra URL mientras ya esta listo navega inmediato (asi
     // cambia de proveedor de IA sin recrear el navegador entero).
     void NavigateTo(const std::string& url);
+    void NavigateToString(const std::string& htmlContent);
+    void Reload();
+    void GoBack();
+    void GoForward();
 
     // Llamar UNA VEZ POR FRAME mientras la app este viva (no solo cuando el
     // panel esta abierto): sincroniza la posicion/tamaño/visibilidad de la

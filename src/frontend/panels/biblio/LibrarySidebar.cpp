@@ -32,6 +32,7 @@ static constexpr int kSideMode_Overlay    = 4;
 static constexpr int kSideMode_Web        = 5;
 static constexpr int kSideMode_Model3D    = 6;
 static constexpr int kSideMode_Lab        = 7;
+static constexpr int kSideMode_Picker     = 8;
 
 namespace ProyecThor::Library {
 
@@ -237,22 +238,26 @@ void RenderCategoryButtons(LibraryContext& ctx)
         { "Web",      ProyecThor::UI::AppIcons::DrawIcon_Globe,      kSideMode_Web       },
         { "3D",       ProyecThor::UI::AppIcons::DrawIcon_Cube3D,     kSideMode_Model3D   },
         { "Lab",      ProyecThor::UI::AppIcons::DrawIcon_Formula,    kSideMode_Lab       },
+        { "Paneles",  ProyecThor::UI::AppIcons::DrawIcon_Grid,       kSideMode_Picker    },
     };
 
     for (const auto& sd : k_SideItems)
     {
         const bool active = (ctx.sideModeInt == sd.mode);
-        // Colores en los indices 8/9 de librarySidebar.categoryColor — ver
-        // SettingsManager.h (7, Reloj, quedo sin uso aca). "Web" reusa el 9
-        // (mismo que Overlay, categoryColor es un array fijo de 10 -- no
-        // hay slot 10 propio sin agrandarlo, y esto ya es "grupo utilitario
-        // de abajo", no hace falta un color unico por item).
         int colorIdx = (sd.mode == kSideMode_Render) ? 8 : 9;
 
         bool clicked = RenderSidebarButton(dl, storage, sidebarW, btnH, iconSz, lt,
                                            sd.label, sd.drawIcon, active,
                                            sidebarSettings.categoryColor[colorIdx]);
-        if (clicked) ctx.sideModeInt = sd.mode;
+        if (clicked) {
+            if (sd.mode == kSideMode_Picker) {
+                if (ctx.openPanelPicker) {
+                    ctx.openPanelPicker();
+                }
+            } else {
+                ctx.sideModeInt = sd.mode;
+            }
+        }
     }
 
     ImGui::PopStyleVar();

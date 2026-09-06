@@ -886,17 +886,15 @@ void OClock::Render(GlassRenderer& glass) {
     float w = ImGui::GetContentRegionAvail().x;
 
     {
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.18f, 0.82f, 0.92f, 1.0f));
-        ImGui::SetWindowFontScale(1.12f);
-        ImGui::TextUnformatted("⏱️  RELOJ & CRONÓMETRO");
-        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::AccentColor));
+        ImGui::TextUnformatted("RELOJ & CRONÓMETRO");
         ImGui::PopStyleColor();
 
         ImGui::SameLine();
         Wiki::InfoButton(Wiki::Topic::OClock);
     }
 
-    DS::GlassSeparator();
+    ImGui::Separator();
     ImGui::Spacing();
 
     RenderDisplayCard(w, timeStr);
