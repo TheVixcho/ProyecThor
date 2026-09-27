@@ -96,22 +96,6 @@ The ProyecThor core is optimized for maximum graphical performance and stability
 
 ---
 
-## Contributing
-
-ProyecThor is open source and welcomes contributions, but follows a structured process to keep the codebase consistent and avoid conflicting work.
-
-**Before submitting any code, feature, or change:**
-
-1. Join the project's Discord server.
-2. Introduce yourself to the development team: what you'd like to work on, proposed changes, or ideas.
-3. Wait for confirmation/registration as a contributor before opening a pull request.
-
-This step exists to prevent duplicated effort, conflicting architecture decisions, and unreviewed changes to sensitive parts of the build (in particular, anything touching third-party SDKs — see [Licensing](#licensing)).
-
-Pull requests opened without prior coordination in Discord may be closed and asked to go through this process first.
-
----
-
 ## Community and Support
 
 ProyecThor is a non-profit project. We believe in the power of open-source collaboration to improve professional tools.
