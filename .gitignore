@@ -33,6 +33,8 @@ iss/installer_output/
 *.wixpdb
 *.wixobj
 *.flatpak
+*.AppImage
+*.zsync
 
 # ── Carpetas de distribución alternativa (si no van en el repo principal) ───
 # web/ ahora SI va al repo (rama beta, pedido explicito) -- su propio

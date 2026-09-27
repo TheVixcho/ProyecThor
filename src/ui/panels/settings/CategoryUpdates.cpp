@@ -140,6 +140,19 @@ static std::string ExtractAssetDownloadUrl(const std::string& json, const std::s
     return ExtractJsonString(json.substr(pos), "browser_download_url");
 }
 
+static std::string ExtractAppImageDownloadUrl(const std::string& json) {
+    std::string search = ".AppImage\"";
+    auto pos = json.find(search);
+    if (pos == std::string::npos) {
+        search = ".appimage\"";
+        pos = json.find(search);
+        if (pos == std::string::npos) return "";
+    }
+    auto objStart = json.rfind('{', pos);
+    if (objStart == std::string::npos) objStart = 0;
+    return ExtractJsonString(json.substr(objStart), "browser_download_url");
+}
+
 #if defined(_WIN32)
 static void ParseURL(const std::wstring& url, std::wstring& host, std::wstring& path) {
     URL_COMPONENTS urlComp;
@@ -151,10 +164,8 @@ static void ParseURL(const std::wstring& url, std::wstring& host, std::wstring& 
     host = std::wstring(urlComp.lpszHostName, urlComp.dwHostNameLength);
     path = std::wstring(urlComp.lpszUrlPath,  urlComp.dwUrlPathLength);
 }
-#endif
 
 static std::string FetchURL(const std::wstring& host, const std::wstring& path) {
-#if defined(_WIN32)
     std::string result;
     HINTERNET hSession = WinHttpOpen(L"ProyecThor Updater",
                                       WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
@@ -191,22 +202,45 @@ static std::string FetchURL(const std::wstring& host, const std::wstring& path) 
     WinHttpCloseHandle(hConnect);
     WinHttpCloseHandle(hSession);
     return result;
-#else
-    return "";
-#endif
 }
+#else
+static std::string FetchURL(const std::string& host, const std::string& path) {
+    std::string url = "https://" + host + path;
+    std::string command = "curl -s -L -H \"User-Agent: ProyecThor-Updater\" \"" + url + "\"";
+    std::array<char, 4096> buffer;
+    std::string result;
+    struct PipeDeleter {
+        void operator()(FILE* f) const { if (f) pclose(f); }
+    };
+    std::unique_ptr<FILE, PipeDeleter> pipe(popen(command.c_str(), "r"));
+    if (!pipe) return "";
+    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+        result += buffer.data();
+    }
+    return result;
+}
+#endif
 
 static void DoCheckUpdate(const std::string& currentVersion,
                            const std::string& channel,
                            bool showPopupIfAvailable) {
     s_Status = UpdateStatus::Checking;
 
+#if defined(_WIN32)
     std::wstring host = L"api.github.com";
     std::wstring path = (channel == "beta")
         ? L"/repos/TheVixcho/ProyecThor/releases?per_page=1"
         : L"/repos/TheVixcho/ProyecThor/releases/latest";
 
     std::string body = FetchURL(host, path);
+#else
+    std::string host = "api.github.com";
+    std::string path = (channel == "beta")
+        ? "/repos/TheVixcho/ProyecThor/releases?per_page=1"
+        : "/repos/TheVixcho/ProyecThor/releases/latest";
+
+    std::string body = FetchURL(host, path);
+#endif
     if (body.empty()) {
         s_ErrorMsg = "No se pudo conectar al servidor.";
         s_Status   = UpdateStatus::Error;
@@ -221,7 +255,17 @@ static void DoCheckUpdate(const std::string& currentVersion,
     }
     if (tag[0] == 'v') tag = tag.substr(1);
 
+#if defined(_WIN32)
     s_DownloadUrl    = ExtractAssetDownloadUrl(body, "ProyecThor_Setup.exe");
+#else
+    s_DownloadUrl    = ExtractAssetDownloadUrl(body, "ProyecThor-x86_64.AppImage");
+    if (s_DownloadUrl.empty()) {
+        s_DownloadUrl = ExtractAssetDownloadUrl(body, "ProyecThor.AppImage");
+    }
+    if (s_DownloadUrl.empty()) {
+        s_DownloadUrl = ExtractAppImageDownloadUrl(body);
+    }
+#endif
     s_LatestVersion  = tag;
 
     auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -322,6 +366,117 @@ static void DoDownloadAndInstall(const std::string& urlStr) {
     WinHttpCloseHandle(hRequest);
     WinHttpCloseHandle(hConnect);
     WinHttpCloseHandle(hSession);
+    s_IsDownloading = false;
+    s_ShowModal     = false;
+#else
+    s_IsDownloading    = true;
+    s_DownloadProgress = 0.0f;
+    s_DownloadedMB     = 0.0f;
+    s_TotalMB          = 0.0f;
+    s_DownloadSpeedMBs = 0.0f;
+
+    const char* appImageEnv = std::getenv("APPIMAGE");
+    std::string currentAppImage = appImageEnv ? appImageEnv : "";
+
+    std::string tempDownload = "/tmp/ProyecThor_Update.AppImage";
+    if (!currentAppImage.empty()) {
+        tempDownload = currentAppImage + ".new";
+    }
+
+    // Obtener tamaño del archivo via Content-Length de headers HTTP
+    std::string headCmd = "curl -s -L -I -H \"User-Agent: ProyecThor-Updater\" \"" + urlStr + "\"";
+    float totalBytes = 0.0f;
+    {
+        FILE* hPipe = popen(headCmd.c_str(), "r");
+        if (hPipe) {
+            char line[512];
+            while (fgets(line, sizeof(line), hPipe)) {
+                std::string s(line);
+                std::string sLower = s;
+                std::transform(sLower.begin(), sLower.end(), sLower.begin(), ::tolower);
+                if (sLower.find("content-length:") != std::string::npos) {
+                    size_t pos = s.find(':');
+                    if (pos != std::string::npos) {
+                        try {
+                            float val = std::stof(s.substr(pos + 1));
+                            if (val > totalBytes) totalBytes = val;
+                        } catch (...) {}
+                    }
+                }
+            }
+            pclose(hPipe);
+        }
+    }
+    s_TotalMB = totalBytes / (1024.0f * 1024.0f);
+
+    std::error_code ecRemove;
+    std::filesystem::remove(tempDownload, ecRemove);
+
+    std::string dlCmd = "curl -s -L -H \"User-Agent: ProyecThor-Updater\" -o \"" + tempDownload + "\" \"" + urlStr + "\"";
+
+    std::atomic<bool> dlFinished{false};
+    int exitCode = -1;
+    std::thread dlThread([dlCmd, &dlFinished, &exitCode]() {
+        exitCode = system(dlCmd.c_str());
+        dlFinished.store(true);
+    });
+
+    auto lastTime = std::chrono::steady_clock::now();
+    float lastBytes = 0.0f;
+
+    while (!dlFinished.load()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        if (std::filesystem::exists(tempDownload)) {
+            std::error_code ec;
+            auto currentSize = (float)std::filesystem::file_size(tempDownload, ec);
+            if (!ec) {
+                s_DownloadedMB = currentSize / (1024.0f * 1024.0f);
+                if (totalBytes > 0.0f) {
+                    s_DownloadProgress = std::min(0.99f, currentSize / totalBytes);
+                }
+
+                auto now = std::chrono::steady_clock::now();
+                float sec = std::chrono::duration<float>(now - lastTime).count();
+                if (sec >= 0.4f) {
+                    float diff = currentSize - lastBytes;
+                    s_DownloadSpeedMBs = (diff / (1024.0f * 1024.0f)) / sec;
+                    lastBytes = currentSize;
+                    lastTime = now;
+                }
+            }
+        }
+    }
+    if (dlThread.joinable()) dlThread.join();
+
+    if (exitCode == 0 && std::filesystem::exists(tempDownload)) {
+        s_DownloadProgress = 1.0f;
+        std::error_code ec;
+        std::filesystem::permissions(tempDownload,
+            std::filesystem::perms::owner_all |
+            std::filesystem::perms::group_read | std::filesystem::perms::group_exec |
+            std::filesystem::perms::others_read | std::filesystem::perms::others_exec,
+            std::filesystem::perm_options::replace, ec);
+
+        if (!currentAppImage.empty()) {
+            std::filesystem::rename(tempDownload, currentAppImage, ec);
+            if (ec) {
+                std::filesystem::copy_file(tempDownload, currentAppImage,
+                    std::filesystem::copy_options::overwrite_existing, ec);
+                std::filesystem::remove(tempDownload, ec);
+            }
+            std::string launchCmd = "\"" + currentAppImage + "\" &";
+            system(launchCmd.c_str());
+            exit(0);
+        } else {
+            std::string launchCmd = "\"" + tempDownload + "\" &";
+            system(launchCmd.c_str());
+            exit(0);
+        }
+    } else {
+        s_ErrorMsg = "Error al descargar el paquete de actualización.";
+        s_Status = UpdateStatus::Error;
+    }
+
     s_IsDownloading = false;
     s_ShowModal     = false;
 #endif
