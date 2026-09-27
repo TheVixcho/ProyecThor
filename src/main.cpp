@@ -2,7 +2,7 @@
 #define GLFW_EXPOSE_NATIVE_WIN32
 #endif
 #define STB_IMAGE_IMPLEMENTATION
-#include "frontend/panels/stb_image.h"
+#include "stb_image.h"
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -34,24 +34,24 @@
 #include <unistd.h>
 #include <climits>
 #endif
-#include "frontend/ui/bin/StyleGeneralApp.h"
+#include "ui/framework/bin/StyleGeneralApp.h"
 #include "Version.h"
 #include "SettingsManager.h"
 #include "PresentationCore.h"
 #include "PerformanceGovernor.h"
 #include "SystemStats.h"
-#include "ui/UIManager.h"
-#include "frontend/panels/LibraryPanel.h"
-#include "frontend/panels/biblio/LibraryMultimedia.h"
-#include "frontend/panels/overlay/OverlayExportService.h"
-#include "frontend/panels/HomePanel.h"
-#include "frontend/ui/Hub.h"
-#include "frontend/panels/ViewPanel.h"
-#include "frontend/panels/StylesHubPanel.h"
-#include "frontend/panels/StreamingWorkspacePanel.h"
-#include "frontend/panels/VideoEditorPanel.h"
-#include "frontend/panels/biblio/LibraryHelpers.h"
-#include "backend/core/AppPaths.h"
+#include "ui/framework/UIManager.h"
+#include "ui/panels/LibraryPanel.h"
+#include "ui/panels/biblio/LibraryMultimedia.h"
+#include "ui/panels/overlay/OverlayExportService.h"
+#include "ui/panels/HomePanel.h"
+#include "ui/framework/Hub.h"
+#include "ui/panels/ViewPanel.h"
+#include "ui/panels/StylesHubPanel.h"
+#include "ui/panels/StreamingWorkspacePanel.h"
+#include "ui/panels/VideoEditorPanel.h"
+#include "ui/panels/biblio/LibraryHelpers.h"
+#include "core/AppPaths.h"
 #include "SplashScreen.h"
 
 #ifdef _WIN32
@@ -66,19 +66,8 @@ constexpr int kSplashWBase = 600;
 constexpr int kSplashHBase = 380;
 constexpr int kMainWBase   = 1280;
 constexpr int kMainHBase   = 720;
-
 }
 
-// La app carga TODOS sus assets (fuentes en "bin/assets/...", "proyecthor.png",
-// los splash_bg*.png, shaders/, lua/, etc.) con rutas relativas al directorio
-// de trabajo -- eso solo funciona si el cwd es la carpeta donde vive el .exe.
-// El acceso directo de escritorio lo garantiza (WorkingDir="{app}" en el
-// instalador, ver ProyecThor.iss), pero "Abrir con ProyecThor"/doble click
-// sobre un archivo asociado NO fija ningun working directory (Explorer deja
-// el que tenga a mano) -- resultado: la app arranca "pelada", sin fuentes ni
-// imagenes, porque busca "bin/assets/..." en un directorio que no es el suyo.
-// Fix: fijar el cwd a la carpeta del propio ejecutable ANTES de cargar nada,
-// sin importar como se haya lanzado.
 static void ChangeToExecutableDirectory()
 {
 #ifdef _WIN32
@@ -95,6 +84,22 @@ static void ChangeToExecutableDirectory()
     std::filesystem::path dir = std::filesystem::path(exePath).parent_path();
     if (chdir(dir.c_str()) != 0)
         std::cerr << "[DIAG] No se pudo cambiar el directorio de trabajo a " << dir << "\n";
+
+    if (!std::getenv("VLC_PLUGIN_PATH"))
+    {
+        if (std::filesystem::exists("/usr/lib/vlc/plugins"))
+            setenv("VLC_PLUGIN_PATH", "/usr/lib/vlc/plugins", 1);
+        else if (std::filesystem::exists("/usr/lib64/vlc/plugins"))
+            setenv("VLC_PLUGIN_PATH", "/usr/lib64/vlc/plugins", 1);
+        else if (std::filesystem::exists("/usr/lib/x86_64-linux-gnu/vlc/plugins"))
+            setenv("VLC_PLUGIN_PATH", "/usr/lib/x86_64-linux-gnu/vlc/plugins", 1);
+        else
+        {
+            std::filesystem::path localPlugins = dir / "plugins";
+            if (std::filesystem::exists(localPlugins))
+                setenv("VLC_PLUGIN_PATH", localPlugins.c_str(), 1);
+        }
+    }
 #endif
 }
 
@@ -116,17 +121,6 @@ std::string GetAppDataFilePath(const std::string& filename)
     return (dirPath / filename).string();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Apertura externa ("Abrir con ProyecThor" / doble click sobre un archivo
-//  asociado, ver packaging/windows/ProyecThor.iss y packaging/*.desktop) --
-//  Windows lanza el .exe con la ruta como argumento; los entornos de
-//  escritorio Linux invocan "proyecthor %U" (ver Exec= en los .desktop).
-// ─────────────────────────────────────────────────────────────────────────────
-
-// argv de main() no es confiable para rutas con caracteres no-ASCII en
-// Windows (queda en la codepage ANSI activa, no UTF-8) -- CommandLineToArgvW
-// da la linea de comandos real en UTF-16, mismo criterio que el resto de la
-// app usa para paths (ver ProyecThor::Library::Utf8ToWide/WideToUtf8).
 std::string GetPendingOpenFilePath(int argc, char** argv)
 {
 #ifdef _WIN32
@@ -142,10 +136,6 @@ std::string GetPendingOpenFilePath(int argc, char** argv)
 #else
     if (argc <= 1) return {};
     std::string raw = argv[1];
-
-    // Algunos gestores de archivos (Nautilus/GNOME) invocan "%U" con URIs
-    // file:// en vez de rutas planas -- hay que sacar el prefijo y
-    // decodificar el percent-encoding (espacios como %20, etc.).
     const std::string prefix = "file://";
     if (raw.rfind(prefix, 0) == 0) raw = raw.substr(prefix.size());
 
@@ -164,13 +154,6 @@ std::string GetPendingOpenFilePath(int argc, char** argv)
 #endif
 }
 
-// Misma ruta que ProyecThor::Audio::GetAudioPath() (AudioHelpers.h) -- ese
-// header no se incluye aca porque arrastra stb_image.h, y este archivo ya
-// compila esa implementacion mas arriba (STB_IMAGE_IMPLEMENTATION); una
-// segunda inclusion redefiniria todos sus simbolos. AppPaths.h si es
-// liviano (sin stb_image/imgui/GL) y ya centraliza la carpeta de datos
-// (respeta Ajustes > Actualizaciones > "Carpeta de datos"), asi que se
-// delega ahi en vez de recalcular %APPDATA% por su cuenta.
 const std::string& GetAudioLibraryPath()
 {
     static std::string s_Path;
@@ -186,9 +169,6 @@ PendingMediaKind ClassifyMediaExtension(const std::string& path)
     std::string ext = std::filesystem::path(path).extension().string();
     std::transform(ext.begin(), ext.end(), ext.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-
-    // Mismas listas que usan los dialogos de importar de Audio (ver
-    // AudioPanel::ImportAudioFile) y Biblioteca > Videos.
     static const std::vector<std::string> kAudioExts = {
         ".mp3", ".flac", ".wav", ".ogg", ".aac", ".m4a", ".wma", ".opus", ".aiff"
     };
@@ -200,15 +180,6 @@ PendingMediaKind ClassifyMediaExtension(const std::string& path)
     return PendingMediaKind::None;
 }
 
-// Copia el archivo abierto externamente a la biblioteca correspondiente (audio
-// o Biblioteca > Videos) y lo selecciona -- EXACTAMENTE lo mismo que hace un
-// click manual sobre un item en Biblioteca (ver LibraryMultimedia.cpp
-// SelectMMItem / LibraryVideos.cpp), asi que cae en el mismo camino ya
-// probado: AudioPanel::Update()/MonitorView::Update() escuchan
-// PresentationCore::PeekSelection() cada frame y lo cargan en Preview (audio:
-// reproduccion local audible via AudioPanel::Play(); video: Preview mudo de
-// MonitorView) -- nunca se manda solo al proyector real, el operador decide
-// eso aparte con "Enviar en vivo".
 void ImportAndPreviewExternalFile(const std::string& externalPath)
 {
     PendingMediaKind kind = ClassifyMediaExtension(externalPath);
@@ -261,17 +232,6 @@ void ImportAndPreviewExternalFile(const std::string& externalPath)
         std::cerr << "[DIAG] Error importando archivo abierto externamente: " << e.what() << "\n";
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Instancia unica -- pedido explicito: "Abrir con" sobre otro archivo (o
-//  doble click en el .exe) mientras ProyecThor ya esta corriendo NUNCA debe
-//  abrir una segunda ventana. Se resuelve con un servidor HTTP minimo en
-//  loopback (127.0.0.1, mismo mecanismo cpp-httplib que ya usa SyncServer
-//  para el companion movil, pero en un puerto propio y sin exponerse a la
-//  LAN): la primera instancia escucha, cualquier lanzamiento posterior
-//  intenta hablarle ANTES de tocar GLFW/ventanas -- si le contesta, esta
-//  segunda "instancia" nunca llega a existir de verdad, solo reenvia y sale.
-// ─────────────────────────────────────────────────────────────────────────────
 
 namespace {
 constexpr int kSingleInstancePort = 51973; // arbitrario, solo loopback, no debe chocar con SyncServer (8080 default)
@@ -613,13 +573,22 @@ static void LoadMainApplicationFonts(ImGuiIO& io, float dpiScale)
 
     // 2. Fusionar fuentes de emojis y símbolos del sistema (Windows / Linux)
     static const char* kFallbackFonts[] = {
+        "bin/assets/fonts/NotoEmoji.ttf",
+        "assets/bin/assets/fonts/NotoEmoji.ttf",
+        "build-win/bin/assets/fonts/NotoEmoji.ttf",
+        "build-linux/bin/assets/fonts/NotoEmoji.ttf",
+        "bin/assets/fonts/Symbola.ttf",
+        "assets/bin/assets/fonts/Symbola.ttf",
+        "build-win/bin/assets/fonts/Symbola.ttf",
+        "build-linux/bin/assets/fonts/Symbola.ttf",
         "C:\\Windows\\Fonts\\seguisym.ttf",
         "C:\\Windows\\Fonts\\seguiemj.ttf",
         "C:\\Windows\\Fonts\\arial.ttf",
-        "bin/assets/fonts/NotoEmoji-Regular.ttf",
-        "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/symbola/Symbola.ttf"
+        "/run/host/fonts/noto/NotoSansSymbols2-Regular.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+        "/run/host/fonts/TTF/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/symbola/Symbola.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
     };
 
     for (const char* fallbackPath : kFallbackFonts)
@@ -631,7 +600,10 @@ static void LoadMainApplicationFonts(ImGuiIO& io, float dpiScale)
             mergeCfg.OversampleH = 1;
             mergeCfg.OversampleV = 1;
             mergeCfg.PixelSnapH  = true;
-            io.Fonts->AddFontFromFileTTF(fallbackPath, 16.0f * dpiScale, &mergeCfg, s_FullGlyphRanges.Data);
+            if (io.Fonts->AddFontFromFileTTF(fallbackPath, 16.0f * dpiScale, &mergeCfg, s_FullGlyphRanges.Data))
+            {
+                std::cout << "[Font] Símbolos/emojis cargados desde: " << fallbackPath << "\n";
+            }
         }
     }
 
@@ -658,6 +630,9 @@ void LoadUIIcons()
     StyleGeneralApp::LoadAppIcon("fit_screen",        "bin/assets/icons/ui/fit_screen.png");
     StyleGeneralApp::LoadAppIcon("arrow_forward",     "bin/assets/icons/ui/arrow_forward.png");
     StyleGeneralApp::LoadAppIcon("arrow_back",        "bin/assets/icons/ui/arrow_back.png");
+    StyleGeneralApp::LoadAppIcon("arrow_right",       "bin/assets/icons/ui/arrow_forward.png");
+    StyleGeneralApp::LoadAppIcon("arrow_left",        "bin/assets/icons/ui/arrow_back.png");
+    StyleGeneralApp::LoadAppIcon("skip_previous",     "bin/assets/icons/ui/skip_previous.png");
     StyleGeneralApp::LoadAppIcon("repeat",            "bin/assets/icons/ui/repeat.png");
     StyleGeneralApp::LoadAppIcon("repeat_one",        "bin/assets/icons/ui/repeat_one.png");
     StyleGeneralApp::LoadAppIcon("stop",              "bin/assets/icons/ui/stop.png");
@@ -728,7 +703,7 @@ GLFWwindow* CreateMainWindow(GLFWwindow* splashWindow, int mainW, int mainH)
     glfwSwapInterval(1);
     glewExperimental = GL_TRUE;
     GLenum status = glewInit();
-    if (status != GLEW_OK)
+    if (status != GLEW_OK && status != GLEW_ERROR_NO_GLX_DISPLAY)
         std::cerr << "[DIAG] ADVERTENCIA: glewInit() para mainWindow devolvio error: "
                   << glewGetErrorString(status) << "\n";
 
@@ -780,10 +755,6 @@ void RunMainLoop(GLFWwindow* window, ProyecThor::UI::UIManager& uiManager,
         FrameProfiler::Add(FrameProfiler::s_PollEvents, FrameProfiler::ElapsedMs(t0));
 
         auto& core = ProyecThor::Core::PresentationCore::Get();
-
-        // Instancia unica: drena cualquier archivo/pedido de foco que haya
-        // mandado un lanzamiento posterior de "Abrir con" (ver
-        // StartSingleInstanceListener/TryForwardToRunningInstance).
         ProcessSingleInstanceRequests(window, uiManager);
 
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -858,22 +829,11 @@ void RunMainLoop(GLFWwindow* window, ProyecThor::UI::UIManager& uiManager,
 
 int main(int argc, char** argv)
 {
-    // PRIMERO que nada -- todo lo que sigue (splash, fuentes, iconos, etc.)
-    // carga assets con rutas relativas y asume que el cwd es la carpeta del
-    // .exe (ver comentario en ChangeToExecutableDirectory).
+
     ChangeToExecutableDirectory();
-
     std::cerr << "[DIAG] Iniciando main()\n";
-
-    // Capturado ACA (antes de que glfwInit/etc. puedan tocar el estado del
-    // proceso) pero recien despachado mas abajo, una vez que UIManager y sus
-    // paneles ya existen -- ver ImportAndPreviewExternalFile.
     const std::string pendingOpenFilePath = GetPendingOpenFilePath(argc, argv);
 
-    // Instancia unica -- pedido explicito: si ya hay una ProyecThor
-    // corriendo, le mandamos el archivo (si hay) y salimos ACA MISMO, antes
-    // de tocar GLFW/splash/ventanas. Esta "instancia" nunca llega a existir
-    // de verdad.
     if (TryForwardToRunningInstance(pendingOpenFilePath))
     {
         std::cerr << "[DIAG] Ya habia una instancia de ProyecThor corriendo -- se le mando "
@@ -886,16 +846,30 @@ int main(int argc, char** argv)
 #endif
 
 #ifndef _WIN32
-    glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
-    std::cerr << "[DIAG] Forzando backend GLFW a X11/XWayland (necesario para GLEW)\n";
+    // En Linux (X11 / Wayland):
+    // Permitir a GLFW seleccionar automáticamente la plataforma activa (Wayland o X11).
+    // Solo forzar X11 si el usuario lo requiere explícitamente via PROYECTHOR_FORCE_X11=1.
+    const char* forceX11 = std::getenv("PROYECTHOR_FORCE_X11");
+    if (forceX11 && std::string(forceX11) != "0")
+    {
+        glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+        std::cerr << "[DIAG] Forzando backend GLFW a X11 por PROYECTHOR_FORCE_X11\n";
+    }
 #endif
 
     if (!glfwInit())
     {
-        std::cerr << "[DIAG] FALLO: glfwInit() devolvio false\n";
+        const char* desc = nullptr;
+        int err = glfwGetError(&desc);
+        std::cerr << "[DIAG] FALLO: glfwInit() devolvio false. Error " << err << ": "
+                  << (desc ? desc : "desconocido") << "\n";
         return -1;
     }
-    std::cerr << "[DIAG] glfwInit() OK\n";
+    int platform = glfwGetPlatform();
+    const char* platName = (platform == GLFW_PLATFORM_WAYLAND) ? "Wayland" :
+                           (platform == GLFW_PLATFORM_X11)     ? "X11/XWayland" :
+                           (platform == GLFW_PLATFORM_WIN32)   ? "Win32" : "Desconocida";
+    std::cerr << "[DIAG] glfwInit() OK. Plataforma activa: " << platName << "\n";
 
     const float dpiScale = DetectDpiScale();
     const int splashW = (int)(kSplashWBase * dpiScale);
@@ -906,12 +880,6 @@ int main(int argc, char** argv)
     ProyecThor::Settings::SettingsManager::Get().LoadSettings();
     std::cerr << "[DIAG] SettingsManager::LoadSettings() OK\n";
     auto& theme = ProyecThor::Settings::SettingsManager::Get().GetSettings().theme;
-
-    // Abierto via "Abrir con"/archivo asociado -- el operador quiere ver ESE
-    // archivo lo antes posible, no el splash con su arte/creditos. La
-    // ventana de splash igual se crea (comparte contexto GL con
-    // CreateMainWindow mas abajo) pero invisible, y los pasos de carga
-    // corren directo sin dibujar ningun frame del splash.
     const bool skipSplash = !pendingOpenFilePath.empty();
 
     GLFWwindow* splashWindow = CreateSplashWindow(splashW, splashH, !skipSplash);
@@ -925,12 +893,14 @@ int main(int argc, char** argv)
     glfwSwapInterval(1);
     glewExperimental = GL_TRUE;
     GLenum glewStatus = glewInit();
-    if (glewStatus != GLEW_OK)
+    if (glewStatus != GLEW_OK && glewStatus != GLEW_ERROR_NO_GLX_DISPLAY)
     {
         std::cerr << "[DIAG] FALLO: glewInit() devolvio error: " << glewGetErrorString(glewStatus) << "\n";
         glfwTerminate();
         return -1;
     }
+    if (glewStatus == GLEW_ERROR_NO_GLX_DISPLAY)
+        std::cerr << "[DIAG] glewInit() aviso: sin display GLX (esperable en Wayland/EGL). Core OpenGL cargado OK.\n";
     std::cerr << "[DIAG] glewInit() OK. Version OpenGL: " << (const char*)glGetString(GL_VERSION) << "\n";
 
     IMGUI_CHECKVERSION();
@@ -949,9 +919,6 @@ int main(int argc, char** argv)
     const ProyecThor::Splash::Art splashArt = ProyecThor::Splash::PickArt();
     const std::string creditText = "Illustration by: " + splashArt.author;
 
-    // Con skipSplash no se dibuja NINGUN frame del splash (ver loop de pasos
-    // y "ultimo frame" mas abajo) -- no tiene sentido gastar tiempo/GPU
-    // subiendo estas texturas para nada.
     GLuint logoTex = skipSplash ? 0 : LoadTextureFromFile("proyecthor.png");
     GLuint bgTex   = skipSplash ? 0 : LoadTextureFromFile(splashArt.filename.c_str());
 
@@ -998,13 +965,6 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    // Ultimo frame del splash, mostrado ANTES de armar la interfaz principal
-    // (UIManager + paneles) -- ese armado es sincronico y no puede volver a
-    // dibujar el splash (destruye su contexto de ImGui mas abajo), asi que
-    // sin este frame el splash quedaba "congelado" en el mensaje anterior
-    // durante ese tramo, dando la sensacion de una traba invisible. Con
-    // skipSplash la ventana ya es invisible y nunca se mostro nada -- no
-    // hace falta este frame tampoco.
     if (!skipSplash) {
         glfwMakeContextCurrent(splashWindow);
         ProyecThor::Splash::Render(splashWindow, splashSize, "Preparando interfaz y paneles...", 1.0f,
@@ -1072,6 +1032,7 @@ int main(int argc, char** argv)
 
     auto homePanel    = std::make_shared<ProyecThor::UI::HomePanel>();
     auto libraryPanel = std::make_shared<ProyecThor::UI::LibraryPanel>();
+
     homePanel->SetAudioPanel(libraryPanel->GetAudioPanel());
     ProyecThor::Core::PresentationCore::Get().SetAudioPanelRef(libraryPanel->GetAudioPanel());
     homePanel->m_UIManagerRef = &uiManager;
@@ -1082,6 +1043,7 @@ int main(int argc, char** argv)
     uiManager.AddPanel(homePanel);
 
     auto viewPanel = std::make_shared<ProyecThor::UI::ViewPanel>(&uiManager);
+    uiManager.SetViewPanelRef(viewPanel.get());
     viewPanel->SetTeamChatPanelRef(&uiManager.GetChatPanel());
     uiManager.AddPanel(viewPanel);
 
@@ -1089,31 +1051,14 @@ int main(int argc, char** argv)
     stylesHub->SetTransitionPanel(uiManager.GetTransitionPanelOwned().get());
     uiManager.AddPanel(stylesHub);
 
-    // Preset "Transmisión" (ver UIManager::BuildWorkspaceLayoutBroadcast):
-    // misma instancia de BroadcastPanel que ya usa Ajustes > Conexiones, asi
-    // que activar/mirar el streaming desde cualquiera de los dos lados
-    // queda sincronizado solo.
     auto streamingWs = std::make_shared<ProyecThor::UI::StreamingWorkspacePanel>(&uiManager.GetBroadcastPanel());
     streamingWs->SetUIManager(&uiManager);
     uiManager.AddPanel(streamingWs);
-
-    // Preset "Producción" (ver Settings::WorkspaceLayoutPreset::Video) --
-    // Render/Colorimetria/Canales de trabajo/Audio(DAW)/Overlays, todo como
-    // pestañas internas de VideoEditorPanel (absorbe a los ex-paneles
-    // AudioEditorPanel/ImageEditorPanel, retirados).
     auto videoEditor = std::make_shared<ProyecThor::UI::VideoEditorPanel>();
     videoEditor->SetUIManager(&uiManager);
     uiManager.AddPanel(videoEditor);
 
     std::cerr << "[DIAG] Todos los paneles agregados OK\n";
-
-    // "Abrir con ProyecThor" / doble click sobre un archivo asociado -- recien
-    // aca, con AudioPanelRef ya registrado y la biblioteca ya escaneada
-    // (ver step del splash "Escaneando biblioteca..."), asi que ya existe
-    // todo lo que ImportAndPreviewExternalFile necesita tocar. Ademas, en
-    // vez de arrancar en el Hub, se salta directo al workspace "Media y
-    // Preview" (Biblioteca > Medios + Home) con el archivo ya cargado ahi
-    // -- pedido explicito.
     if (!pendingOpenFilePath.empty())
     {
         ImportAndPreviewExternalFile(pendingOpenFilePath);
@@ -1157,10 +1102,6 @@ int main(int argc, char** argv)
 
     glfwShowWindow(mainWindow);
     glfwFocusWindow(mainWindow);
-
-    // Recien aca: esta es la instancia real (la unica que llega tan lejos,
-    // ver TryForwardToRunningInstance mas arriba) -- empieza a escuchar por
-    // si otro lanzamiento de "Abrir con" llega despues.
     StartSingleInstanceListener();
 
     std::cerr << "[DIAG] Entrando al loop principal\n";

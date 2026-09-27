@@ -63,7 +63,11 @@ desktop.ini
 
 # ── Configuracion local del usuario (puede contener API keys, ej. Pexels) ────
 settings.json
+imgui.ini
+/bin/
+brace_out.txt
 # Build de Linux extraido a mano para probar (binario + .so vendorizados +
 # plugins de VLC) -- son artifacts de build, no fuente; ya se generan solos
 # via CI (build-linux) o compilando local, no hace falta trackearlos.
 packaging/Linux/
+

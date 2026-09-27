@@ -1,4 +1,0 @@
-Las canciones se estan guardando como nueva cnacion y no con su nombre
-
-https://github.com/Beblia/Holy-Bible-XML-Format
-Creditos a las biblias que ahora hay en assets

@@ -136,6 +136,7 @@ ProyecThor is built on the shoulders of several open-source libraries and SDKs, 
 | PDFium | BSD 3-Clause | [chromium.googlesource.com](https://chromium.googlesource.com/chromium/src/+/main/third_party/pdfium) |
 | nlohmann/json | MIT | [github.com/nlohmann/json](https://github.com/nlohmann/json) |
 | stb_image | Public Domain / MIT | [github.com/nothings/stb](https://github.com/nothings/stb) |
+| Holy-Bible-XML-Format | Public Domain / Open Data | [github.com/Beblia/Holy-Bible-XML-Format](https://github.com/Beblia/Holy-Bible-XML-Format) |
 
 ProyecThor also bundles two command-line tools, invoked as separate child processes (not linked into the app) for a couple of features:
 
@@ -150,7 +151,8 @@ Some of these dependencies (notably LibVLC and TagLib, both under LGPL 2.1) carr
 
 ### Acknowledgments
 
-The "Importar desde URL" subtitle-as-lyrics feature (Archivo > Importar) follows the same yt-dlp track-selection approach (manual captions preferred over auto-generated, `tlang=` auto-translations filtered out) as [SudoMeke/subtitle-grabber](https://github.com/SudoMeke/subtitle-grabber), a Python CLI tool for downloading YouTube subtitles. ProyecThor's implementation is an independent C++ port, not a copy of its code.
+- **Beblia (Holy-Bible-XML-Format)**: The bundled Bible versions and XML schema structure are provided by the [Holy-Bible-XML-Format](https://github.com/Beblia/Holy-Bible-XML-Format) project by Beblia.
+- **SudoMeke / subtitle-grabber**: The "Importar desde URL" subtitle-as-lyrics feature (Archivo > Importar) follows the same yt-dlp track-selection approach (manual captions preferred over auto-generated, `tlang=` auto-translations filtered out) as [SudoMeke/subtitle-grabber](https://github.com/SudoMeke/subtitle-grabber), a Python CLI tool for downloading YouTube subtitles. ProyecThor's implementation is an independent C++ port, not a copy of its code.
 
 ---
 

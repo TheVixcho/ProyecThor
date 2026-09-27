@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.11)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 project(ProyecThor
-    VERSION 1.0.0
+    VERSION 1.0.1
     LANGUAGES C CXX
 )
 
@@ -83,53 +83,62 @@ add_compile_definitions(IMGUI_USE_WCHAR32)
 
 # ── 2. RUTAS DE LIBRERIAS ────────────────────────────────────────────────────
 set(IMGUI_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/src/external/imgui-docking")
-set(GLFW_SDK   "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/glfw")
-set(GLEW_DIR   "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/glew")
-set(VLC_SDK    "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/vlc")
-set(VLC_SDK_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/vlc-linux")
-set(PDFIUM_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/pdfium")
-set(PDFIUM_SDK_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/pdfium-linux")
+set(GLFW_SDK   "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/glfw")
+set(GLEW_DIR   "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/glew")
+set(VLC_SDK    "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/vlc")
+set(VLC_SDK_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/vlc-linux")
+set(PDFIUM_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/pdfium")
+set(PDFIUM_SDK_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/pdfium-linux")
 # WebView2 (Asistente de IA, panel embebido -- ver AIWebViewPanel): headers +
 # import lib (.dll.lib) vendorizados desde el paquete NuGet oficial de
 # Microsoft (Microsoft.Web.WebView2). Solo Windows -- no existe equivalente
 # de WebView2 en Linux, ahi el panel del Asistente cae a abrir el navegador
 # externo del sistema (ver OpenURL.cpp).
-set(WEBVIEW2_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk/webview2")
-set(HTTPLIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/sdk")
+set(WEBVIEW2_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/webview2")
+set(HTTPLIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk")
 
 # ── 3. ARCHIVOS FUENTE ───────────────────────────────────────────────────────
 
-# -- BACKEND --
-file(GLOB BACKEND_CORE_SOURCES      CONFIGURE_DEPENDS "src/backend/core/*.cpp")
-file(GLOB BACKEND_MEDIA_SOURCES     CONFIGURE_DEPENDS "src/backend/media/*.cpp")
-file(GLOB BACKEND_SETTINGS_SOURCES  CONFIGURE_DEPENDS "src/backend/settings/*.cpp")
-file(GLOB BACKEND_LIBRARY_SOURCES   CONFIGURE_DEPENDS "src/backend/library/*.cpp")
-file(GLOB BACKEND_CONTENT_SOURCES   CONFIGURE_DEPENDS "src/backend/content/*.cpp")
-file(GLOB BACKEND_MONITOR_SOURCES   CONFIGURE_DEPENDS "src/backend/monitors/*.cpp")
-file(GLOB BACKEND_SHADERS_SOURCES   CONFIGURE_DEPENDS "src/backend/shaders/*.cpp")
+# -- CORE --
+file(GLOB CORE_SOURCES              CONFIGURE_DEPENDS "src/core/*.cpp")
+file(GLOB CORE_IO_SOURCES           CONFIGURE_DEPENDS "src/core/io/*.cpp")
+file(GLOB CORE_SETTINGS_SOURCES     CONFIGURE_DEPENDS "src/core/settings/*.cpp")
+
+# -- MEDIA --
+file(GLOB MEDIA_PLAYER_SOURCES      CONFIGURE_DEPENDS "src/media/player/*.cpp")
+file(GLOB MEDIA_AUDIO_SOURCES       CONFIGURE_DEPENDS "src/media/audio/*.cpp")
+file(GLOB MEDIA_CAPTURE_SOURCES     CONFIGURE_DEPENDS "src/media/capture/*.cpp")
+
+# -- GRAPHICS --
+file(GLOB GRAPHICS_SHADERS_SOURCES  CONFIGURE_DEPENDS "src/graphics/shaders/*.cpp")
 file(GLOB EXTERNAL_TOOLS            CONFIGURE_DEPENDS "src/external/tools/*.cpp")
 
-file(GLOB FRONTEND_UI_BIN_SOURCES   CONFIGURE_DEPENDS "src/frontend/ui/bin/*.cpp")
+# -- UI --
+file(GLOB UI_FRAMEWORK_BIN_SOURCES   CONFIGURE_DEPENDS "src/ui/framework/bin/*.cpp")
+file(GLOB UI_FRAMEWORK_SOURCES       CONFIGURE_DEPENDS "src/ui/framework/*.cpp")
+file(GLOB UI_LANG_SOURCES            CONFIGURE_DEPENDS "src/ui/framework/lenguaje/*.cpp")
+file(GLOB UI_WINDOWING_SOURCES       CONFIGURE_DEPENDS "src/ui/windowing/*.cpp")
+file(GLOB UI_PANELS_SOURCES          CONFIGURE_DEPENDS "src/ui/panels/*.cpp")
+file(GLOB UI_SETTINGS_SOURCES        CONFIGURE_DEPENDS "src/ui/panels/settings/*.cpp")
+file(GLOB UI_CAPTURE_SOURCES         CONFIGURE_DEPENDS "src/ui/panels/capture/*.cpp")
+file(GLOB UI_LAYERS_SOURCES          CONFIGURE_DEPENDS "src/ui/panels/layers/*.cpp")
+file(GLOB UI_OVERLAY_SOURCES         CONFIGURE_DEPENDS "src/ui/panels/overlay/*.cpp")
+file(GLOB UI_MONITOR_SOURCES         CONFIGURE_DEPENDS "src/ui/panels/monitor/*.cpp")
+file(GLOB UI_STYLES_SOURCES          CONFIGURE_DEPENDS "src/ui/panels/styles/*.cpp")
+file(GLOB UI_BIBLIO_SOURCES          CONFIGURE_DEPENDS "src/ui/panels/biblio/*.cpp")
+file(GLOB UI_HOME_SOURCES            CONFIGURE_DEPENDS "src/ui/panels/home/*.cpp")
+file(GLOB UI_MODEL3D_SOURCES         CONFIGURE_DEPENDS "src/ui/panels/model3d/*.cpp")
+file(GLOB UI_LAB_SOURCES             CONFIGURE_DEPENDS "src/ui/panels/lab/*.cpp")
+file(GLOB UI_VIEWS_SOURCES           CONFIGURE_DEPENDS "src/ui/views/*.cpp")
+file(GLOB UI_VIEWS_BIBLIA_SOURCES    CONFIGURE_DEPENDS "src/ui/views/biblia/*.cpp")
+file(GLOB UI_VIEWS_AUDIO_SOURCES     CONFIGURE_DEPENDS "src/ui/views/audio/*.cpp")
 
-# -- FRONTEND --
-file(GLOB FRONTEND_WINDOWING_SOURCES CONFIGURE_DEPENDS "src/frontend/windowing/*.cpp")
-file(GLOB FRONTEND_PANELS_SOURCES   CONFIGURE_DEPENDS "src/frontend/panels/*.cpp")
-file(GLOB FRONTEND_CAPTURE_SOURCES  CONFIGURE_DEPENDS "src/frontend/panels/capture/*.cpp")
-file(GLOB FRONTEND_LAYERS_SOURCES   CONFIGURE_DEPENDS "src/frontend/panels/layers/*.cpp")
-file(GLOB FRONTEND_OVERLAY_SOURCES  CONFIGURE_DEPENDS "src/frontend/panels/overlay/*.cpp")
-file(GLOB FRONTEND_MONITOR_SOURCES  CONFIGURE_DEPENDS "src/frontend/panels/monitor/*.cpp")
-file(GLOB FRONTEND_STYLES_SOURCES   CONFIGURE_DEPENDS "src/frontend/panels/styles/*.cpp")
-file(GLOB FRONTEND_VIEWS_SOURCES    CONFIGURE_DEPENDS "src/frontend/views/*.cpp")
-file(GLOB FRONTEND_VIEWS_BIBLIA_SOURCES CONFIGURE_DEPENDS "src/frontend/views/biblia/*.cpp")
-file(GLOB FRONTEND_UI_SOURCES       CONFIGURE_DEPENDS "src/frontend/ui/*.cpp")
-file(GLOB FRONTEND_UI_LANG_SOURCES  CONFIGURE_DEPENDS "src/frontend/ui/lenguaje/*.cpp")
-file(GLOB PREVIEW_DOC_SOURCES       CONFIGURE_DEPENDS "src/frontend/views/documents/*.cpp")
-file(GLOB PREVIEW_MON_SOURCES       CONFIGURE_DEPENDS "src/frontend/panels/preview/monitors/*.cpp")
-file(GLOB PREVIEW_MON_SOURCES       CONFIGURE_DEPENDS "src/frontend/panels/stb_image_write_impl.cpp")
-file(GLOB FRONTEND_BIBLIO_SOURCES   CONFIGURE_DEPENDS "src/frontend/panels/biblio/*.cpp")
-file(GLOB FRONTEND_HOME_SOURCES     CONFIGURE_DEPENDS "src/frontend/panels/home/*.cpp")
-file(GLOB FRONTEND_MODEL3D_SOURCES  CONFIGURE_DEPENDS "src/frontend/panels/model3d/*.cpp")
-file(GLOB FRONTEND_LAB_SOURCES      CONFIGURE_DEPENDS "src/frontend/panels/lab/*.cpp")
+# -- VENDOR --
+set(VENDOR_SOURCES
+    "src/vendor/stb/stb_image_write_impl.cpp"
+    "src/vendor/qrcodegen/qrcodegen.cpp"
+)
+
 # -- RAIZ src/ (main.cpp y similares) --
 file(GLOB ROOT_SOURCES              CONFIGURE_DEPENDS "src/*.cpp")
 
@@ -143,8 +152,6 @@ set(IMGUI_SOURCES
     "${IMGUI_DIR}/backends/imgui_impl_glfw.cpp"
     "${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp"
 )
-# -- AUDIO --
-file(GLOB AUDIO_SOURCES             CONFIGURE_DEPENDS "src/frontend/views/audio/*.cpp")
 
 # -- RECURSO WINDOWS (solo aplica en Windows) --
 if(WIN32)
@@ -155,7 +162,7 @@ else()
 endif()
 
 # --- COPIA DE RECURSOS AL DIRECTORIO BUILD ---
-file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/shaders"
+file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/shaders"
      DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 
 if(WIN32 AND EXISTS "${PDFIUM_SDK}/bin/pdfium.dll")
@@ -168,33 +175,33 @@ endif()
 # En Linux no existe ese concepto, asi que se crea como ejecutable normal.
 if(WIN32)
     add_executable(ProyecThor WIN32
-        ${AUDIO_SOURCES}
-        ${FRONTEND_BIBLIO_SOURCES}
-        ${FRONTEND_HOME_SOURCES}
-        ${FRONTEND_MODEL3D_SOURCES}
-        ${FRONTEND_LAB_SOURCES}
         ${ROOT_SOURCES}
-        ${FRONTEND_UI_BIN_SOURCES}
-        ${BACKEND_CORE_SOURCES}
-        ${BACKEND_MEDIA_SOURCES}
-        ${BACKEND_SETTINGS_SOURCES}
-        ${BACKEND_LIBRARY_SOURCES}
-        ${BACKEND_CONTENT_SOURCES}
-        ${BACKEND_MONITOR_SOURCES}
-        ${BACKEND_SHADERS_SOURCES}
-        ${FRONTEND_PANELS_SOURCES}
-        ${FRONTEND_CAPTURE_SOURCES}
-        ${FRONTEND_LAYERS_SOURCES}
-        ${FRONTEND_OVERLAY_SOURCES}
-        ${FRONTEND_MONITOR_SOURCES}
-        ${FRONTEND_STYLES_SOURCES}
-        ${FRONTEND_VIEWS_SOURCES}
-        ${FRONTEND_VIEWS_BIBLIA_SOURCES}
-        ${FRONTEND_UI_SOURCES}
-        ${FRONTEND_UI_LANG_SOURCES}
-        ${FRONTEND_WINDOWING_SOURCES}
-        ${PREVIEW_DOC_SOURCES}
-        ${PREVIEW_MON_SOURCES}
+        ${CORE_SOURCES}
+        ${CORE_SETTINGS_SOURCES}
+        ${CORE_IO_SOURCES}
+        ${MEDIA_PLAYER_SOURCES}
+        ${MEDIA_AUDIO_SOURCES}
+        ${MEDIA_CAPTURE_SOURCES}
+        ${GRAPHICS_SHADERS_SOURCES}
+        ${UI_FRAMEWORK_SOURCES}
+        ${UI_FRAMEWORK_BIN_SOURCES}
+        ${UI_LANG_SOURCES}
+        ${UI_WINDOWING_SOURCES}
+        ${UI_PANELS_SOURCES}
+        ${UI_SETTINGS_SOURCES}
+        ${UI_CAPTURE_SOURCES}
+        ${UI_LAYERS_SOURCES}
+        ${UI_OVERLAY_SOURCES}
+        ${UI_MONITOR_SOURCES}
+        ${UI_STYLES_SOURCES}
+        ${UI_BIBLIO_SOURCES}
+        ${UI_HOME_SOURCES}
+        ${UI_MODEL3D_SOURCES}
+        ${UI_LAB_SOURCES}
+        ${UI_VIEWS_SOURCES}
+        ${UI_VIEWS_BIBLIA_SOURCES}
+        ${UI_VIEWS_AUDIO_SOURCES}
+        ${VENDOR_SOURCES}
         ${EXTERNAL_TOOLS}
         ${IMGUI_SOURCES}
         ${RESOURCE_FILE}
@@ -202,33 +209,33 @@ if(WIN32)
     )
 else()
     add_executable(ProyecThor
-        ${AUDIO_SOURCES}
-        ${FRONTEND_BIBLIO_SOURCES}
-        ${FRONTEND_HOME_SOURCES}
-        ${FRONTEND_MODEL3D_SOURCES}
-        ${FRONTEND_LAB_SOURCES}
         ${ROOT_SOURCES}
-        ${FRONTEND_UI_BIN_SOURCES}
-        ${BACKEND_CORE_SOURCES}
-        ${BACKEND_MEDIA_SOURCES}
-        ${BACKEND_SETTINGS_SOURCES}
-        ${BACKEND_LIBRARY_SOURCES}
-        ${BACKEND_CONTENT_SOURCES}
-        ${BACKEND_MONITOR_SOURCES}
-        ${BACKEND_SHADERS_SOURCES}
-        ${FRONTEND_PANELS_SOURCES}
-        ${FRONTEND_CAPTURE_SOURCES}
-        ${FRONTEND_LAYERS_SOURCES}
-        ${FRONTEND_OVERLAY_SOURCES}
-        ${FRONTEND_MONITOR_SOURCES}
-        ${FRONTEND_STYLES_SOURCES}
-        ${FRONTEND_VIEWS_SOURCES}
-        ${FRONTEND_VIEWS_BIBLIA_SOURCES}
-        ${FRONTEND_UI_SOURCES}
-        ${FRONTEND_UI_LANG_SOURCES}
-        ${FRONTEND_WINDOWING_SOURCES}
-        ${PREVIEW_DOC_SOURCES}
-        ${PREVIEW_MON_SOURCES}
+        ${CORE_SOURCES}
+        ${CORE_SETTINGS_SOURCES}
+        ${CORE_IO_SOURCES}
+        ${MEDIA_PLAYER_SOURCES}
+        ${MEDIA_AUDIO_SOURCES}
+        ${MEDIA_CAPTURE_SOURCES}
+        ${GRAPHICS_SHADERS_SOURCES}
+        ${UI_FRAMEWORK_SOURCES}
+        ${UI_FRAMEWORK_BIN_SOURCES}
+        ${UI_LANG_SOURCES}
+        ${UI_WINDOWING_SOURCES}
+        ${UI_PANELS_SOURCES}
+        ${UI_SETTINGS_SOURCES}
+        ${UI_CAPTURE_SOURCES}
+        ${UI_LAYERS_SOURCES}
+        ${UI_OVERLAY_SOURCES}
+        ${UI_MONITOR_SOURCES}
+        ${UI_STYLES_SOURCES}
+        ${UI_BIBLIO_SOURCES}
+        ${UI_HOME_SOURCES}
+        ${UI_MODEL3D_SOURCES}
+        ${UI_LAB_SOURCES}
+        ${UI_VIEWS_SOURCES}
+        ${UI_VIEWS_BIBLIA_SOURCES}
+        ${UI_VIEWS_AUDIO_SOURCES}
+        ${VENDOR_SOURCES}
         ${EXTERNAL_TOOLS}
         ${IMGUI_SOURCES}
         "${GLEW_DIR}/src/glew.c"
@@ -252,19 +259,14 @@ target_compile_definitions(ProyecThor PRIVATE
 # silencioso (mismo criterio que OpenCV mas abajo) -- sin libssl-dev
 # instalado, el asistente de IA simplemente no puede conectarse (se avisa
 # en tiempo de ejecucion, no en compilacion).
-if(WIN32)
+find_package(OpenSSL QUIET)
+if(OpenSSL_FOUND)
+    message(STATUS "OpenSSL encontrado (${OPENSSL_VERSION}): Asistente de IA (HTTPS saliente) habilitado")
     target_compile_definitions(ProyecThor PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
     set(PROYECTHOR_HAS_OPENSSL TRUE)
 else()
-    find_package(OpenSSL QUIET)
-    if(OpenSSL_FOUND)
-        message(STATUS "OpenSSL encontrado (${OPENSSL_VERSION}): Asistente de IA (HTTPS saliente) habilitado")
-        target_compile_definitions(ProyecThor PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
-        set(PROYECTHOR_HAS_OPENSSL TRUE)
-    else()
-        message(STATUS "OpenSSL NO encontrado: el Asistente de IA no podra conectarse (instala libssl-dev y recompila)")
-        set(PROYECTHOR_HAS_OPENSSL FALSE)
-    endif()
+    message(STATUS "OpenSSL NO encontrado: el Asistente de IA no podra conectarse")
+    set(PROYECTHOR_HAS_OPENSSL FALSE)
 endif()
 
 if(WIN32)
@@ -280,34 +282,49 @@ target_include_directories(ProyecThor PRIVATE
 
     # Raiz src/ para includes absolutos desde src/
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/views/audio"
-    # BACKEND
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/backend"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/core"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/media"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/settings"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/library"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/content"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/monitors"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/shaders"
+    # CORE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/core/settings"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/core/io"
 
-    # FRONTEND
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/windowing"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/ui"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/capture"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/layers"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/overlay"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/monitor"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/styles"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/preview"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/views/documents"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/preview/monitors"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/views"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/toolbar"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/biblio"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/panels/home"
+    # GRAPHICS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/shaders"
+
+    # UI
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/framework"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/framework/bin"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/windowing"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/panels"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/panels/settings"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/panels/capture"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/panels/layers"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/panels/overlay"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/panels/monitor"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/panels/styles"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/panels/biblio"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/panels/home"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/panels/model3d"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/panels/lab"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/views"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/views/biblia"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/views/audio"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/toolbar"
+
+    # MEDIA
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/media"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/media/player"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/media/audio"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/media/capture"
+
+    # VENDOR / TERCEROS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/stb"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/nanosvg"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/qrcodegen"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk"
+
     # EXTERNAS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/external/tools"
     "${IMGUI_DIR}"
@@ -316,11 +333,10 @@ target_include_directories(ProyecThor PRIVATE
     "${GLEW_DIR}/include"
     "${VLC_SDK}/include"
 
-    # httplib — está directamente en src/backend/sdk/httplib.h
+    # httplib — está directamente en src/vendor/sdk/httplib.h
     "${HTTPLIB_DIR}"
     # BIN
     "${CMAKE_CURRENT_SOURCE_DIR}/bin"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/ui/bin"
 )
 
 # El include de PDFium y VLC cambia segun la plataforma
@@ -370,25 +386,16 @@ if(WIN32)
         winhttp
         d3d11
         dxgi
-        # OpenSSL (ver CPPHTTPLIB_OPENSSL_SUPPORT mas arriba) -- .a estaticos
-        # a proposito, no .dll.a: el ejecutable ya se linkea entero con
-        # -static (ver target_link_options mas abajo), asi que usar los
-        # estaticos evita que haga falta redistribuir libssl-3-x64.dll/
-        # libcrypto-3-x64.dll junto al .exe. crypt32/bcrypt son las
-        # dependencias del sistema que OpenSSL en Windows necesita para el
-        # almacen de certificados y el generador de numeros aleatorios.
-        ssl
-        crypto
-        crypt32
-        bcrypt
-        # ws2_32 de nuevo aca: OpenSSL (arriba) trae sus propias referencias a
-        # simbolos de Winsock (WSAIoctl, WSASocketA, accept, gethostbyname,
-        # etc.) que solo aparecen como pendientes DESPUES de que el linker ya
-        # proceso el ws2_32 de mas arriba -- ld resuelve en una sola pasada de
-        # izquierda a derecha, asi que sin este segundo ws2_32 esos simbolos
-        # quedan "undefined reference" al final.
-        ws2_32
     )
+    if(PROYECTHOR_HAS_OPENSSL)
+        target_link_libraries(ProyecThor PRIVATE
+            ssl
+            crypto
+            crypt32
+            bcrypt
+            ws2_32
+        )
+    endif()
 
     target_link_options(ProyecThor PRIVATE
         "-static"
@@ -574,14 +581,15 @@ endif()
 # Sin esto, el ejecutable de build-linux/ no encuentra las librerias hasta
 # que se hace "install" (que si las copia a /usr/lib/proyecthor).
 if(NOT WIN32)
+    file(GLOB VLC_LINUX_SO_FILES "${VLC_SDK_LINUX}/lib/lib*.so*")
     add_custom_command(TARGET ProyecThor POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${PDFIUM_SDK_LINUX}/lib/libpdfium.so"
             "$<TARGET_FILE_DIR:ProyecThor>"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${VLC_SDK_LINUX}/lib/libvlc.so"
+            ${VLC_LINUX_SO_FILES}
             "$<TARGET_FILE_DIR:ProyecThor>"
-        COMMENT "Copiando libpdfium.so y libvlc.so al directorio de build"
+        COMMENT "Copiando libpdfium.so y librerias de VLC al directorio de build"
     )
 
     if(EXISTS "${VLC_SDK_LINUX}/plugins")
@@ -618,8 +626,9 @@ if(NOT WIN32)
         DESTINATION ${PROYECTHOR_INSTALL_DIR}
     )
 
-    # libvlc.so vive al lado del binario
-    install(FILES "${VLC_SDK_LINUX}/lib/libvlc.so"
+    # libvlc.so y libvlccore.so viven al lado del binario
+    file(GLOB VLC_LINUX_SO_FILES "${VLC_SDK_LINUX}/lib/lib*.so*")
+    install(FILES ${VLC_LINUX_SO_FILES}
         DESTINATION ${PROYECTHOR_INSTALL_DIR}
     )
 
@@ -719,21 +728,38 @@ if(UNIX AND NOT APPLE)
         message(STATUS "libpipewire-0.3 y/o dbus-1 NO encontradas: sin captura de pantalla/ventana nativa en Wayland")
     endif()
 endif()
+    # Licencias de terceros y licencia principal
+    install(FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/THIRD_PARTY_LICENSES.md"
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/io.github.thevixcho.ProyecThor
+    )
+
+    # Iconos (tanto proyecthor.png como con App ID io.github.thevixcho.ProyecThor.png)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.png")
         install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.png"
             DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps
         )
+        install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.png"
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps
+            RENAME io.github.thevixcho.ProyecThor.png
+        )
     endif()
 
-    # Entrada de menu (.desktop) -- el icono de arriba solo lo hace
-    # encontrable POR NOMBRE ("Icon=proyecthor" en el .desktop, ver
-    # packaging/proyecthor.desktop), pero sin instalar el .desktop en si el
-    # entorno de escritorio nunca se entera de que la app existe (no
-    # aparece en el menu de aplicaciones aunque el binario+icono esten bien
-    # instalados). Esto faltaba.
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.desktop")
+    # Entrada de menu (.desktop) y Metainfo AppStream
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/io.github.thevixcho.ProyecThor.desktop")
+        install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/io.github.thevixcho.ProyecThor.desktop"
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
+        )
+    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.desktop")
         install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.desktop"
             DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
+        )
+    endif()
+
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/io.github.thevixcho.ProyecThor.metainfo.xml")
+        install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/io.github.thevixcho.ProyecThor.metainfo.xml"
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo
         )
     endif()
 endif()
