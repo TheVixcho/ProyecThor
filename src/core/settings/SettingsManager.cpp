@@ -723,6 +723,7 @@ void SettingsManager::ApplyProjection() {
     core.SetFillBlurEnabled(p.fillBlurEnabled);
     core.SetFillBlurBrightness(p.fillBlurBrightness);
     core.SetVideoRenderEngine(p.videoRenderEngine);
+    core.SetVLCHardwareDecoder(p.vlcHardwareDecoder);
 }
 
 // ── Tema ─────────────────────────────────────────────────────────────────
@@ -942,6 +943,7 @@ void SettingsManager::SaveSettings() {
     j["projection"]["fillBlurEnabled"]      = p.fillBlurEnabled;
     j["projection"]["fillBlurBrightness"]   = p.fillBlurBrightness;
     j["projection"]["videoRenderEngine"]    = p.videoRenderEngine;
+    j["projection"]["vlcHardwareDecoder"]   = p.vlcHardwareDecoder;
 
     const auto& sd = m_Settings.stageDisplay;
     j["stageDisplay"]["layoutTemplateIndex"] = sd.layoutTemplateIndex;
@@ -1248,6 +1250,7 @@ void SettingsManager::LoadSettings() {
             p.fillBlurEnabled       = jp.value("fillBlurEnabled",       false);
             p.fillBlurBrightness    = jp.value("fillBlurBrightness",    0.6f);
             p.videoRenderEngine     = jp.value("videoRenderEngine",     1);
+            p.vlcHardwareDecoder    = jp.value("vlcHardwareDecoder",    "any");
         }
 
         if (j.contains("stageDisplay")) {

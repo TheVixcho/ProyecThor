@@ -386,6 +386,9 @@ void SetGlobalMute(bool mute);
         void SetVideoRenderEngine(int engine);
         int  GetVideoRenderEngine() const;
 
+        void        SetVLCHardwareDecoder(const std::string& dec);
+        std::string GetVLCHardwareDecoder() const;
+
         // ── Post-proceso del composite completo de "ProjectorLive" (fondo +
         //    overlays + texto + anuncios + captura) — ver CompositePostChain.h
         //    para la arquitectura. A diferencia de FSR (arriba), estos no

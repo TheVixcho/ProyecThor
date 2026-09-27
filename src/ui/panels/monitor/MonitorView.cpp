@@ -150,7 +150,10 @@ void MonitorView::Render(Core::VLCBasePlayer* player)
             {
                 Core::PresentationCore::Get().RequestPreviewStop();
                 m_PreviewPlaying = false;
-                m_ImageView.LoadImageFromFile(GetAssetsPath() + "/images/" + currentSel.title);
+                std::string imgPath = currentSel.title;
+                if (!std::filesystem::path(imgPath).is_absolute())
+                    imgPath = GetAssetsPath() + "/images/" + imgPath;
+                m_ImageView.LoadImageFromFile(imgPath);
                 m_ImageView.ResetAdjustments();
             }
             else

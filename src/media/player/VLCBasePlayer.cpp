@@ -56,10 +56,21 @@ std::string GetDirectYoutubeURL(const std::string& youtubeURL)
 #endif
         std::array<char, 1024> buffer;
         std::string result;
+        struct PipeDeleter {
+            void operator()(FILE* f) const {
+                if (f) {
 #ifdef _WIN32
-        std::unique_ptr<FILE, decltype(&_pclose)> pipe(_popen(command.c_str(), "r"), _pclose);
+                    _pclose(f);
 #else
-        std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(command.c_str(), "r"), pclose);
+                    pclose(f);
+#endif
+                }
+            }
+        };
+#ifdef _WIN32
+        std::unique_ptr<FILE, PipeDeleter> pipe(_popen(command.c_str(), "r"));
+#else
+        std::unique_ptr<FILE, PipeDeleter> pipe(popen(command.c_str(), "r"));
 #endif
         if (!pipe) return "";
         while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr)
@@ -143,6 +154,7 @@ struct VLCAudioCtx {
 
 struct VLCVideoCtx {
     std::mutex mutex;
+    libvlc_media_player_t* mp = nullptr;
     void*    frontBuf = nullptr; // listo para subir a GL
     void*    backBuf  = nullptr; // lo escribe el decoder de VLC
     unsigned width  = 0;
@@ -376,7 +388,19 @@ static unsigned vlc_format(void** opaque, char* chroma, unsigned* width, unsigne
 {
     auto* ctx = static_cast<VLCVideoCtx*>(*opaque);
     std::lock_guard<std::mutex> lock(ctx->mutex);
+
+    unsigned realW = 0, realH = 0;
+    if (ctx && ctx->mp && libvlc_video_get_size(ctx->mp, 0, &realW, &realH) == 0 && realW > 0 && realH > 0)
+    {
+        *width  = realW;
+        *height = realH;
+    }
+
+#ifdef _WIN32
     std::memcpy(chroma, "RGBA", 4);
+#else
+    std::memcpy(chroma, "RV32", 4);
+#endif
     ctx->width  = *width;
     ctx->height = *height;
     *pitches    = (*width) * 4;
@@ -448,6 +472,18 @@ static void vlc_display(void* opaque, void* /*picture*/)
 
 namespace ProyecThor::Core {
 
+std::string VLCBasePlayer::s_HwDecoder = "any";
+
+void VLCBasePlayer::SetDefaultHwDecoder(const std::string& dec)
+{
+    s_HwDecoder = dec.empty() ? "any" : dec;
+}
+
+std::string VLCBasePlayer::GetDefaultHwDecoder()
+{
+    return s_HwDecoder;
+}
+
 VLCBasePlayer::VLCBasePlayer(int decodeThreads, bool useHardwareDecode, bool forceSilent,
                              bool nativeWindowOutput)
     : m_DecodeThreads(decodeThreads)
@@ -476,12 +512,8 @@ VLCBasePlayer::~VLCBasePlayer()
 
 void VLCBasePlayer::InitVLC()
 {
+#ifdef _WIN32
     std::string threadsArg = "--avcodec-threads=" + std::to_string(m_DecodeThreads);
-
-    // "any": libVLC autodetecta el mejor metodo de aceleracion de hardware
-    // disponible segun la plataforma real en la que esta corriendo
-    // (D3D11VA/DXVA2 en Windows, VAAPI/VDPAU en Linux), sin necesidad de
-    // codificar el valor a mano para cada sistema operativo.
     std::string hwDecodeArg = m_UseHardwareDecode
         ? "--avcodec-hw=any"
         : "--avcodec-hw=none";
@@ -493,18 +525,21 @@ void VLCBasePlayer::InitVLC()
         "--no-video-title-show",
         hwDecodeArg.c_str(),
         threadsArg.c_str(),
-        // Cache mas generoso (antes 300ms) para dar margen en disco/CPU
-        // lentos. clock-jitter/clock-synchro NO se fuerzan a 0: eso
-        // desactivaba el auto-corrector de drift audio/video de VLC, que es
-        // justo el mecanismo que hace falta en hardware limitado.
         "--file-caching=1000",
     };
     m_Instance = libvlc_new(sizeof(args) / sizeof(args[0]), args);
+#else
+    const char* args[] = {
+        "--no-xlib",
+        "--quiet",
+        "--no-osd",
+        "--no-video-title-show",
+        "--file-caching=1000",
+    };
+    m_Instance = libvlc_new(sizeof(args) / sizeof(args[0]), args);
+#endif
     if (!m_Instance)
     {
-        // En ciertas versiones/distribuciones de libVLC en Linux, parametros de avcodec
-        // como --avcodec-hw no son aceptados como argumentos globales de libvlc_new.
-        // Reintentamos con argumentos base seguros para garantizar la reproduccion:
         const char* fallbackArgs[] = {
             "--no-xlib",
             "--quiet",
@@ -557,6 +592,7 @@ void VLCBasePlayer::CreatePersistentPlayer()
     if (!m_NativeWindowOutput)
     {
         auto* vCtx = new VLCVideoCtx();
+        vCtx->mp   = m_MediaPlayer;
         m_VideoCtx = vCtx;
         libvlc_video_set_format_callbacks(m_MediaPlayer, vlc_format, vlc_cleanup);
         libvlc_video_set_callbacks(m_MediaPlayer, vlc_lock, vlc_unlock, vlc_display, vCtx);
@@ -645,7 +681,11 @@ void VLCBasePlayer::EnsureTexture(int w, int h)
 
     glGenTextures(1, &m_TextureID);
     glBindTexture(GL_TEXTURE_2D, m_TextureID);
+#ifdef _WIN32
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+#else
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_BGRA, GL_UNSIGNED_BYTE, nullptr);
+#endif
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -740,6 +780,11 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
 
     if (loop)
         libvlc_media_add_option(media, "input-repeat=65535");
+
+    std::string hw = s_HwDecoder.empty() ? "any" : s_HwDecoder;
+    if (!m_UseHardwareDecode) hw = "none";
+    std::string hwOpt = ":avcodec-hw=" + hw;
+    libvlc_media_add_option(media, hwOpt.c_str());
 
     {
         std::lock_guard<std::mutex> lock(m_MediaSwapMutex);
@@ -1084,7 +1129,11 @@ bool VLCBasePlayer::UpdateTexture()
 
     EnsureTexture(static_cast<int>(w), static_cast<int>(h));
     glBindTexture(GL_TEXTURE_2D, m_TextureID);
+#ifdef _WIN32
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixelsToUpload);
+#else
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_BGRA, GL_UNSIGNED_BYTE, pixelsToUpload);
+#endif
     glBindTexture(GL_TEXTURE_2D, 0);
     return true;
 }

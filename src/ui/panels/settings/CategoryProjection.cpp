@@ -275,6 +275,77 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
             }
 
             ImGui::Spacing();
+            ImGui::TextUnformatted("Decodificador de Video / Aceleración de Hardware (libvlc)");
+
+#ifdef _WIN32
+            struct HwDecoderOpt {
+                const char* id;
+                const char* label;
+                const char* desc;
+            };
+            static const HwDecoderOpt kHwOpts[] = {
+                { "any",     "Automático (Recomendado)",         "LibVLC selecciona automáticamente el mejor acelerador disponible." },
+                { "none",    "Desactivado (CPU / Software)",     "Decodificación por CPU sin GPU. Recomendado si hay fallos gráficos o líneas verdes." },
+                { "d3d11va", "Direct3D 11 (D3D11VA)",           "Aceleración nativa Direct3D 11 (Windows 8, 10, 11)." },
+                { "dxva2",   "DXVA2 (DirectX Video Accel 2.0)",  "Aceleración gráfica compatible con GPUs más antiguas." }
+            };
+#else
+            struct HwDecoderOpt {
+                const char* id;
+                const char* label;
+                const char* desc;
+            };
+            static const HwDecoderOpt kHwOpts[] = {
+                { "any",   "Automático (Recomendado)",       "LibVLC selecciona automáticamente el mejor acelerador disponible." },
+                { "none",  "Desactivado (CPU / Software)",   "Decodificación por CPU sin GPU. Recomendado si hay fallos gráficos, líneas verdes o problemas en KDE/Wayland." },
+                { "vaapi", "VA-API (Intel / AMD Mesa)",      "Video Acceleration API para tarjetas gráficas Intel y AMD." },
+                { "vdpau", "VDPAU (NVIDIA)",                 "Video Decode and Presentation API for Unix para drivers NVIDIA propietarios." }
+            };
+#endif
+
+            int selIdx = 0;
+            for (int i = 0; i < (int)(sizeof(kHwOpts) / sizeof(kHwOpts[0])); ++i) {
+                if (p.vlcHardwareDecoder == kHwOpts[i].id) {
+                    selIdx = i;
+                    break;
+                }
+            }
+
+            ImGui::SetNextItemWidth(300.0f);
+            if (ImGui::BeginCombo("##vlcHwDec", kHwOpts[selIdx].label)) {
+                for (int i = 0; i < (int)(sizeof(kHwOpts) / sizeof(kHwOpts[0])); ++i) {
+                    bool isSelected = (selIdx == i);
+                    if (ImGui::Selectable(kHwOpts[i].label, isSelected)) {
+                        p.vlcHardwareDecoder = kHwOpts[i].id;
+                        Core::PresentationCore::Get().SetVLCHardwareDecoder(p.vlcHardwareDecoder);
+                        changed = true;
+                    }
+                    if (ImGui::IsItemHovered() && kHwOpts[i].desc) {
+                        ImGui::SetTooltip("%s", kHwOpts[i].desc);
+                    }
+                    if (isSelected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::SameLine();
+            HelpTooltip("Permite cambiar el método de decodificación de vídeo en LibVLC (afecta a fondos animados y vídeos).\n\n"
+                        "• Automático: Selección estándar del sistema.\n"
+                        "• Desactivado (CPU): Fuerza decodificación por software. "
+                        "Soluciona líneas verdes, problemas de macrobloques, artefactos o controladores de vídeo incompatibles.\n"
+#ifdef _WIN32
+                        "• Direct3D 11: Aceleración GPU óptima para Windows moderno.\n"
+                        "• DXVA2: Aceleración por hardware clásica de Windows.\n\n"
+#else
+                        "• VA-API: Estándar para GPUs Intel y AMD en Linux.\n"
+                        "• VDPAU: Utilizado por GPUs NVIDIA con drivers privativos.\n\n"
+#endif
+                        "Nota: Se aplica al reproducir el siguiente vídeo o cambiar de fondo.");
+
+            ImGui::Spacing();
+
+            ImGui::Spacing();
             ImGui::SeparatorText("FSR Upscaling");
 
             // OJO: la fuente de verdad es p.fsrEnabled/p.fsrSharpness (el mismo

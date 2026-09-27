@@ -91,7 +91,7 @@ namespace ProyecThor::UI {
                 if (!std::filesystem::path(imgPath).is_absolute()) {
                     imgPath = ImagesPath() + imgPath;
                 }
-                Core::PresentationCore::Get().SetBackgroundMedia(imgPath, true);
+                Core::PresentationCore::Get().SetBackgroundMedia(imgPath, false);
             }
             ImGui::PopStyleColor(2);
 

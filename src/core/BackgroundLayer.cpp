@@ -1,5 +1,6 @@
 #include "BackgroundLayer.h"
 #include "ui/windowing/SecondaryOutputWindow.h"
+#include "stb_image.h"
 #include <iostream>
 #include <chrono>
 #include <GL/glew.h>
@@ -55,7 +56,7 @@ uniform float     u_FlipY;
 void main() {
     vec2 uv = vec2(v_UV.x, mix(v_UV.y, 1.0 - v_UV.y, u_FlipY));
     vec4 c = texture(u_Tex, uv);
-    fragColor = vec4(c.rgb, c.a * u_Alpha);
+    fragColor = vec4(c.rgb, u_Alpha);
 }
 )GLSL";
 
@@ -127,6 +128,16 @@ void main() {
             using namespace std::chrono;
             return duration<double>(steady_clock::now().time_since_epoch()).count();
         }
+
+        static bool IsImagePath(const std::string& path)
+        {
+            auto dot = path.find_last_of('.');
+            if (dot == std::string::npos) return false;
+            std::string ext = path.substr(dot);
+            for (char& c : ext) c = static_cast<char>(std::tolower(c));
+            return (ext == ".jpg" || ext == ".jpeg" || ext == ".png" ||
+                    ext == ".bmp" || ext == ".webp" || ext == ".tga");
+        }
     } // anonymous namespace
 
     // useHardwareDecode=false: el parametro de VLCBasePlayer existe
@@ -147,6 +158,53 @@ void main() {
         , m_PlayerB(2, false, forceSilentAudio)
         , m_ForceSilentAudio(forceSilentAudio)
     {
+    }
+
+    BackgroundLayer::~BackgroundLayer()
+    {
+        ClearStaticImage();
+    }
+
+    bool BackgroundLayer::LoadStaticImage(const std::string& path)
+    {
+        ClearStaticImage();
+        int w = 0, h = 0, ch = 0;
+        unsigned char* data = stbi_load(path.c_str(), &w, &h, &ch, 4);
+        if (!data)
+        {
+            std::cerr << "[BackgroundLayer] Fallo al cargar imagen estatica: " << path << "\n";
+            return false;
+        }
+
+        glGenTextures(1, &m_StaticImageTex);
+        glBindTexture(GL_TEXTURE_2D, m_StaticImageTex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        stbi_image_free(data);
+
+        m_StaticImageW = w;
+        m_StaticImageH = h;
+        m_StaticImagePath = path;
+        m_IsStaticImage = true;
+        std::cerr << "[BackgroundLayer] Imagen estatica cargada OK (" << w << "x" << h << "): " << path << "\n";
+        return true;
+    }
+
+    void BackgroundLayer::ClearStaticImage()
+    {
+        if (m_StaticImageTex != 0)
+        {
+            glDeleteTextures(1, &m_StaticImageTex);
+            m_StaticImageTex = 0;
+        }
+        m_StaticImageW = 0;
+        m_StaticImageH = 0;
+        m_IsStaticImage = false;
+        m_StaticImagePath.clear();
     }
 
     VLCBasePlayer& BackgroundLayer::Active()  { return m_ActiveIsA ? m_PlayerA : m_PlayerB; }
@@ -207,6 +265,9 @@ void main() {
             }
             return;
         }
+
+        if (m_IsStaticImage)
+            return;
 
         Active().UpdateTexture();
         Active().EnforceSilenceIfNeeded();
@@ -424,13 +485,13 @@ void main() {
         if (m_ActiveIsNative) return;
 
         GLuint rawTex = static_cast<GLuint>(
-            reinterpret_cast<uintptr_t>(Active().GetTextureID()));
+            reinterpret_cast<uintptr_t>(GetTextureID()));
 
         if (rawTex == 0)
             return;
 
         int srcW = 0, srcH = 0;
-        Active().GetVideoSize(srcW, srcH);
+        GetActiveVideoSize(srcW, srcH);
 
         if (srcW <= 0 || srcH <= 0)
             return;
@@ -638,6 +699,8 @@ void main() {
 
     void* BackgroundLayer::GetTextureID()
     {
+        if (m_IsStaticImage && m_StaticImageTex != 0)
+            return (void*)(uintptr_t)m_StaticImageTex;
         return Active().GetTextureID();
     }
 
@@ -671,6 +734,13 @@ void main() {
 
     void BackgroundLayer::GetActiveVideoSize(int& width, int& height)
     {
+        if (m_IsStaticImage && m_StaticImageTex != 0)
+        {
+            width = m_StaticImageW;
+            height = m_StaticImageH;
+            return;
+        }
+
         if (m_SwapPending && Standby().HasVideoFrame())
         {
             int sw = 0, sh = 0;
@@ -730,6 +800,33 @@ void main() {
                 m_ActiveNative->player.SetVolume(0);
             }
         }
+
+        if (IsImagePath(path))
+        {
+            if (m_ActiveIsNative)
+            {
+                m_ActiveIsNative = false;
+                RetireActiveNative();
+            }
+            Active().Stop();
+            Standby().Stop();
+            m_SwapPending        = false;
+            m_SwapReadyAt        = 0.0;
+            m_SwapSettledAt      = 0.0;
+            m_TransitionProgress = 0.0f;
+            m_PrefetchArmed      = false;
+            m_PrefetchedPath.clear();
+            m_IsVideo            = false;
+
+            if (m_IsStaticImage && m_StaticImagePath == path)
+            {
+                return;
+            }
+            LoadStaticImage(path);
+            return;
+        }
+
+        ClearStaticImage();
 
         // El motor nativo aplica SOLO a video real (allowAudio=true —
         // Videos/cola del Monitor): Fondos/imagenes (allowAudio=false)
@@ -903,6 +1000,8 @@ void main() {
             allowAudio = false;
         }
 
+        if (IsImagePath(path)) return;
+
         // Sin crossfade en el motor nativo, no hay nada util que precargar
         // (ver CommitPrefetch(), que en este modo cae directo a SetVideo()).
         // Igual que en SetVideo(): solo aplica a video real (allowAudio).
@@ -975,6 +1074,8 @@ void main() {
             RetireActiveNative();
         }
 
+        if (IsImagePath(path)) { SetVideo(path, allowAudio); return; }
+
         if (m_PrefetchArmed && m_PrefetchedPath == path)
         {
             // Ya esta listo (Update() lo pauso apenas decodifico su primer
@@ -1041,6 +1142,7 @@ void main() {
 
     void BackgroundLayer::SetSolidColor(float r, float g, float b)
     {
+        ClearStaticImage();
         m_ContentAllowsAudio = false;
         m_IsVideo    = false;
         m_BgColor[0] = r;
@@ -1073,7 +1175,7 @@ void main() {
     }
 
     void* BackgroundLayer::GetProcessedTexture(int targetW, int targetH) {
-        GLuint rawTex = static_cast<GLuint>(reinterpret_cast<uintptr_t>(Active().GetTextureID()));
+        GLuint rawTex = static_cast<GLuint>(reinterpret_cast<uintptr_t>(GetTextureID()));
         if (rawTex == 0 || targetW <= 0 || targetH <= 0)
             return nullptr;
 
@@ -1081,7 +1183,7 @@ void main() {
             return (void*)(uintptr_t)rawTex;
 
         int srcW = 0, srcH = 0;
-        Active().GetVideoSize(srcW, srcH);
+        GetActiveVideoSize(srcW, srcH);
 
         if (srcW <= 0 || srcH <= 0 || (srcW >= targetW && srcH >= targetH))
             return (void*)(uintptr_t)rawTex;
@@ -1127,7 +1229,7 @@ void main() {
     void* BackgroundLayer::GetBlurredFillTexture(int workW, int workH) {
         if (!m_FillBlurEnabled) return nullptr;
 
-        GLuint rawTex = static_cast<GLuint>(reinterpret_cast<uintptr_t>(Active().GetTextureID()));
+        GLuint rawTex = static_cast<GLuint>(reinterpret_cast<uintptr_t>(GetTextureID()));
         if (rawTex == 0 || workW <= 0 || workH <= 0) return nullptr;
 
         // Resolucion de trabajo baja a proposito (1/4, igual que

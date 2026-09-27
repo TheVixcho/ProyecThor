@@ -87,18 +87,15 @@ static void ChangeToExecutableDirectory()
 
     if (!std::getenv("VLC_PLUGIN_PATH"))
     {
-        if (std::filesystem::exists("/usr/lib/vlc/plugins"))
+        std::filesystem::path localPlugins = dir / "plugins";
+        if (std::filesystem::exists(localPlugins))
+            setenv("VLC_PLUGIN_PATH", localPlugins.c_str(), 1);
+        else if (std::filesystem::exists("/usr/lib/vlc/plugins"))
             setenv("VLC_PLUGIN_PATH", "/usr/lib/vlc/plugins", 1);
         else if (std::filesystem::exists("/usr/lib64/vlc/plugins"))
             setenv("VLC_PLUGIN_PATH", "/usr/lib64/vlc/plugins", 1);
         else if (std::filesystem::exists("/usr/lib/x86_64-linux-gnu/vlc/plugins"))
             setenv("VLC_PLUGIN_PATH", "/usr/lib/x86_64-linux-gnu/vlc/plugins", 1);
-        else
-        {
-            std::filesystem::path localPlugins = dir / "plugins";
-            if (std::filesystem::exists(localPlugins))
-                setenv("VLC_PLUGIN_PATH", localPlugins.c_str(), 1);
-        }
     }
 #endif
 }

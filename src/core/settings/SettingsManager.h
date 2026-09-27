@@ -196,6 +196,9 @@ namespace ProyecThor::Settings {
         // BackgroundLayer::SetUseNativeEngine). Default libvlc (1): pedido
         // explicito, sin que el operador tenga que ir a configurarlo.
         int videoRenderEngine = 1;
+
+        // ── Decodificador de hardware para libVLC ("any", "none", "vaapi", "vdpau", "d3d11va", "dxva2")
+        std::string vlcHardwareDecoder = "any";
     };
 
     // ── Audio ────────────────────────────────────────────────────────────

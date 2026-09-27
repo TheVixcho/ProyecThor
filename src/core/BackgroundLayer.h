@@ -217,6 +217,15 @@ namespace ProyecThor::Core {
         // un rato en m_RetiringNative hasta que Update() los destruye.
         std::unique_ptr<NativePlayback>              m_ActiveNative;
         std::vector<std::unique_ptr<NativePlayback>> m_RetiringNative;
+        // Imagenes estaticas (evitan VLC para maxima estabilidad y compatibilidad)
+        GLuint      m_StaticImageTex   = 0;
+        int         m_StaticImageW     = 0;
+        int         m_StaticImageH     = 0;
+        bool        m_IsStaticImage    = false;
+        std::string m_StaticImagePath;
+        bool LoadStaticImage(const std::string& path);
+        void ClearStaticImage();
+
         static constexpr double kNativeRetireSeconds = 2.0;
 
         // ── Revelado diferido de la ventana nueva ────────────────────────
@@ -287,7 +296,7 @@ namespace ProyecThor::Core {
         // de producto NUNCA debe emitir audio, sin importar que boton la
         // toque.
         explicit BackgroundLayer(bool forceSilentAudio = false);
-        ~BackgroundLayer() = default;
+        ~BackgroundLayer();
 
         void SetFlipVideoY(bool flip) { m_FlipVideoY = flip; }
         bool GetFlipVideoY() const { return m_FlipVideoY; }

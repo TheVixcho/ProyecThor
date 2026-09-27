@@ -399,9 +399,9 @@ static void RenderMMDragSource(const MMItem& item, const std::string& disp) {
 
 static void RenderMMContextMenu(const MMItem& item, const char* popupId) {
     if (!ImGui::BeginPopupContextItem(popupId)) return;
-    if (item.type == Core::ItemType::Video) {
+    if (item.type == Core::ItemType::Video || item.type == Core::ItemType::Image) {
         if (ImGui::MenuItem("Enviar al monitor")) {
-            Core::PresentationCore::Get().SetBackgroundMedia(ItemFullPath(item), true, /*allowAudio=*/true);
+            Core::PresentationCore::Get().SetBackgroundMedia(ItemFullPath(item), item.type == Core::ItemType::Video, /*allowAudio=*/item.type == Core::ItemType::Video);
             Core::PresentationCore::Get().SetProjecting(true);
         }
         ImGui::Separator();

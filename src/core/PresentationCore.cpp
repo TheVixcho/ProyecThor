@@ -333,6 +333,13 @@ bool PresentationCore::GetGlobalMute() const {
         return (m_Impl && m_Impl->background.GetUseNativeEngine()) ? 1 : 0;
     }
 
+    void PresentationCore::SetVLCHardwareDecoder(const std::string& dec) {
+        VLCBasePlayer::SetDefaultHwDecoder(dec);
+    }
+    std::string PresentationCore::GetVLCHardwareDecoder() const {
+        return VLCBasePlayer::GetDefaultHwDecoder();
+    }
+
     // NOTA multi-monitor: cada setter de aca abajo, ademas de aplicar al
     // primario (compositeFX), tambien aplica el mismo valor a CADA instancia
     // de m_Impl->extraCompositeFX (monitores de salida extra) -- asi un

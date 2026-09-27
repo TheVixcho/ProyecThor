@@ -564,7 +564,7 @@ endif()
 # vez que se compila, ENCIMA de assets/ (mismo directorio de salida) -- no
 # hay conflicto real porque ya no comparten archivos (fuente/iconos/splash
 # se movieron a assets/, ver arriba).
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
+if(WIN32 AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
     message(STATUS "extrabuild/ encontrado, se copiara al build")
     add_custom_command(TARGET ProyecThor POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -573,8 +573,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
         COMMENT "Copiando extrabuild/ al directorio de salida"
     )
 else()
-    message(STATUS "extrabuild/ no encontrado -- se sigue con lo que trajo assets/ (icono/fuente/splash). "
-                    "Para audio/video real (VLC) todavia hace falta VLC instalado (Linux) o extrabuild/ (Windows).")
+    message(STATUS "extrabuild/ no aplica o no encontrado en Linux -- se usan las librerias y plugins nativos.")
 endif()
 
 # ── 7c. COPIA DE libpdfium.so Y libvlc.so AL DIRECTORIO DE BUILD (Linux) ─────
