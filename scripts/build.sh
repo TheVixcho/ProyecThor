@@ -94,8 +94,79 @@ case "$PLATFORM" in
         $FLATPAK_BIN install --user -y --bundle "$PROJECT_ROOT/ProyecThor.flatpak"
         $FLATPAK_BIN run io.github.thevixcho.ProyecThor
         ;;
+    appimage)
+        cmake -B build-linux -G Ninja
+        cmake --build build-linux
+        rm -rf build-appimage
+        mkdir -p build-appimage/AppDir
+        DESTDIR="$PROJECT_ROOT/build-appimage/AppDir" cmake --install build-linux --prefix=/usr
+        cp "$PROJECT_ROOT/packaging/io.github.thevixcho.ProyecThor.desktop" "$PROJECT_ROOT/build-appimage/AppDir/"
+        cp "$PROJECT_ROOT/packaging/proyecthor.png" "$PROJECT_ROOT/build-appimage/AppDir/io.github.thevixcho.ProyecThor.png"
+        cp "$PROJECT_ROOT/packaging/proyecthor.png" "$PROJECT_ROOT/build-appimage/AppDir/.DirIcon"
+
+        cat << 'EOF' > "$PROJECT_ROOT/build-appimage/AppDir/AppRun"
+#!/bin/sh
+set -e
+HERE="$(dirname "$(readlink -f "$0")")"
+export PATH="${HERE}/usr/bin:${PATH}"
+export LD_LIBRARY_PATH="${HERE}/usr/lib/proyecthor:${HERE}/usr/lib64/proyecthor:${HERE}/usr/lib:${HERE}/usr/lib64:${LD_LIBRARY_PATH}"
+
+if [ -d "${HERE}/usr/lib/proyecthor/plugins" ]; then
+    export VLC_PLUGIN_PATH="${HERE}/usr/lib/proyecthor/plugins"
+elif [ -d "${HERE}/usr/lib64/proyecthor/plugins" ]; then
+    export VLC_PLUGIN_PATH="${HERE}/usr/lib64/proyecthor/plugins"
+fi
+
+if [ -d "${HERE}/usr/lib/proyecthor" ]; then
+    cd "${HERE}/usr/lib/proyecthor"
+elif [ -d "${HERE}/usr/lib64/proyecthor" ]; then
+    cd "${HERE}/usr/lib64/proyecthor"
+fi
+
+exec ./ProyecThor "$@"
+EOF
+        chmod +x "$PROJECT_ROOT/build-appimage/AppDir/AppRun"
+
+        if [ -d "$PROJECT_ROOT/build-appimage/AppDir/usr/lib64/proyecthor" ] && [ ! -e "$PROJECT_ROOT/build-appimage/AppDir/usr/lib/proyecthor" ]; then
+            mkdir -p "$PROJECT_ROOT/build-appimage/AppDir/usr/lib"
+            ln -s ../lib64/proyecthor "$PROJECT_ROOT/build-appimage/AppDir/usr/lib/proyecthor"
+        fi
+
+        APPIMAGETOOL="/home/vixcho/.local/bin/appimagetool"
+        if ! command -v appimagetool >/dev/null 2>&1 && [ ! -f "$APPIMAGETOOL" ]; then
+            mkdir -p /home/vixcho/.local/bin
+            curl -L -o "$APPIMAGETOOL" https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+            chmod +x "$APPIMAGETOOL"
+        fi
+
+        APPIMAGETOOL_CMD="appimagetool"
+        if [ -f "$APPIMAGETOOL" ]; then
+            APPIMAGETOOL_CMD="$APPIMAGETOOL"
+        fi
+
+        if command -v flatpak-spawn >/dev/null 2>&1; then
+            flatpak-spawn --host env ARCH=x86_64 "$APPIMAGETOOL_CMD" -n -u "gh-releases-zsync|TheVixcho|ProyecThor|latest|ProyecThor-*x86_64.AppImage.zsync" "$PROJECT_ROOT/build-appimage/AppDir" "$PROJECT_ROOT/ProyecThor-x86_64.AppImage"
+        else
+            env ARCH=x86_64 "$APPIMAGETOOL_CMD" -n -u "gh-releases-zsync|TheVixcho|ProyecThor|latest|ProyecThor-*x86_64.AppImage.zsync" "$PROJECT_ROOT/build-appimage/AppDir" "$PROJECT_ROOT/ProyecThor-x86_64.AppImage"
+        fi
+
+        echo "=========================================================="
+        echo "[OK] AppImage generado con éxito: ProyecThor-x86_64.AppImage"
+        echo "Para ejecutarlo: ./ProyecThor-x86_64.AppImage"
+        echo "=========================================================="
+        ;;
+    appimage-run)
+        if [ ! -f "ProyecThor-x86_64.AppImage" ]; then
+            "$0" appimage
+        fi
+        if command -v flatpak-spawn >/dev/null 2>&1; then
+            flatpak-spawn --host "$PROJECT_ROOT/ProyecThor-x86_64.AppImage"
+        else
+            "$PROJECT_ROOT/ProyecThor-x86_64.AppImage"
+        fi
+        ;;
     *)
-        echo "Uso: $0 {linux|windows|linux-run|windows-run|flatpak|flatpak-run}"
+        echo "Uso: $0 {linux|windows|linux-run|windows-run|flatpak|flatpak-run|appimage|appimage-run}"
         exit 1
         ;;
 esac
