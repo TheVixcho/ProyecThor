@@ -57,4 +57,4 @@ modules:
       - type: git
         url: https://github.com/TheVixcho/ProyecThor.git
         tag: v1.0.1
-        commit: ac5bd3d92f5e7594d2a788cfe3e680975cd2e8ee
+        commit: e5c1369bf57a8a25c1356f671c6caecb062ca6c8
