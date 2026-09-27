@@ -2,6 +2,7 @@
 #include "TransitionPanel.h"
 #include "UIManager.h"
 #include "DesignSystem.h"
+#include "ui/framework/UIStrings.h"
 #include "ui/framework/IconRail.h"
 #include "ui/framework/AppIcons.h"
 #include "ui/panels/home/HomeIcons.h"

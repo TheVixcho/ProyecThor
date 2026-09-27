@@ -650,7 +650,7 @@ void LayersStyleTab::RenderQuickAdjust() {
         ImGui::TextColored(LP::TextMuted, "%s", Loc("Color Base", "Base Color", "Cor Base"));
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
-        changed |= ImGuiColorEdit4("##qc", m_CurrentStyle.lyrics.color,
+        changed |= ImGui::ColorEdit4("##qc", m_CurrentStyle.lyrics.color,
             ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_NoInputs |
             ImGuiColorEditFlags_PickerHueWheel | ImGuiColorEditFlags_AlphaPreviewHalf);
 

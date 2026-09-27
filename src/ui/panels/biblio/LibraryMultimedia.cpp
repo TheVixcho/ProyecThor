@@ -27,6 +27,7 @@
 #include "stb_image.h"
 
 namespace DS = ProyecThor::UI::DS;
+using ProyecThor::UI::Loc;
 
 namespace ProyecThor::Library {
 

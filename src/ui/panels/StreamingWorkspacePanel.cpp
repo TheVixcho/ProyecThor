@@ -2,6 +2,7 @@
 #include "BroadcastPanel.h"
 #include "UIManager.h"
 #include "DesignSystem.h"
+#include "ui/framework/UIStrings.h"
 #include <algorithm>
 #include <imgui.h>
 

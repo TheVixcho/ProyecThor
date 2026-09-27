@@ -2,6 +2,7 @@
 #include "UIManager.h"
 #include "LibraryPanel.h"
 #include "DesignSystem.h"
+#include "ui/framework/UIStrings.h"
 #include "overlay/OverlayLibraryTab.h"
 #include "ui/framework/AppIcons.h"
 #include "biblio/LibraryIcons.h"

@@ -21,6 +21,7 @@ static constexpr int kCat_Videos = 1;
 static constexpr int kCat_Bibles = 3;
 
 namespace DS = ProyecThor::UI::DS;
+using ProyecThor::UI::Loc;
 
 namespace ProyecThor::Library {
 
