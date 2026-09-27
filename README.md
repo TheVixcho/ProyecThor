@@ -7,6 +7,7 @@ Open-source software designed for optimal speed and reliability in high-pressure
 [Website](https://proyecthor.web.app) &nbsp;•&nbsp; [Download Release](https://github.com/TheVixcho/ProyecThor/releases) &nbsp;•&nbsp; [Report a Bug](https://github.com/TheVixcho/ProyecThor/issues) &nbsp;•&nbsp; [Wiki](https://github.com/TheVixcho/ProyecThor/wiki)
 
 ---
+## Used AI to generate comprehensive comments, document function logic for team collaboration, and structure distinct code sections.
 
 ## Table of Contents
 
