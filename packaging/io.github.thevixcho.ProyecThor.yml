@@ -13,8 +13,6 @@ finish-args:
   - --device=dri
   - --socket=pulseaudio
   - --share=network
-  - --talk-name=org.freedesktop.portal.FileChooser
-  - --talk-name=org.freedesktop.portal.OpenURI
 
 modules:
   - name: nlohmann-json
@@ -30,13 +28,14 @@ modules:
   - name: glm
     buildsystem: cmake-ninja
     config-opts:
-      - -DGLM_TEST_ENABLE=OFF
+      - -DGLM_BUILD_TESTS=OFF
+      - -DGLM_BUILD_INSTALL=ON
       - -DBUILD_SHARED_LIBS=OFF
     sources:
       - type: git
         url: https://github.com/g-truc/glm.git
-        tag: 0.9.9.8
-        commit: bf71a834948186f4097caa076cd2663c69a10e1e
+        tag: 1.0.1
+        commit: 0af55ccecd98d4e5a8d1fad7de25ba429d60e863
 
   - name: glfw
     buildsystem: cmake-ninja
@@ -59,4 +58,4 @@ modules:
       - type: git
         url: https://github.com/TheVixcho/ProyecThor.git
         tag: v1.0.1
-        commit: e5c1369937213c45df8b4a987c5ca94bc2eb8937
+        commit: 34a016798905412101191879c7984adf7324d883
