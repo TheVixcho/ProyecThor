@@ -1025,8 +1025,8 @@ if (m_Mode == WorkspaceMode::Hub)
         // Biblioteca) mientras el panel estaba oculto.
         panel->Render();
     }
-if (m_FocusViewNextFrame) {
-        ImGui::SetWindowFocus(str.panelLiveView);
+    if (m_FocusViewNextFrame) {
+        ImGui::SetWindowFocus("###LiveViewPanel");
         m_FocusViewNextFrame = false;
     }
     // (Salida real movida a RenderLiveOutputWindows(), llamada al principio
@@ -2309,6 +2309,14 @@ void UIManager::BeginDockspace()
             m_ResetLayout         = true;
         }
     }
+    {
+        int currentLang = (int)ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language;
+        if (m_LastLanguage != -1 && currentLang != m_LastLanguage)
+        {
+            m_ResetLayout = true;
+        }
+        m_LastLanguage = currentLang;
+    }
 
     if (m_ResetLayout || !ImGui::DockBuilderGetNode(dockspace_id))
     {
@@ -2364,10 +2372,10 @@ void UIManager::BuildWorkspaceLayoutClassic(ImGuiID dockspace_id)
     ImGuiID dock_main_top, dock_main_bottom;
     ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Down, 0.30f, &dock_main_bottom, &dock_main_top);
 
-    ImGui::DockBuilderDockWindow(str.library,       dock_left_top);
-    ImGui::DockBuilderDockWindow("Home",            dock_main_top);
-    ImGui::DockBuilderDockWindow(str.panelLiveView, dock_right);
-    ImGui::DockBuilderDockWindow("Diseño",          dock_main_bottom);
+    ImGui::DockBuilderDockWindow("###LibraryPanel",       dock_left_top);
+    ImGui::DockBuilderDockWindow("###HomePanel",          dock_main_top);
+    ImGui::DockBuilderDockWindow("###LiveViewPanel",      dock_right);
+    ImGui::DockBuilderDockWindow("###StylesHubPanel",     dock_main_bottom);
 
     ImGuiID leafNodes[] = { dock_left_top, dock_left_bottom, dock_main_top, dock_main_bottom, dock_right };
     for (ImGuiID nodeId : leafNodes)
@@ -2420,10 +2428,10 @@ void UIManager::BuildWorkspaceLayoutSimple(ImGuiID dockspace_id)
     // mas ancha de las dos columnas del medio (~32% del total vs ~30% de
     // Home), en vez de quedar mas chica que Home.
 
-    ImGui::DockBuilderDockWindow(str.library,       dock_left_top);
-    ImGui::DockBuilderDockWindow("Home",            dock_main);
-    ImGui::DockBuilderDockWindow(str.panelLiveView, dock_mid_right);
-    ImGui::DockBuilderDockWindow("Diseño",          dock_right);
+    ImGui::DockBuilderDockWindow("###LibraryPanel",       dock_left_top);
+    ImGui::DockBuilderDockWindow("###HomePanel",          dock_main);
+    ImGui::DockBuilderDockWindow("###LiveViewPanel",      dock_mid_right);
+    ImGui::DockBuilderDockWindow("###StylesHubPanel",     dock_right);
 
     ImGuiID leafNodes[] = { dock_left_top, dock_left_bottom, dock_main, dock_mid_right, dock_right };
     for (ImGuiID nodeId : leafNodes)
@@ -2451,7 +2459,7 @@ void UIManager::BuildWorkspaceLayoutSimple(ImGuiID dockspace_id)
 // Captura/Overlay/Vista en vivo).
 void UIManager::BuildWorkspaceLayoutBroadcast(ImGuiID dockspace_id)
 {
-    ImGui::DockBuilderDockWindow("Transmisión", dockspace_id);
+    ImGui::DockBuilderDockWindow("###StreamingWorkspacePanel", dockspace_id);
     ImGui::DockBuilderFinish(dockspace_id);
 
     for (auto& p : m_PanelCollapse) { p.nodeId = 0; p.collapsed = false; p.animT = 0.0f; }
@@ -2473,8 +2481,8 @@ void UIManager::BuildWorkspaceLayoutLibrary(ImGuiID dockspace_id)
     ImGuiID dock_left;
     ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Left, 0.30f, &dock_left, &dock_main);
 
-    ImGui::DockBuilderDockWindow(str.library, dock_left);
-    ImGui::DockBuilderDockWindow("Home",      dock_main);
+    ImGui::DockBuilderDockWindow("###LibraryPanel", dock_left);
+    ImGui::DockBuilderDockWindow("###HomePanel",    dock_main);
 
     ImGuiID leafNodes[] = { dock_left, dock_main };
     for (ImGuiID nodeId : leafNodes)
@@ -2500,7 +2508,7 @@ void UIManager::BuildWorkspaceLayoutLibrary(ImGuiID dockspace_id)
 // Overlays como pestañas internas.
 void UIManager::BuildWorkspaceLayoutVideo(ImGuiID dockspace_id)
 {
-    ImGui::DockBuilderDockWindow("Producción", dockspace_id);
+    ImGui::DockBuilderDockWindow("###VideoEditorPanel", dockspace_id);
     ImGui::DockBuilderFinish(dockspace_id);
     for (auto& p : m_PanelCollapse) { p.nodeId = 0; p.collapsed = false; p.animT = 0.0f; }
 }

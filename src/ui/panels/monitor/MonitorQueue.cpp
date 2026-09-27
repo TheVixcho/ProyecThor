@@ -10,6 +10,7 @@
 #include <cinttypes>
 #include "core/AppPaths.h"
 #include "ui/framework/bin/StyleGeneralApp.h"
+#include "ui/framework/UIStrings.h"
 #include <filesystem>
 
 namespace ProyecThor::UI {
@@ -102,7 +103,7 @@ void MonitorView::RenderQueue(float w)
             m_QueueCollapsed = false;
         }
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Desplegar cola de reproducción");
+            ImGui::SetTooltip("%s", Loc("Desplegar cola de reproducción", "Expand play queue", "Expandir fila de reprodução"));
         ImGui::PopStyleVar();
         ImGui::PopStyleColor(3);
 
@@ -155,7 +156,7 @@ void MonitorView::RenderQueue(float w)
     {
         ImGui::PushStyleColor(ImGuiCol_Text, k_QueueAccent);
         char title[64];
-        snprintf(title, sizeof(title), "Cola  (%d)", static_cast<int>(items.size()));
+        snprintf(title, sizeof(title), "%s  (%d)", Loc("Cola", "Queue", "Fila"), static_cast<int>(items.size()));
         ImGui::TextUnformatted(title);
         ImGui::PopStyleColor();
 
@@ -187,7 +188,7 @@ void MonitorView::RenderQueue(float w)
             m_QueueCollapsed = true;
         }
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Plegar cola (maximizar preview)");
+            ImGui::SetTooltip("%s", Loc("Plegar cola (maximizar preview)", "Collapse queue (maximize preview)", "Recolher fila (maximizar preview)"));
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor(4);
     }
@@ -396,18 +397,18 @@ void MonitorView::RenderQueue(float w)
 
         if (ImGui::BeginPopupContextItem("##ctx_q"))
         {
-            if (ImGui::MenuItem("Reproducir ahora")) PlayQueueItem(i);
+            if (ImGui::MenuItem(Loc("Reproducir ahora", "Play now", "Reproduzir agora"))) PlayQueueItem(i);
             ImGui::Separator();
             bool canUp   = (i > 0);
             bool canDown = (i < static_cast<int>(items.size()) - 1);
             if (!canUp) ImGui::BeginDisabled();
-            if (ImGui::MenuItem("Subir")) m_QueueEngine.Move(i, i - 1);
+            if (ImGui::MenuItem(Loc("Subir", "Move up", "Mover para cima"))) m_QueueEngine.Move(i, i - 1);
             if (!canUp) ImGui::EndDisabled();
             if (!canDown) ImGui::BeginDisabled();
-            if (ImGui::MenuItem("Bajar")) m_QueueEngine.Move(i, i + 1);
+            if (ImGui::MenuItem(Loc("Bajar", "Move down", "Mover para baixo"))) m_QueueEngine.Move(i, i + 1);
             if (!canDown) ImGui::EndDisabled();
             ImGui::Separator();
-            if (ImGui::MenuItem("Quitar de la cola")) removeRequest = i;
+            if (ImGui::MenuItem(Loc("Quitar de la cola", "Remove from queue", "Remover da fila"))) removeRequest = i;
             ImGui::EndPopup();
         }
 
@@ -434,8 +435,8 @@ void MonitorView::RenderQueue(float w)
             ImGui::SetCursorPosX((availW - tw) * 0.5f);
             ImGui::TextUnformatted(txt);
         };
-        center("Sin videos en la cola");
-        center("Agrega con el botón  +  Agregar");
+        center(Loc("Sin videos en la cola", "No videos in queue", "Nenhum vídeo na fila"));
+        center(Loc("Agrega con el botón  +  Agregar", "Add with the  +  Add button", "Adicione com o botão  +  Adicionar"));
         ImGui::PopStyleColor();
     }
 
@@ -488,7 +489,9 @@ void MonitorView::RenderQueue(float w)
             ImVec4 apHov = isActive
                 ? ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, 0.64f)
                 : ImVec4(k_QueueAccent.x, k_QueueAccent.y, k_QueueAccent.z, 0.46f);
-            const char* apLabel = isActive ? "Detener reproducción" : "Reproducir cola";
+            const char* apLabel = isActive
+                ? Loc("Detener reproducción", "Stop playback", "Parar reprodução")
+                : Loc("Reproducir cola", "Play queue", "Reproduzir fila");
 
             ImVec2 apP0 = ImGui::GetCursorScreenPos();
 
@@ -523,7 +526,7 @@ void MonitorView::RenderQueue(float w)
             bool hasNext = isActive && (currentIdx < static_cast<int>(items.size()) - 1);
 
             if (!hasPrev) ImGui::BeginDisabled();
-            bool prevClicked = QueueActionButton("prevBtn", "Anterior", "skip_prev",
+            bool prevClicked = QueueActionButton("prevBtn", Loc("Anterior", "Previous", "Anterior"), "skip_prev",
                               { bw2, btnH }, k_BtnGreen, k_BtnGreenH, k_QueueAccent, k_R * 0.7f);
             if (prevClicked)
                 PlayQueueItem(currentIdx - 1);
@@ -532,7 +535,7 @@ void MonitorView::RenderQueue(float w)
             ImGui::SameLine();
 
             if (!hasNext) ImGui::BeginDisabled();
-            bool nextClicked = QueueActionButton("nextBtn", "Siguiente", "skip_next",
+            bool nextClicked = QueueActionButton("nextBtn", Loc("Siguiente", "Next", "Seguinte"), "skip_next",
                               { bw2, btnH }, k_BtnGreen, k_BtnGreenH, k_QueueAccent, k_R * 0.7f);
             if (nextClicked)
                 PlayQueueItem(currentIdx + 1);
@@ -542,7 +545,7 @@ void MonitorView::RenderQueue(float w)
         ImGui::Spacing();
 
         {
-            bool addClicked = QueueActionButton("addBtn", "Agregar", "add_to_queue",
+            bool addClicked = QueueActionButton("addBtn", Loc("Agregar", "Add", "Adicionar"), "add_to_queue",
                               { bw2, btnH }, k_BtnNeutral, k_BtnNeutralH, k_BtnNeutralT, k_R * 0.7f);
             if (addClicked)
             {
@@ -562,7 +565,7 @@ void MonitorView::RenderQueue(float w)
             ImGui::SameLine();
 
             if (isEmpty) ImGui::BeginDisabled();
-            bool clearClicked = QueueActionButton("clearBtn", "Limpiar", "cleaning_services",
+            bool clearClicked = QueueActionButton("clearBtn", Loc("Limpiar", "Clear", "Limpar"), "cleaning_services",
                               { bw2, btnH }, k_BtnDel, k_BtnDelH, k_BtnDelT, k_R * 0.7f);
             if (clearClicked)
             {

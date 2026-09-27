@@ -3,6 +3,7 @@
 #include "core/settings/SettingsManager.h"
 #include "core/PresentationCore.h"
 #include "core/AppPaths.h"
+#include "ui/framework/UIStrings.h"
 #include "stb_image.h"
 #include <imgui.h>
 #include <algorithm>
@@ -579,7 +580,7 @@ void BroadcastPanel::RenderStudioWindow(bool* pOpen) {
             if (srcTex && srcW > 0 && srcH > 0) {
                 ImGui::Image((ImTextureID)(intptr_t)srcTex, ImVec2(prevW, prevH), ImVec2(0, 1), ImVec2(1, 0));
             } else {
-                const char* noSrc = "[ SIN SEÑAL / SELECCIONA UNA FUENTE ]";
+                const char* noSrc = Loc("[ SIN SEÑAL / SELECCIONA UNA FUENTE ]", "[ NO SIGNAL / SELECT A SOURCE ]", "[ SEM SINAL / SELECIONE UMA FONTE ]");
                 ImVec2 nsz = ImGui::CalcTextSize(noSrc);
                 dl->AddText(ImVec2(prevMin.x + (prevW - nsz.x) * 0.5f, prevMin.y + (prevH - nsz.y) * 0.5f),
                             IM_COL32(140, 140, 150, 180), noSrc);
@@ -591,13 +592,13 @@ void BroadcastPanel::RenderStudioWindow(bool* pOpen) {
             ImGui::Spacing();
 
             // Selector de Fuentes y Capas
-            ImGui::TextUnformatted("Fuentes y Capas Disponibles:");
+            ImGui::TextUnformatted(Loc("Fuentes y Capas Disponibles:", "Available Sources and Layers:", "Fontes e Camadas Disponíveis:"));
             ImGui::Spacing();
 
             // Opción 1: Captura directa
             bool isCaptureActive = (m_ActiveLayer == -1);
             if (isCaptureActive) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(accent.x, accent.y, accent.z, 0.35f));
-            if (ImGui::Button("📹 Cámara / Captura de Pantalla", ImVec2(ImGui::GetContentRegionAvail().x, 30.0f))) {
+            if (ImGui::Button(Loc("📹 Cámara / Captura de Pantalla", "📹 Camera / Screen Capture", "📹 Câmera / Captura de Tela"), ImVec2(ImGui::GetContentRegionAvail().x, 30.0f))) {
                 m_ActiveLayer = -1;
                 m_ShowInLayer = true;
             }
@@ -611,7 +612,7 @@ void BroadcastPanel::RenderStudioWindow(bool* pOpen) {
                 }
             }
             if (isLiveOutput) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(accent.x, accent.y, accent.z, 0.35f));
-            if (ImGui::Button("📽 Salida en Vivo (Pantalla Pública)", ImVec2(ImGui::GetContentRegionAvail().x, 30.0f))) {
+            if (ImGui::Button(Loc("📽 Salida en Vivo (Pantalla Pública)", "📽 Live Output (Public Display)", "📽 Saída Ao Vivo (Tela Pública)"), ImVec2(ImGui::GetContentRegionAvail().x, 30.0f))) {
                 // Buscar o agregar capa de salida en vivo
                 int found = -1;
                 for (int i = 0; i < (int)m_Layers.size(); ++i) {
@@ -630,7 +631,7 @@ void BroadcastPanel::RenderStudioWindow(bool* pOpen) {
             if (isLiveOutput) ImGui::PopStyleColor();
 
             ImGui::Spacing();
-            ImGui::Checkbox("Habilitar envío de señal a la transmisión", &m_ShowInLayer);
+            ImGui::Checkbox(Loc("Habilitar envío de señal a la transmisión", "Enable signal output to stream", "Habilitar envio de sinal para a transmissão"), &m_ShowInLayer);
         }
         ImGui::EndChild();
 
@@ -641,7 +642,7 @@ void BroadcastPanel::RenderStudioWindow(bool* pOpen) {
         {
             auto& s = ProyecThor::Settings::SettingsManager::Get().GetSettings().streaming;
 
-            ImGui::TextUnformatted("Ajustes del Codificador");
+            ImGui::TextUnformatted(Loc("Ajustes del Codificador", "Encoder Settings", "Configurações do Codificador"));
             ImGui::Separator();
             ImGui::Spacing();
 

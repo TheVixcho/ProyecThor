@@ -4,6 +4,7 @@
 #include "LibraryHelpers.h"
 #include "LibrarySongs.h"
 #include "ui/framework/DesignSystem.h"
+#include "ui/framework/UIStrings.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -46,18 +47,18 @@ void RenderRenameModal(LibraryContext& ctx)
                                ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextPrimary));
-        ImGui::TextUnformatted(ctx.renameIsURL ? "Editar URL" : "Renombrar archivo");
+        ImGui::TextUnformatted(ctx.renameIsURL ? Loc("Editar URL", "Edit URL", "Editar URL") : Loc("Renombrar archivo", "Rename file", "Renomear arquivo"));
         ImGui::PopStyleColor();
 
         AccentSep(ImGui::ColorConvertU32ToFloat4(DS::AccentColorDim));
         ImGui::Spacing();
 
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
-        ImGui::Text("Original: %s", ctx.renameOldName.c_str());
+        ImGui::Text("%s: %s", Loc("Original", "Original", "Original"), ctx.renameOldName.c_str());
         ImGui::PopStyleColor();
         ImGui::Spacing();
 
-        ImGui::TextUnformatted("Nuevo nombre:");
+        ImGui::TextUnformatted(Loc("Nuevo nombre:", "New name:", "Novo nome:"));
         ImGui::SetNextItemWidth(-1.f);
         if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
 
@@ -92,11 +93,11 @@ void RenderRenameModal(LibraryContext& ctx)
             const float bw2   = std::floor((avail - sp) * 0.5f);
 
             bool doRename = pressEnter ||
-                PillButton("Aceptar",  { bw2, 36.f },
+                PillButton(Loc("Aceptar", "Accept", "Aceitar"),  { bw2, 36.f },
                            k_BtnGreen,   k_BtnGreenH,   k_BtnGreenA,   k_BtnGreenT);
             ImGui::SameLine();
             bool doCancel =
-                PillButton("Cancelar", { bw2, 36.f },
+                PillButton(Loc("Cancelar", "Cancel", "Cancelar"), { bw2, 36.f },
                            k_BtnNeutral, k_BtnNeutralH, k_BtnNeutralA, k_BtnNeutralT) ||
                 ImGui::IsKeyPressed(ImGuiKey_Escape);
 
@@ -193,11 +194,11 @@ void RenderDefaultStyleCombo(LibraryContext& ctx, float trailingReserve)
         Core::PresentationCore::Get().GetSavedStyleNames();
 
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
-    ImGui::TextUnformatted("Estilo por defecto:");
+    ImGui::TextUnformatted(Loc("Estilo por defecto:", "Default style:", "Estilo padrão:"));
     ImGui::PopStyleColor();
     ImGui::SameLine(0.f, 8.f);
 
-    const char* preview = current.empty() ? "(ninguno)" : current.c_str();
+    const char* preview = current.empty() ? Loc("(ninguno)", "(none)", "(nenhum)") : current.c_str();
 
     ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill));
@@ -214,7 +215,7 @@ void RenderDefaultStyleCombo(LibraryContext& ctx, float trailingReserve)
         ImGui::PushStyleColor(ImGuiCol_Text,
             noneSelected ? ImGui::ColorConvertU32ToFloat4(DS::AccentLight)
                          : ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
-        if (ImGui::Selectable("(ninguno)", noneSelected))
+        if (ImGui::Selectable(Loc("(ninguno)", "(none)", "(nenhum)"), noneSelected))
             Core::PresentationCore::Get().SetCategoryDefaultStyle(itemType, "");
         ImGui::PopStyleColor();
 
@@ -222,7 +223,7 @@ void RenderDefaultStyleCombo(LibraryContext& ctx, float trailingReserve)
 
         if (names.empty()) {
             ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextHint));
-            ImGui::TextUnformatted("  Sin estilos guardados");
+            ImGui::TextUnformatted(Loc("  Sin estilos guardados", "  No saved styles", "  Sem estilos salvos"));
             ImGui::PopStyleColor();
         }
 

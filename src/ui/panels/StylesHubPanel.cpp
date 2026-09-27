@@ -214,10 +214,11 @@ void StylesHubPanel::Render()
     if (m_UIManager && m_UIManager->IsPanelCollapsedForRender(GetName()))
         return;
 
+    std::string stylesTitle = std::string(Loc("Diseño", "Design", "Design")) + "###StylesHubPanel";
     bool visible = m_UIManager
-        ? DS::BeginGlassPanel(GetName().c_str(), m_UIManager->GetGlassRenderer(),
+        ? DS::BeginGlassPanel(stylesTitle.c_str(), m_UIManager->GetGlassRenderer(),
                               nullptr, 0, ImVec2(0.0f, 0.0f))
-        : ImGui::Begin(GetName().c_str());
+        : ImGui::Begin(stylesTitle.c_str());
 
     if (!visible) {
         if (m_UIManager) DS::EndGlassPanel(); else ImGui::End();

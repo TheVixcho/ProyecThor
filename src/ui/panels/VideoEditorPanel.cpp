@@ -100,11 +100,12 @@ void VideoEditorPanel::Render()
     m_Daw.Update();
 
     bool visible = false;
+    std::string prodTitle = std::string(Loc("Producción", "Production", "Produção")) + "###VideoEditorPanel";
     if (m_UIManagerRef)
-        visible = DS::BeginGlassPanel("Producción", m_UIManagerRef->GetGlassRenderer(),
+        visible = DS::BeginGlassPanel(prodTitle.c_str(), m_UIManagerRef->GetGlassRenderer(),
                                       nullptr, 0, ImVec2(0.0f, 0.0f));
     else
-        visible = ImGui::Begin("Producción");
+        visible = ImGui::Begin(prodTitle.c_str());
 
     if (!visible) {
         if (m_UIManagerRef) DS::EndGlassPanel();

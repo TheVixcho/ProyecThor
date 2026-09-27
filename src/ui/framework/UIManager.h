@@ -271,6 +271,7 @@ private:
     // cambio, sin que la pagina de Ajustes necesite conocer a UIManager.
     // -1 = todavia no se aplico ninguno (fuerza el reset en el primer frame).
     int                                  m_LastWorkspacePreset  = -1;
+    int                                  m_LastLanguage         = -1;
     GlassRenderer                        m_GlassRenderer;
 
     // ── Pantalla completa (menu Ventana) ────────────────────────────────────

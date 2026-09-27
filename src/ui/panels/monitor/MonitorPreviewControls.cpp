@@ -8,6 +8,7 @@
 
 #include "MonitorDesign.h"
 #include "MonitorUIHelpers.h"
+#include "ui/framework/UIStrings.h"
 
 namespace ProyecThor::UI {
 
@@ -93,9 +94,9 @@ void MonitorView::RenderPreviewAudioToggle(Core::VLCBasePlayer* player, float bt
         }
     }
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip(m_PreviewAudioEnabled
-            ? "Audio de Preview activado -- click para volver a silenciarlo"
-            : "Preview mudo (default, evita duplicar el audio en vivo) -- click para escucharlo");
+        ImGui::SetTooltip("%s", m_PreviewAudioEnabled
+            ? Loc("Audio de Preview activado -- click para volver a silenciarlo", "Preview audio enabled -- click to mute again", "Áudio de Preview ativado -- clique para silenciar novamente")
+            : Loc("Preview mudo (default, evita duplicar el audio en vivo) -- click para escucharlo", "Preview muted (default, avoids duplicating live audio) -- click to listen", "Preview mudo (padrão, evita duplicar áudio ao vivo) -- clique para ouvir"));
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
 }
@@ -108,7 +109,7 @@ void MonitorView::RenderTransportRow(Core::VLCBasePlayer* player, float innerW)
     if (!player) {
         ImGui::Spacing();
         ImGui::PushStyleColor(ImGuiCol_Text, MT::k_TextDim);
-        ImGui::TextUnformatted("No hay reproductor asignado");
+        ImGui::TextUnformatted(Loc("No hay reproductor asignado", "No player assigned", "Nenhum reprodutor atribuído"));
         ImGui::PopStyleColor();
         return;
     }
@@ -147,7 +148,7 @@ void MonitorView::RenderTransportRow(Core::VLCBasePlayer* player, float innerW)
     if (DrawIconButton("skip_prev", iconSize, MT::k_NeutBtn, MT::k_NeutBtnHov, MT::k_NeutBtnAct, {navBtnW, btnH})) {
         player->SetPosition(0.0f);
     }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Ir al inicio");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", Loc("Ir al inicio", "Go to start", "Ir para o início"));
     ImGui::PopID();
     ImGui::SameLine(0.0f, gap);
 
@@ -156,7 +157,7 @@ void MonitorView::RenderTransportRow(Core::VLCBasePlayer* player, float innerW)
         int64_t t = std::max(static_cast<int64_t>(0), curMs - 10000);
         player->SetPosition(lenMs > 0 ? static_cast<float>(t) / static_cast<float>(lenMs) : 0.0f);
     }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Atrasar 10 segundos");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", Loc("Atrasar 10 segundos", "Rewind 10 seconds", "Retroceder 10 segundos"));
     ImGui::PopID();
     ImGui::SameLine(0.0f, gap);
 
@@ -178,7 +179,7 @@ void MonitorView::RenderTransportRow(Core::VLCBasePlayer* player, float innerW)
             m_PreviewPlaying = true;
         }
     }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip(m_PreviewPlaying ? "Pausar" : "Reproducir");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_PreviewPlaying ? Loc("Pausar", "Pause", "Pausar") : Loc("Reproducir", "Play", "Reproduzir"));
     ImGui::PopID();
     ImGui::SameLine(0.0f, gap);
 
@@ -188,7 +189,7 @@ void MonitorView::RenderTransportRow(Core::VLCBasePlayer* player, float innerW)
         if (lenMs > 0 && t > lenMs) t = lenMs;
         player->SetPosition(lenMs > 0 ? static_cast<float>(t) / static_cast<float>(lenMs) : 0.0f);
     }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Adelantar 10 segundos");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", Loc("Adelantar 10 segundos", "Forward 10 seconds", "Avançar 10 segundos"));
     ImGui::PopID();
     ImGui::SameLine(0.0f, gap);
 
@@ -198,7 +199,7 @@ void MonitorView::RenderTransportRow(Core::VLCBasePlayer* player, float innerW)
         player->SetPause(true);
         m_PreviewPlaying = false;
     }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Detener");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", Loc("Detener", "Stop", "Parar"));
     ImGui::PopID();
 
     ImGui::EndDisabled();
@@ -258,7 +259,7 @@ void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
         if (ImGui::Button("EQ##mon_eq", { eqBtnW, eqBtnH }))
             ImGui::OpenPopup("##mon_eq_popup");
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Ecualizador del audio en vivo");
+            ImGui::SetTooltip("%s", Loc("Ecualizador del audio en vivo", "Live audio equalizer", "Equalizador do áudio ao vivo"));
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor(4);
 
@@ -288,15 +289,15 @@ void MonitorView::RenderEqualizerPopup()
         return;
 
     ImGui::PushStyleColor(ImGuiCol_Text, MT::k_PrevAccent);
-    ImGui::TextUnformatted("ECUALIZADOR — AUDIO EN VIVO");
+    ImGui::TextUnformatted(Loc("ECUALIZADOR — AUDIO EN VIVO", "EQUALIZER — LIVE AUDIO", "EQUALIZADOR — ÁUDIO AO VIVO"));
     ImGui::PopStyleColor();
     ImGui::Separator();
 
-    if (ImGui::Checkbox("Activar", &m_EqEnabled))
+    if (ImGui::Checkbox(Loc("Activar", "Enable", "Ativar"), &m_EqEnabled))
         Core::PresentationCore::Get().SetLiveEqualizerEnabled(m_EqEnabled);
 
     ImGui::SameLine(0.0f, 20.0f);
-    if (ImGui::Button("Reset")) {
+    if (ImGui::Button(Loc("Reset", "Reset", "Reset"))) {
         m_EqPreamp = 0.0f;
         for (int b = 0; b < kEqBands; b++) m_EqBandAmps[b] = 0.0f;
         Core::PresentationCore::Get().SetLiveEqualizerPreamp(m_EqPreamp);

@@ -4,6 +4,7 @@
 #include "core/FileDeletionManager.h"
 #include "core/AppPaths.h"
 #include "ui/panels/biblio/LibraryMultimedia.h"
+#include "ui/framework/UIStrings.h"
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
 #ifdef _WIN32
@@ -357,7 +358,7 @@ void LayersBgTab::BgContextMenu(const BgEntry& entry) {
     ImGui::PopStyleColor();
     ImGui::Separator();
 
-    if (ImGui::Selectable("  Mover a Biblioteca (Media)")) {
+    if (ImGui::Selectable(Loc("  Mover a Biblioteca (Media)", "  Move to Library (Media)", "  Mover para Biblioteca (Mídia)"))) {
         std::error_code ec;
         fs::path src(entry.fullPath);
         std::string targetDir = entry.isImage ? (GetAssetsPath() + "/images") : (GetAssetsPath() + "/videos");
@@ -367,7 +368,7 @@ void LayersBgTab::BgContextMenu(const BgEntry& entry) {
         ReloadList();
         Library::RefreshMultimediaLists();
     }
-    if (ImGui::Selectable("  Copiar a Biblioteca (Media)")) {
+    if (ImGui::Selectable(Loc("  Copiar a Biblioteca (Media)", "  Copy to Library (Media)", "  Copiar para Biblioteca (Mídia)"))) {
         std::error_code ec;
         fs::path src(entry.fullPath);
         std::string targetDir = entry.isImage ? (GetAssetsPath() + "/images") : (GetAssetsPath() + "/videos");
@@ -378,14 +379,14 @@ void LayersBgTab::BgContextMenu(const BgEntry& entry) {
     }
     ImGui::Separator();
 
-    if (ImGui::Selectable("  Renombrar")) {
+    if (ImGui::Selectable(Loc("  Renombrar", "  Rename", "  Renomear"))) {
         m_RenamingBg    = true;
         m_RenameOldPath = entry.fullPath;
         size_t len = std::min(entry.name.size(), sizeof(m_RenameBuf)-1);
         memcpy(m_RenameBuf, entry.name.c_str(), len); m_RenameBuf[len] = '\0';
     }
-    if (!m_BgFolders.empty() && ImGui::BeginMenu("  Mover a carpeta")) {
-        if (!entry.folder.empty() && ImGui::MenuItem("  Raiz")) {
+    if (!m_BgFolders.empty() && ImGui::BeginMenu(Loc("  Mover a carpeta", "  Move to folder", "  Mover para pasta"))) {
+        if (!entry.folder.empty() && ImGui::MenuItem(Loc("  Raiz", "  Root", "  Raiz"))) {
             if (MoveBgToFolder(entry.fullPath, "")) ReloadList();
         }
         for (const auto& fn : m_BgFolders) {
@@ -397,7 +398,7 @@ void LayersBgTab::BgContextMenu(const BgEntry& entry) {
     }
     ImGui::Separator();
     ImGui::PushStyleColor(ImGuiCol_Text, LP::Red);
-    if (ImGui::Selectable("  Eliminar"))
+    if (ImGui::Selectable(Loc("  Eliminar", "  Delete", "  Excluir")))
         if (DeleteBgFile(entry.fullPath)) ReloadList();
     ImGui::PopStyleColor();
 }
@@ -408,7 +409,7 @@ void LayersBgTab::FolderContextMenu(const std::string& folderName) {
     ImGui::Text("%s", disp.c_str());
     ImGui::PopStyleColor();
     ImGui::Separator();
-    if (ImGui::Selectable("  Renombrar")) {
+    if (ImGui::Selectable(Loc("  Renombrar", "  Rename", "  Renomear"))) {
         m_RenamingFolder  = true;
         m_RenameFolderOld = folderName;
         size_t len = std::min(folderName.size(), sizeof(m_RenameFolderBuf)-1);
@@ -416,7 +417,7 @@ void LayersBgTab::FolderContextMenu(const std::string& folderName) {
     }
     ImGui::Separator();
     ImGui::PushStyleColor(ImGuiCol_Text, LP::Red);
-    if (ImGui::Selectable("  Eliminar (con contenido)")) {
+    if (ImGui::Selectable(Loc("  Eliminar (con contenido)", "  Delete (with content)", "  Excluir (com conteúdo)"))) {
         if (DeleteBgFolder(folderName)) {
             if (m_CurrentBgFolder == folderName) m_CurrentBgFolder.clear();
             ReloadList();
@@ -438,7 +439,7 @@ void LayersBgTab::RenderCreateFolderModal() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16, 14));
     if (ImGui::BeginPopup("##NewFolderPop")) {
         ImGui::PushStyleColor(ImGuiCol_Text, LP::Gold);
-        ImGui::Text("Nueva carpeta");
+        ImGui::Text("%s", Loc("Nueva carpeta", "New folder", "Nova pasta"));
         ImGui::PopStyleColor();
         ImGui::Separator(); ImGui::Spacing();
         ImGui::PushStyleColor(ImGuiCol_FrameBg,        LP::Surface2);
@@ -450,12 +451,12 @@ void LayersBgTab::RenderCreateFolderModal() {
         ImGui::PopStyleVar(); ImGui::PopStyleColor(2);
         ImGui::SetItemDefaultFocus();
         ImGui::Spacing();
-        if (LPPrimaryBtn("Crear") || confirm) {
+        if (LPPrimaryBtn(Loc("Crear", "Create", "Criar")) || confirm) {
             if (strlen(m_NewFolderBuf)>0 && CreateBgFolder(m_NewFolderBuf)) ReloadList();
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine(0,6);
-        if (LPGhostBtn("Cancelar")) ImGui::CloseCurrentPopup();
+        if (LPGhostBtn(Loc("Cancelar", "Cancel", "Cancelar"))) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
     ImGui::PopStyleVar(); ImGui::PopStyleColor();
@@ -467,7 +468,7 @@ void LayersBgTab::RenderRenameBgModal() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16,14));
     if (ImGui::BeginPopup("##RenameBgPop")) {
         ImGui::PushStyleColor(ImGuiCol_Text, LP::Accent);
-        ImGui::Text("Renombrar archivo");
+        ImGui::Text("%s", Loc("Renombrar archivo", "Rename file", "Renomear arquivo"));
         ImGui::PopStyleColor();
         ImGui::Separator(); ImGui::Spacing();
         ImGui::PushStyleColor(ImGuiCol_FrameBg,        LP::Surface2);
@@ -478,7 +479,7 @@ void LayersBgTab::RenderRenameBgModal() {
                                         ImGuiInputTextFlags_EnterReturnsTrue);
         ImGui::PopStyleVar(); ImGui::PopStyleColor(2);
         ImGui::SetItemDefaultFocus(); ImGui::Spacing();
-        if (LPPrimaryBtn("Renombrar") || confirm) {
+        if (LPPrimaryBtn(Loc("Renombrar", "Rename", "Renomear")) || confirm) {
             if (strlen(m_RenameBuf)>0 && RenameBgFile(m_RenameOldPath, m_RenameBuf)) {
                 m_ThumbnailCache.erase(m_RenameOldPath);
                 ReloadList();
@@ -486,7 +487,7 @@ void LayersBgTab::RenderRenameBgModal() {
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine(0,6);
-        if (LPGhostBtn("Cancelar")) ImGui::CloseCurrentPopup();
+        if (LPGhostBtn(Loc("Cancelar", "Cancel", "Cancelar"))) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
     ImGui::PopStyleVar(); ImGui::PopStyleColor();
@@ -498,7 +499,7 @@ void LayersBgTab::RenderRenameFolderModal() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16,14));
     if (ImGui::BeginPopup("##RenameFolderPop")) {
         ImGui::PushStyleColor(ImGuiCol_Text, LP::Gold);
-        ImGui::Text("Renombrar carpeta");
+        ImGui::Text("%s", Loc("Renombrar carpeta", "Rename folder", "Renomear pasta"));
         ImGui::PopStyleColor();
         ImGui::Separator(); ImGui::Spacing();
         ImGui::PushStyleColor(ImGuiCol_FrameBg,        LP::Surface2);
@@ -509,7 +510,7 @@ void LayersBgTab::RenderRenameFolderModal() {
                                         ImGuiInputTextFlags_EnterReturnsTrue);
         ImGui::PopStyleVar(); ImGui::PopStyleColor(2);
         ImGui::SetItemDefaultFocus(); ImGui::Spacing();
-        if (LPPrimaryBtn("Renombrar") || confirm) {
+        if (LPPrimaryBtn(Loc("Renombrar", "Rename", "Renomear")) || confirm) {
             if (strlen(m_RenameFolderBuf)>0) {
                 std::string nn(m_RenameFolderBuf);
                 if (RenameBgFolder(m_RenameFolderOld, nn)) {
@@ -520,7 +521,7 @@ void LayersBgTab::RenderRenameFolderModal() {
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine(0,6);
-        if (LPGhostBtn("Cancelar")) ImGui::CloseCurrentPopup();
+        if (LPGhostBtn(Loc("Cancelar", "Cancel", "Cancelar"))) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
     ImGui::PopStyleVar(); ImGui::PopStyleColor();
@@ -540,11 +541,11 @@ void LayersBgTab::SelectFolder(const std::string& folderKey) {
 //  Toolbar superior — compacta, solo iconos (estilo ProPresenter/Holyrics)
 // ─────────────────────────────────────────────────────────────────────────────
 void LayersBgTab::RenderTopBar() {
-    const std::string title = m_CurrentBgFolder.empty() ? "Todos" : m_CurrentBgFolder;
+    const std::string title = m_CurrentBgFolder.empty() ? Loc("Todos", "All", "Todos") : m_CurrentBgFolder;
 
     ImGui::AlignTextToFramePadding();
     ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
-    ImGui::TextUnformatted("Fondos");
+    ImGui::TextUnformatted(Loc("Fondos", "Backgrounds", "Fundos"));
     ImGui::PopStyleColor();
     ImGui::SameLine(0, 6);
     ImGui::PushStyleColor(ImGuiCol_Text, LP::TextMuted);
@@ -578,7 +579,7 @@ void LayersBgTab::RenderTopBar() {
                 ImVec2 o = { c.x - cs - g*0.5f + cI*(cs+g), c.y - cs - g*0.5f + rI*(cs+g) };
                 dl->AddRectFilled(o, {o.x+cs, o.y+cs}, col, 1.5f);
             }
-        }, "Vista en cuadricula", {btnSz,btnSz}, m_GridMode))
+        }, Loc("Vista en cuadrícula", "Grid view", "Visualização em grade"), {btnSz,btnSz}, m_GridMode))
         m_GridMode = true;
     ImGui::SameLine(0, gap);
     if (LPCornerIconBtn("##listm", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
@@ -586,15 +587,15 @@ void LayersBgTab::RenderTopBar() {
                 float y = c.y - r*0.5f + i*r*0.5f;
                 dl->AddRectFilled({c.x-r*0.7f, y}, {c.x+r*0.7f, y+r*0.22f}, col, 1.0f);
             }
-        }, "Vista en lista", {btnSz,btnSz}, !m_GridMode))
+        }, Loc("Vista en lista", "List view", "Visualização em lista"), {btnSz,btnSz}, !m_GridMode))
         m_GridMode = false;
     ImGui::PopID();
 
     ImGui::SameLine(0, gap*2);
-    if (LPCornerIconBtn("##newfolder", LPDrawFolderPlus, "Nueva carpeta", {btnSz,btnSz}))
+    if (LPCornerIconBtn("##newfolder", LPDrawFolderPlus, Loc("Nueva carpeta", "New folder", "Nova pasta"), {btnSz,btnSz}))
         m_CreatingFolder = true;
     ImGui::SameLine(0, gap);
-    if (LPCornerIconBtn("##import", LPDrawPlus, "Importar fondo", {btnSz,btnSz}, true)) {
+    if (LPCornerIconBtn("##import", LPDrawPlus, Loc("Importar fondo", "Import background", "Importar fundo"), {btnSz,btnSz}, true)) {
         if (ImportBackground()) ReloadList();
     }
 }
@@ -716,7 +717,7 @@ void LayersBgTab::RenderFolderChips() {
         }
     };
 
-    chip("Todos", "", rootCount, m_CurrentBgFolder.empty());
+    chip(Loc("Todos", "All", "Todos"), "", rootCount, m_CurrentBgFolder.empty());
     for (const auto& fn : m_BgFolders) {
         int cnt = 0;
         for (const auto& bg : m_AllBackgrounds) if (bg.folder == fn) cnt++;
@@ -732,7 +733,7 @@ void LayersBgTab::RenderFolderSidebar(float w, float h) {
     for (const auto& bg : m_AllBackgrounds) if (bg.folder.empty()) rootCount++;
 
     ImGui::Dummy({w, 4.0f});
-    RenderSidebarItem("Todos", "", rootCount, m_CurrentBgFolder.empty(), w);
+    RenderSidebarItem(Loc("Todos", "All", "Todos"), "", rootCount, m_CurrentBgFolder.empty(), w);
 
     if (!m_BgFolders.empty()) {
         ImGui::Dummy({w, 4.0f});
@@ -812,7 +813,7 @@ void LayersBgTab::RenderBgCard(const BgEntry& e, float W, float H, int col, int 
         ImGui::SetDragDropPayload("BG_FILE", e.fullPath.c_str(), e.fullPath.size()+1);
         ImGui::SetDragDropPayload("BG_ITEM_PATH", e.fullPath.c_str(), e.fullPath.size()+1);
         ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
-        ImGui::Text("Mover: %s", dn.c_str());
+        ImGui::Text("%s: %s", Loc("Mover", "Move", "Mover"), dn.c_str());
         ImGui::PopStyleColor();
         ImGui::EndDragDropSource();
     }
@@ -897,7 +898,7 @@ void LayersBgTab::RenderBgRow(const BgEntry& e, float W, float rowH) {
         ImGui::SetDragDropPayload("BG_FILE", e.fullPath.c_str(), e.fullPath.size()+1);
         ImGui::SetDragDropPayload("BG_ITEM_PATH", e.fullPath.c_str(), e.fullPath.size()+1);
         ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
-        ImGui::Text("Mover: %s", dn.c_str());
+        ImGui::Text("%s: %s", Loc("Mover", "Move", "Mover"), dn.c_str());
         ImGui::PopStyleColor();
         ImGui::EndDragDropSource();
     }
@@ -943,8 +944,8 @@ void LayersBgTab::RenderContentArea(float w, float h) {
         ImGui::Dummy({0,12});
         ImGui::PushStyleColor(ImGuiCol_Text, LP::TextMuted);
         const char* msg = m_CurrentBgFolder.empty()
-            ? "Sin fondos aun. Usa el botón + de arriba para importar."
-            : "Esta carpeta esta vacia.";
+            ? Loc("Sin fondos aun. Usa el botón + de arriba para importar.", "No backgrounds yet. Use the + button above to import.", "Sem fundos ainda. Use o botão + acima para importar.")
+            : Loc("Esta carpeta esta vacia.", "This folder is empty.", "Esta pasta está vazia.");
         float tw = ImGui::CalcTextSize(msg).x;
         ImGui::SetCursorPosX(std::max(0.0f, (w-tw)*0.5f));
         ImGui::Text("%s", msg);

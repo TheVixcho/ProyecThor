@@ -2,6 +2,7 @@
 #include "LibraryIcons.h"
 #include "LibraryStyles.h"
 #include "LibraryHelpers.h"
+#include "ui/framework/UIStrings.h"
 #include "ui/framework/DesignSystem.h"
 #include "ui/panels/layers/LayersTheme.h"
 #include "ui/views/audio/AudioHelpers.h"
@@ -315,7 +316,7 @@ static void RenderRenameModal() {
         ImGui::SetNextItemWidth(-1.0f);
         ImGui::InputText("##mmRenameBuf", s_RenameBuffer, sizeof(s_RenameBuffer));
 
-        if (ImGui::Button("Renombrar", ImVec2(160, 0))) {
+        if (ImGui::Button(Loc("Renombrar", "Rename", "Renomear"), ImVec2(160, 0))) {
             std::string ext;
             SplitExtension(s_RenameItem.filename, ext);
             std::string newName = std::string(s_RenameBuffer) + ext;
@@ -330,7 +331,7 @@ static void RenderRenameModal() {
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancelar", ImVec2(120, 0))) {
+        if (ImGui::Button(Loc("Cancelar", "Cancel", "Cancelar"), ImVec2(120, 0))) {
             s_ShowRenameModal = false;
             ImGui::CloseCurrentPopup();
         }
@@ -343,13 +344,13 @@ static void RenderDeleteModal() {
     ImGui::OpenPopup("Eliminar##mm");
     ImGui::SetNextWindowSize(ImVec2(360, 0));
     if (ImGui::BeginPopupModal("Eliminar##mm", &s_ShowDeleteModal, ImGuiWindowFlags_NoResize)) {
-        ImGui::TextWrapped("Eliminar \"%s\"? Esta acción no se puede deshacer.",
+        ImGui::TextWrapped(Loc("Eliminar \"%s\"? Esta acción no se puede deshacer.", "Delete \"%s\"? This action cannot be undone.", "Excluir \"%s\"? Esta ação não pode ser desfeita."),
                            s_DeleteItem.filename.c_str());
         ImGui::Spacing();
 
         ImGui::PushStyleColor(ImGuiCol_Button,        DS::DangerColorDim);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  DS::DangerColor);
-        if (ImGui::Button("Eliminar", ImVec2(160, 0))) {
+        if (ImGui::Button(Loc("Eliminar", "Delete", "Excluir"), ImVec2(160, 0))) {
             std::string fullPath = ItemFullPath(s_DeleteItem);
             if (s_SelectedFile == s_DeleteItem.filename) {
                 s_SelectedFile.clear();
@@ -362,7 +363,7 @@ static void RenderDeleteModal() {
         }
         ImGui::PopStyleColor(2);
         ImGui::SameLine();
-        if (ImGui::Button("Cancelar", ImVec2(120, 0))) {
+        if (ImGui::Button(Loc("Cancelar", "Cancel", "Cancelar"), ImVec2(120, 0))) {
             s_ShowDeleteModal = false;
             ImGui::CloseCurrentPopup();
         }
@@ -400,14 +401,14 @@ static void RenderMMDragSource(const MMItem& item, const std::string& disp) {
 static void RenderMMContextMenu(const MMItem& item, const char* popupId) {
     if (!ImGui::BeginPopupContextItem(popupId)) return;
     if (item.type == Core::ItemType::Video || item.type == Core::ItemType::Image) {
-        if (ImGui::MenuItem("Enviar al monitor")) {
+        if (ImGui::MenuItem(Loc("Enviar al monitor", "Send to monitor", "Enviar para o monitor"))) {
             Core::PresentationCore::Get().SetBackgroundMedia(ItemFullPath(item), item.type == Core::ItemType::Video, /*allowAudio=*/item.type == Core::ItemType::Video);
             Core::PresentationCore::Get().SetProjecting(true);
         }
         ImGui::Separator();
     }
     if (item.type == Core::ItemType::Video || item.type == Core::ItemType::Image) {
-        if (ImGui::MenuItem("Mover a Fondos (Backgrounds)")) {
+        if (ImGui::MenuItem(Loc("Mover a Fondos (Backgrounds)", "Move to Backgrounds", "Mover para Fundos"))) {
             std::error_code ec;
             std::string srcPath = ItemFullPath(item);
             fs::path src(srcPath);
@@ -417,7 +418,7 @@ static void RenderMMContextMenu(const MMItem& item, const char* popupId) {
             fs::rename(src, dst, ec);
             RefreshMultimediaLists();
         }
-        if (ImGui::MenuItem("Copiar a Fondos (Backgrounds)")) {
+        if (ImGui::MenuItem(Loc("Copiar a Fondos (Backgrounds)", "Copy to Backgrounds", "Copiar para Fundos"))) {
             std::error_code ec;
             std::string srcPath = ItemFullPath(item);
             fs::path src(srcPath);
@@ -428,10 +429,10 @@ static void RenderMMContextMenu(const MMItem& item, const char* popupId) {
         }
         ImGui::Separator();
     }
-    if (ImGui::MenuItem("Renombrar")) RequestRename(item);
+    if (ImGui::MenuItem(Loc("Renombrar", "Rename", "Renomear"))) RequestRename(item);
     ImGui::Separator();
     ImGui::PushStyleColor(ImGuiCol_Text, DS::DangerColor);
-    if (ImGui::MenuItem("Eliminar")) RequestDelete(item);
+    if (ImGui::MenuItem(Loc("Eliminar", "Delete", "Excluir"))) RequestDelete(item);
     ImGui::PopStyleColor();
     ImGui::EndPopup();
 }
@@ -604,7 +605,7 @@ static void RenderMMSection(const char* label, const std::vector<MMItem>& items,
     if (filtered.empty()) {
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 8.0f);
         ImGui::PushStyleColor(ImGuiCol_Text, DS::TextHint);
-        ImGui::TextUnformatted("(vacio)");
+        ImGui::TextUnformatted(Loc("(vacío)", "(empty)", "(vazio)"));
         ImGui::PopStyleColor();
         ImGui::Dummy(ImVec2(0.0f, 16.0f));
         return;
@@ -670,16 +671,16 @@ void RenderMultimediaSection(LibraryContext& ctx, MultimediaFilter& filter)
 
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 2.0f);
         ImGui::PushID("mmfilters");
-        if (UI::LPCornerIconBtn("##mmall", UI::LPDrawAll, "Todos los medios", {btnSz, btnSz}, filter == MultimediaFilter::All))
+        if (UI::LPCornerIconBtn("##mmall", UI::LPDrawAll, Loc("Todos los medios", "All media", "Todas as mídias"), {btnSz, btnSz}, filter == MultimediaFilter::All))
             filter = MultimediaFilter::All;
         ImGui::SameLine(0, gap);
-        if (UI::LPCornerIconBtn("##mmvid", UI::LPDrawPlay, "Solo videos", {btnSz, btnSz}, filter == MultimediaFilter::Video))
+        if (UI::LPCornerIconBtn("##mmvid", UI::LPDrawPlay, Loc("Solo videos", "Videos only", "Apenas vídeos"), {btnSz, btnSz}, filter == MultimediaFilter::Video))
             filter = MultimediaFilter::Video;
         ImGui::SameLine(0, gap);
-        if (UI::LPCornerIconBtn("##mmaud", UI::LPDrawAudio, "Solo audios", {btnSz, btnSz}, filter == MultimediaFilter::Audio))
+        if (UI::LPCornerIconBtn("##mmaud", UI::LPDrawAudio, Loc("Solo audios", "Audios only", "Apenas áudios"), {btnSz, btnSz}, filter == MultimediaFilter::Audio))
             filter = MultimediaFilter::Audio;
         ImGui::SameLine(0, gap);
-        if (UI::LPCornerIconBtn("##mmimg", UI::LPDrawImage, "Solo imágenes", {btnSz, btnSz}, filter == MultimediaFilter::Image))
+        if (UI::LPCornerIconBtn("##mmimg", UI::LPDrawImage, Loc("Solo imágenes", "Images only", "Apenas imagens"), {btnSz, btnSz}, filter == MultimediaFilter::Image))
             filter = MultimediaFilter::Image;
         ImGui::PopID();
 
@@ -694,11 +695,11 @@ void RenderMultimediaSection(LibraryContext& ctx, MultimediaFilter& filter)
         }
         ImGui::SameLine(0, gap * 2.0f);
 
-        if (UI::LPCornerIconBtn("##mmrefresh", UI::LPDrawRefresh, "Actualizar lista", {btnSz, btnSz}))
+        if (UI::LPCornerIconBtn("##mmrefresh", UI::LPDrawRefresh, Loc("Actualizar lista", "Refresh list", "Atualizar lista"), {btnSz, btnSz}))
             RefreshMultimediaLists();
 
         ImGui::SameLine(0, gap);
-        if (UI::LPCornerIconBtn("##mmimport", UI::LPDrawPlus, "Importar archivo", {btnSz, btnSz}))
+        if (UI::LPCornerIconBtn("##mmimport", UI::LPDrawPlus, Loc("Importar archivo", "Import file", "Importar arquivo"), {btnSz, btnSz}))
             ctx.importFile();
     }
 
@@ -711,10 +712,10 @@ void RenderMultimediaSection(LibraryContext& ctx, MultimediaFilter& filter)
 
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 2.0f);
         ImGui::PushID("mmview");
-        if (UI::LPCornerIconBtn("##mmgridm", UI::LPDrawGrid, "Vista en cuadrícula", {btnSz, btnSz}, s_GridMode))
+        if (UI::LPCornerIconBtn("##mmgridm", UI::LPDrawGrid, Loc("Vista en cuadrícula", "Grid view", "Visualização em grade"), {btnSz, btnSz}, s_GridMode))
             s_GridMode = true;
         ImGui::SameLine(0, gap);
-        if (UI::LPCornerIconBtn("##mmlistm", UI::LPDrawList, "Vista en lista", {btnSz, btnSz}, !s_GridMode))
+        if (UI::LPCornerIconBtn("##mmlistm", UI::LPDrawList, Loc("Vista en lista", "List view", "Visualização em lista"), {btnSz, btnSz}, !s_GridMode))
             s_GridMode = false;
         ImGui::PopID();
 

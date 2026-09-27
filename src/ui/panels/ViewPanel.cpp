@@ -598,7 +598,8 @@ void ViewPanel::Render()
     }
     else
     {
-        visible = ImGui::Begin(str.panelLiveView);
+        std::string viewTitle = std::string(str.panelLiveView) + "###LiveViewPanel";
+        visible = ImGui::Begin(viewTitle.c_str());
     }
 
     ImGui::PopStyleColor(1);
@@ -1078,10 +1079,10 @@ void ViewPanel::RenderPadsContent()
         if (clicked && pad.assigned) ApplyPad(pad);
 
         if (ImGui::BeginPopupContextItem("##padCtx")) {
-            if (ImGui::MenuItem(pad.assigned ? "Guardar aquí (reemplazar)" : "Guardar aquí"))
+            if (ImGui::MenuItem(pad.assigned ? Loc("Guardar aquí (reemplazar)", "Save here (replace)", "Salvar aqui (substituir)") : Loc("Guardar aquí", "Save here", "Salvar aqui")))
                 SavePad(pad);
 
-            if (ImGui::BeginMenu("Elegir icono")) {
+            if (ImGui::BeginMenu(Loc("Elegir icono", "Choose icon", "Escolher ícone"))) {
                 if (RenderPadIconGrid(pad.iconIndex))
                     ProyecThor::Settings::SettingsManager::Get().Save();
                 ImGui::EndMenu();
@@ -1089,7 +1090,7 @@ void ViewPanel::RenderPadsContent()
 
             if (pad.assigned) {
                 ImGui::Separator();
-                if (ImGui::MenuItem("Borrar pad")) {
+                if (ImGui::MenuItem(Loc("Borrar pad", "Clear pad", "Limpar pad"))) {
                     pad = PadSettings{};
                     ProyecThor::Settings::SettingsManager::Get().Save();
                 }
@@ -1099,8 +1100,8 @@ void ViewPanel::RenderPadsContent()
 
         if (pad.assigned && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
             std::string tip = "Pad " + std::to_string(i + 1);
-            if (pad.hasCapture) tip += "\n- Captura";
-            if (pad.hasStyle)   tip += "\n- Estilo y fondo";
+            if (pad.hasCapture) tip += Loc("\n- Captura", "\n- Capture", "\n- Captura");
+            if (pad.hasStyle)   tip += Loc("\n- Estilo y fondo", "\n- Style and background", "\n- Estilo e fundo");
             ImGui::SetTooltip("%s", tip.c_str());
         }
 
@@ -1222,7 +1223,7 @@ void ViewPanel::RenderLiveTransport(float w, float h)
         float np = livePos + (liveLen > 0 ? 10000.0f / static_cast<float>(liveLen) : 0.0f);
         core.SetLivePosition(std::min(1.0f, np));
     }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Adelantar 10 segundos");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", Loc("Adelantar 10 segundos", "Forward 10 seconds", "Avançar 10 segundos"));
     ImGui::PopID();
     ImGui::SameLine(0.0f, gap);
 
@@ -1231,7 +1232,7 @@ void ViewPanel::RenderLiveTransport(float w, float h)
         core.SetLivePosition(0.0f);
         if (bg) { bg->SetPosition(0.0f); bg->SetPause(true); }
     }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Detener video");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", Loc("Detener video", "Stop video", "Parar vídeo"));
     ImGui::PopID();
     ImGui::SameLine(0.0f, gap);
 
@@ -1247,7 +1248,7 @@ void ViewPanel::RenderLiveTransport(float w, float h)
             core.SetLivePosition(std::min(1.0f, np));
         }
     }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Avanzar / Siguiente (Flecha Derecha)");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", Loc("Avanzar / Siguiente (Flecha Derecha)", "Forward / Next (Right Arrow)", "Avançar / Próximo (Seta Direita)"));
     ImGui::PopID();
 
     ImGui::Spacing();
@@ -1270,7 +1271,9 @@ void ViewPanel::RenderLiveTransport(float w, float h)
         core.SetLiveVolume(m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
     }
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip(m_LiveMuted ? "Audio silenciado — click para activar" : "Silenciar audio");
+        ImGui::SetTooltip("%s", m_LiveMuted
+            ? Loc("Audio silenciado — click para activar", "Audio muted -- click to unmute", "Áudio silenciado -- clique para ativar")
+            : Loc("Silenciar audio", "Mute audio", "Silenciar áudio"));
     ImGui::PopID();
     ImGui::SameLine(0.0f, gap);
 
@@ -1283,7 +1286,7 @@ void ViewPanel::RenderLiveTransport(float w, float h)
         core.SetLiveVolume(m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
     }
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Volumen en vivo: %d%%", static_cast<int>(m_LiveVolume * 100.0f));
+        ImGui::SetTooltip(Loc("Volumen en vivo: %d%%", "Live volume: %d%%", "Volume ao vivo: %d%%"), static_cast<int>(m_LiveVolume * 100.0f));
 
     ImGui::SameLine(0.0f, gap);
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (volRowH - ImGui::GetTextLineHeight()) * 0.5f);
@@ -1380,7 +1383,7 @@ void ViewPanel::RenderContent(float panelW, float panelH)
             }
             else
             {
-                const char* msg = "En blanco";
+                const char* msg = Loc("En blanco", "Blank", "Em branco");
                 ImVec2 ts = ImGui::CalcTextSize(msg);
                 dl->AddText({ p0.x + (drawW - ts.x) * 0.5f, p0.y + (drawH - ts.y) * 0.5f },
                             IM_COL32(110, 110, 118, 255), msg);
@@ -1389,7 +1392,11 @@ void ViewPanel::RenderContent(float panelW, float panelH)
         }
 
         {
-            const char* pillLabel[3] = { "En vivo", "Solo reloj", "En blanco" };
+            const char* pillLabel[3] = {
+                Loc("En vivo", "Live", "Ao vivo"),
+                Loc("Solo reloj", "Clock only", "Apenas relógio"),
+                Loc("En blanco", "Blank", "Em branco")
+            };
             const float pillH = 24.0f, pillGap = 4.0f, pillPad = 8.0f;
             float pillY = p1.y - pillH - pillPad;
             float pillTotalW = drawW - pillPad * 2.0f;

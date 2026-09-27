@@ -600,15 +600,16 @@ void LibraryPanel::Render()
     
     bool visible = false;
 
+    std::string libTitle = std::string(str.library) + "###LibraryPanel";
     if (m_UIManagerRef)
     {
-        visible = DS::BeginGlassPanel(str.library, m_UIManagerRef->GetGlassRenderer(),
+        visible = DS::BeginGlassPanel(libTitle.c_str(), m_UIManagerRef->GetGlassRenderer(),
                                       nullptr, 0, ImVec2(0.0f, 0.0f));
     }
     else
     {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
-        visible = ImGui::Begin(str.library);
+        visible = ImGui::Begin(libTitle.c_str());
         ImGui::PopStyleVar();
     }
 

@@ -9,6 +9,7 @@
 
 #include "MonitorDesign.h"
 #include "MonitorUIHelpers.h"
+#include "ui/framework/UIStrings.h"
 
 namespace ProyecThor::UI {
 
@@ -77,6 +78,7 @@ void MonitorView::RenderCenterColumn(float w, float h, Core::VLCBasePlayer* prev
                 newBg->SetPause(false);
         }
     }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", Loc("Transmitir a En Vivo", "Send to Live", "Transmitir para Ao Vivo"));
     ImGui::PopID();
 
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + spacing);
@@ -92,6 +94,7 @@ void MonitorView::RenderCenterColumn(float w, float h, Core::VLCBasePlayer* prev
     {
         Core::PresentationCore::Get().SetLiveLoop(!loopEnabled);
     }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", loopEnabled ? Loc("Bucle activado", "Loop enabled", "Loop ativado") : Loc("Bucle desactivado", "Loop disabled", "Loop desativado"));
     ImGui::PopID();
 
     ImGui::EndChild();
