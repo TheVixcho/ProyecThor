@@ -649,8 +649,17 @@ if(NOT WIN32)
     # resolviendo igual que en desarrollo, sin importar el cwd del usuario.
     file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/proyecthor-wrapper.sh"
 "#!/bin/sh
-cd \"${CMAKE_INSTALL_PREFIX}/${PROYECTHOR_INSTALL_DIR}\" || exit 1
-export VLC_PLUGIN_PATH=\"${CMAKE_INSTALL_PREFIX}/${PROYECTHOR_INSTALL_DIR}/plugins\"
+SCRIPT_DIR=\"\$(dirname \"\$(readlink -f \"\$0\")\")\"
+APP_DIR=\"\$(cd \"\$SCRIPT_DIR/..\" && pwd)\"
+if [ -d \"\$APP_DIR/lib/proyecthor\" ]; then
+    INSTALL_DIR=\"\$APP_DIR/lib/proyecthor\"
+elif [ -d \"\$APP_DIR/lib64/proyecthor\" ]; then
+    INSTALL_DIR=\"\$APP_DIR/lib64/proyecthor\"
+else
+    INSTALL_DIR=\"${CMAKE_INSTALL_PREFIX}/${PROYECTHOR_INSTALL_DIR}\"
+fi
+cd \"\$INSTALL_DIR\" || exit 1
+export VLC_PLUGIN_PATH=\"\$INSTALL_DIR/plugins\"
 exec ./ProyecThor \"\$@\"
 ")
     install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/proyecthor-wrapper.sh"
