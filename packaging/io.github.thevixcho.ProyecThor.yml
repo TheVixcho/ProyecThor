@@ -3,6 +3,8 @@ runtime: org.freedesktop.Platform
 runtime-version: '24.08'
 sdk: org.freedesktop.Sdk
 command: proyecthor
+only-arches:
+  - x86_64
 
 finish-args:
   - --share=ipc
@@ -57,4 +59,4 @@ modules:
       - type: git
         url: https://github.com/TheVixcho/ProyecThor.git
         tag: v1.0.1
-        commit: e5c1369bf57a8a25c1356f671c6caecb062ca6c8
+        commit: e5c1369937213c45df8b4a987c5ca94bc2eb8937
