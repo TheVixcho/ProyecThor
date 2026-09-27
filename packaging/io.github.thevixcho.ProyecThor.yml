@@ -3,8 +3,6 @@ runtime: org.freedesktop.Platform
 runtime-version: '24.08'
 sdk: org.freedesktop.Sdk
 command: proyecthor
-only-arches:
-  - x86_64
 
 finish-args:
   - --share=ipc

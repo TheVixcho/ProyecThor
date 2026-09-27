@@ -58,6 +58,7 @@ text.txt
 # ── Herramientas externas (cache local, nunca va a git) ──────────────────────
 .firebase/
 .cache/
+.flatpak-builder/
 
 # ── Archivos del sistema operativo ───────────────────────────────────────────
 .DS_Store
