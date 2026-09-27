@@ -33,6 +33,12 @@ namespace ProyecThor::Settings {
 
         int   outputWidth     = 0;
         int   outputHeight    = 0;
+
+        // ── Ventana de proyección (Linux & Multi-monitor) ───────────────
+        bool  windowFullscreen    = true;  // true = Pantalla completa (fullscreen), false = Modo ventana
+        int   windowWidth         = 1920;  // Ancho en píxeles (modo ventana o resolución personalizada)
+        int   windowHeight        = 1080;  // Alto en píxeles (modo ventana o resolución personalizada)
+        bool  windowAutoDetectRes = true;  // true = usar resolución nativa del monitor en fullscreen
         float contentScale    = 1.0f;
         float marginTop       = 50.0f;
         float marginBottom    = 50.0f;

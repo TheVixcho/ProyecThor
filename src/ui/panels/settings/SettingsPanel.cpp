@@ -36,7 +36,7 @@ static const Category k_Categories[] = {
     { "UI",  "Apariencia",      "Colores, fuentes y efectos visuales",     CatIcon::Palette,   IM_COL32(185, 130, 245, 255) }, // 0
     { "PRY", "Proyección",      "Monitor, texto y márgenes",               CatIcon::Monitor,   IM_COL32( 70, 195, 220, 255) }, // 1
     { "CNX", "Conexiones",      "Red, app movil, streaming y OSC",         CatIcon::Cast,      IM_COL32(120, 160, 235, 255) }, // 2
-    { "STG", "Pantallas",       "Monitor de confianza para el equipo",     CatIcon::Sliders,   IM_COL32( 80, 205, 165, 255) }, // 3
+    { "STG", "Pantallas",       "Ventana de proyección y monitor de confianza", CatIcon::Monitor, IM_COL32( 80, 205, 165, 255) }, // 3
     { "SOU", "Audio",           "Volumen, dispositivo y fade",             CatIcon::Speaker,   IM_COL32(245, 165,  75, 255) }, // 4
     { "SNG", "Canciones",       "Etiquetas y opciones de canciones",       CatIcon::MusicNote, IM_COL32(235, 105, 165, 255) }, // 5
     { "KEY", "Teclas rápidas",  "Atajos de teclado disponibles",           CatIcon::Keyboard,  IM_COL32(230, 190,  70, 255) }, // 6

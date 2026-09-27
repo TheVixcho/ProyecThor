@@ -18,7 +18,8 @@ namespace ProyecThor::Core {
         DestroyCallbacks().push_back(std::move(cb));
     }
 
-    bool SecondaryOutputWindow::Create(GLFWwindow* sharedContext, int monitorIndex, const std::string& title)
+    bool SecondaryOutputWindow::Create(GLFWwindow* sharedContext, int monitorIndex, const std::string& title,
+                                        bool fullscreen, int customW, int customH)
     {
         Destroy();
 
@@ -28,6 +29,9 @@ namespace ProyecThor::Core {
         GLFWmonitor* target = nullptr;
         if (monitorIndex >= 0 && monitorIndex < monitorCount) {
             target = monitors[monitorIndex];
+        } else if (monitorCount > 0) {
+            target = monitors[0];
+            monitorIndex = 0;
         }
 
         glfwDefaultWindowHints();
@@ -35,28 +39,39 @@ namespace ProyecThor::Core {
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
         glfwWindowHint(GLFW_VISIBLE,               GLFW_FALSE);
 
-        #if defined(GLFW_HAS_GETPLATFORM) && GLFW_HAS_GETPLATFORM
-        bool isWayland = (glfwGetPlatform() == GLFW_PLATFORM_WAYLAND);
-        #else
         bool isWayland = false;
+        #if defined(GLFW_PLATFORM_WAYLAND) && defined(GLFW_VERSION_MAJOR) && (GLFW_VERSION_MAJOR > 3 || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 4))
+        isWayland = (glfwGetPlatform() == GLFW_PLATFORM_WAYLAND);
+        #else
+        const char* sessionType = getenv("XDG_SESSION_TYPE");
+        if (sessionType && strcmp(sessionType, "wayland") == 0) {
+            isWayland = true;
+        }
         #endif
 
-        int winW = 1280;
-        int winH = 720;
+        int winW = 1920;
+        int winH = 1080;
         int monX = 0, monY = 0;
-        bool isFullscreenOutput = false;
+        const GLFWvidmode* vm = nullptr;
 
-        if (monitorCount > 1 && monitorIndex > 0 && target != nullptr)
+        if (target != nullptr) {
+            vm = glfwGetVideoMode(target);
+            glfwGetMonitorPos(target, &monX, &monY);
+        }
+
+        if (customW > 0 && customH > 0) {
+            winW = customW;
+            winH = customH;
+        } else if (vm && vm->width > 0 && vm->height > 0) {
+            winW = vm->width;
+            winH = vm->height;
+        }
+
+        bool isFullscreenOutput = fullscreen && (target != nullptr);
+
+        if (isFullscreenOutput)
         {
             // Salida secundaria en monitor fisico dedicado (pantalla completa)
-            isFullscreenOutput = true;
-            const GLFWvidmode* vm = glfwGetVideoMode(target);
-            if (vm && vm->width > 0 && vm->height > 0) {
-                winW = vm->width;
-                winH = vm->height;
-            }
-            glfwGetMonitorPos(target, &monX, &monY);
-
             glfwWindowHint(GLFW_DECORATED,     GLFW_FALSE);
             glfwWindowHint(GLFW_FLOATING,      GLFW_TRUE);
             glfwWindowHint(GLFW_RESIZABLE,     GLFW_FALSE);
@@ -75,16 +90,17 @@ namespace ProyecThor::Core {
         }
         else
         {
-            // Sistema de un solo monitor (o vista previa de operador): ventana flotante
-            winW = 960;
-            winH = 540;
+            // Modo ventana (redimensionable, con bordes y barra de titulo del sistema)
             glfwWindowHint(GLFW_DECORATED,     GLFW_TRUE);
-            glfwWindowHint(GLFW_FLOATING,      GLFW_TRUE);
+            glfwWindowHint(GLFW_FLOATING,      GLFW_FALSE);
             glfwWindowHint(GLFW_RESIZABLE,     GLFW_TRUE);
             glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_TRUE);
 
-            std::string windowTitle = title + " (Vista Previa)";
+            std::string windowTitle = title;
             m_Window = glfwCreateWindow(winW, winH, windowTitle.c_str(), nullptr, sharedContext);
+            if (m_Window && target != nullptr && !isWayland) {
+                glfwSetWindowPos(m_Window, monX + 40, monY + 40);
+            }
         }
 
         if (!m_Window) {
@@ -99,8 +115,11 @@ namespace ProyecThor::Core {
                     if (m_Window) glfwSetWindowPos(m_Window, monX, monY);
                 }
             } else {
-                std::string windowTitle = title + " (Vista Previa)";
+                std::string windowTitle = title;
                 m_Window = glfwCreateWindow(winW, winH, windowTitle.c_str(), nullptr, sharedContext);
+                if (m_Window && target != nullptr && !isWayland) {
+                    glfwSetWindowPos(m_Window, monX + 40, monY + 40);
+                }
             }
         }
 

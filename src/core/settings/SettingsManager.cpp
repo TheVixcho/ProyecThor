@@ -865,6 +865,10 @@ void SettingsManager::SaveSettings() {
     j["projection"]["defaultBgB"]    = p.defaultBgB;
     j["projection"]["outputWidth"]        = p.outputWidth;
     j["projection"]["outputHeight"]       = p.outputHeight;
+    j["projection"]["windowFullscreen"]    = p.windowFullscreen;
+    j["projection"]["windowWidth"]         = p.windowWidth;
+    j["projection"]["windowHeight"]        = p.windowHeight;
+    j["projection"]["windowAutoDetectRes"] = p.windowAutoDetectRes;
     j["projection"]["targetFPS"]          = p.targetFPS;
     j["projection"]["outputQualityMode"]  = p.outputQualityMode;
     j["projection"]["outputPresetIndex"]  = p.outputPresetIndex;
@@ -1172,6 +1176,10 @@ void SettingsManager::LoadSettings() {
             p.defaultBgB    = jp.value("defaultBgB",    0.0f);
             p.outputWidth        = jp.value("outputWidth",        0);
             p.outputHeight       = jp.value("outputHeight",       0);
+            p.windowFullscreen    = jp.value("windowFullscreen",    true);
+            p.windowWidth         = jp.value("windowWidth",         1920);
+            p.windowHeight        = jp.value("windowHeight",        1080);
+            p.windowAutoDetectRes = jp.value("windowAutoDetectRes", true);
             p.targetFPS          = jp.value("targetFPS",          60);
             p.outputQualityMode  = jp.value("outputQualityMode",  0);
             p.outputPresetIndex  = jp.value("outputPresetIndex",  3);

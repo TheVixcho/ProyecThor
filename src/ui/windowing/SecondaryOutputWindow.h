@@ -25,7 +25,8 @@ namespace ProyecThor::Core {
         SecondaryOutputWindow(SecondaryOutputWindow&&)                 = default;
         SecondaryOutputWindow& operator=(SecondaryOutputWindow&&)      = default;
 
-        bool Create(GLFWwindow* sharedContext, int monitorIndex, const std::string& title);
+        bool Create(GLFWwindow* sharedContext, int monitorIndex, const std::string& title,
+                    bool fullscreen = true, int customW = 0, int customH = 0);
         void Destroy();
 
         void RenderFrame(const RenderFn& renderFn);

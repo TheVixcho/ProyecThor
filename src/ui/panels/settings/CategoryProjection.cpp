@@ -139,6 +139,50 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
                         ImGui::Text("%s", names[i]);
                     }
                 }
+                // Modo de Visualización (Pantalla Completa vs Ventana)
+                ImGui::Spacing();
+                ImGui::TextDisabled("Modo de Visualización:");
+                bool isFs = p.windowFullscreen;
+                if (ImGui::RadioButton("Pantalla Completa (Fullscreen)##projFs", isFs)) {
+                    if (!p.windowFullscreen) {
+                        p.windowFullscreen = true;
+                        changed = true;
+                    }
+                }
+                ImGui::SameLine(0.0f, 20.0f);
+                if (ImGui::RadioButton("Modo Ventana (Windowed)##projWin", !isFs)) {
+                    if (p.windowFullscreen) {
+                        p.windowFullscreen = false;
+                        changed = true;
+                    }
+                }
+
+                if (!p.windowFullscreen || !p.windowAutoDetectRes) {
+                    ImGui::Spacing();
+                    ImGui::TextDisabled("Resolución de la Ventana:");
+                    ImGui::SetNextItemWidth(130.0f);
+                    if (ImGui::InputInt("Ancho##pWinW", &p.windowWidth, 10, 100)) {
+                        p.windowWidth = std::clamp(p.windowWidth, 320, 7680);
+                        changed = true;
+                    }
+                    ImGui::SameLine(0.0f, 15.0f);
+                    ImGui::SetNextItemWidth(130.0f);
+                    if (ImGui::InputInt("Alto##pWinH", &p.windowHeight, 10, 100)) {
+                        p.windowHeight = std::clamp(p.windowHeight, 240, 4320);
+                        changed = true;
+                    }
+                    ImGui::SameLine(0.0f, 10.0f);
+                    if (ImGui::Button("16:9##pRatio169")) {
+                        p.windowHeight = (p.windowWidth * 9) / 16;
+                        changed = true;
+                    }
+                } else if (p.windowFullscreen) {
+                    bool autoRes = p.windowAutoDetectRes;
+                    if (ImGui::Checkbox("Usar resolución nativa del monitor##pAutoRes", &autoRes)) {
+                        p.windowAutoDetectRes = autoRes;
+                        changed = true;
+                    }
+                }
             } else {
                 ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f),
                                    "No se detectaron monitores adicionales.");

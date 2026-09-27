@@ -711,7 +711,9 @@ void SetGlobalMute(bool mute);
         // un id nuevo, no hay que tocar la clase.
         bool CreateSecondaryWindow(const std::string& id, int monitorIndex,
                                     const std::string& title,
-                                    SecondaryOutputWindow::RenderFn renderFn);
+                                    SecondaryOutputWindow::RenderFn renderFn,
+                                    bool fullscreen = true,
+                                    int customW = 0, int customH = 0);
         void DestroySecondaryWindow(const std::string& id);
         void DestroyAllSecondaryWindows();
         bool IsSecondaryWindowActive(const std::string& id) const;
@@ -721,7 +723,9 @@ void SetGlobalMute(bool mute);
         void RenderAllSecondaryWindows();
 
         // ── Atajos con nombre fijo para los casos conocidos hoy ─────────
-        bool        CreateProjectorWindow(int monitorIndex);
+        bool        CreateProjectorWindow(int monitorIndex = -1,
+                                          int fullscreenOverride = -1,
+                                          int customW = 0, int customH = 0);
         void        DestroyProjectorWindow();
         bool        IsProjectorWindowActive() const;
         GLFWwindow* GetProjectorWindow() const;

@@ -1086,7 +1086,9 @@ bool PresentationCore::GetGlobalMute() const {
     // ── Ventanas secundarias, API generica ──────────────────────────────
     bool PresentationCore::CreateSecondaryWindow(const std::string& id, int monitorIndex,
                                                   const std::string& title,
-                                                  SecondaryOutputWindow::RenderFn renderFn)
+                                                  SecondaryOutputWindow::RenderFn renderFn,
+                                                  bool fullscreen,
+                                                  int customW, int customH)
     {
         if (!m_MainWindow) {
             std::cerr << "[PresentationCore] CreateSecondaryWindow('" << id
@@ -1097,7 +1099,7 @@ bool PresentationCore::GetGlobalMute() const {
         std::lock_guard<std::mutex> lock(m_SecondaryWindowsMutex);
 
         SecondaryOutput& out = m_SecondaryWindows[id]; // crea si no existe
-        if (!out.window.Create(m_MainWindow, monitorIndex, title))
+        if (!out.window.Create(m_MainWindow, monitorIndex, title, fullscreen, customW, customH))
         {
             m_SecondaryWindows.erase(id);
             return false;
@@ -1144,20 +1146,44 @@ bool PresentationCore::GetGlobalMute() const {
     }
 
     // ── Atajos con nombre fijo: Proyector ────────────────────────────────
-    bool PresentationCore::CreateProjectorWindow(int monitorIndex)
+    bool PresentationCore::CreateProjectorWindow(int monitorIndex, int fullscreenOverride, int customW, int customH)
     {
 #ifdef _WIN32
         // En Windows se usa el pipeline multi-viewport nativo de ImGui (RenderProjectorOutput).
         // No se crea ventana GLFW secundaria extra.
         std::lock_guard<std::recursive_mutex> lock(m_Mutex);
-        m_State.targetMonitorIndex = monitorIndex;
+        if (monitorIndex >= 0) m_State.targetMonitorIndex = monitorIndex;
         return false;
 #else
+        auto& settings = Settings::SettingsManager::Get().GetSettings();
+        if (monitorIndex < 0) {
+            monitorIndex = settings.projection.targetMonitor;
+        }
+
         int monitorCount = 0;
         GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
-        if (monitorIndex >= 0 && monitorIndex < monitorCount) {
+        if (monitorCount > 0) {
+            monitorIndex = std::clamp(monitorIndex < 0 ? (monitorCount > 1 ? 1 : 0) : monitorIndex, 0, monitorCount - 1);
+        } else {
+            monitorIndex = 0;
+        }
+
+        bool fs = (fullscreenOverride >= 0) ? (fullscreenOverride != 0) : settings.projection.windowFullscreen;
+        int winW = customW;
+        int winH = customH;
+
+        if (winW <= 0 || winH <= 0) {
+            winW = settings.projection.windowWidth;
+            winH = settings.projection.windowHeight;
+        }
+
+        if (monitors && monitorIndex >= 0 && monitorIndex < monitorCount) {
             if (const GLFWvidmode* vm = glfwGetVideoMode(monitors[monitorIndex])) {
-                SetProjectorSize(vm->width, vm->height); // <-- clave
+                if (fs && (customW <= 0 || customH <= 0) && settings.projection.windowAutoDetectRes) {
+                    winW = vm->width;
+                    winH = vm->height;
+                }
+                SetProjectorSize(winW > 0 ? winW : vm->width, winH > 0 ? winH : vm->height);
             }
         }
 
@@ -1169,7 +1195,7 @@ bool PresentationCore::GetGlobalMute() const {
                 } else {
                     RenderProjectorWindow();
                 }
-            });
+            }, fs, winW, winH);
 
         if (ok) {
             std::lock_guard<std::recursive_mutex> lock(m_Mutex);

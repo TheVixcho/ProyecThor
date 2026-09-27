@@ -1482,12 +1482,19 @@ void UIManager::ToggleAudience(bool active)
         int monitorCount = 0;
         glfwGetMonitors(&monitorCount);
         int monitorIndex = std::clamp(
-            settings.projection.targetMonitor < 0 ? 1 : settings.projection.targetMonitor,
+            settings.projection.targetMonitor < 0 ? (monitorCount > 1 ? 1 : 0) : settings.projection.targetMonitor,
             0, std::max(0, monitorCount - 1));
 
         core.SetTargetMonitor(monitorIndex);
 #ifndef _WIN32
-        core.CreateProjectorWindow(monitorIndex);
+        int w = settings.projection.windowWidth;
+        int h = settings.projection.windowHeight;
+        if (settings.projection.windowFullscreen && settings.projection.windowAutoDetectRes) {
+            w = 0; h = 0;
+        }
+        core.CreateProjectorWindow(monitorIndex,
+                                   settings.projection.windowFullscreen ? 1 : 0,
+                                   w, h);
 #endif
         core.SetProjecting(true);
         std::cout << "[UIManager] Proyección iniciada en monitor " << monitorIndex << ".\n";
