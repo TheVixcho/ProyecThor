@@ -389,18 +389,9 @@ static unsigned vlc_format(void** opaque, char* chroma, unsigned* width, unsigne
     auto* ctx = static_cast<VLCVideoCtx*>(*opaque);
     std::lock_guard<std::mutex> lock(ctx->mutex);
 
-    unsigned realW = 0, realH = 0;
-    if (ctx && ctx->mp && libvlc_video_get_size(ctx->mp, 0, &realW, &realH) == 0 && realW > 0 && realH > 0)
-    {
-        *width  = realW;
-        *height = realH;
-    }
-
-#ifdef _WIN32
+    // Usar RGBA unificado en todas las plataformas. libVLC convierte directamente
+    // a empaquetado de 32 bits RGBA, perfectamente alineado con OpenGL GL_RGBA.
     std::memcpy(chroma, "RGBA", 4);
-#else
-    std::memcpy(chroma, "RV32", 4);
-#endif
     ctx->width  = *width;
     ctx->height = *height;
     *pitches    = (*width) * 4;
@@ -472,16 +463,50 @@ static void vlc_display(void* opaque, void* /*picture*/)
 
 namespace ProyecThor::Core {
 
+#ifdef _WIN32
 std::string VLCBasePlayer::s_HwDecoder = "any";
+#else
+std::string VLCBasePlayer::s_HwDecoder = "none";
+#endif
+std::string VLCBasePlayer::s_DeinterlaceMode = "disabled";
 
 void VLCBasePlayer::SetDefaultHwDecoder(const std::string& dec)
 {
-    s_HwDecoder = dec.empty() ? "any" : dec;
+    s_HwDecoder = dec.empty() ?
+#ifdef _WIN32
+        "any"
+#else
+        "none"
+#endif
+        : dec;
 }
 
 std::string VLCBasePlayer::GetDefaultHwDecoder()
 {
     return s_HwDecoder;
+}
+
+void VLCBasePlayer::SetDefaultDeinterlace(const std::string& mode)
+{
+    s_DeinterlaceMode = mode.empty() ? "disabled" : mode;
+}
+
+std::string VLCBasePlayer::GetDefaultDeinterlace()
+{
+    return s_DeinterlaceMode;
+}
+
+void VLCBasePlayer::SetDeinterlace(const std::string& mode)
+{
+    if (!m_MediaPlayer) return;
+    if (!mode.empty() && mode != "disabled" && mode != "off")
+    {
+        libvlc_video_set_deinterlace(m_MediaPlayer, mode.c_str());
+    }
+    else
+    {
+        libvlc_video_set_deinterlace(m_MediaPlayer, nullptr);
+    }
 }
 
 VLCBasePlayer::VLCBasePlayer(int decodeThreads, bool useHardwareDecode, bool forceSilent,
@@ -512,11 +537,17 @@ VLCBasePlayer::~VLCBasePlayer()
 
 void VLCBasePlayer::InitVLC()
 {
-#ifdef _WIN32
     std::string threadsArg = "--avcodec-threads=" + std::to_string(m_DecodeThreads);
-    std::string hwDecodeArg = m_UseHardwareDecode
-        ? "--avcodec-hw=any"
-        : "--avcodec-hw=none";
+    std::string hw = s_HwDecoder.empty() ?
+#ifdef _WIN32
+        "any"
+#else
+        "none"
+#endif
+        : s_HwDecoder;
+
+    if (!m_UseHardwareDecode) hw = "none";
+    std::string hwDecodeArg = "--avcodec-hw=" + hw;
 
     const char* args[] = {
         "--no-xlib",
@@ -528,16 +559,6 @@ void VLCBasePlayer::InitVLC()
         "--file-caching=1000",
     };
     m_Instance = libvlc_new(sizeof(args) / sizeof(args[0]), args);
-#else
-    const char* args[] = {
-        "--no-xlib",
-        "--quiet",
-        "--no-osd",
-        "--no-video-title-show",
-        "--file-caching=1000",
-    };
-    m_Instance = libvlc_new(sizeof(args) / sizeof(args[0]), args);
-#endif
     if (!m_Instance)
     {
         const char* fallbackArgs[] = {
@@ -681,11 +702,7 @@ void VLCBasePlayer::EnsureTexture(int w, int h)
 
     glGenTextures(1, &m_TextureID);
     glBindTexture(GL_TEXTURE_2D, m_TextureID);
-#ifdef _WIN32
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-#else
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_BGRA, GL_UNSIGNED_BYTE, nullptr);
-#endif
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -781,7 +798,13 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
     if (loop)
         libvlc_media_add_option(media, "input-repeat=65535");
 
-    std::string hw = s_HwDecoder.empty() ? "any" : s_HwDecoder;
+    std::string hw = s_HwDecoder.empty() ?
+#ifdef _WIN32
+        "any"
+#else
+        "none"
+#endif
+        : s_HwDecoder;
     if (!m_UseHardwareDecode) hw = "none";
     std::string hwOpt = ":avcodec-hw=" + hw;
     libvlc_media_add_option(media, hwOpt.c_str());
@@ -835,6 +858,15 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
         libvlc_media_player_set_media(m_MediaPlayer, media);
         libvlc_media_player_play(m_MediaPlayer);
         m_Paused.store(false, std::memory_order_relaxed);
+
+        if (!s_DeinterlaceMode.empty() && s_DeinterlaceMode != "disabled" && s_DeinterlaceMode != "off")
+        {
+            libvlc_video_set_deinterlace(m_MediaPlayer, s_DeinterlaceMode.c_str());
+        }
+        else
+        {
+            libvlc_video_set_deinterlace(m_MediaPlayer, nullptr);
+        }
     }
 
     libvlc_media_release(media); // el player ya tomo su propia referencia
@@ -1138,11 +1170,11 @@ bool VLCBasePlayer::UpdateTexture()
 
     EnsureTexture(static_cast<int>(w), static_cast<int>(h));
     glBindTexture(GL_TEXTURE_2D, m_TextureID);
-#ifdef _WIN32
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixelsToUpload);
-#else
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_BGRA, GL_UNSIGNED_BYTE, pixelsToUpload);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+#ifdef GL_UNPACK_ROW_LENGTH
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 #endif
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixelsToUpload);
     glBindTexture(GL_TEXTURE_2D, 0);
     return true;
 }

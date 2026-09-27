@@ -451,6 +451,9 @@ namespace ProyecThor::Core {
 
         void BlockPath(const std::string& path);
         void UnblockPath();
+
+        void SetDeinterlace(const std::string& mode);
+        std::string GetDeinterlace() const;
     };
 
 } // namespace ProyecThor::Core

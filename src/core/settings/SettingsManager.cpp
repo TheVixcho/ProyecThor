@@ -728,6 +728,7 @@ void SettingsManager::ApplyProjection() {
     core.SetVideoRenderEngine(0);
 #endif
     core.SetVLCHardwareDecoder(p.vlcHardwareDecoder);
+    core.SetVLCDeinterlace(p.vlcDeinterlace);
 }
 
 // ── Tema ─────────────────────────────────────────────────────────────────
@@ -952,6 +953,7 @@ void SettingsManager::SaveSettings() {
     j["projection"]["fillBlurBrightness"]   = p.fillBlurBrightness;
     j["projection"]["videoRenderEngine"]    = p.videoRenderEngine;
     j["projection"]["vlcHardwareDecoder"]   = p.vlcHardwareDecoder;
+    j["projection"]["vlcDeinterlace"]       = p.vlcDeinterlace;
 
     const auto& sd = m_Settings.stageDisplay;
     j["stageDisplay"]["layoutTemplateIndex"] = sd.layoutTemplateIndex;
@@ -1262,7 +1264,12 @@ void SettingsManager::LoadSettings() {
             p.fillBlurEnabled       = jp.value("fillBlurEnabled",       false);
             p.fillBlurBrightness    = jp.value("fillBlurBrightness",    0.6f);
             p.videoRenderEngine     = jp.value("videoRenderEngine",     0);
+#ifdef _WIN32
             p.vlcHardwareDecoder    = jp.value("vlcHardwareDecoder",    "any");
+#else
+            p.vlcHardwareDecoder    = jp.value("vlcHardwareDecoder",    "none");
+#endif
+            p.vlcDeinterlace        = jp.value("vlcDeinterlace",        "disabled");
         }
 
         if (j.contains("stageDisplay")) {

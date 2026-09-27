@@ -1502,4 +1502,18 @@ void main() {
         m_PlayerB.UnblockPath();
     }
 
+    void BackgroundLayer::SetDeinterlace(const std::string& mode)
+    {
+        VLCBasePlayer::SetDefaultDeinterlace(mode);
+        m_PlayerA.SetDeinterlace(mode);
+        m_PlayerB.SetDeinterlace(mode);
+        if (m_ActiveNative)
+            m_ActiveNative->player.SetDeinterlace(mode);
+    }
+
+    std::string BackgroundLayer::GetDeinterlace() const
+    {
+        return VLCBasePlayer::GetDefaultDeinterlace();
+    }
+
 } // namespace ProyecThor::Core

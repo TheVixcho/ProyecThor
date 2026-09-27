@@ -200,7 +200,14 @@ namespace ProyecThor::Settings {
         int videoRenderEngine = 0;
 
         // ── Decodificador de hardware para libVLC ("any", "none", "vaapi", "vdpau", "d3d11va", "dxva2")
+#ifdef _WIN32
         std::string vlcHardwareDecoder = "any";
+#else
+        std::string vlcHardwareDecoder = "none";
+#endif
+
+        // ── Desentrelazado para libVLC ("disabled", "yadif", "yadif2x", "blend", "bob", "linear", "discard")
+        std::string vlcDeinterlace = "disabled";
     };
 
     // ── Audio ────────────────────────────────────────────────────────────

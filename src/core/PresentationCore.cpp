@@ -345,6 +345,17 @@ bool PresentationCore::GetGlobalMute() const {
         return VLCBasePlayer::GetDefaultHwDecoder();
     }
 
+    void PresentationCore::SetVLCDeinterlace(const std::string& mode) {
+        if (m_Impl) {
+            m_Impl->background.SetDeinterlace(mode);
+        } else {
+            VLCBasePlayer::SetDefaultDeinterlace(mode);
+        }
+    }
+    std::string PresentationCore::GetVLCDeinterlace() const {
+        return VLCBasePlayer::GetDefaultDeinterlace();
+    }
+
     // NOTA multi-monitor: cada setter de aca abajo, ademas de aplicar al
     // primario (compositeFX), tambien aplica el mismo valor a CADA instancia
     // de m_Impl->extraCompositeFX (monitores de salida extra) -- asi un

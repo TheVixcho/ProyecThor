@@ -393,6 +393,56 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
                         "Nota: Se aplica al reproducir el siguiente vídeo o cambiar de fondo.");
 
             ImGui::Spacing();
+            ImGui::TextUnformatted("Desentrelazado de Video (libvlc)");
+
+            struct DeintOpt {
+                const char* id;
+                const char* label;
+                const char* desc;
+            };
+            static const DeintOpt kDeintOpts[] = {
+                { "disabled", "Desactivado (Progresivo)", "No se aplica desentrelazado. Ideal para vídeos progresivos modernos." },
+                { "yadif",    "Yadif (Recomendado)",     "Desentrelazado adaptativo por movimiento de alta calidad (1x)." },
+                { "yadif2x",  "Yadif 2x",                "Yadif a doble frecuencia de cuadros para movimientos ultra suaves." },
+                { "blend",    "Mezclar (Blend)",         "Combina campos consecutivos (suave pero puede producir efecto fantasma)." },
+                { "bob",      "Bob",                     "Duplica cada campo interpolando las líneas ausentes." },
+                { "linear",   "Lineal",                  "Interpolación lineal simple entre líneas." },
+                { "discard",  "Descartar",               "Descarta la mitad de las líneas entrelazadas (menor resolución vertical)." }
+            };
+
+            int deintIdx = 0;
+            for (int i = 0; i < (int)(sizeof(kDeintOpts) / sizeof(kDeintOpts[0])); ++i) {
+                if (p.vlcDeinterlace == kDeintOpts[i].id) {
+                    deintIdx = i;
+                    break;
+                }
+            }
+
+            ImGui::SetNextItemWidth(300.0f);
+            if (ImGui::BeginCombo("##vlcDeint", kDeintOpts[deintIdx].label)) {
+                for (int i = 0; i < (int)(sizeof(kDeintOpts) / sizeof(kDeintOpts[0])); ++i) {
+                    bool isSelected = (deintIdx == i);
+                    if (ImGui::Selectable(kDeintOpts[i].label, isSelected)) {
+                        p.vlcDeinterlace = kDeintOpts[i].id;
+                        Core::PresentationCore::Get().SetVLCDeinterlace(p.vlcDeinterlace);
+                        changed = true;
+                    }
+                    if (ImGui::IsItemHovered() && kDeintOpts[i].desc) {
+                        ImGui::SetTooltip("%s", kDeintOpts[i].desc);
+                    }
+                    if (isSelected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::SameLine();
+            HelpTooltip("Elimina las líneas horizontales o efecto 'peine' en vídeos grabados en formato entrelazado (1080i, cámaras antiguas, emisiones de TV, DVDs).\n\n"
+                        "• Desactivado: Para vídeos progresivos normales (1080p, 720p, etc.).\n"
+                        "• Yadif: Algoritmo inteligente que detecta movimiento y preserva nitidez.\n"
+                        "• Yadif 2x: Genera 50/60 fps fluidos duplicando la cadencia de campos.");
+
+            ImGui::Spacing();
 
             ImGui::Spacing();
             ImGui::SeparatorText("FSR Upscaling");

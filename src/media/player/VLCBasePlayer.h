@@ -51,6 +51,11 @@ namespace ProyecThor::Core {
         static void SetDefaultHwDecoder(const std::string& dec);
         static std::string GetDefaultHwDecoder();
 
+        static void SetDefaultDeinterlace(const std::string& mode);
+        static std::string GetDefaultDeinterlace();
+
+        void SetDeinterlace(const std::string& mode);
+
         // NOTA: sincronico. Se ejecuta en el hilo que llama a Play(), sin
         // hilo de fondo propio. Si el archivo tarda en abrir (disco lento,
         // red, o resolucion de YouTube via yt-dlp), el hilo llamante se
@@ -242,6 +247,7 @@ namespace ProyecThor::Core {
         std::atomic<uint64_t> m_LoadGeneration{0};
         int m_InstanceId = -1;
         static std::string s_HwDecoder;
+        static std::string s_DeinterlaceMode;
         void* m_NativeWindowHandle = nullptr;
         void InitVLC();
         void DestroyVLC();
