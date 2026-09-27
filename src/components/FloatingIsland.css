@@ -1,0 +1,25 @@
+.floating-island {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  width: 3rem;
+  height: 3rem;
+  display: grid;
+  place-items: center;
+  background: rgba(18, 18, 22, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(18px);
+  z-index: 20;
+}
+
+.floating-island-link {
+  color: #f8f9fb;
+  font-size: 1.25rem;
+  text-decoration: none;
+}
+
+.floating-island-arrow .floating-island-link {
+  font-weight: 700;
+}

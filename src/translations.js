@@ -1,0 +1,421 @@
+export const LANGUAGES = ['en', 'es', 'pt']
+export const defaultLanguage = 'es'
+
+export const languageLabels = {
+  en: 'English',
+  es: 'Español',
+  pt: 'Português',
+}
+
+export const translations = {
+  en: {
+    nav: {
+      links: [
+        { href: '#home', label: 'Home' },
+        { href: '#caracteristicas', label: 'Features' },
+        { href: '#plataformas', label: 'Platforms' },
+        { href: '#comunidad', label: 'Community' },
+      ],
+      github: 'GitHub',
+      download: 'Download',
+    },
+    hero: {
+      titlePrefix: 'Project like',
+      titleHighlight: 'lightning',
+      lead: 'ProyecThor is a professional projection engine designed for reliable performance and instant response under live production pressure. Ideal for churches, theaters, and events where execution must be secure and predictable.',
+      download: 'Download for free',
+      github: 'View on GitHub',
+    },
+    video: {},
+    philosophy: {
+      heading: 'Everything engineered for real-world production',
+      lead: 'No distractions, no hidden menus: each tool is placed where the operator expects it, exactly when it is needed.',
+      pillars: [
+        {
+          title: 'No subscriptions',
+          text: 'All features are available to everyone forever. No plans, no accounts, no locked modules.',
+        },
+        {
+          title: 'Operator first',
+          text: 'The interface is designed to reduce human error under pressure, especially when the moment is most demanding.',
+        },
+        {
+          title: 'Open source',
+          text: 'The source code is available on GitHub for anyone who wants to review, improve, or build it themselves.',
+        },
+      ],
+    },
+    downloadCta: {
+      heading: 'Start projecting in minutes',
+      text: 'No accounts, no limits. Download it now.',
+      cta: 'Download now',
+    },
+    featuresHeading: 'Features',
+    featuresLead: 'Everything you need to direct live productions from one trustworthy interface.',
+    features: [
+      { title: 'Multi-layer architecture', text: 'Manage backgrounds (colors, images, video) and text independently, without elements overlapping incorrectly.' },
+      { title: 'Dual-screen workflow', text: 'Dedicated operator interface separated from a clean, borderless projector output.' },
+      { title: 'All-in-one library', text: 'Lyrics, media, scripture, documents, and audio organized in one place.' },
+      { title: 'Overlay editor', text: 'Transparent PNG layers with text, shapes and images, editable full-screen.' },
+      { title: 'Streaming and connectivity', text: 'RTMP streaming, LAN routing, and OSC control for external lighting and controllers.' },
+      { title: 'Live visual effects', text: 'CRT, grain, vignette, blur, and sharpening applied directly to the real output.' },
+      { title: 'Customizable themes', text: 'Multiple built-in themes, or edit every color, font, and shape to match your brand.' },
+      { title: 'Format conversion', text: 'Convert imported video and audio without leaving the application.' },
+      { title: 'Playback queue', text: 'Build a playback queue with transitions and intelligent background looping.' },
+      { title: 'Remote app control', text: 'Operate ProyecThor from a dedicated mobile app for remote command and control.',
+      },
+      { title: 'Free XML scriptures', text: 'Load open-source XML scripture files at no cost, with compatibility for liturgical content.',
+      },
+      { title: 'Automated lyrics', text: 'Generate song lyrics with improved automated scripting and synchronized timing.',
+      },
+      { title: 'Wayland-style shortcuts', text: 'Navigate and control the app using keyboard shortcuts inspired by Wayland, minimizing mouse use.',
+      },
+      { title: 'Video codec conversion', text: 'Transcode and compress videos at the codec level for optimized playback and storage.',
+      },
+      { title: 'HTTPS subtitles', text: 'Download subtitles via HTTPS and use them as song lyrics or synced presentation text.',
+      },
+      { title: 'Unified playlists', text: 'Manage playlists for videos and songs with integrated playlist support.',
+      },
+    ],
+    platforms: {
+      heading: 'Run where you already work',
+      lead: 'ProyecThor provides an optimized resource profile on Linux with lower memory, CPU and GPU usage compared to the equivalent Windows build, without sacrificing performance on comparable hardware.',
+      items: [
+        {
+          name: 'Windows 10 / 11',
+          status: 'Fully supported',
+          note: 'Primary platform for development and testing.',
+          tiers: [
+            { label: 'Minimum', specs: [['CPU', 'Intel i5 7th gen'], ['RAM', '8 GB'], ['GPU', 'Integrated'], ['Storage', '500 MB free + library']] },
+            { label: 'Recommended', specs: [['CPU', 'Recent Intel i5 or i7'], ['RAM', '16 GB'], ['GPU', 'Dedicated, hardware acceleration'], ['Storage', 'SSD']] },
+          ],
+        },
+        {
+          name: 'Linux (Arch / CachyOS)',
+          status: 'Fully supported',
+          note: 'Compatibility tested on Arch-based distributions, with extended support for Debian/Ubuntu.',
+          tiers: [
+            { label: 'Minimum', specs: [['CPU', 'Dual-core'], ['RAM', '4 GB'], ['GPU', 'Integrated, OpenGL support'], ['Storage', '500 MB free + library']] },
+            { label: 'Recommended', specs: [['CPU', 'Quad-core or equivalent'], ['RAM', '8 GB'], ['GPU', 'Dedicated (optional)'], ['Storage', 'SSD']] },
+          ],
+        },
+        {
+          name: 'Android (closed beta)',
+          status: 'Available on Google Play',
+          note: 'The mobile app is in closed beta; join the test program for remote control access.',
+          tiers: [
+            { label: 'Recommended', specs: [['OS', 'Android 12 or newer'], ['RAM', '4 GB'], ['Network', 'Wi-Fi or local network'], ['Storage', '100 MB free']] },
+          ],
+        },
+      ],
+    },
+    community: {
+      heading: 'A not-for-profit project built by community',
+      lead: 'We believe in the power of open source to improve professional tools. Although the app is free, voluntary donations help cover maintenance, hosting, and development time.',
+      channels: {
+        whatsapp: {
+          title: 'WhatsApp channel',
+          text: 'Announcements and quick alerts delivered directly to your phone.',
+          cta: 'Join channel',
+        },
+        github: {
+          title: 'GitHub',
+          text: 'Report issues, follow development, or review the source code.',
+          cta: 'View repository',
+        },
+      },
+      donateTitle: 'Want to support the project?',
+      donateText: 'Every donation helps keep ProyecThor secure, maintained and up to date.',
+      donateCta: 'Donate on Ko-fi',
+    },
+    footer: {
+      project: 'Project',
+      community: 'Community',
+      repo: 'Source code',
+      releases: 'Downloads',
+      wiki: 'Wiki',
+      issues: 'Report an issue',
+      mobileApp: 'Mobile app',
+      whatsapp: 'WhatsApp',
+      discord: 'Discord',
+      donations: 'Donations',
+      copyright: 'ProyecThor Project.',
+      license: 'MIT licensed.',
+    },
+    floating: {
+      home: 'Back to top',
+      language: 'Language',
+    },
+  },
+  es: {
+    nav: {
+      links: [
+        { href: '#home', label: 'Inicio' },
+        { href: '#caracteristicas', label: 'Características' },
+        { href: '#plataformas', label: 'Plataformas' },
+        { href: '#comunidad', label: 'Comunidad' },
+      ],
+      github: 'GitHub',
+      download: 'Descargar',
+    },
+    hero: {
+      titlePrefix: 'Proyecta como',
+      titleHighlight: 'el rayo',
+      lead: 'ProyecThor es un motor de proyección profesional diseñado para ofrecer rendimiento estable y respuestas instantáneas bajo presión en producciones en vivo. Ideal para iglesias, teatros y eventos donde la operación debe ser segura y predecible.',
+      download: 'Descargar gratis',
+      github: 'Ver en GitHub',
+    },
+    video: {},
+    philosophy: {
+      heading: 'Todo diseñado para producción real',
+      lead: 'Sin distracciones, sin menús ocultos: cada herramienta está donde el operador la espera, justo cuando la necesita.',
+      pillars: [
+        {
+          title: 'Sin suscripciones',
+          text: 'Todas las funciones están disponibles para todos, para siempre. Ni planes, ni cuentas, ni módulos bloqueados.',
+        },
+        {
+          title: 'Centrado en el operador',
+          text: 'La interfaz está diseñada para minimizar el error humano bajo presión, especialmente en los momentos más críticos.',
+        },
+        {
+          title: 'Código abierto',
+          text: 'El código fuente está disponible en GitHub para cualquiera que quiera revisarlo, mejorarlo o compilarlo por su cuenta.',
+        },
+      ],
+    },
+    downloadCta: {
+      heading: 'Empieza a proyectar en minutos',
+      text: 'Sin cuentas ni límites. Descárgalo ahora.',
+      cta: 'Descargar ahora',
+    },
+    featuresHeading: 'Características',
+    featuresLead: 'Todo lo que necesitas para dirigir producciones en vivo desde una interfaz confiable.',
+    features: [
+      { title: 'Arquitectura multi-capa', text: 'Gestiona fondos (colores, imágenes, video) y texto de forma independiente, sin que se pisen entre sí.' },
+      { title: 'Flujo de doble pantalla', text: 'Interfaz de operador dedicada, separada de una salida limpia y sin bordes para el proyector.' },
+      { title: 'Biblioteca todo-en-uno', text: 'Letras, multimedia, Biblia, documentos y audio organizados en un solo lugar.' },
+      { title: 'Editor de overlays', text: 'Capas PNG transparentes con texto, formas e imágenes, editables a pantalla completa.' },
+      { title: 'Streaming y conexiones', text: 'Transmisión RTMP, red LAN y OSC para luces y controladores externos.' },
+      { title: 'Efectos visuales en vivo', text: 'CRT, grano, viñeta, desenfoque y nitidez aplicados directo sobre la salida real.' },
+      { title: 'Temas personalizables', text: 'Varios temas incluidos, o edita cada color, fuente y forma a tu gusto.' },
+      { title: 'Conversor de formatos', text: 'Convierte tus videos y audios importados sin salir de la aplicación.' },
+      { title: 'Cola y transiciones', text: 'Arma una cola de reproducción con transiciones y bucle inteligente de fondos.' },
+      { title: 'Control remoto por aplicación', text: 'Controla ProyecThor desde tu dispositivo móvil con una app dedicada para mando y gestión a distancia.' },
+      { title: 'Biblias XML gratuitas', text: 'Carga archivos de Biblia en formato XML de código abierto sin costo adicional, con compatibilidad para contenido litúrgico.' },
+      { title: 'Letras automatizadas', text: 'Genera letras de canciones con escrituras automáticas mejoradas y sincronizadas.' },
+      { title: 'Accesos rápidos tipo Wayland', text: 'Navega y controla la app mediante atajos inspirados en Wayland, minimizando el uso del mouse.' },
+      { title: 'Conversión y compresión de video', text: 'Transcodifica y comprime videos a nivel de códecs para optimizar reproducción y almacenamiento.' },
+      { title: 'Subtítulos HTTPS', text: 'Descarga subtítulos vía HTTPS y úsalos como letras de canciones o texto sincronizado.' },
+      { title: 'Listas de reproducción unificadas', text: 'Gestiona playlists para videos y canciones con soporte integrado.' },
+    ],
+    platforms: {
+      heading: 'Corre donde ya trabajas',
+      lead: 'ProyecThor ofrece un perfil de recursos optimizado en Linux, con menor uso de memoria, CPU y GPU respecto a la versión equivalente en Windows, sin sacrificar rendimiento en hardware comparable.',
+      items: [
+        {
+          name: 'Windows 10 / 11',
+          status: 'Totalmente soportado',
+          note: 'Plataforma principal de desarrollo y pruebas.',
+          tiers: [
+            { label: 'Mínimo', specs: [['CPU', 'Intel i5 de 7ma generación'], ['RAM', '8 GB'], ['GPU', 'Integrada'], ['Almacenamiento', '500 MB libres + biblioteca']] },
+            { label: 'Recomendado', specs: [['CPU', 'Intel i5 reciente o i7'], ['RAM', '16 GB'], ['GPU', 'Dedicada, aceleración por hardware'], ['Almacenamiento', 'SSD']] },
+          ],
+        },
+        {
+          name: 'Linux (Arch / CachyOS)',
+          status: 'Totalmente soportado',
+          note: 'Compatibilidad probada en distribuciones basadas en Arch, con soporte extendido a Debian/Ubuntu.',
+          tiers: [
+            { label: 'Mínimo', specs: [['CPU', 'Dual-core'], ['RAM', '4 GB'], ['GPU', 'Integrada, soporte OpenGL'], ['Almacenamiento', '500 MB libres + biblioteca']] },
+            { label: 'Recomendado', specs: [['CPU', 'Quad-core o equivalente'], ['RAM', '8 GB'], ['GPU', 'Dedicada (opcional)'], ['Almacenamiento', 'SSD']] },
+          ],
+        },
+        {
+          name: 'Android (beta cerrada)',
+          status: 'Disponible en Google Play',
+          note: 'La app móvil está en beta cerrada; únete al programa de prueba para acceder al control remoto.',
+          tiers: [
+            { label: 'Recomendado', specs: [['SO', 'Android 12 o superior'], ['RAM', '4 GB'], ['Red', 'Wi-Fi o red local'], ['Almacenamiento', '100 MB libres']] },
+          ],
+        },
+      ],
+    },
+    community: {
+      heading: 'Un proyecto sin fines de lucro, hecho en comunidad',
+      lead: 'Creemos en el poder del código abierto para mejorar herramientas profesionales. Aunque la app es gratuita, las donaciones voluntarias ayudan a cubrir mantenimiento, hosting y tiempo de desarrollo.',
+      channels: {
+        whatsapp: {
+          title: 'Canal de WhatsApp',
+          text: 'Novedades y avisos rápidos, directo a tu teléfono.',
+          cta: 'Seguir el canal',
+        },
+        github: {
+          title: 'GitHub',
+          text: 'Reporta errores, sigue el desarrollo o revisa el código fuente.',
+          cta: 'Ver repositorio',
+        },
+      },
+      donateTitle: '¿Quieres apoyar el proyecto?',
+      donateText: 'Cada donación ayuda a mantener ProyecThor seguro, actualizado y disponible.',
+      donateCta: 'Donar en Ko-fi',
+    },
+    footer: {
+      project: 'Proyecto',
+      community: 'Comunidad',
+      repo: 'Código fuente',
+      releases: 'Descargas',
+      wiki: 'Wiki',
+      issues: 'Reportar un error',
+      mobileApp: 'App móvil',
+      whatsapp: 'WhatsApp',
+      discord: 'Discord',
+      donations: 'Donaciones',
+      copyright: 'ProyecThor Project.',
+      license: 'Con licencia MIT.',
+    },
+    floating: {
+      home: 'Volver al inicio',
+      language: 'Idioma',
+    },
+  },
+  pt: {
+    nav: {
+      links: [
+        { href: '#home', label: 'Início' },
+        { href: '#caracteristicas', label: 'Recursos' },
+        { href: '#plataformas', label: 'Plataformas' },
+        { href: '#comunidad', label: 'Comunidade' },
+      ],
+      github: 'GitHub',
+      download: 'Baixar',
+    },
+    hero: {
+      titlePrefix: 'Projete como',
+      titleHighlight: 'o raio',
+      lead: 'ProyecThor é um motor de projeção profissional projetado para desempenho confiável e resposta instantânea sob pressão de produção ao vivo. Ideal para igrejas, teatros e eventos onde a operação deve ser segura e previsível.',
+      download: 'Baixar grátis',
+      github: 'Ver no GitHub',
+    },
+    video: {},
+    philosophy: {
+      heading: 'Tudo projetado para produção real',
+      lead: 'Sem distrações, sem menus ocultos: cada ferramenta está onde o operador espera, exatamente quando precisa.',
+      pillars: [
+        {
+          title: 'Sem assinaturas',
+          text: 'Todos os recursos estão disponíveis para todos para sempre. Sem planos, sem contas, sem módulos bloqueados.',
+        },
+        {
+          title: 'Focado no operador',
+          text: 'A interface é projetada para reduzir erros humanos sob pressão, especialmente nos momentos mais exigentes.',
+        },
+        {
+          title: 'Código aberto',
+          text: 'O código-fonte está disponível no GitHub para quem quiser revisar, melhorar ou compilar por conta própria.',
+        },
+      ],
+    },
+    downloadCta: {
+      heading: 'Comece a projetar em minutos',
+      text: 'Sem contas, sem limites. Baixe agora.',
+      cta: 'Baixar agora',
+    },
+    featuresHeading: 'Recursos',
+    featuresLead: 'Tudo o que você precisa para dirigir produções ao vivo em uma interface confiável.',
+    features: [
+      { title: 'Arquitetura multicamadas', text: 'Gerencie fundos (cores, imagens, vídeo) e texto de forma independente, sem sobreposição incorreta.' },
+      { title: 'Fluxo de duas telas', text: 'Interface de operador dedicada separada de uma saída de projetor limpa e sem bordas.' },
+      { title: 'Biblioteca tudo-em-um', text: 'Letras, mídia, escritura, documentos e áudio organizados em um só lugar.' },
+      { title: 'Editor de overlays', text: 'Camadas PNG transparentes com texto, formas e imagens, editáveis em tela cheia.' },
+      { title: 'Streaming e conexões', text: 'Streaming RTMP, roteamento LAN e controle OSC para iluminação e controladores externos.' },
+      { title: 'Efeitos visuais ao vivo', text: 'CRT, grão, vinheta, desfoque e nitidez aplicados diretamente à saída real.' },
+      { title: 'Temas personalizáveis', text: 'Múltiplos temas integrados, ou edite cada cor, fonte e forma ao seu gosto.' },
+      { title: 'Conversão de formatos', text: 'Converta vídeo e áudio importados sem sair do aplicativo.' },
+      { title: 'Fila de reprodução', text: 'Monte uma fila de reprodução com transições e loop inteligente de fundos.' },
+      { title: 'Controle remoto por aplicativo', text: 'Controle o ProyecThor a partir de um aplicativo móvel dedicado para comando remoto.',
+      },
+      { title: 'Bíblias XML gratuitas', text: 'Carregue arquivos de escritura XML open source sem custo adicional, compatíveis com conteúdo litúrgico.',
+      },
+      { title: 'Letras automatizadas', text: 'Gere letras de música com scripts automáticos aprimorados e sincronização.',
+      },
+      { title: 'Atalhos estilo Wayland', text: 'Navegue e controle o app usando atalhos de teclado inspirados no Wayland, minimizando o uso do mouse.',
+      },
+      { title: 'Conversão e compressão de vídeo', text: 'Transcodifique e comprima vídeos no nível de codecs para otimizar reprodução e armazenamento.',
+      },
+      { title: 'Legendas HTTPS', text: 'Baixe legendas via HTTPS e use-as como letras de músicas ou texto sincronizado.',
+      },
+      { title: 'Playlists unificadas', text: 'Gerencie playlists para vídeos e músicas com suporte integrado.',
+      },
+    ],
+    platforms: {
+      heading: 'Rode onde você já trabalha',
+      lead: 'ProyecThor oferece um perfil de recursos otimizado no Linux, com menor uso de memória, CPU e GPU em comparação à versão equivalente no Windows, sem comprometer o desempenho em hardware comparável.',
+      items: [
+        {
+          name: 'Windows 10 / 11',
+          status: 'Totalmente suportado',
+          note: 'Plataforma principal para desenvolvimento e testes.',
+          tiers: [
+            { label: 'Mínimo', specs: [['CPU', 'Intel i5 7ª geração'], ['RAM', '8 GB'], ['GPU', 'Integrada'], ['Armazenamento', '500 MB livres + biblioteca']] },
+            { label: 'Recomendado', specs: [['CPU', 'Intel i5 recente ou i7'], ['RAM', '16 GB'], ['GPU', 'Dedicada, aceleração de hardware'], ['Armazenamento', 'SSD']] },
+          ],
+        },
+        {
+          name: 'Linux (Arch / CachyOS)',
+          status: 'Totalmente suportado',
+          note: 'Compatibilidade testada em distribuições baseadas em Arch, com suporte estendido para Debian/Ubuntu.',
+          tiers: [
+            { label: 'Mínimo', specs: [['CPU', 'Dual-core'], ['RAM', '4 GB'], ['GPU', 'Integrada, suporte OpenGL'], ['Armazenamento', '500 MB livres + biblioteca']] },
+            { label: 'Recomendado', specs: [['CPU', 'Quad-core ou equivalente'], ['RAM', '8 GB'], ['GPU', 'Dedicada (opcional)'], ['Armazenamento', 'SSD']] },
+          ],
+        },
+        {
+          name: 'Android (beta fechada)',
+          status: 'Disponível no Google Play',
+          note: 'O app móvel está em beta fechada; entre no programa de testes para acessar o controle remoto.',
+          tiers: [
+            { label: 'Recomendado', specs: [['SO', 'Android 12 ou superior'], ['RAM', '4 GB'], ['Rede', 'Wi-Fi ou rede local'], ['Armazenamento', '100 MB livres']] },
+          ],
+        },
+      ],
+    },
+    community: {
+      heading: 'Um projeto sem fins lucrativos, feito em comunidade',
+      lead: 'Acreditamos no poder do código aberto para aprimorar ferramentas profissionais. Embora o app seja gratuito, doações voluntárias ajudam a custear manutenção, hospedagem e o desenvolvimento.',
+      channels: {
+        whatsapp: {
+          title: 'Canal WhatsApp',
+          text: 'Novidades e alertas rápidos entregues diretamente ao seu telefone.',
+          cta: 'Entrar no canal',
+        },
+        github: {
+          title: 'GitHub',
+          text: 'Reporte problemas, acompanhe o desenvolvimento ou revise o código fonte.',
+          cta: 'Ver repositório',
+        },
+      },
+      donateTitle: 'Quer apoiar o projeto?',
+      donateText: 'Cada doação ajuda a manter o ProyecThor seguro, atualizado e disponível.',
+      donateCta: 'Doar no Ko-fi',
+    },
+    footer: {
+      project: 'Projeto',
+      community: 'Comunidade',
+      repo: 'Código fonte',
+      releases: 'Downloads',
+      wiki: 'Wiki',
+      issues: 'Reportar um problema',
+      mobileApp: 'App móvel',
+      whatsapp: 'WhatsApp',
+      discord: 'Discord',
+      donations: 'Doações',
+      copyright: 'ProyecThor Project.',
+      license: 'Licenciado MIT.',
+    },
+    floating: {
+      home: 'Voltar ao topo',
+      language: 'Idioma',
+    },
+  },
+}
