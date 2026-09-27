@@ -40,11 +40,8 @@ static ImU32 ColAf(ImU32 col, float alpha01) {
 }
 
 static float HubHoverLerp(ImGuiID id, bool hovered, float speed = 12.0f) {
-    ImGuiStorage* storage = ImGui::GetStateStorage();
-    float* pT = storage->GetFloatRef(id ^ 0x48554248u, 0.0f);
-    const float target = hovered ? 1.0f : 0.0f;
-    *pT += (target - *pT) * std::min(1.0f, ImGui::GetIO().DeltaTime * speed);
-    return *pT;
+    (void)id; (void)speed;
+    return hovered ? 1.0f : 0.0f;
 }
 
 struct UpdateVersionInfo {
@@ -225,33 +222,19 @@ static std::unordered_map<std::string, ParallaxState>& GetParallaxStates() {
 }
 
 static void DrawCoverImageCover(ImDrawList* dl, GLuint texId, int texW, int texH,
-                                 ImVec2 pMin, ImVec2 pMax,
-                                 float rounding, ImDrawFlags roundFlags,
-                                 const char* stateKey, float dt,
-                                 bool hovered, float maxZoom, float followSpeed = 9.0f)
+                                ImVec2 pMin, ImVec2 pMax,
+                                float rounding, ImDrawFlags roundFlags,
+                                const char* stateKey = nullptr, float dt = 0.0f,
+                                bool hovered = false, float maxZoom = 1.0f, float followSpeed = 9.0f)
 {
+    (void)stateKey; (void)dt; (void)hovered; (void)maxZoom; (void)followSpeed;
     if (texId == 0 || texW <= 0 || texH <= 0) {
         dl->AddRectFilled(pMin, pMax, ColA(HT::CardAlt, 255), rounding, roundFlags);
         return;
     }
 
-    ParallaxState& st = GetParallaxStates()[stateKey];
-
     const float boxW = std::max(1.0f, pMax.x - pMin.x);
     const float boxH = std::max(1.0f, pMax.y - pMin.y);
-
-    float targetZoom = hovered ? maxZoom : 1.0f;
-    float targetOX   = 0.0f, targetOY = 0.0f;
-    if (hovered) {
-        const ImVec2 mouse = ImGui::GetMousePos();
-        targetOX = std::clamp(((mouse.x - pMin.x) / boxW) * 2.0f - 1.0f, -1.0f, 1.0f);
-        targetOY = std::clamp(((mouse.y - pMin.y) / boxH) * 2.0f - 1.0f, -1.0f, 1.0f);
-    }
-
-    const float t = std::clamp(dt * followSpeed, 0.0f, 1.0f);
-    st.zoom += (targetZoom - st.zoom) * t;
-    st.ox   += (targetOX   - st.ox)   * t;
-    st.oy   += (targetOY   - st.oy)   * t;
 
     const float boxAspect = boxW / boxH;
     const float imgAspect = static_cast<float>(texW) / static_cast<float>(texH);
@@ -265,25 +248,8 @@ static void DrawCoverImageCover(ImDrawList* dl, GLuint texId, int texW, int texH
         baseUH = imgAspect / boxAspect;
     }
 
-    const float zoom = std::max(1.0f, st.zoom);
-    const float uw = baseUW / zoom;
-    const float uh = baseUH / zoom;
-
-    const float marginX = std::max(0.0f, (1.0f - uw) * 0.5f);
-    const float marginY = std::max(0.0f, 1.0f - uh);
-
-    const float centerU = 0.5f + st.ox * marginX;
-    // Anclado en la base inferior (v1 = 1.0f, v0 = 1.0f - uh) para que la imagen
-    // parta de abajo hacia arriba y no al medio.
-    float v1 = 1.0f + std::min(0.0f, st.oy) * marginY * 0.5f;
-    float v0 = v1 - uh;
-    if (v0 < 0.0f) {
-        v0 = 0.0f;
-        v1 = std::min(1.0f, uh);
-    }
-
-    const ImVec2 uv0(centerU - uw * 0.5f, v0);
-    const ImVec2 uv1(centerU + uw * 0.5f, v1);
+    const ImVec2 uv0(0.5f - baseUW * 0.5f, 1.0f - baseUH);
+    const ImVec2 uv1(0.5f + baseUW * 0.5f, 1.0f);
 
     const int imgAlpha = static_cast<int>(std::clamp(ImGui::GetStyle().Alpha, 0.0f, 1.0f) * 255.0f);
     dl->AddImageRounded((ImTextureID)(intptr_t)texId, pMin, pMax, uv0, uv1,
@@ -310,21 +276,17 @@ Hub::~Hub() {
 
 void Hub::ForceOpen() {
     m_Open                  = true;
-    m_Appearing             = true;
-    m_AppearProgress        = 0.0f;
+    m_Appearing             = false;
+    m_AppearProgress        = 1.0f;
     m_LaunchRequested       = false;
     m_OpenSettingsRequested = false;
     m_LastFrameTime         = std::chrono::steady_clock::now();
 }
 
 void Hub::UpdateAnimations(float dt) {
-    if (m_Appearing) {
-        m_AppearProgress += dt * HUB_APPEAR_SPD;
-        if (m_AppearProgress >= 1.0f) {
-            m_AppearProgress = 1.0f;
-            m_Appearing      = false;
-        }
-    }
+    (void)dt;
+    m_AppearProgress = 1.0f;
+    m_Appearing      = false;
 }
 
 static void DrawSectionHeader(const char* title, float width) {
@@ -342,12 +304,8 @@ static void DrawSectionHeader(const char* title, float width) {
 }
 
 void Hub::RenderNovedadesPanel() {
-    const float target = m_NovedadesOpen ? 1.0f : 0.0f;
-    m_NovedadesAnim += (target - m_NovedadesAnim) * std::min(1.0f, ImGui::GetIO().DeltaTime * 10.0f);
-    m_NovedadesAnim = std::clamp(m_NovedadesAnim, 0.0f, 1.0f);
-    if (m_NovedadesAnim < 0.001f) m_NovedadesAnim = 0.0f;
-
-    if (!m_NovedadesOpen && m_NovedadesAnim <= 0.0f) return;
+    m_NovedadesAnim = m_NovedadesOpen ? 1.0f : 0.0f;
+    if (!m_NovedadesOpen) return;
 
     ImGuiViewport* vp    = ImGui::GetMainViewport();
     const float    fadeA = EaseOut(m_NovedadesAnim);
@@ -665,12 +623,6 @@ bool Hub::Render() {
 
     ImGuiViewport* vp = ImGui::GetMainViewport();
 
-    if (!m_BgParticlesInit)
-        InitBgParticles(vp->WorkSize.x, vp->WorkSize.y);
-
-    UpdateBgParticles(dt, vp->WorkSize.x, vp->WorkSize.y);
-    UpdateNebulas(dt, vp->WorkSize.x, vp->WorkSize.y);
-
     ImGui::SetNextWindowPos(vp->WorkPos);
     ImGui::SetNextWindowSize(vp->WorkSize);
     ImGui::SetNextWindowBgAlpha(0.0f);
@@ -685,13 +637,13 @@ bool Hub::Render() {
 
     ImGui::Begin("##HubRoot", nullptr, rootFlags);
 
-    const float appearA = EaseOut(m_AppearProgress);
+    const float appearA = 1.0f;
     ImGui::PushStyleVar(ImGuiStyleVar_Alpha, appearA);
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2      wp = ImGui::GetWindowPos();
 
-    dl->AddRectFilled(wp, ImVec2(wp.x + vp->WorkSize.x, wp.y + vp->WorkSize.y), ColAf(HT::BgMain, appearA));
+    dl->AddRectFilled(wp, ImVec2(wp.x + vp->WorkSize.x, wp.y + vp->WorkSize.y), ColA(HT::BgMain, 255));
     RenderBgCanvas(dl, wp, vp->WorkSize.x, vp->WorkSize.y);
 
     static GLuint s_HubBgTex      = 0;
@@ -740,8 +692,6 @@ void Hub::RenderContent(float w, float h) {
     ImGui::SetCursorPos(ImVec2(contentX, startY));
     ImGui::BeginGroup();
 
-    // Factor de respiración armónico suave (ciclo de ~3.2 segundos)
-    const float breathe = 0.5f + 0.5f * sinf(m_Time * 1.95f);
 
     // ── 1. Cabecera con Branding y Versión ───────────────────────────────
     {
@@ -801,23 +751,7 @@ void Hub::RenderContent(float w, float h) {
 
     const ImVec2 row1Pos = ImGui::GetCursorScreenPos();
 
-    // ── Helper para dibujar brackets estilizados en las esquinas ──
-    auto DrawCornerBrackets = [&](const ImVec2& min, const ImVec2& max, ImU32 col, float len = 12.0f, float th = 1.8f) {
-        // Top-left
-        dl->AddLine(min, ImVec2(min.x + len, min.y), col, th);
-        dl->AddLine(min, ImVec2(min.x, min.y + len), col, th);
-        // Top-right
-        dl->AddLine(ImVec2(max.x, min.y), ImVec2(max.x - len, min.y), col, th);
-        dl->AddLine(ImVec2(max.x, min.y), ImVec2(max.x, min.y + len), col, th);
-        // Bottom-left
-        dl->AddLine(ImVec2(min.x, max.y), ImVec2(min.x + len, max.y), col, th);
-        dl->AddLine(ImVec2(min.x, max.y), ImVec2(min.x, max.y - len), col, th);
-        // Bottom-right
-        dl->AddLine(max, ImVec2(max.x - len, max.y), col, th);
-        dl->AddLine(max, ImVec2(max.x, max.y - len), col, th);
-    };
-
-    // ── Card 1: Empezar a proyectar (Hero Poster con Aura Esmeralda / Cian) ──
+    // ── Card 1: Empezar a proyectar (Hero Card Limpia y Moderna) ──
     {
         const ImVec2 cMin = ImVec2(contentX + ImGui::GetWindowPos().x, row1Pos.y);
         const ImVec2 cMax = ImVec2(cMin.x + cardW, cMin.y + cardH);
@@ -828,36 +762,24 @@ void Hub::RenderContent(float w, float h) {
         if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
         if (ImGui::IsItemClicked()) m_LaunchRequested = true;
 
-        const float hoverT = HubHoverLerp(ImGui::GetID("##heroBtn"), hovered);
+        // Fondo de tarjeta limpio
+        dl->AddRectFilled(cMin, cMax, ColA(HT::CardAlt, 255), HT::RadiusLg);
 
-        // Halo de respiración ambiental continuo + expansión interactiva en hover
-        const float glowIntensity = 0.09f + 0.09f * breathe + hoverT * 0.25f;
-        for (int i = 3; i >= 1; i--) {
-            const float pad = (static_cast<float>(i) * 3.5f) + (breathe * 2.0f) + (hoverT * 6.0f);
-            dl->AddRectFilled(
-                ImVec2(cMin.x - pad, cMin.y - pad),
-                ImVec2(cMax.x + pad, cMax.y + pad),
-                ColAf(HT::AccentBlue, glowIntensity * (1.0f - static_cast<float>(i - 1) / 3.0f)),
-                HT::RadiusLg + pad * 0.35f);
-        }
-
-        // Fondo con imagen y parallax
+        // Fondo con imagen estática nítida
         const GLTextureInfo heroTex = GetCoverTexture(kHeroCardTextureFile);
         DrawCoverImageCover(dl, heroTex.id, heroTex.width, heroTex.height, cMin, cMax,
-            HT::RadiusLg, ImDrawFlags_RoundCornersAll,
-            "hub_hero_card", ImGui::GetIO().DeltaTime, hovered, 1.05f, 2.8f);
+            HT::RadiusLg, ImDrawFlags_RoundCornersAll);
 
-        // Scrim oscuro degradado
-        dl->AddRectFilled(cMin, cMax, ColA(HT::Card, 120), HT::RadiusLg);
+        // Scrim oscuro degradado para legibilidad perfecta
+        dl->AddRectFilled(cMin, cMax, ColA(HT::Card, 100), HT::RadiusLg);
         dl->AddRectFilledMultiColor(
-            ImVec2(cMin.x, cMin.y + cardH * 0.18f), cMax,
+            ImVec2(cMin.x, cMin.y + cardH * 0.25f), cMax,
             ColA(IM_COL32(0, 0, 0, 0), 0), ColA(IM_COL32(0, 0, 0, 0), 0),
-            ColA(HT::BgMain, 252), ColA(HT::BgMain, 252));
+            ColA(HT::BgMain, 245), ColA(HT::BgMain, 245));
 
-        // Borde interactivo con cristal fino
-        const ImU32 cardBorderCol = ColAf(HT::AccentBlue, 0.25f + 0.25f * breathe + hoverT * 0.55f);
-        dl->AddRect(cMin, cMax, cardBorderCol, HT::RadiusLg, 0, hovered ? 1.8f : 1.2f);
-        DrawCornerBrackets(cMin, cMax, ColAf(HT::AccentSoft, 0.30f + hoverT * 0.60f), 14.0f, 2.0f);
+        // Borde limpio y definido (destacado al hover)
+        const ImU32 cardBorderCol = hovered ? ColAf(HT::AccentBlue, 0.90f) : ColAf(HT::Divider, 0.70f);
+        dl->AddRect(cMin, cMax, cardBorderCol, HT::RadiusLg, 0, hovered ? 1.6f : 1.0f);
 
         // Contenido de la tarjeta (Padding 20px)
         const float padX = 20.0f, padY = 18.0f;
@@ -865,15 +787,14 @@ void Hub::RenderContent(float w, float h) {
         // Tag superior
         const ImVec2 tagPos(cMin.x + padX, cMin.y + padY);
         dl->AddRectFilled(tagPos, ImVec2(tagPos.x + 136.0f, tagPos.y + 22.0f),
-            ColAf(HT::AccentBlue, 0.28f + hoverT * 0.20f), HT::RadiusSm);
+            ColAf(HT::AccentBlue, hovered ? 0.35f : 0.22f), HT::RadiusSm);
         dl->AddText(ImVec2(tagPos.x + 8.0f, tagPos.y + 3.0f),
             HT::AccentSoft, "PROYECCIÓN EN VIVO");
 
-        // Icono Play central flotante con halo de respiración
-        const float playR = 25.0f + hoverT * 3.0f + breathe * 1.5f;
+        // Icono Play central estático y nítido
+        const float playR = 26.0f;
         const ImVec2 playCenter(cMin.x + cardW * 0.5f, cMin.y + cardH * 0.38f);
-        dl->AddCircleFilled(playCenter, playR + 8.0f + breathe * 3.0f, ColAf(HT::AccentBlue, 0.14f + 0.14f * breathe + hoverT * 0.20f));
-        dl->AddCircleFilled(playCenter, playR, HT::AccentBlue);
+        dl->AddCircleFilled(playCenter, playR, hovered ? HT::AccentBlue : ColAf(HT::AccentBlue, 0.85f));
         const float pTriW = playR * 0.70f, pTriH = playR * 0.85f;
         dl->AddTriangleFilled(
             ImVec2(playCenter.x - pTriW * 0.35f, playCenter.y - pTriH * 0.5f),
@@ -894,7 +815,7 @@ void Hub::RenderContent(float w, float h) {
 
         // Subtítulo
         ImGui::SetCursorScreenPos(ImVec2(cMin.x + padX, cMin.y + cardH - 90.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text, ColA(HT::TextPri, 195));
+        ImGui::PushStyleColor(ImGuiCol_Text, ColA(HT::TextPri, 200));
         ImGui::PushTextWrapPos(cMin.x + padX + textW);
         ImGui::TextWrapped("Canciones, Biblia, videos, fondos, notas, overlays y capturas.");
         ImGui::PopTextWrapPos();
@@ -903,15 +824,15 @@ void Hub::RenderContent(float w, float h) {
         // Botón indicador inferior
         const ImVec2 btnMin(cMin.x + padX, cMin.y + cardH - 38.0f);
         const ImVec2 btnMax(cMax.x - padX, cMin.y + cardH - 12.0f);
-        dl->AddRectFilled(btnMin, btnMax, ColAf(HT::AccentBlue, 0.16f + 0.10f * breathe + hoverT * 0.25f), HT::RadiusSm);
-        dl->AddRect(btnMin, btnMax, ColAf(HT::AccentBlue, 0.32f + 0.20f * breathe + hoverT * 0.45f), HT::RadiusSm, 0, 1.2f);
+        dl->AddRectFilled(btnMin, btnMax, hovered ? HT::AccentBlue : ColAf(HT::AccentBlue, 0.20f), HT::RadiusSm);
+        dl->AddRect(btnMin, btnMax, hovered ? HT::AccentBlue : ColAf(HT::AccentBlue, 0.50f), HT::RadiusSm, 0, 1.0f);
         const char* hintTxt = "Abrir Proyector";
         const ImVec2 hsz = ImGui::CalcTextSize(hintTxt);
         dl->AddText(ImVec2(btnMin.x + (btnMax.x - btnMin.x - hsz.x) * 0.5f, btnMin.y + (btnMax.y - btnMin.y - hsz.y) * 0.5f),
-            HT::AccentSoft, hintTxt);
+            hovered ? HT::OnAccent : HT::AccentSoft, hintTxt);
     }
 
-    // ── Card 2: Ajustes y Configuración (Hero Companion con Aura Robótica) ──
+    // ── Card 2: Ajustes y Configuración (Hero Card Limpia y Moderna) ──
     {
         const ImVec2 cMin = ImVec2(contentX + ImGui::GetWindowPos().x + cardW + mainGap, row1Pos.y);
         const ImVec2 cMax = ImVec2(cMin.x + cardW, cMin.y + cardH);
@@ -922,36 +843,24 @@ void Hub::RenderContent(float w, float h) {
         if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
         if (ImGui::IsItemClicked()) m_OpenSettingsRequested = true;
 
-        const float hoverT = HubHoverLerp(ImGui::GetID("##cfgCardHit"), hovered);
+        // Fondo de tarjeta limpio
+        dl->AddRectFilled(cMin, cMax, ColA(HT::CardAlt, 255), HT::RadiusLg);
 
-        // Halo de respiración sutil ambiental
-        const float glowIntensity = 0.06f + 0.06f * breathe + hoverT * 0.20f;
-        for (int i = 3; i >= 1; i--) {
-            const float pad = (static_cast<float>(i) * 3.0f) + (breathe * 1.5f) + (hoverT * 5.0f);
-            dl->AddRectFilled(
-                ImVec2(cMin.x - pad, cMin.y - pad),
-                ImVec2(cMax.x + pad, cMax.y + pad),
-                ColAf(HT::AccentSoft, glowIntensity * (1.0f - static_cast<float>(i - 1) / 3.0f)),
-                HT::RadiusLg + pad * 0.35f);
-        }
-
-        // Fondo con imagen y parallax
+        // Fondo con imagen estática nítida
         const GLTextureInfo cfgTex = GetCoverTexture(kConfigCardTextureFile);
         DrawCoverImageCover(dl, cfgTex.id, cfgTex.width, cfgTex.height, cMin, cMax,
-            HT::RadiusLg, ImDrawFlags_RoundCornersAll,
-            "hub_cfg_card", ImGui::GetIO().DeltaTime, hovered, 1.05f, 2.8f);
+            HT::RadiusLg, ImDrawFlags_RoundCornersAll);
 
         // Scrim oscuro degradado
-        dl->AddRectFilled(cMin, cMax, ColA(HT::Card, 140), HT::RadiusLg);
+        dl->AddRectFilled(cMin, cMax, ColA(HT::Card, 110), HT::RadiusLg);
         dl->AddRectFilledMultiColor(
-            ImVec2(cMin.x, cMin.y + cardH * 0.18f), cMax,
+            ImVec2(cMin.x, cMin.y + cardH * 0.25f), cMax,
             ColA(IM_COL32(0, 0, 0, 0), 0), ColA(IM_COL32(0, 0, 0, 0), 0),
-            ColA(HT::BgMain, 252), ColA(HT::BgMain, 252));
+            ColA(HT::BgMain, 245), ColA(HT::BgMain, 245));
 
-        // Borde interactivo con cristal
-        const ImU32 cardBorderCol = ColAf(HT::AccentSoft, 0.18f + 0.18f * breathe + hoverT * 0.45f);
-        dl->AddRect(cMin, cMax, cardBorderCol, HT::RadiusLg, 0, hovered ? 1.6f : 1.2f);
-        DrawCornerBrackets(cMin, cMax, ColAf(HT::TextPri, 0.25f + hoverT * 0.50f), 14.0f, 2.0f);
+        // Borde limpio y definido (destacado al hover)
+        const ImU32 cardBorderCol = hovered ? ColAf(HT::AccentSoft, 0.90f) : ColAf(HT::Divider, 0.70f);
+        dl->AddRect(cMin, cMax, cardBorderCol, HT::RadiusLg, 0, hovered ? 1.6f : 1.0f);
 
         // Contenido de la tarjeta (Padding 20px)
         const float padX = 20.0f, padY = 18.0f;
@@ -963,12 +872,11 @@ void Hub::RenderContent(float w, float h) {
         dl->AddText(ImVec2(tagPos.x + 8.0f, tagPos.y + 3.0f),
             HT::TextMuted, "CONFIGURACIÓN");
 
-        // Icono de engranaje central flotante
-        const float iconR = 25.0f + hoverT * 2.0f + breathe * 1.2f;
+        // Icono de engranaje central estático
+        const float iconR = 26.0f;
         const ImVec2 iconCenter(cMin.x + cardW * 0.5f, cMin.y + cardH * 0.38f);
-        dl->AddCircleFilled(iconCenter, iconR + 8.0f + breathe * 2.0f, ColAf(HT::AccentSoft, 0.09f + 0.09f * breathe + hoverT * 0.16f));
-        dl->AddCircleFilled(iconCenter, iconR, ColA(HT::Surface, 235));
-        dl->AddCircle(iconCenter, iconR, ColAf(HT::AccentSoft, 0.28f + 0.22f * breathe), 20, 1.4f);
+        dl->AddCircleFilled(iconCenter, iconR, hovered ? ColA(HT::Surface, 255) : ColA(HT::Surface, 230));
+        dl->AddCircle(iconCenter, iconR, hovered ? HT::AccentSoft : ColAf(HT::Divider, 0.8f), 20, 1.2f);
         dl->AddCircle(iconCenter, iconR * 0.42f, HT::TextPri, 12, 2.0f);
 
         // Textos inferiores
@@ -984,7 +892,7 @@ void Hub::RenderContent(float w, float h) {
 
         // Subtítulo
         ImGui::SetCursorScreenPos(ImVec2(cMin.x + padX, cMin.y + cardH - 90.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text, ColA(HT::TextPri, 195));
+        ImGui::PushStyleColor(ImGuiCol_Text, ColA(HT::TextPri, 200));
         ImGui::PushTextWrapPos(cMin.x + padX + textW);
         ImGui::TextWrapped("Pantallas de salida, conexiones LAN, temas, shaders y atajos.");
         ImGui::PopTextWrapPos();
@@ -993,8 +901,8 @@ void Hub::RenderContent(float w, float h) {
         // Botón indicador inferior
         const ImVec2 btnMin(cMin.x + padX, cMin.y + cardH - 38.0f);
         const ImVec2 btnMax(cMax.x - padX, cMin.y + cardH - 12.0f);
-        dl->AddRectFilled(btnMin, btnMax, ColA(HT::Surface, hovered ? 245 : 185), HT::RadiusSm);
-        dl->AddRect(btnMin, btnMax, ColAf(HT::AccentSoft, 0.22f + 0.15f * breathe + hoverT * 0.35f), HT::RadiusSm, 0, 1.2f);
+        dl->AddRectFilled(btnMin, btnMax, hovered ? ColA(HT::Surface, 255) : ColA(HT::Surface, 185), HT::RadiusSm);
+        dl->AddRect(btnMin, btnMax, hovered ? ColAf(HT::AccentSoft, 0.60f) : ColAf(HT::Divider, 0.70f), HT::RadiusSm, 0, 1.0f);
         const char* hintTxt = "Abrir Ajustes";
         const ImVec2 hsz = ImGui::CalcTextSize(hintTxt);
         dl->AddText(ImVec2(btnMin.x + (btnMax.x - btnMin.x - hsz.x) * 0.5f, btnMin.y + (btnMax.y - btnMin.y - hsz.y) * 0.5f),
@@ -1004,7 +912,7 @@ void Hub::RenderContent(float w, float h) {
     ImGui::SetCursorScreenPos(ImVec2(row1Pos.x, row1Pos.y + cardH + 16.0f));
     ImGui::Dummy(ImVec2(0.0f, 0.0f));
 
-    // ── 3. Fila de Acompañamiento: 4 Tarjetas Compactas (Estilo Adobe / Deadlock Bottom Quad) ──
+    // ── 3. Fila de Acompañamiento: 4 Tarjetas Compactas (Estilo Minimalista Limpio) ──
     const float quadGap = 12.0f;
     const float quadW   = (contentW - quadGap * 3.0f) / 4.0f;
     const float quadH   = 84.0f;
@@ -1021,24 +929,13 @@ void Hub::RenderContent(float w, float h) {
         if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
         if (ImGui::IsItemClicked()) onClick();
 
-        const float hoverT = HubHoverLerp(ImGui::GetID(id), hovered);
+        // Fondo del tile limpio
+        dl->AddRectFilled(uMin, uMax, ColAf(HT::CardAlt, hovered ? 1.0f : 0.90f), HT::RadiusMd);
 
-        // Fondo del tile
-        dl->AddRectFilled(uMin, uMax, ColAf(HT::CardAlt, 0.95f), HT::RadiusMd);
-        if (hoverT > 0.001f)
-            dl->AddRectFilled(uMin, uMax, ColAf(isAccent ? HT::AccentBlue : HT::TextPri, 0.06f * hoverT), HT::RadiusMd);
-
-        // Borde interactivo con cristal suave
+        // Borde limpio
         dl->AddRect(uMin, uMax,
-            hovered ? ColAf(isAccent ? HT::AccentBlue : HT::TextPri, 0.40f + hoverT * 0.35f) : ColAf(HT::Divider, 0.60f),
+            hovered ? ColAf(isAccent ? HT::AccentBlue : HT::AccentSoft, 0.85f) : ColAf(HT::Divider, 0.60f),
             HT::RadiusMd, 0, hovered ? 1.4f : 1.0f);
-
-        // Indicador lateral izquierdo al hover
-        if (hoverT > 0.001f) {
-            dl->AddRectFilled(uMin, ImVec2(uMin.x + 3.5f, uMax.y),
-                ColAf(isAccent ? HT::AccentBlue : HT::AccentSoft, hoverT),
-                HT::RadiusMd, ImDrawFlags_RoundCornersLeft);
-        }
 
         // Contenido
         const float padX = 12.0f;
@@ -1047,7 +944,7 @@ void Hub::RenderContent(float w, float h) {
 
         // Icon Box
         dl->AddRectFilled(iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize),
-            ColAf(isAccent ? HT::AccentBlue : HT::Surface, 0.30f + hoverT * 0.20f), HT::RadiusSm);
+            ColAf(isAccent ? HT::AccentBlue : HT::Surface, hovered ? 0.35f : 0.22f), HT::RadiusSm);
         dl->AddRect(iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize),
             ColAf(isAccent ? HT::AccentBlue : HT::Divider, 0.50f), HT::RadiusSm);
 
@@ -1139,217 +1036,30 @@ void Hub::RenderContent(float w, float h) {
     ImGui::PopStyleColor();
 }
 
-void Hub::InitBgParticles(float w, float h) {
-    std::mt19937 rng(static_cast<uint32_t>(
-        reinterpret_cast<uintptr_t>(m_BgParticles.data()) ^ 0xDEADBEEF));
-
-    auto frand = [&](float lo, float hi) -> float {
-        return lo + (hi - lo) * (static_cast<float>(rng()) / static_cast<float>(rng.max()));
-    };
-
-    for (auto& p : m_BgParticles) {
-        p.x      = frand(0.0f, w);
-        p.y      = frand(0.0f, h);
-        p.vx     = frand(-0.15f, 0.15f);
-        p.vy     = frand(-0.10f, -0.38f);
-        p.r      = frand(1.2f, 3.2f);
-        p.phase  = frand(0.0f, 6.28318530717958647f);
-        p.isCyan = (frand(0.0f, 1.0f) > 0.55f);
-    }
-
-    m_BgParticlesInit = true;
-}
-
-void Hub::UpdateBgParticles(float dt, float w, float h) {
-    for (auto& p : m_BgParticles) {
-        p.x += (p.vx + sinf(m_Time * 0.8f + p.phase) * 0.12f) * dt * 60.0f;
-        p.y += p.vy * dt * 60.0f;
-
-        if (p.x < 0.0f) p.x += w;
-        if (p.x > w)    p.x -= w;
-        if (p.y < 0.0f) {
-            p.y += h;
-            p.x = fmodf(p.x + sinf(p.phase) * 100.0f + w, w);
-        }
-        if (p.y > h)    p.y -= h;
-    }
-}
-
-void Hub::InitNebulas(float w, float h) {
-    std::mt19937 rng(static_cast<uint32_t>(
-        reinterpret_cast<uintptr_t>(m_Nebulas.data()) ^ 0x9E3779B9u));
-    auto frand = [&](float lo, float hi) -> float {
-        return lo + (hi - lo) * (static_cast<float>(rng()) / static_cast<float>(rng.max()));
-    };
-    for (auto& n : m_Nebulas) {
-        n.x  = frand(0.0f, w);
-        n.y  = frand(0.0f, h);
-        n.r  = frand(160.0f, 320.0f);
-        n.vx = frand(-0.04f, 0.04f);
-        n.vy = frand(-0.03f, 0.03f);
-    }
-    m_NebulasInit = true;
-}
-
-void Hub::UpdateNebulas(float dt, float w, float h) {
-    for (auto& n : m_Nebulas) {
-        n.x += n.vx * dt * 60.0f;
-        n.y += n.vy * dt * 60.0f;
-        if (n.x < -n.r) n.x = w + n.r;
-        if (n.x > w + n.r) n.x = -n.r;
-        if (n.y < -n.r) n.y = h + n.r;
-        if (n.y > h + n.r) n.y = -n.r;
-    }
-}
+void Hub::InitBgParticles(float w, float h) { (void)w; (void)h; }
+void Hub::UpdateBgParticles(float dt, float w, float h) { (void)dt; (void)w; (void)h; }
+void Hub::InitNebulas(float w, float h) { (void)w; (void)h; }
+void Hub::UpdateNebulas(float dt, float w, float h) { (void)dt; (void)w; (void)h; }
 
 void Hub::RenderBgCanvas(ImDrawList* dl, ImVec2 origin, float w, float h) {
-    const auto& curTheme = ProyecThor::Settings::SettingsManager::Get().GetSettings().theme;
-
-    // ── 1. Fondo Base del Tema ──
+    // Fondo principal sólido limpio del tema activo
     const ImU32 baseBg = ColA(HT::BgMain, 255);
     dl->AddRectFilled(origin, ImVec2(origin.x + w, origin.y + h), baseBg);
 
-    const float t = m_Time * 0.16f;
+    // Sutil viñeta oscura en los bordes para profundidad limpia y moderna
+    const ImU32 edgeDark = ColA(IM_COL32(5, 5, 8, 255), 180);
+    const ImU32 centerTrans = ColA(IM_COL32(0, 0, 0, 0), 0);
 
-    // ── 2. Animaciones Específicas por Tema / Temas Pro ──
-    if (curTheme.preset == ProyecThor::Settings::ThemePreset::Cyberpunk) {
-        // ── Cyberpunk Neón Pro: Rejilla Perspectiva Neón + Rayos Láser Cian y Magenta ──
-        float horizonY = origin.y + h * 0.35f;
-
-        // Líneas de perspectiva que convergen al horizonte
-        int persLines = 22;
-        for (int i = 0; i <= persLines; i++) {
-            float frac = (float)i / (float)persLines;
-            float bottomX = origin.x + w * (-0.2f + frac * 1.4f);
-            float topX = origin.x + w * (0.3f + frac * 0.4f);
-            dl->AddLine(ImVec2(topX, horizonY), ImVec2(bottomX, origin.y + h),
-                        ColAf(HT::AccentBlue, 0.08f + 0.04f * sinf(m_Time * 2.0f + frac * 6.28f)), 1.2f);
-        }
-
-        // Líneas horizontales de la rejilla con espaciado exponencial
-        int gridHCount = 14;
-        for (int j = 1; j <= gridHCount; j++) {
-            float ratio = (float)j / (float)gridHCount;
-            float lineY = horizonY + (h - (horizonY - origin.y)) * (ratio * ratio);
-            float alpha = 0.04f + 0.10f * ratio;
-            dl->AddLine(ImVec2(origin.x, lineY), ImVec2(origin.x + w, lineY),
-                        ColAf((j % 2 == 0) ? HT::AccentBlue : HT::AccentSoft, alpha), 1.2f);
-        }
-
-        // Rayos de pulso láser horizontal
-        float laserY = horizonY + fmodf(m_Time * 140.0f, h - (horizonY - origin.y));
-        dl->AddLine(ImVec2(origin.x, laserY), ImVec2(origin.x + w, laserY),
-                    ColAf(HT::AccentSoft, 0.40f), 2.0f);
-    }
-    else if (curTheme.preset == ProyecThor::Settings::ThemePreset::Galaxy ||
-             curTheme.preset == ProyecThor::Settings::ThemePreset::Amethyst) {
-        // ── Galaxy & Amethyst: Nebulosas Cósmicas Flotantes y Constelaciones ──
-        if (!m_NebulasInit) InitNebulas(w, h);
-        UpdateNebulas(ImGui::GetIO().DeltaTime, w, h);
-
-        for (const auto& n : m_Nebulas) {
-            ImVec2 nPos(origin.x + n.x, origin.y + n.y);
-            for (int rL = 5; rL >= 1; rL--) {
-                float rFrac = (float)rL / 5.0f;
-                float alpha = 0.045f * (1.0f - rFrac * 0.7f);
-                dl->AddCircleFilled(nPos, n.r * rFrac, ColAf(HT::AccentBlue, alpha), 24);
-            }
-        }
-    }
-    else if (curTheme.preset == ProyecThor::Settings::ThemePreset::Emerald) {
-        // ── Emerald Studio Pro: Ondas de Gradiente Suave y Velo Orgánico ──
-        const int waveCount = 10;
-        for (int wIdx = 0; wIdx < waveCount; wIdx++) {
-            float baseRatio = (float)wIdx / (float)(waveCount - 1);
-            float baseY = h * (0.12f + baseRatio * 0.76f);
-            float freq = 0.003f + baseRatio * 0.001f;
-            float amp = 32.0f + 18.0f * sinf(t * 0.8f + baseRatio * 3.0f);
-            float speed = t * 1.2f + baseRatio * 1.8f;
-            float alpha = 0.040f + 0.035f * sinf(t + baseRatio * 2.5f);
-
-            ImVec2 prevPt;
-            const int steps = 48;
-            for (int s = 0; s <= steps; s++) {
-                float px = origin.x + (w * (float)s / (float)steps);
-                float py = origin.y + baseY + sinf((px - origin.x) * freq + speed) * amp;
-                if (s > 0) {
-                    dl->AddLine(prevPt, ImVec2(px, py), ColAf(HT::AccentBlue, alpha), 1.5f);
-                }
-                prevPt = ImVec2(px, py);
-            }
-        }
-    }
-    else if (curTheme.preset == ProyecThor::Settings::ThemePreset::Crimson) {
-        // ── Crimson Velvet Pro: Nodos de Energía Radiante y Chispas Ascendentes ──
-        const ImVec2 centerC(origin.x + w * 0.50f, origin.y + h * 0.50f);
-        for (int r = 1; r <= 6; r++) {
-            float rad = (float)r * 110.0f + fmodf(m_Time * 22.0f, 110.0f);
-            float a   = std::max(0.0f, 0.055f * (1.0f - rad / 800.0f));
-            dl->AddCircle(centerC, rad, ColAf(HT::AccentBlue, a), 64, 1.4f);
-        }
-    }
-    else {
-        // ── Temas Clásicos / Deadlock / Dark / Mek / Titanium / Midnight: Ondas Topográficas Fluidas y Nodos ──
-        const ImVec2 centerL(origin.x + w * 0.18f, origin.y + h * 0.38f);
-        const ImVec2 centerR(origin.x + w * 0.82f, origin.y + h * 0.52f);
-
-        for (int r = 1; r <= 8; r++) {
-            const float radL = (static_cast<float>(r) * 85.0f) + fmodf(m_Time * 14.0f, 85.0f);
-            const float aL   = std::max(0.0f, 0.045f * (1.0f - radL / 720.0f));
-            dl->AddCircle(centerL, radL, ColAf(HT::AccentBlue, aL), 64, 1.1f);
-
-            const float radR = (static_cast<float>(r) * 95.0f) + fmodf(m_Time * 11.0f + 45.0f, 95.0f);
-            const float aR   = std::max(0.0f, 0.040f * (1.0f - radR / 780.0f));
-            dl->AddCircle(centerR, radR, ColAf(HT::AccentSoft, aR), 64, 1.1f);
-        }
-
-        const int waveCount = 14;
-        for (int wIdx = 0; wIdx < waveCount; wIdx++) {
-            const float baseRatio = static_cast<float>(wIdx) / static_cast<float>(waveCount - 1);
-            const float baseY = h * (0.06f + baseRatio * 0.88f);
-            const float freq1 = 0.0022f + baseRatio * 0.0010f;
-            const float freq2 = 0.0048f - baseRatio * 0.0012f;
-            const float amp1  = 26.0f + 16.0f * sinf(t * 0.7f + baseRatio * 2.8f);
-            const float amp2  = 14.0f + 9.0f * cosf(t * 1.1f - baseRatio * 1.9f);
-            const float speed = t * 1.4f + baseRatio * 1.5f;
-
-            const float alpha = 0.035f + 0.030f * sinf(t * 0.8f + baseRatio * 3.0f);
-            const ImU32 waveCol = ColAf((wIdx % 2 == 0) ? HT::AccentBlue : HT::AccentSoft, alpha);
-
-            ImVec2 prevPt;
-            const int steps = 54;
-            for (int s = 0; s <= steps; s++) {
-                const float px = origin.x + (w * static_cast<float>(s) / static_cast<float>(steps));
-                const float py = origin.y + baseY
-                    + sinf((px - origin.x) * freq1 + speed) * amp1
-                    + cosf((px - origin.x) * freq2 - speed * 0.65f) * amp2
-                    + sinf(((px - origin.x) + baseY) * 0.003f + t * 0.5f) * 12.0f;
-
-                if (s > 0) {
-                    dl->AddLine(prevPt, ImVec2(px, py), waveCol, 1.2f);
-                }
-                prevPt = ImVec2(px, py);
-            }
-        }
-    }
-
-    // ── 3. Partículas / Luciérnagas / Chispas Luminosas en Suspensión ──
-    for (const auto& p : m_BgParticles) {
-        const float sinVal = sinf(m_Time * 1.1f + p.phase);
-        const float alpha  = 0.28f + 0.26f * sinVal;
-        const ImU32 particleTint = p.isCyan ? HT::ParticleA : HT::ParticleB;
-        const ImU32 col    = ColAf(particleTint, alpha);
-        const ImVec2 pos = ImVec2(origin.x + p.x, origin.y + p.y);
-
-        // Halos de resplandor multicapa
-        for (int layer = 3; layer >= 1; layer--) {
-            const float layerT = static_cast<float>(layer) / 3.0f;
-            const float haloR  = p.r * (1.8f + layerT * 2.5f);
-            const float haloA  = alpha * 0.18f * (1.0f - layerT * 0.7f);
-            dl->AddCircleFilled(pos, haloR, ColAf(particleTint, haloA), 12);
-        }
-        dl->AddCircleFilled(pos, p.r, col, 10);
-    }
+    const float vigH = std::min(160.0f, h * 0.25f);
+    const float vigW = std::min(160.0f, w * 0.25f);
+    dl->AddRectFilledMultiColor(origin, ImVec2(origin.x + w, origin.y + vigH),
+                                edgeDark, edgeDark, centerTrans, centerTrans);
+    dl->AddRectFilledMultiColor(ImVec2(origin.x, origin.y + h - vigH), ImVec2(origin.x + w, origin.y + h),
+                                centerTrans, centerTrans, edgeDark, edgeDark);
+    dl->AddRectFilledMultiColor(origin, ImVec2(origin.x + vigW, origin.y + h),
+                                edgeDark, centerTrans, centerTrans, edgeDark);
+    dl->AddRectFilledMultiColor(ImVec2(origin.x + w - vigW, origin.y), ImVec2(origin.x + w, origin.y + h),
+                                centerTrans, edgeDark, edgeDark, centerTrans);
 }
 
 void Hub::RenderDownloadSubtitlesPanel() {
@@ -1521,14 +1231,10 @@ void Hub::RenderDownloadSubtitlesPanel() {
 void Hub::RenderUpdateDetailModal() {
     const int selectedUpdateVer = m_SelectedUpdateVer;
 
-    {
-        const float target = m_IsUpdateModalOpen ? 1.0f : 0.0f;
-        m_UpdateModalAnim += (target - m_UpdateModalAnim) * std::min(1.0f, ImGui::GetIO().DeltaTime * 10.0f);
-        m_UpdateModalAnim = std::clamp(m_UpdateModalAnim, 0.0f, 1.0f);
-        if (m_UpdateModalAnim < 0.001f) m_UpdateModalAnim = 0.0f;
-    }
+    m_UpdateModalAnim = m_IsUpdateModalOpen ? 1.0f : 0.0f;
+    if (!m_IsUpdateModalOpen) return;
 
-    if (m_IsUpdateModalOpen || m_UpdateModalAnim > 0.0f) {
+    if (m_IsUpdateModalOpen) {
         const UpdateVersionInfo* selInfo = FindUpdateVersion(selectedUpdateVer);
         const GLTextureInfo modalCover = selInfo ? GetCoverTexture(selInfo->coverFile) : GLTextureInfo{};
 
@@ -2269,14 +1975,8 @@ void Hub::RenderUpdateDetailModal() {
 
 // ── Modal de Tutorial y Tour Guiado Profesional (Estilo Adobe) ──────────────
 void Hub::RenderTutorialModal() {
-    {
-        const float target = m_TutorialOpen ? 1.0f : 0.0f;
-        m_TutorialAnim += (target - m_TutorialAnim) * std::min(1.0f, ImGui::GetIO().DeltaTime * 12.0f);
-        m_TutorialAnim = std::clamp(m_TutorialAnim, 0.0f, 1.0f);
-        if (m_TutorialAnim < 0.001f) m_TutorialAnim = 0.0f;
-    }
-
-    if (!m_TutorialOpen && m_TutorialAnim <= 0.0f) return;
+    m_TutorialAnim = m_TutorialOpen ? 1.0f : 0.0f;
+    if (!m_TutorialOpen) return;
 
     ImGuiViewport* vp    = ImGui::GetMainViewport();
     const float    fadeA = EaseOut(m_TutorialAnim);

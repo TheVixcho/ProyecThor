@@ -11,42 +11,40 @@ finish-args:
   - --device=dri
   - --socket=pulseaudio
   - --share=network
-  - --filesystem=xdg-documents
-  - --filesystem=xdg-videos
-  - --filesystem=xdg-pictures
-  - --filesystem=xdg-music
-  - --filesystem=xdg-download
   - --talk-name=org.freedesktop.portal.FileChooser
   - --talk-name=org.freedesktop.portal.OpenURI
 
 modules:
-  - name: nlohmann_json-src
-    buildsystem: simple
-    build-commands:
-      - mkdir -p /var/tmp/proyecthor-deps/json
-      - cp -r . /var/tmp/proyecthor-deps/json
+  - name: nlohmann-json
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DJSON_BuildTests=OFF
     sources:
       - type: git
         url: https://github.com/nlohmann/json.git
         tag: v3.11.3
         commit: 9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03
 
-  - name: glm-src
-    buildsystem: simple
-    build-commands:
-      - mkdir -p /var/tmp/proyecthor-deps/glm
-      - cp -r . /var/tmp/proyecthor-deps/glm
+  - name: glm
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DGLM_TEST_ENABLE=OFF
+      - -DBUILD_SHARED_LIBS=OFF
     sources:
       - type: git
         url: https://github.com/g-truc/glm.git
         tag: 0.9.9.8
         commit: bf71a834948186f4097caa076cd2663c69a10e1e
 
-  - name: glfw3-src
-    buildsystem: simple
-    build-commands:
-      - mkdir -p /var/tmp/proyecthor-deps/glfw3_src
-      - cp -r . /var/tmp/proyecthor-deps/glfw3_src
+  - name: glfw
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DBUILD_SHARED_LIBS=ON
+      - -DGLFW_BUILD_EXAMPLES=OFF
+      - -DGLFW_BUILD_TESTS=OFF
+      - -DGLFW_BUILD_DOCS=OFF
+      - -DGLFW_BUILD_X11=ON
+      - -DGLFW_BUILD_WAYLAND=ON
     sources:
       - type: git
         url: https://github.com/glfw/glfw.git
@@ -55,12 +53,6 @@ modules:
 
   - name: proyecthor
     buildsystem: cmake-ninja
-    config-opts:
-      - -DCMAKE_BUILD_TYPE=Release
-      - -DFETCHCONTENT_FULLY_DISCONNECTED=ON
-      - -DFETCHCONTENT_SOURCE_DIR_JSON=/var/tmp/proyecthor-deps/json
-      - -DFETCHCONTENT_SOURCE_DIR_GLM=/var/tmp/proyecthor-deps/glm
-      - -DFETCHCONTENT_SOURCE_DIR_GLFW3_SRC=/var/tmp/proyecthor-deps/glfw3_src
     sources:
       - type: git
         url: https://github.com/TheVixcho/ProyecThor.git

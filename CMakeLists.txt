@@ -59,25 +59,29 @@ configure_file(
     "${CMAKE_BINARY_DIR}/generated/Version.h"
 )
 
-# ── 1. DEPENDENCIAS EXTERNAS (JSON, GLM y TagLib) ────────────────────────────
+# ── 1. DEPENDENCIAS EXTERNAS (JSON y GLM) ───────────────────────────────────
 
-include(FetchContent)
+find_package(nlohmann_json QUIET)
+if(NOT nlohmann_json_FOUND)
+    include(FetchContent)
+    FetchContent_Declare(
+        json
+        GIT_REPOSITORY https://github.com/nlohmann/json.git
+        GIT_TAG v3.11.3
+    )
+    FetchContent_MakeAvailable(json)
+endif()
 
-# -- JSON --
-FetchContent_Declare(
-    json
-    GIT_REPOSITORY https://github.com/nlohmann/json.git
-    GIT_TAG v3.11.3
-)
-FetchContent_MakeAvailable(json)
-
-# -- GLM --
-FetchContent_Declare(
-    glm
-    GIT_REPOSITORY https://github.com/g-truc/glm.git
-    GIT_TAG 0.9.9.8
-)
-FetchContent_MakeAvailable(glm)
+find_package(glm QUIET)
+if(NOT glm_FOUND)
+    include(FetchContent)
+    FetchContent_Declare(
+        glm
+        GIT_REPOSITORY https://github.com/g-truc/glm.git
+        GIT_TAG 0.9.9.8
+    )
+    FetchContent_MakeAvailable(glm)
+endif()
 
 add_compile_definitions(IMGUI_USE_WCHAR32)
 
@@ -416,19 +420,28 @@ else()
     # cualquiera de los dos sin recompilar -- necesita los paquetes de
     # desarrollo de Wayland instalados ademas de los de X11 (ver
     # .github/workflows/build.yml).
-    include(FetchContent)
-    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(GLFW_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
-    set(GLFW_BUILD_DOCS     OFF CACHE BOOL "" FORCE)
-    set(GLFW_BUILD_X11      ON  CACHE BOOL "" FORCE)
-    set(GLFW_BUILD_WAYLAND  ON  CACHE BOOL "" FORCE)
-    FetchContent_Declare(
-        glfw3_src
-        GIT_REPOSITORY https://github.com/glfw/glfw.git
-        GIT_TAG        3.4
-        GIT_SHALLOW    TRUE
-    )
-    FetchContent_MakeAvailable(glfw3_src)
+    find_package(glfw3 3.4 QUIET)
+    if(NOT glfw3_FOUND)
+        find_package(glfw3 QUIET)
+    endif()
+    if(NOT glfw3_FOUND)
+        include(FetchContent)
+        set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+        set(GLFW_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
+        set(GLFW_BUILD_DOCS     OFF CACHE BOOL "" FORCE)
+        set(GLFW_BUILD_X11      ON  CACHE BOOL "" FORCE)
+        set(GLFW_BUILD_WAYLAND  ON  CACHE BOOL "" FORCE)
+        FetchContent_Declare(
+            glfw3_src
+            GIT_REPOSITORY https://github.com/glfw/glfw.git
+            GIT_TAG        3.4
+            GIT_SHALLOW    TRUE
+        )
+        FetchContent_MakeAvailable(glfw3_src)
+    endif()
+    if(TARGET glfw3::glfw AND NOT TARGET glfw)
+        add_library(glfw ALIAS glfw3::glfw)
+    endif()
     # De aca en mas "glfw" es el target que provee FetchContent -- mismo
     # nombre que exportaba find_package(glfw3), el resto del archivo
     # (target_link_libraries mas abajo) no necesita cambios.

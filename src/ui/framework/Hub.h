@@ -38,8 +38,8 @@ private:
     void UpdateAnimations(float dt);
 
     bool  m_Open                  = true;
-    bool  m_Appearing             = true;
-    float m_AppearProgress        = 0.0f;
+    bool  m_Appearing             = false;
+    float m_AppearProgress        = 1.0f;
     float m_Time                  = 0.0f;
 
     bool  m_LaunchRequested       = false;
