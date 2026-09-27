@@ -1,6 +1,6 @@
 app-id: io.github.thevixcho.ProyecThor
 runtime: org.freedesktop.Platform
-runtime-version: '24.08'
+runtime-version: '26.08'
 sdk: org.freedesktop.Sdk
 command: proyecthor
 
@@ -26,14 +26,14 @@ modules:
   - name: glm
     buildsystem: cmake-ninja
     config-opts:
-      - -DGLM_BUILD_TESTS=OFF
-      - -DGLM_BUILD_INSTALL=ON
+      - -DGLM_TEST_ENABLE=OFF
       - -DBUILD_SHARED_LIBS=OFF
+      - -DCMAKE_POLICY_VERSION_MINIMUM=3.5
     sources:
       - type: git
         url: https://github.com/g-truc/glm.git
-        tag: 1.0.1
-        commit: 0af55ccecd98d4e5a8d1fad7de25ba429d60e863
+        tag: 0.9.9.8
+        commit: bf71a834948186f4097caa076cd2663c69a10e1e
 
   - name: glfw
     buildsystem: cmake-ninja
