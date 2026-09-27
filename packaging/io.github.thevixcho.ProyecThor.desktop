@@ -1,9 +1,18 @@
 [Desktop Entry]
 Type=Application
 Name=ProyecThor
-Comment=Software de proyeccion de letras y presentaciones
+GenericName=Projection Software
+GenericName[es]=Software de proyección
+Comment=Professional projection software for lyrics, media, and presentations
+Comment[es]=Software profesional de proyección para letras, multimedia y presentaciones
+Comment[pt]=Software profissional de projeção para letras, mídia e apresentações
 Exec=proyecthor %U
 Icon=io.github.thevixcho.ProyecThor
-Categories=AudioVideo;Presentation;
 Terminal=false
+Categories=Office;Presentation;
+Keywords=presentation;projection;lyrics;worship;church;bible;video;media;
+Keywords[es]=presentacion;proyeccion;letras;iglesia;biblia;video;multimedia;
+Keywords[pt]=apresentacao;projecao;letras;igreja;biblia;video;multimidia;
+StartupNotify=true
+StartupWMClass=ProyecThor
 MimeType=audio/mpeg;audio/flac;audio/x-flac;audio/x-wav;audio/wav;audio/ogg;audio/aac;audio/mp4;audio/x-ms-wma;audio/opus;audio/x-aiff;video/mp4;video/x-matroska;video/x-msvideo;video/quicktime;video/webm;

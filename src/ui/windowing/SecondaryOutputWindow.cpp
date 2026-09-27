@@ -1,0 +1,238 @@
+#include "SecondaryOutputWindow.h"
+#include <GL/glew.h>
+#include "backends/imgui_impl_opengl3.h"
+#include <iostream>
+#include <filesystem>
+
+namespace ProyecThor::Core {
+
+    std::vector<SecondaryOutputWindow::ContextDestroyCallback>&
+    SecondaryOutputWindow::DestroyCallbacks()
+    {
+        static std::vector<ContextDestroyCallback> callbacks;
+        return callbacks;
+    }
+
+    void SecondaryOutputWindow::RegisterContextDestroyCallback(ContextDestroyCallback cb)
+    {
+        DestroyCallbacks().push_back(std::move(cb));
+    }
+
+    bool SecondaryOutputWindow::Create(GLFWwindow* sharedContext, int monitorIndex, const std::string& title)
+    {
+        Destroy();
+
+        int monitorCount = 0;
+        GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
+
+        GLFWmonitor* target = nullptr;
+        if (monitorIndex >= 0 && monitorIndex < monitorCount) {
+            target = monitors[monitorIndex];
+        }
+
+        glfwDefaultWindowHints();
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+        glfwWindowHint(GLFW_VISIBLE,               GLFW_FALSE);
+
+        #if defined(GLFW_HAS_GETPLATFORM) && GLFW_HAS_GETPLATFORM
+        bool isWayland = (glfwGetPlatform() == GLFW_PLATFORM_WAYLAND);
+        #else
+        bool isWayland = false;
+        #endif
+
+        int winW = 1280;
+        int winH = 720;
+        int monX = 0, monY = 0;
+        bool isFullscreenOutput = false;
+
+        if (monitorCount > 1 && monitorIndex > 0 && target != nullptr)
+        {
+            // Salida secundaria en monitor fisico dedicado (pantalla completa)
+            isFullscreenOutput = true;
+            const GLFWvidmode* vm = glfwGetVideoMode(target);
+            if (vm && vm->width > 0 && vm->height > 0) {
+                winW = vm->width;
+                winH = vm->height;
+            }
+            glfwGetMonitorPos(target, &monX, &monY);
+
+            glfwWindowHint(GLFW_DECORATED,     GLFW_FALSE);
+            glfwWindowHint(GLFW_FLOATING,      GLFW_TRUE);
+            glfwWindowHint(GLFW_RESIZABLE,     GLFW_FALSE);
+            glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_FALSE);
+
+            if (isWayland) {
+                // En Wayland se debe pasar el monitor como 4to parametro para fullscreen nativo
+                m_Window = glfwCreateWindow(winW, winH, title.c_str(), target, sharedContext);
+            } else {
+                // En Windows y X11, borderless window colocado en las coordenadas del monitor
+                m_Window = glfwCreateWindow(winW, winH, title.c_str(), nullptr, sharedContext);
+                if (m_Window) {
+                    glfwSetWindowPos(m_Window, monX, monY);
+                }
+            }
+        }
+        else
+        {
+            // Sistema de un solo monitor (o vista previa de operador): ventana flotante
+            winW = 960;
+            winH = 540;
+            glfwWindowHint(GLFW_DECORATED,     GLFW_TRUE);
+            glfwWindowHint(GLFW_FLOATING,      GLFW_TRUE);
+            glfwWindowHint(GLFW_RESIZABLE,     GLFW_TRUE);
+            glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_TRUE);
+
+            std::string windowTitle = title + " (Vista Previa)";
+            m_Window = glfwCreateWindow(winW, winH, windowTitle.c_str(), nullptr, sharedContext);
+        }
+
+        if (!m_Window) {
+            // Reintentar con GL 3.0 por si el driver no soporta 3.3
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+            if (isFullscreenOutput) {
+                if (isWayland) {
+                    m_Window = glfwCreateWindow(winW, winH, title.c_str(), target, sharedContext);
+                } else {
+                    m_Window = glfwCreateWindow(winW, winH, title.c_str(), nullptr, sharedContext);
+                    if (m_Window) glfwSetWindowPos(m_Window, monX, monY);
+                }
+            } else {
+                std::string windowTitle = title + " (Vista Previa)";
+                m_Window = glfwCreateWindow(winW, winH, windowTitle.c_str(), nullptr, sharedContext);
+            }
+        }
+
+        if (!m_Window) {
+            const char* desc = nullptr;
+            int code = glfwGetError(&desc);
+            std::cerr << "[SecondaryOutputWindow] glfwCreateWindow fallo ('" << title
+                      << "'). Código: " << code << " Desc: " << (desc ? desc : "N/A") << "\n";
+            glfwDefaultWindowHints();
+            return false;
+        }
+
+        // Contexto OpenGL e ImGui dedicado compartiendo atlas de fuentes
+        GLFWwindow* backupWin = glfwGetCurrentContext();
+        ImGuiContext* backupCtx = ImGui::GetCurrentContext();
+        ImFontAtlas* sharedAtlas = backupCtx ? ImGui::GetIO().Fonts : nullptr;
+
+        glfwMakeContextCurrent(m_Window);
+        glfwSwapInterval(1);
+
+        m_ImGuiContext = ImGui::CreateContext(sharedAtlas);
+        if (m_ImGuiContext)
+        {
+            ImGui::SetCurrentContext(m_ImGuiContext);
+            ImGui_ImplOpenGL3_Init("#version 130");
+
+            ImGuiIO& io = ImGui::GetIO();
+            io.IniFilename = nullptr; // no ensuciar imgui.ini con salidas secundarias
+
+            if (!sharedAtlas)
+            {
+                io.Fonts->AddFontDefault();
+                io.Fonts->Build();
+            }
+        }
+
+        glfwShowWindow(m_Window);
+        if (isFullscreenOutput) {
+            glfwSetInputMode(m_Window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+        } else {
+            glfwSetInputMode(m_Window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        }
+
+        m_MonitorIndex = monitorIndex;
+        glfwDefaultWindowHints();
+
+        glfwMakeContextCurrent(backupWin);
+        ImGui::SetCurrentContext(backupCtx);
+
+        return true;
+    }
+
+    void SecondaryOutputWindow::Destroy()
+    {
+        if (m_Window) {
+            for (auto& cb : DestroyCallbacks())
+                cb(m_Window);
+
+            if (m_ImGuiContext) {
+                GLFWwindow* backupWin = glfwGetCurrentContext();
+                ImGuiContext* backupCtx = ImGui::GetCurrentContext();
+
+                glfwMakeContextCurrent(m_Window);
+                ImGui::SetCurrentContext(m_ImGuiContext);
+                ImGui_ImplOpenGL3_Shutdown();
+                ImGui::DestroyContext(m_ImGuiContext);
+                m_ImGuiContext = nullptr;
+
+                glfwMakeContextCurrent(backupWin);
+                ImGui::SetCurrentContext(backupCtx);
+            }
+
+            glfwDestroyWindow(m_Window);
+            m_Window = nullptr;
+        }
+        m_MonitorIndex = -1;
+    }
+
+    void SecondaryOutputWindow::RenderFrame(const RenderFn& renderFn)
+    {
+        if (!m_Window || !renderFn) return;
+
+        if (glfwWindowShouldClose(m_Window)) {
+            Destroy();
+            return;
+        }
+
+        GLFWwindow* backupWin = glfwGetCurrentContext();
+        ImGuiContext* backupCtx = ImGui::GetCurrentContext();
+
+        glfwMakeContextCurrent(m_Window);
+
+        int fw = 0, fh = 0;
+        glfwGetFramebufferSize(m_Window, &fw, &fh);
+
+        if (fw > 0 && fh > 0 && m_ImGuiContext)
+        {
+            ImGui::SetCurrentContext(m_ImGuiContext);
+            ImGuiIO& io = ImGui::GetIO();
+            io.DisplaySize = ImVec2(static_cast<float>(fw), static_cast<float>(fh));
+            io.DeltaTime   = 1.0f / 60.0f;
+
+            glViewport(0, 0, fw, fh);
+            glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            ImGui_ImplOpenGL3_NewFrame();
+            ImGui::NewFrame();
+
+            ImGui::SetNextWindowPos(ImVec2(0, 0));
+            ImGui::SetNextWindowSize(ImVec2(static_cast<float>(fw), static_cast<float>(fh)));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+            ImGui::Begin("##SecondaryOutputCanvas", nullptr,
+                ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+                ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+                ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoBackground |
+                ImGuiWindowFlags_NoNav);
+
+            renderFn(fw, fh);
+
+            ImGui::End();
+            ImGui::PopStyleVar(2);
+
+            ImGui::Render();
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        }
+
+        glfwSwapBuffers(m_Window);
+
+        glfwMakeContextCurrent(backupWin);
+        ImGui::SetCurrentContext(backupCtx);
+    }
+
+} // namespace ProyecThor::Core

@@ -16,6 +16,7 @@ ProyecThor's own source code is released under the MIT License (see `LICENSE`), 
 | **GLM** | MIT | Permissive | [github.com/g-truc/glm](https://github.com/g-truc/glm) | Keep copyright notice. |
 | **nlohmann/json** | MIT | Permissive | [github.com/nlohmann/json](https://github.com/nlohmann/json) | Keep copyright notice. |
 | **stb_image** | Public Domain / MIT | Permissive | [github.com/nothings/stb](https://github.com/nothings/stb) | No practical obligation. |
+| **Holy-Bible-XML-Format (Beblia)** | Public Domain / Open Data | Permissive | [github.com/Beblia/Holy-Bible-XML-Format](https://github.com/Beblia/Holy-Bible-XML-Format) | No practical obligation. Bundled Bible translations (XML format). |
 | **PDFium** | BSD 3-Clause | Permissive | [chromium.googlesource.com/.../pdfium](https://chromium.googlesource.com/chromium/src/+/main/third_party/pdfium) | Keep copyright notice; do not use the project's name for promotion without permission. |
 | **LibVLC SDK** | LGPL 2.1 | Weak copyleft | [videolan.org](https://www.videolan.org) | See special section below. |
 | **TagLib** | LGPL 2.1 / MPL 1.1 | Weak copyleft | [taglib.github.io](https://taglib.github.io) | See special section below. |

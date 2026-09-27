@@ -1,21 +1,25 @@
 app-id: io.github.thevixcho.ProyecThor
 runtime: org.freedesktop.Platform
-runtime-version: '23.08'
+runtime-version: '24.08'
 sdk: org.freedesktop.Sdk
 command: proyecthor
 
 finish-args:
-  - --socket=x11
+  - --share=ipc
   - --socket=fallback-x11
   - --socket=wayland
   - --device=dri
   - --socket=pulseaudio
   - --share=network
-  - --filesystem=home
+  - --filesystem=xdg-documents
+  - --filesystem=xdg-videos
+  - --filesystem=xdg-pictures
+  - --filesystem=xdg-music
+  - --filesystem=xdg-download
+  - --talk-name=org.freedesktop.portal.FileChooser
   - --talk-name=org.freedesktop.portal.OpenURI
 
 modules:
-
   - name: nlohmann_json-src
     buildsystem: simple
     build-commands:
@@ -25,6 +29,7 @@ modules:
       - type: git
         url: https://github.com/nlohmann/json.git
         tag: v3.11.3
+        commit: 9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03
 
   - name: glm-src
     buildsystem: simple
@@ -35,42 +40,18 @@ modules:
       - type: git
         url: https://github.com/g-truc/glm.git
         tag: 0.9.9.8
+        commit: bf71a834948186f4097caa076cd2663c69a10e1e
 
-  - name: libvlc
+  - name: glfw3-src
     buildsystem: simple
     build-commands:
-      - mkdir -p /app/lib/proyecthor /app/lib/proyecthor/plugins /app/include/vlc
-      - cp -P src/backend/sdk/vlc-linux/lib/*.so* /app/lib/proyecthor/
-      - cp -r src/backend/sdk/vlc-linux/plugins/* /app/lib/proyecthor/plugins/
-      - cp -r src/backend/sdk/vlc-linux/include/* /app/include/vlc/
-    sources:
-      - type: git
-        url: https://github.com/TheVixcho/ProyecThor.git
-        branch: beta
-
-  - name: pdfium
-    buildsystem: simple
-    build-commands:
-      - install -Dm755 src/backend/sdk/pdfium-linux/lib/libpdfium.so /app/lib/proyecthor/libpdfium.so
-      - mkdir -p /app/include/pdfium
-      - cp -r src/backend/sdk/pdfium-linux/include/* /app/include/pdfium/
-    sources:
-      - type: git
-        url: https://github.com/TheVixcho/ProyecThor.git
-        branch: beta
-
-  - name: glfw
-    buildsystem: cmake-ninja
-    config-opts:
-      - -DCMAKE_BUILD_TYPE=Release
-      - -DBUILD_SHARED_LIBS=ON
-      - -DGLFW_BUILD_EXAMPLES=OFF
-      - -DGLFW_BUILD_TESTS=OFF
-      - -DGLFW_BUILD_DOCS=OFF
+      - mkdir -p /var/tmp/proyecthor-deps/glfw3_src
+      - cp -r . /var/tmp/proyecthor-deps/glfw3_src
     sources:
       - type: git
         url: https://github.com/glfw/glfw.git
-        tag: "3.4"
+        tag: '3.4'
+        commit: a74efa0d5628b74adc0426af4c5710e287fa7c2c
 
   - name: proyecthor
     buildsystem: cmake-ninja
@@ -79,13 +60,9 @@ modules:
       - -DFETCHCONTENT_FULLY_DISCONNECTED=ON
       - -DFETCHCONTENT_SOURCE_DIR_JSON=/var/tmp/proyecthor-deps/json
       - -DFETCHCONTENT_SOURCE_DIR_GLM=/var/tmp/proyecthor-deps/glm
+      - -DFETCHCONTENT_SOURCE_DIR_GLFW3_SRC=/var/tmp/proyecthor-deps/glfw3_src
     sources:
       - type: git
         url: https://github.com/TheVixcho/ProyecThor.git
-        branch: beta
-      - type: file
-        path: proyecthor.png
-    post-install:
-      - install -Dm644 proyecthor.png /app/share/icons/hicolor/256x256/apps/io.github.thevixcho.ProyecThor.png
-      - install -Dm644 io.github.thevixcho.ProyecThor.desktop /app/share/applications/io.github.thevixcho.ProyecThor.desktop
-      - install -Dm644 io.github.thevixcho.ProyecThor.metainfo.xml /app/share/metainfo/io.github.thevixcho.ProyecThor.metainfo.xml
+        tag: v1.0.1
+        commit: 365912cc9d956557871cc563c9ce37530e0d6056
