@@ -355,7 +355,11 @@ namespace ProyecThor::Core {
         // reproduciendose no tiene efecto instantaneo (asi lo documenta
         // libVLC) — recien se aplica en el proximo SetVideo()/
         // CommitPrefetch() real.
+#ifdef _WIN32
         void SetUseNativeEngine(bool useNative) { m_UseNativeEngine = useNative; }
+#else
+        void SetUseNativeEngine(bool /*useNative*/) { m_UseNativeEngine = false; }
+#endif
         bool GetUseNativeEngine() const { return m_UseNativeEngine; }
         void* GetProcessedTexture(int targetW, int targetH);
         void* GetTextureID();

@@ -218,8 +218,45 @@ namespace ProyecThor::UI {
         const char* libRailSongs;
         const char* libRailMultimedia;
         const char* libRailDocs;
+
+        // ── Menús y Toolbars de Interfaz ───────────────────────────────────────
+        const char* menuWorkspace;
+        const char* menuScreens;
+        const char* menuWindow;
+        const char* menuFullscreen;
+        const char* menuStartHub;
+        const char* menuPerformance;
+        const char* menuBugReport;
+        const char* menuRemoteApp;
+        const char* menuWindows;
+        const char* menuSidebarPanels;
+
+        const char* tbHub;
+        const char* tbProjector;
+        const char* tbNotes;
+        const char* tbAIAssistant;
+        const char* tbStyles;
+        const char* tbConnections;
+        const char* tbClearAll;
+        const char* tbAudience;
+        const char* tbStage;
+
+        const char* panelLiveView;
+        const char* panelSettings;
+        const char* panelProduction;
+        const char* panelDesign;
+        const char* panelPerformance;
+        const char* panelPanels;
     };
 
     const UIStrings& GetUIStrings();
+
+    inline const char* Loc(const char* es, const char* en, const char* pt = nullptr) {
+        using ProyecThor::Settings::Language;
+        auto lang = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language;
+        if (lang == Language::English) return en;
+        if (lang == Language::Portuguese && pt) return pt;
+        return es;
+    }
 
 } // namespace ProyecThor::UI

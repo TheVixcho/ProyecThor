@@ -878,35 +878,46 @@ void main() {
                 fresh->player.SetAudioDevice(m_AudioDeviceId);
 
             void* handle = m_IsLiveToPublic ? fresh->window.CreateHidden(m_LastKnownMonitorIndex) : nullptr;
-            VLCBasePlayer* newPlayerPtr = &fresh->player;
+            if (!handle)
+            {
+                // Sin ventana nativa disponible (ej. no está en vivo o falló creación):
+                // no usar el reproductor nativo (evita abrir ventana externa flotante de VLC).
+                // Continuar por el camino estándar de OpenGL.
+                RetireActiveNative();
+                m_ActiveIsNative = false;
+            }
+            else
+            {
+                VLCBasePlayer* newPlayerPtr = &fresh->player;
 
-            // Adjuntar la ventana tiene que pasar ANTES de Play() (la doc
-            // de libVLC dice que set_hwnd/set_xwindow "toma efecto cuando
-            // arranca la reproduccion").
-            bool allowAudioCopy = allowAudio;
-            m_NativeLoader.Request([this, newPlayerPtr, path, handle, allowAudioCopy]() {
-                if (handle) newPlayerPtr->AttachNativeWindow(handle);
-                // Los fondos (allowAudio=false) siempre deben repetirse en
-                // loop; los videos reales (allowAudio=true, cola del
-                // Monitor) NO -- MonitorQueueEngine::Update() depende de
-                // que ConsumeEndReached() dispare de verdad al terminar
-                // para avanzar la cola, cosa que nunca pasaria si loopean.
-                newPlayerPtr->Play(path, /*loop=*/!allowAudioCopy, /*startMuted=*/true);
+                // Adjuntar la ventana tiene que pasar ANTES de Play() (la doc
+                // de libVLC dice que set_hwnd/set_xwindow "toma efecto cuando
+                // arranca la reproduccion").
+                bool allowAudioCopy = allowAudio;
+                m_NativeLoader.Request([this, newPlayerPtr, path, handle, allowAudioCopy]() {
+                    newPlayerPtr->AttachNativeWindow(handle);
+                    // Los fondos (allowAudio=false) siempre deben repetirse en
+                    // loop; los videos reales (allowAudio=true, cola del
+                    // Monitor) NO -- MonitorQueueEngine::Update() depende de
+                    // que ConsumeEndReached() dispare de verdad al terminar
+                    // para avanzar la cola, cosa que nunca pasaria si loopean.
+                    newPlayerPtr->Play(path, /*loop=*/!allowAudioCopy, /*startMuted=*/true);
 
-                bool live       = m_IsLiveToPublic.load(std::memory_order_relaxed);
-                bool muted      = m_TargetMuted.load(std::memory_order_relaxed);
-                int  volume     = m_TargetVolume.load(std::memory_order_relaxed);
-                bool wantActive = live && allowAudioCopy;
-                newPlayerPtr->SetAudioActive(wantActive);
-                newPlayerPtr->SetMute(muted || !wantActive);
-                newPlayerPtr->SetVolume((wantActive && !muted) ? volume : 0);
-            });
+                    bool live       = m_IsLiveToPublic.load(std::memory_order_relaxed);
+                    bool muted      = m_TargetMuted.load(std::memory_order_relaxed);
+                    int  volume     = m_TargetVolume.load(std::memory_order_relaxed);
+                    bool wantActive = live && allowAudioCopy;
+                    newPlayerPtr->SetAudioActive(wantActive);
+                    newPlayerPtr->SetMute(muted || !wantActive);
+                    newPlayerPtr->SetVolume((wantActive && !muted) ? volume : 0);
+                });
 
-            m_NativeRevealPending = true;
-            m_NativeRevealStart   = NowSeconds();
+                m_NativeRevealPending = true;
+                m_NativeRevealStart   = NowSeconds();
 
-            m_ActiveNative = std::move(fresh);
-            return;
+                m_ActiveNative = std::move(fresh);
+                return;
+            }
         }
 
         // Esto va por OpenGL: si el contenido activo ANTERIOR era nativo,
@@ -1345,6 +1356,7 @@ void main() {
 
             m_NativeLoader.Request([p]() {
                 p->SetAudioActive(false);
+                p->SetPause(true);
                 p->DetachNativeWindow();
             });
         }

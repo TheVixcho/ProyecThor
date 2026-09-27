@@ -232,13 +232,13 @@ void RenderCategoryButtons(LibraryContext& ctx)
     ImGui::Dummy({ sidebarW, 8.0f });
 
     struct SideDef { const char* label; DrawFn drawIcon; int mode; };
-    static const SideDef k_SideItems[] = {
-        { "Render",   ProyecThor::UI::AppIcons::DrawIcon_Swap,       kSideMode_Render    },
-        { "Overlay",  ProyecThor::UI::AppIcons::DrawIcon_Overlay,    kSideMode_Overlay   },
-        { "Web",      ProyecThor::UI::AppIcons::DrawIcon_Globe,      kSideMode_Web       },
-        { "3D",       ProyecThor::UI::AppIcons::DrawIcon_Cube3D,     kSideMode_Model3D   },
-        { "Lab",      ProyecThor::UI::AppIcons::DrawIcon_Formula,    kSideMode_Lab       },
-        { "Paneles",  ProyecThor::UI::AppIcons::DrawIcon_Grid,       kSideMode_Picker    },
+    const SideDef k_SideItems[] = {
+        { "Render",         ProyecThor::UI::AppIcons::DrawIcon_Swap,       kSideMode_Render    },
+        { "Overlay",        ProyecThor::UI::AppIcons::DrawIcon_Overlay,    kSideMode_Overlay   },
+        { "Web",            ProyecThor::UI::AppIcons::DrawIcon_Globe,      kSideMode_Web       },
+        { "3D",             ProyecThor::UI::AppIcons::DrawIcon_Cube3D,     kSideMode_Model3D   },
+        { "Lab",            ProyecThor::UI::AppIcons::DrawIcon_Formula,    kSideMode_Lab       },
+        { str.panelPanels,  ProyecThor::UI::AppIcons::DrawIcon_Grid,       kSideMode_Picker    },
     };
 
     for (const auto& sd : k_SideItems)

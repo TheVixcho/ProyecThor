@@ -823,6 +823,15 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
             ctx->dirty        = false;
         }
 
+        if (m_NativeWindowOutput && !m_NativeWindowHandle)
+        {
+            std::cerr << "[VLC#" << m_InstanceId << "] ERROR: Play() cancelado: el player fue configurado para ventana nativa pero no tiene ninguna ventana adjunta (evita ventana flotante externa de VLC).\n";
+            m_LoadHasError.store(true, std::memory_order_relaxed);
+            m_EndReached.store(true, std::memory_order_relaxed);
+            libvlc_media_release(media);
+            return;
+        }
+
         libvlc_media_player_set_media(m_MediaPlayer, media);
         libvlc_media_player_play(m_MediaPlayer);
         m_Paused.store(false, std::memory_order_relaxed);
@@ -1245,6 +1254,7 @@ void VLCBasePlayer::GetAudioLevels(float& left, float& right)
 
 void VLCBasePlayer::AttachNativeWindow(void* nativeHandle)
 {
+    m_NativeWindowHandle = nativeHandle;
     if (!m_MediaPlayer) return;
 #ifdef _WIN32
     libvlc_media_player_set_hwnd(m_MediaPlayer, nativeHandle);
@@ -1256,6 +1266,7 @@ void VLCBasePlayer::AttachNativeWindow(void* nativeHandle)
 
 void VLCBasePlayer::DetachNativeWindow()
 {
+    m_NativeWindowHandle = nullptr;
     if (!m_MediaPlayer) return;
 #ifdef _WIN32
     libvlc_media_player_set_hwnd(m_MediaPlayer, nullptr);

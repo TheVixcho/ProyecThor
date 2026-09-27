@@ -17,6 +17,7 @@
 #include "ui/framework/IconRail.h"
 #include "ui/framework/LiveContentRenderer.h"
 #include "ui/panels/biblio/LibrarySongs.h"
+#include "ui/framework/UIStrings.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <algorithm>
@@ -578,6 +579,7 @@ void ViewPanel::Render()
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGui::PushStyleColor(ImGuiCol_WindowBg, MT::k_Bg3);
 
+    const auto& str = ProyecThor::UI::GetUIStrings();
     bool visible = false;
     if (m_IsDetached)
     {
@@ -589,14 +591,14 @@ void ViewPanel::Render()
 
         ImGuiWindowFlags flags = ImGuiWindowFlags_NoDocking;
         bool open = true;
-        visible = ImGui::Begin("Vista en Vivo - Ventana Independiente", &open, flags);
+        visible = ImGui::Begin(Loc("Vista en Vivo - Ventana Independiente", "Live View - Detached Window", "Visualização ao Vivo - Janela Independente"), &open, flags);
         if (!open) {
             SetDetached(false);
         }
     }
     else
     {
-        visible = ImGui::Begin("Vista en Vivo");
+        visible = ImGui::Begin(str.panelLiveView);
     }
 
     ImGui::PopStyleColor(1);
@@ -741,19 +743,19 @@ void ViewPanel::RenderQuickActionsClear(float railW)
     };
 
     ActionDef actions[7] = {
-        { "vaClearText", "cleaning_services", nullptr, "\xF0\x9F\x93\x9D", "Limpiar texto",
+        { "vaClearText", "cleaning_services", nullptr, "\xF0\x9F\x93\x9D", Loc("Limpiar texto", "Clear text", "Limpar texto"),
           hoverClear, activeContent, showText,  showText  ? tintOnYellow : textPrimary },
-        { "vaClearDisc", "stop", nullptr, "\xF0\x9F\x92\xBF", "Detener disco en vivo",
+        { "vaClearDisc", "stop", nullptr, "\xF0\x9F\x92\xBF", Loc("Detener disco en vivo", "Stop live disc", "Parar disco ao vivo"),
           hoverClear, activeContent, discLive,  discLive  ? tintOnYellow : textPrimary },
-        { "vaClearBg",   "original_screen", nullptr, "\xF0\x9F\x96\xBC", "Quitar fondo",
+        { "vaClearBg",   "original_screen", nullptr, "\xF0\x9F\x96\xBC", Loc("Quitar fondo", "Remove background", "Remover plano de fundo"),
           hoverClear, activeContent, bgLive,    bgLive    ? tintOnYellow : textPrimary },
-        { "vaClearOverlay", "fit_screen", nullptr, "\xF0\x9F\x93\x91", "Quitar overlay",
+        { "vaClearOverlay", "fit_screen", nullptr, "\xF0\x9F\x93\x91", Loc("Quitar overlay", "Remove overlay", "Remover overlay"),
           hoverClear, activeContent, overlayLive, overlayLive ? tintOnYellow : textPrimary },
-        { "vaClearAnn",  "volume_up", nullptr, "\xF0\x9F\x93\xA2", "Detener anuncios",
+        { "vaClearAnn",  "volume_up", nullptr, "\xF0\x9F\x93\xA2", Loc("Detener anuncios", "Stop announcements", "Parar anúncios"),
           hoverClear, activeContent, annLive,   annLive   ? tintOnYellow : textPrimary },
-        { "vaClearClock","", nullptr, "\xE2\x8F\xB0", "Quitar reloj",
+        { "vaClearClock","", nullptr, "\xE2\x8F\xB0", Loc("Quitar reloj", "Remove clock", "Remover relógio"),
           hoverClear, activeContent, clockLive, clockLive ? tintOnYellow : textPrimary },
-        { "vaClearCap",  "motion_play", nullptr, "\xF0\x9F\x93\xB9", "Detener captura",
+        { "vaClearCap",  "motion_play", nullptr, "\xF0\x9F\x93\xB9", Loc("Detener captura", "Stop capture", "Parar captura"),
           hoverClear, activeContent, capLive,   capLive   ? tintOnYellow : textPrimary },
     };
 
@@ -806,11 +808,17 @@ void ViewPanel::RenderQuickActionsConfig(float stripH)
     };
 
     const bool previewingAlt = (m_PreviewSource != PreviewSource::Publico);
-    const char* previewSourceLabel[4] = { "Público", "Stage", "Transmisión", "Inalámbrica" };
+    const char* previewSourceLabel[4] = {
+        Loc("Público", "Live", "Público"),
+        "Stage",
+        Loc("Transmisión", "Broadcast", "Transmissão"),
+        Loc("Inalámbrica", "Wireless", "Sem fio")
+    };
     int previewSourceIdx = static_cast<int>(m_PreviewSource);
     int nextPreviewSourceIdx = (previewSourceIdx + 1) % 4;
-    char previewSourceTooltip[96];
-    snprintf(previewSourceTooltip, sizeof(previewSourceTooltip), "Viendo: %s (click para ver %s)",
+    char previewSourceTooltip[128];
+    snprintf(previewSourceTooltip, sizeof(previewSourceTooltip),
+             Loc("Viendo: %s (clic para ver %s)", "Viewing: %s (click for %s)", "Visualizando: %s (clique para ver %s)"),
              previewSourceLabel[previewSourceIdx], previewSourceLabel[nextPreviewSourceIdx]);
 
     const bool overlaysOn = (m_ActiveTool == InlineTool::Overlays);
@@ -819,12 +827,14 @@ void ViewPanel::RenderQuickActionsConfig(float stripH)
     const bool clockOn    = (m_ActiveTool == InlineTool::Clock);
 
     const bool detachedOn = m_IsDetached;
-    const char* detachTip = m_IsDetached ? "Acoplar panel al entorno (Ctrl+Shift+D)" : "Poner en ventana aparte (Ctrl+Shift+D)";
+    const char* detachTip = m_IsDetached ?
+        Loc("Acoplar panel al entorno (Ctrl+Shift+D)", "Dock panel to workspace (Ctrl+Shift+D)", "Acoplar painel ao espaço (Ctrl+Shift+D)") :
+        Loc("Poner en ventana aparte (Ctrl+Shift+D)", "Detach into separate window (Ctrl+Shift+D)", "Destacar em janela separada (Ctrl+Shift+D)");
 
     ActionDef actions[7] = {
         { "vaStretch",   "fit_screen", nullptr, "\xF0\x9F\x93\x90",
-          "Alternar proporción", hoverClear, activeStretch, stretchOn, textPrimary },
-        { "vaClock",     "", nullptr, "\xE2\x8F\xB0", "Reloj",
+          Loc("Alternar proporción", "Toggle aspect ratio", "Alternar proporção"), hoverClear, activeStretch, stretchOn, textPrimary },
+        { "vaClock",     "", nullptr, "\xE2\x8F\xB0", Loc("Reloj", "Clock", "Relógio"),
           hoverClear, activeStretch, clockOn, textPrimary },
         { "vaPreviewSource", "repeat", nullptr, "\xF0\x9F\x94\x84",
           previewSourceTooltip,

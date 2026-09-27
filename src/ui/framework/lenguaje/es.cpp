@@ -171,7 +171,36 @@ extern const UIStrings kSpanish = {
     // LibrarySidebar
     "Letra",
     "Medios",
-    "Doc"
+    "Doc",
+
+    // Menús y Toolbars
+    "Espacio de trabajo",
+    "Pantallas",
+    "Ventana",
+    "Pantalla completa",
+    "Hub de inicio",
+    "Rendimiento",
+    "Reporte de bugs",
+    "App móvil (control remoto)",
+    "Ventanas",
+    "Paneles en barra lateral",
+
+    "Hub",
+    "Proyector",
+    "Notas",
+    "Asistente IA",
+    "Estilos",
+    "Conexiones",
+    "Borrar Todo",
+    "Público",
+    "Stage",
+
+    "Vista en Vivo",
+    "Configuraciones",
+    "Producción",
+    "Diseño",
+    "Rendimiento",
+    "Paneles"
 };
 
 } // namespace ProyecThor::UI

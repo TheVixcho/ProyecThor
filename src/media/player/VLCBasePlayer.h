@@ -133,6 +133,7 @@ namespace ProyecThor::Core {
         // instantaneo sobre un clip que ya esta reproduciendose.
         void AttachNativeWindow(void* nativeHandle);
         void DetachNativeWindow();
+        void* GetNativeWindowHandle() const { return m_NativeWindowHandle; }
 
         // Enumera los dispositivos de salida de audio disponibles.
         // - Windows: enumera dispositivos WinMM reales via
@@ -241,6 +242,7 @@ namespace ProyecThor::Core {
         std::atomic<uint64_t> m_LoadGeneration{0};
         int m_InstanceId = -1;
         static std::string s_HwDecoder;
+        void* m_NativeWindowHandle = nullptr;
         void InitVLC();
         void DestroyVLC();
         void EnsureTexture(int w, int h);

@@ -287,6 +287,7 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
             ImGui::Spacing();
             ImGui::SeparatorText("Motor de Renderizado (Videos)");
 
+#ifdef _WIN32
             int engine = Core::PresentationCore::Get().GetVideoRenderEngine();
             float w2    = ImGui::GetContentRegionAvail().x;
             float btnW2 = (w2 - 6.0f) * 0.5f;
@@ -317,6 +318,10 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
                     "Con libvlc: mientras un video este activo, sin overlays/texto encima "
                     "y sin transicion animada entre clips (corte seco).");
             }
+#else
+            ImGui::TextColored(ImVec4(0.4f, 0.85f, 0.55f, 1.0f), "OpenGL (Composición GPU activa)");
+            ImGui::TextDisabled("En Linux el renderizado se realiza mediante OpenGL con soporte de aceleración por hardware,\npermitiendo capas, overlays, textos en vivo y transiciones fluidas sin ventanas externas.");
+#endif
 
             ImGui::Spacing();
             ImGui::TextUnformatted("Decodificador de Video / Aceleración de Hardware (libvlc)");

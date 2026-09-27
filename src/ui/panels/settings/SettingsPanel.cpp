@@ -1,6 +1,7 @@
 #include "SettingsPanel.h"
 #include "SettingsManager.h"
 #include "core/PresentationCore.h"
+#include "ui/framework/UIStrings.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <GLFW/glfw3.h>
@@ -32,18 +33,41 @@ struct Category {
     ImU32        color; // color de identidad de la categoría (icono + acento del ítem)
 };
 
-static const Category k_Categories[] = {
-    { "UI",  "Apariencia",      "Colores, fuentes y efectos visuales",     CatIcon::Palette,   IM_COL32(185, 130, 245, 255) }, // 0
-    { "PRY", "Proyección",      "Monitor, texto y márgenes",               CatIcon::Monitor,   IM_COL32( 70, 195, 220, 255) }, // 1
-    { "CNX", "Conexiones",      "Red, app movil, streaming y OSC",         CatIcon::Cast,      IM_COL32(120, 160, 235, 255) }, // 2
-    { "STG", "Pantallas",       "Ventana de proyección y monitor de confianza", CatIcon::Monitor, IM_COL32( 80, 205, 165, 255) }, // 3
-    { "SOU", "Audio",           "Volumen, dispositivo y fade",             CatIcon::Speaker,   IM_COL32(245, 165,  75, 255) }, // 4
-    { "SNG", "Canciones",       "Etiquetas y opciones de canciones",       CatIcon::MusicNote, IM_COL32(235, 105, 165, 255) }, // 5
-    { "KEY", "Teclas rápidas",  "Atajos de teclado disponibles",           CatIcon::Keyboard,  IM_COL32(230, 190,  70, 255) }, // 6
-    { "LNG", "Idioma",          "Idioma de la interfaz",                   CatIcon::Globe,     IM_COL32(100, 205, 110, 255) }, // 7
-    { "UPD", "Actualizaciones", "Versión instalada y canales",             CatIcon::Download,  IM_COL32(230, 100,  95, 255) }, // 8
-    { "DAT", "Datos",           "Ubicación de archivos y carpetas vinculadas", CatIcon::Storage, IM_COL32(245, 185,  65, 255) }, // 9
-};
+static Category GetCategory(int i) {
+    switch (i) {
+        case 0: return { "UI",  Loc("Apariencia", "Appearance", "Aparência"),
+                               Loc("Colores, fuentes y efectos visuales", "Colors, fonts and visual effects", "Cores, fontes e efeitos visuais"),
+                               CatIcon::Palette,   IM_COL32(185, 130, 245, 255) };
+        case 1: return { "PRY", Loc("Proyección", "Projection", "Projeção"),
+                               Loc("Monitor, texto y márgenes", "Monitor, text and margins", "Monitor, texto e margens"),
+                               CatIcon::Monitor,   IM_COL32( 70, 195, 220, 255) };
+        case 2: return { "CNX", Loc("Conexiones", "Connections", "Conexões"),
+                               Loc("Red, app móvil, streaming y OSC", "Network, mobile app, streaming and OSC", "Rede, app móvel, streaming e OSC"),
+                               CatIcon::Cast,      IM_COL32(120, 160, 235, 255) };
+        case 3: return { "STG", Loc("Pantallas", "Screens", "Telas"),
+                               Loc("Ventana de proyección y monitor de confianza", "Projection window and stage display", "Janela de projeção e monitor de retorno"),
+                               CatIcon::Monitor,   IM_COL32( 80, 205, 165, 255) };
+        case 4: return { "SOU", Loc("Audio", "Audio", "Áudio"),
+                               Loc("Volumen, dispositivo y fade", "Volume, device and fade", "Volume, dispositivo e fade"),
+                               CatIcon::Speaker,   IM_COL32(245, 165,  75, 255) };
+        case 5: return { "SNG", Loc("Canciones", "Songs", "Músicas"),
+                               Loc("Etiquetas y opciones de canciones", "Tags and song options", "Etiquetas e opções de músicas"),
+                               CatIcon::MusicNote, IM_COL32(235, 105, 165, 255) };
+        case 6: return { "KEY", Loc("Teclas rápidas", "Shortcuts", "Atalhos"),
+                               Loc("Atajos de teclado disponibles", "Available keyboard shortcuts", "Atalhos de teclado disponíveis"),
+                               CatIcon::Keyboard,  IM_COL32(230, 190,  70, 255) };
+        case 7: return { "LNG", Loc("Idioma", "Language", "Idioma"),
+                               Loc("Idioma de la interfaz", "Interface language", "Idioma da interface"),
+                               CatIcon::Globe,     IM_COL32(100, 205, 110, 255) };
+        case 8: return { "UPD", Loc("Actualizaciones", "Updates", "Atualizações"),
+                               Loc("Versión instalada y canales", "Installed version and channels", "Versão instalada e canais"),
+                               CatIcon::Download,  IM_COL32(230, 100,  95, 255) };
+        case 9: return { "DAT", Loc("Datos", "Data", "Dados"),
+                               Loc("Ubicación de archivos y carpetas vinculadas", "File location and linked folders", "Local dos arquivos e pastas vinculadas"),
+                               CatIcon::Storage,   IM_COL32(245, 185,  65, 255) };
+        default: return { "", "", "", CatIcon::Palette, 0 };
+    }
+}
 static constexpr int k_CategoryCount = 10;
 
 // Dibuja un glifo simple y reconocible para 'icon', centrado en 'c', con
@@ -156,12 +180,15 @@ static void DrawCategoryIcon(ImDrawList* dl, CatIcon icon, ImVec2 c, float r, Im
 // Reagrupa temas relacionados (p.ej. Stage/Canciones junto a Proyección)
 // sin tocar los índices reales, así ningún QuickBtn/m_ActiveTab se rompe.
 struct NavGroup { const char* label; const int items[4]; int count; };
-static const NavGroup k_NavGroups[] = {
-    { "APARIENCIA",      { 0,          }, 1 },
-    { "PANTALLAS",       { 1, 2, 3     }, 3 }, // Proyección + Conexiones + Pantallas (Stage)
-    { "AUDIO",           { 4, 5        }, 2 },
-    { "SISTEMA Y DATOS", { 6, 7, 8, 9  }, 4 }, // Teclas + Idioma + Actualizaciones + Datos
-};
+static NavGroup GetNavGroup(int g) {
+    switch (g) {
+        case 0: return { Loc("APARIENCIA", "APPEARANCE", "APARÊNCIA"),      { 0,          }, 1 };
+        case 1: return { Loc("PANTALLAS", "SCREENS", "TELAS"),              { 1, 2, 3     }, 3 };
+        case 2: return { Loc("AUDIO", "AUDIO", "ÁUDIO"),                    { 4, 5        }, 2 };
+        case 3: return { Loc("SISTEMA Y DATOS", "SYSTEM & DATA", "SISTEMA E DADOS"), { 6, 7, 8, 9  }, 4 };
+        default: return { "", {0}, 0 };
+    }
+}
 static constexpr int k_NavGroupCount = 4;
 
 // Pequeño helper local: convierte un token de color del tema (float[4]) en
@@ -272,7 +299,7 @@ void SettingsPanel::Render(bool* isOpen) {
     // siempre vuelve a nacer centrado la próxima vez que se abra, sin
     // arrastrar coordenadas obsoletas de una resolución/monitor distinto.
     // NoDocking: ver comentario de floatingClass arriba.
-    bool open = ImGui::Begin("Configuraciones", isOpen,
+    bool open = ImGui::Begin(Loc("Configuraciones###SettingsPanel", "Settings###SettingsPanel", "Configurações###SettingsPanel"), isOpen,
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking);
 
@@ -420,7 +447,9 @@ void SettingsPanel::RenderSidebar() {
 
     ImGui::SetCursorPosX(25.0f);
     ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textDim));
-    ImGui::Text("Versión %s", mgr.GetSettings().updates.currentVersion.c_str());
+    char verBuf[64];
+    snprintf(verBuf, sizeof(verBuf), Loc("Versión %s", "Version %s", "Versão %s"), mgr.GetSettings().updates.currentVersion.c_str());
+    ImGui::TextUnformatted(verBuf);
     ImGui::PopStyleColor();
 
     ImGui::Dummy(ImVec2(0.0f, 18.0f));
@@ -442,7 +471,7 @@ void SettingsPanel::RenderSidebar() {
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
 
         ImGui::SetNextItemWidth(searchW);
-        ImGui::InputTextWithHint("##settingsSearch", "Buscar ajustes...", m_SearchBuffer, sizeof(m_SearchBuffer));
+        ImGui::InputTextWithHint("##settingsSearch", Loc("Buscar ajustes...", "Search settings...", "Pesquisar configurações..."), m_SearchBuffer, sizeof(m_SearchBuffer));
         ImVec2 fMin = ImGui::GetItemRectMin();
         ImVec2 fMax = ImGui::GetItemRectMax();
 
@@ -526,7 +555,8 @@ void SettingsPanel::RenderSidebar() {
         // Insignia circular detrás del icono (look "chip de color", estilo
         // Windows 11/macOS Ajustes) -- antes el icono flotaba solo contra
         // el fondo de la fila, se veía plano/aburrido.
-        ImVec4 iconColV = ImGui::ColorConvertU32ToFloat4(k_Categories[i].color);
+        Category cat = GetCategory(i);
+        ImVec4 iconColV = ImGui::ColorConvertU32ToFloat4(cat.color);
         ImVec2 badgeC(p.x + 22.0f, p.y + itemH * 0.5f);
         ImVec4 badgeFillV = iconColV;
         badgeFillV.w = selected ? 0.24f : (hovered ? 0.16f : 0.10f);
@@ -536,13 +566,13 @@ void SettingsPanel::RenderSidebar() {
             dl->AddCircle(badgeC, 13.5f, ImGui::ColorConvertFloat4ToU32(badgeRingV), 20, 1.2f);
         }
         iconColV.w *= selected ? 1.0f : (hovered ? 0.90f : 0.62f);
-        DrawCategoryIcon(dl, k_Categories[i].icon, badgeC, 8.5f,
+        DrawCategoryIcon(dl, cat.icon, badgeC, 8.5f,
             ImGui::ColorConvertFloat4ToU32(iconColV));
 
         float labelY = p.y + (itemH - ImGui::GetTextLineHeight()) * 0.5f;
         float labelX = p.x + 42.0f;
         ImVec4 labelColV = selected ? ThemeCol(theme.textPrimary) : ThemeCol(theme.textDim, hovered ? 1.0f : 0.85f);
-        dl->AddText(ImVec2(labelX, labelY), ImGui::ColorConvertFloat4ToU32(labelColV), k_Categories[i].label);
+        dl->AddText(ImVec2(labelX, labelY), ImGui::ColorConvertFloat4ToU32(labelColV), cat.label);
 
         ImGui::PopStyleColor(3);
 
@@ -585,8 +615,9 @@ void SettingsPanel::RenderSidebar() {
         std::string query = ToLowerAscii(m_SearchBuffer);
         int matches = 0;
         for (int i = 0; i < k_CategoryCount; i++) {
-            std::string label = ToLowerAscii(k_Categories[i].label);
-            std::string desc  = ToLowerAscii(k_Categories[i].description);
+            Category cat = GetCategory(i);
+            std::string label = ToLowerAscii(cat.label);
+            std::string desc  = ToLowerAscii(cat.description);
             if (label.find(query) == std::string::npos && desc.find(query) == std::string::npos)
                 continue;
             matches++;
@@ -595,7 +626,7 @@ void SettingsPanel::RenderSidebar() {
         if (matches == 0) {
             ImGui::SetCursorPosX(25.0f);
             ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textFaint));
-            ImGui::TextUnformatted("Sin resultados.");
+            ImGui::TextUnformatted(Loc("Sin resultados.", "No results.", "Sem resultados."));
             ImGui::PopStyleColor();
         }
     } else {
@@ -604,7 +635,7 @@ void SettingsPanel::RenderSidebar() {
         // pequeño ("GENERAL", "PANTALLAS", "AUDIO", "SISTEMA", "CONEXIONES"),
         // más fácil de escanear visualmente.
         for (int g = 0; g < k_NavGroupCount; g++) {
-            const NavGroup& group = k_NavGroups[g];
+            const NavGroup group = GetNavGroup(g);
 
             if (g > 0) ImGui::Dummy(ImVec2(0.0f, 16.0f));
             ImGui::SetCursorPosX(25.0f);
@@ -679,7 +710,7 @@ void SettingsPanel::RenderContent() {
     // sidebar ya dicen dónde está parado el usuario).
     ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textPrimary));
     ImGui::SetWindowFontScale(1.6f);
-    ImGui::TextUnformatted(k_Categories[m_SelectedCategory].label);
+    ImGui::TextUnformatted(GetCategory(m_SelectedCategory).label);
     ImGui::SetWindowFontScale(1.0f);
     ImGui::PopStyleColor();
 
@@ -754,11 +785,11 @@ void SettingsPanel::RenderSaveBar() {
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ThemeCol(theme.accentDim));
     ImGui::PushStyleColor(ImGuiCol_Text,          ThemeCol(theme.textPrimary));
 
-    if (ImGui::Button("Guardar ajustes", ImVec2(160.0f, 36.0f))) {
+    if (ImGui::Button(Loc("Guardar ajustes", "Save settings", "Salvar configurações"), ImVec2(160.0f, 36.0f))) {
         mgr.SaveSettings();
         mgr.ApplyTheme();
         mgr.ApplyProjection();
-        m_SaveStatusMsg = "Cambios guardados";
+        m_SaveStatusMsg = Loc("Cambios guardados", "Changes saved", "Alterações salvas");
         m_SaveTimer     = 3.0f;
     }
     ImGui::PopStyleColor(4);
@@ -770,9 +801,9 @@ void SettingsPanel::RenderSaveBar() {
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ThemeCol(theme.surface1, 0.8f));
     ImGui::PushStyleColor(ImGuiCol_Text,          ThemeCol(theme.textDim));
 
-    if (ImGui::Button("Restablecer", ImVec2(130.0f, 36.0f))) {
+    if (ImGui::Button(Loc("Restablecer", "Reset", "Redefinir"), ImVec2(130.0f, 36.0f))) {
         mgr.ResetToDefaults();
-        m_SaveStatusMsg = "Ajustes restablecidos";
+        m_SaveStatusMsg = Loc("Ajustes restablecidos", "Settings reset", "Configurações redefinidas");
         m_SaveTimer     = 3.0f;
     }
     ImGui::PopStyleColor(4);

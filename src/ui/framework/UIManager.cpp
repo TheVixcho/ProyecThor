@@ -1026,7 +1026,7 @@ if (m_Mode == WorkspaceMode::Hub)
         panel->Render();
     }
 if (m_FocusViewNextFrame) {
-        ImGui::SetWindowFocus("Vista en Vivo");
+        ImGui::SetWindowFocus(str.panelLiveView);
         m_FocusViewNextFrame = false;
     }
     // (Salida real movida a RenderLiveOutputWindows(), llamada al principio
@@ -1207,10 +1207,11 @@ void UIManager::ToggleFullscreen()
 void UIManager::RenderModeToolbar()
 {
     auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
+    const auto& str = ProyecThor::UI::GetUIStrings();
 
-    static const IconRailItem kItemsLeft[] = {
-        { (int)WorkspaceMode::Hub,        HomeIcons::DrawIcon_Home,      "Hub"        },
-        { (int)WorkspaceMode::Projector,  AppIcons::DrawIcon_Monitor,    "Proyector"  },
+    const IconRailItem kItemsLeft[] = {
+        { (int)WorkspaceMode::Hub,        HomeIcons::DrawIcon_Home,      str.tbHub        },
+        { (int)WorkspaceMode::Projector,  AppIcons::DrawIcon_Monitor,    str.tbProjector  },
     };
 
     ImVec4 accent = ImGui::ColorConvertU32ToFloat4(DS::AccentColor);
@@ -1362,21 +1363,21 @@ void UIManager::RenderModeToolbar()
 
         // ── Grupo derecho: Notas, IA, Estilos, Streaming ───────────────────
         {
-            bool clicked = RenderPill("Notas", HomeIcons::DrawIcon_Notepad, m_ShowNotes, true, gap * 2.0f);
+            bool clicked = RenderPill(str.tbNotes, HomeIcons::DrawIcon_Notepad, m_ShowNotes, true, gap * 2.0f);
             if (clicked) ToggleNotesWindow();
         }
         const auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
         if (general.showAIAssistantToolbar)
         {
-            bool clicked = RenderPill("Asistente IA", HomeIcons::DrawIcon_Sparkle, m_ShowAIAssistant, true, gap);
+            bool clicked = RenderPill(str.tbAIAssistant, HomeIcons::DrawIcon_Sparkle, m_ShowAIAssistant, true, gap);
             if (clicked) ToggleAIAssistant();
         }
         {
-            bool clicked = RenderPill("Estilos", AppIcons::DrawIcon_Layers, false, true, gap);
+            bool clicked = RenderPill(str.tbStyles, AppIcons::DrawIcon_Layers, false, true, gap);
             if (clicked) ImGui::OpenPopup("##modeTbStylesPopup");
         }
         {
-            bool clicked = RenderPill("Conexiones", HomeIcons::DrawIcon_Broadcast, m_ShowConnectionsWindow, true, gap);
+            bool clicked = RenderPill(str.tbConnections, HomeIcons::DrawIcon_Broadcast, m_ShowConnectionsWindow, true, gap);
             if (clicked) {
                 ToggleConnectionsWindow();
             }
@@ -1396,6 +1397,7 @@ void UIManager::RenderModeToolbarStatusActions(float winW, float railH)
 {
     auto& core = Core::PresentationCore::Get();
     auto& sd   = ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay;
+    const auto& str = ProyecThor::UI::GetUIStrings();
 
     const bool  audienceOn = core.IsProjecting();
     const bool  stageOn    = sd.useLAN ? core.IsStreamingNet() : core.IsStaging();
@@ -1403,15 +1405,15 @@ void UIManager::RenderModeToolbarStatusActions(float winW, float railH)
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    const char* clearLabel = "Borrar Todo";
+    const char* clearLabel = str.tbClearAll;
     ImVec2      clearTxtSz = ImGui::CalcTextSize(clearLabel);
     const float clearIconSz  = rowH * 0.55f;
     const float clearIconGap = 8.0f;
     float       clearGroupW  = clearIconSz + clearIconGap + clearTxtSz.x;
     float       clearBtnW    = clearGroupW + 24.0f;
 
-    ImVec2 dotSzAudience = ImVec2(5.0f * 2.0f + 6.0f + ImGui::CalcTextSize("Público").x + 14.0f, rowH);
-    ImVec2 dotSzStage    = ImVec2(5.0f * 2.0f + 6.0f + ImGui::CalcTextSize("Stage").x    + 14.0f, rowH);
+    ImVec2 dotSzAudience = ImVec2(5.0f * 2.0f + 6.0f + ImGui::CalcTextSize(str.tbAudience).x + 14.0f, rowH);
+    ImVec2 dotSzStage    = ImVec2(5.0f * 2.0f + 6.0f + ImGui::CalcTextSize(str.tbStage).x    + 14.0f, rowH);
 
     const float gap   = 14.0f;
     float       totalW = dotSzAudience.x + gap + dotSzStage.x + gap + clearBtnW;
@@ -1419,12 +1421,12 @@ void UIManager::RenderModeToolbarStatusActions(float winW, float railH)
 
     ImGui::SetCursorPos(ImVec2(startX, (railH - rowH) * 0.5f));
 
-    if (StatusDotToggle(dl, "##modeTbDotAudience", "Público", audienceOn, MT::k_LiveAccent, rowH))
+    if (StatusDotToggle(dl, "##modeTbDotAudience", str.tbAudience, audienceOn, MT::k_LiveAccent, rowH))
         ToggleAudience(!audienceOn);
 
     ImGui::SameLine(0.0f, gap);
 
-    if (StatusDotToggle(dl, "##modeTbDotStage", "Stage", stageOn, MT::k_PrevAccent, rowH))
+    if (StatusDotToggle(dl, "##modeTbDotStage", str.tbStage, stageOn, MT::k_PrevAccent, rowH))
         ToggleStageQuick(!stageOn);
 
     ImGui::SameLine(0.0f, gap);
@@ -1653,9 +1655,9 @@ void UIManager::RenderConnectionsWindow()
                 ImGui::TextColored(ImVec4(theme.textDim[0], theme.textDim[1], theme.textDim[2], 0.9f), "%s", detail);
             };
 
-            DrawStatusChip(0, "Red (LAN)", lanActive, lanActive ? "En línea :8080" : "Detenido");
-            DrawStatusChip(1, "App Móvil", syncActive, syncActive ? "Sincronizado" : "Inactivo");
-            DrawStatusChip(2, "Transmisión", bcastActive, bcastActive ? "Emitiendo" : "En espera");
+            DrawStatusChip(0, Loc("Red (LAN)", "Network (LAN)", "Rede (LAN)"), lanActive, lanActive ? Loc("En línea :8080", "Online :8080", "Online :8080") : Loc("Detenido", "Stopped", "Parado"));
+            DrawStatusChip(1, Loc("App Móvil", "Mobile App", "App Móvel"), syncActive, syncActive ? Loc("Sincronizado", "Synced", "Sincronizado") : Loc("Inactivo", "Inactive", "Inativo"));
+            DrawStatusChip(2, Loc("Transmisión", "Broadcast", "Transmissão"), bcastActive, bcastActive ? Loc("Emitiendo", "Broadcasting", "Transmitindo") : Loc("En espera", "Standby", "Em espera"));
             DrawStatusChip(3, "OSC Control", true, ":8000 / :9000");
         }
         ImGui::EndChild();
@@ -1668,12 +1670,12 @@ void UIManager::RenderConnectionsWindow()
 
         // ── Pestañas de Conexión Estilo Segmented Bar ──
         struct TabInfo { const char* label; const char* icon; };
-        static const TabInfo tabs[] = {
-            { "Red (LAN)",      "\xF0\x9F\x8C\x90" }, // 🌐
-            { "App Móvil",      "\xF0\x9F\x93\xB1" }, // 📱
-            { "Transmisión",    "\xF0\x9F\x93\xA1" }, // 📡
-            { "Control OSC",    "\xF0\x9F\x8E\x9B" }, // 🎛
-            { "Chat de Equipo", "\xF0\x9F\x92\xAC" }, // 💬
+        const TabInfo tabs[] = {
+            { Loc("Red (LAN)", "Network (LAN)", "Rede (LAN)"),      "\xF0\x9F\x8C\x90" }, // 🌐
+            { Loc("App Móvil", "Mobile App", "App Móvel"),          "\xF0\x9F\x93\xB1" }, // 📱
+            { Loc("Transmisión", "Broadcast", "Transmissão"),        "\xF0\x9F\x93\xA1" }, // 📡
+            { Loc("Control OSC", "OSC Control", "Controle OSC"),    "\xF0\x9F\x8E\x9B" }, // 🎛
+            { Loc("Chat de Equipo", "Team Chat", "Chat da Equipe"), "\xF0\x9F\x92\xAC" }, // 💬
         };
         const int tabCount = 5;
         const float tabW = (ImGui::GetContentRegionAvail().x - (tabCount - 1) * 6.0f) / tabCount;
@@ -1991,13 +1993,13 @@ void UIManager::RenderMainMenuBar()
 
             if (ImGui::BeginMenu(str.importLabel))
             {
-                if (ImGui::MenuItem("Importar canción desde portapapeles"))
+                if (ImGui::MenuItem(Loc("Importar canción desde portapapeles", "Import song from clipboard", "Importar música da área de transferência")))
                 {
                     const char* clip = ImGui::GetClipboardText();
                     if (clip && clip[0] != '\0')
                         ProyecThor::Library::CreateNewSongFromClipboard(clip);
                 }
-                if (ImGui::MenuItem("Importar desde URL"))
+                if (ImGui::MenuItem(Loc("Importar desde URL", "Import from URL", "Importar de URL")))
                 {
                     m_ShowUrlImport = true;
                     m_UrlImportLastError.clear();
@@ -2019,17 +2021,17 @@ void UIManager::RenderMainMenuBar()
         }
 
         // ── Menú Espacio de Trabajo ────────────────────────────────────────
-        if (ImGui::BeginMenu("Espacio de trabajo"))
+        if (ImGui::BeginMenu(str.menuWorkspace))
         {
             ImGui::Spacing();
             auto& workspace = ProyecThor::Settings::SettingsManager::Get().GetSettings().workspace;
 
             struct WsEntry { const char* label; ProyecThor::Settings::WorkspaceLayoutPreset preset; };
-            static const WsEntry kWorkspaceEntries[] = {
-                { "Clásico",     ProyecThor::Settings::WorkspaceLayoutPreset::Classic   },
-                { "Simple",      ProyecThor::Settings::WorkspaceLayoutPreset::Simple    },
-                { "Biblioteca",  ProyecThor::Settings::WorkspaceLayoutPreset::Library   },
-                { "Producción",  ProyecThor::Settings::WorkspaceLayoutPreset::Video     },
+            const WsEntry kWorkspaceEntries[] = {
+                { Loc("Clásico", "Classic", "Clássico"),       ProyecThor::Settings::WorkspaceLayoutPreset::Classic   },
+                { Loc("Simple", "Simple", "Simples"),          ProyecThor::Settings::WorkspaceLayoutPreset::Simple    },
+                { Loc("Biblioteca", "Library", "Biblioteca"),  ProyecThor::Settings::WorkspaceLayoutPreset::Library   },
+                { Loc("Producción", "Production", "Produção"), ProyecThor::Settings::WorkspaceLayoutPreset::Video     },
             };
             for (const auto& e : kWorkspaceEntries)
             {
@@ -2048,7 +2050,7 @@ void UIManager::RenderMainMenuBar()
             if (ImGui::MenuItem(str.menuResetLayout))
                 m_ResetLayout = true;
 
-            if (ImGui::MenuItem("Hub de inicio"))
+            if (ImGui::MenuItem(str.menuStartHub))
                 OpenHub();
 
             ImGui::Spacing();
@@ -2057,19 +2059,19 @@ void UIManager::RenderMainMenuBar()
 
             {
                 auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
-                if (ImGui::MenuItem("Titulos en barras de iconos", nullptr, general.showRailLabels))
+                if (ImGui::MenuItem(Loc("Títulos en barras de iconos", "Titles on icon bars", "Títulos em barras de ícones"), nullptr, general.showRailLabels))
                 {
                     general.showRailLabels = !general.showRailLabels;
                     ProyecThor::Settings::SettingsManager::Get().Save();
                 }
 
-                if (ImGui::MenuItem("Rendimiento", nullptr, general.showPerfPanel))
+                if (ImGui::MenuItem(str.menuPerformance, nullptr, general.showPerfPanel))
                 {
                     general.showPerfPanel = !general.showPerfPanel;
                     ProyecThor::Settings::SettingsManager::Get().Save();
                 }
 
-                if (ImGui::MenuItem("Botones de limpieza (Vista en Vivo)", nullptr, general.showViewQuickActions))
+                if (ImGui::MenuItem(Loc("Botones de limpieza (Vista en Vivo)", "Clear buttons (Live View)", "Botões de limpeza (Visualização ao Vivo)"), nullptr, general.showViewQuickActions))
                 {
                     general.showViewQuickActions = !general.showViewQuickActions;
                     ProyecThor::Settings::SettingsManager::Get().Save();
@@ -2079,62 +2081,62 @@ void UIManager::RenderMainMenuBar()
                 ImGui::Separator();
                 ImGui::Spacing();
 
-                if (ImGui::BeginMenu("Ventanas"))
+                if (ImGui::BeginMenu(str.menuWindows))
                 {
                     if (m_ViewPanelRef)
                     {
                         bool isDetached = m_ViewPanelRef->IsDetached();
-                        if (ImGui::MenuItem("Vista en Vivo como ventana aparte", "Ctrl+Shift+D", isDetached))
+                        if (ImGui::MenuItem(Loc("Vista en Vivo como ventana aparte", "Live View as separate window", "Visualização ao Vivo como janela separada"), "Ctrl+Shift+D", isDetached))
                         {
                             m_ViewPanelRef->SetDetached(!isDetached);
                         }
                         ImGui::Separator();
                     }
 
-                    if (ImGui::MenuItem("Botón Asistente IA (en toolbar)", nullptr, general.showAIAssistantToolbar))
+                    if (ImGui::MenuItem(Loc("Botón Asistente IA (en toolbar)", "AI Assistant button (in toolbar)", "Botão Assistente IA (na barra)"), nullptr, general.showAIAssistantToolbar))
                     {
                         general.showAIAssistantToolbar = !general.showAIAssistantToolbar;
                         ProyecThor::Settings::SettingsManager::Get().Save();
                     }
-                    if (ImGui::MenuItem("Asistente IA", nullptr, m_ShowAIAssistant))
+                    if (ImGui::MenuItem(str.tbAIAssistant, nullptr, m_ShowAIAssistant))
                     {
                         ToggleAIAssistant();
                     }
-                    if (ImGui::MenuItem("Notas", nullptr, m_ShowNotes))
+                    if (ImGui::MenuItem(str.tbNotes, nullptr, m_ShowNotes))
                     {
                         ToggleNotesWindow();
                     }
-                    if (ImGui::MenuItem("Conexiones", nullptr, m_ShowConnectionsWindow))
+                    if (ImGui::MenuItem(str.tbConnections, nullptr, m_ShowConnectionsWindow))
                     {
                         ToggleConnectionsWindow();
                     }
                     ImGui::EndMenu();
                 }
 
-                if (ImGui::BeginMenu("Paneles en barra lateral"))
+                if (ImGui::BeginMenu(str.menuSidebarPanels))
                 {
                     auto& libSettings = ProyecThor::Settings::SettingsManager::Get().GetSettings().librarySidebar;
-                    if (ImGui::MenuItem("Conversor de Medios (Render)", nullptr, libSettings.showRender))
+                    if (ImGui::MenuItem(Loc("Conversor de Medios (Render)", "Media Converter (Render)", "Conversor de Mídia (Render)"), nullptr, libSettings.showRender))
                     {
                         libSettings.showRender = !libSettings.showRender;
                         ProyecThor::Settings::SettingsManager::Get().Save();
                     }
-                    if (ImGui::MenuItem("Overlays Gráficos", nullptr, libSettings.showOverlay))
+                    if (ImGui::MenuItem(Loc("Overlays Gráficos", "Graphic Overlays", "Overlays Gráficos"), nullptr, libSettings.showOverlay))
                     {
                         libSettings.showOverlay = !libSettings.showOverlay;
                         ProyecThor::Settings::SettingsManager::Get().Save();
                     }
-                    if (ImGui::MenuItem("Navegador Web & HTML", nullptr, libSettings.showWeb))
+                    if (ImGui::MenuItem(Loc("Navegador Web & HTML", "Web Browser & HTML", "Navegador Web & HTML"), nullptr, libSettings.showWeb))
                     {
                         libSettings.showWeb = !libSettings.showWeb;
                         ProyecThor::Settings::SettingsManager::Get().Save();
                     }
-                    if (ImGui::MenuItem("Modelos 3D", nullptr, libSettings.showModel3D))
+                    if (ImGui::MenuItem(Loc("Modelos 3D", "3D Models", "Modelos 3D"), nullptr, libSettings.showModel3D))
                     {
                         libSettings.showModel3D = !libSettings.showModel3D;
                         ProyecThor::Settings::SettingsManager::Get().Save();
                     }
-                    if (ImGui::MenuItem("Laboratorio Matemático", nullptr, libSettings.showLab))
+                    if (ImGui::MenuItem(Loc("Laboratorio Matemático", "Math Lab", "Laboratório Matemático"), nullptr, libSettings.showLab))
                     {
                         libSettings.showLab = !libSettings.showLab;
                         ProyecThor::Settings::SettingsManager::Get().Save();
@@ -2148,10 +2150,10 @@ void UIManager::RenderMainMenuBar()
         }
 
         // ── Menú Pantallas ─────────────────────────────────────────────────
-        if (ImGui::BeginMenu("Pantallas"))
+        if (ImGui::BeginMenu(str.menuScreens))
         {
             ImGui::Spacing();
-            if (ImGui::MenuItem("Configuración de Stage"))
+            if (ImGui::MenuItem(Loc("Configuración de Stage", "Stage Settings", "Configuração de Stage")))
             {
                 m_ShowConfig = true;
                 m_SettingsPanel.SetInitialCategory(2);
@@ -2161,11 +2163,11 @@ void UIManager::RenderMainMenuBar()
         }
 
         // ── Menú Ventana ───────────────────────────────────────────────────
-        if (ImGui::BeginMenu("Ventana"))
+        if (ImGui::BeginMenu(str.menuWindow))
         {
             ImGui::Spacing();
             bool isFullscreen = (glfwGetWindowMonitor(m_Window) != nullptr);
-            if (ImGui::MenuItem("Pantalla completa", "F11", isFullscreen))
+            if (ImGui::MenuItem(str.menuFullscreen, "F11", isFullscreen))
                 ToggleFullscreen();
 
             ImGui::Spacing();
@@ -2173,23 +2175,23 @@ void UIManager::RenderMainMenuBar()
             ImGui::Spacing();
 
             auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
-            if (ImGui::MenuItem("Botón Asistente IA (en toolbar)", nullptr, general.showAIAssistantToolbar))
+            if (ImGui::MenuItem(Loc("Botón Asistente IA (en toolbar)", "AI Assistant button (in toolbar)", "Botão Assistente IA (na barra)"), nullptr, general.showAIAssistantToolbar))
             {
                 general.showAIAssistantToolbar = !general.showAIAssistantToolbar;
                 ProyecThor::Settings::SettingsManager::Get().Save();
             }
 
-            if (ImGui::MenuItem("Asistente IA", nullptr, m_ShowAIAssistant))
+            if (ImGui::MenuItem(str.tbAIAssistant, nullptr, m_ShowAIAssistant))
             {
                 ToggleAIAssistant();
             }
 
-            if (ImGui::MenuItem("Notas", nullptr, m_ShowNotes))
+            if (ImGui::MenuItem(str.tbNotes, nullptr, m_ShowNotes))
             {
                 ToggleNotesWindow();
             }
 
-            if (ImGui::MenuItem("Conexiones", nullptr, m_ShowConnectionsWindow))
+            if (ImGui::MenuItem(str.tbConnections, nullptr, m_ShowConnectionsWindow))
             {
                 ToggleConnectionsWindow();
             }
@@ -2198,7 +2200,7 @@ void UIManager::RenderMainMenuBar()
             ImGui::Separator();
             ImGui::Spacing();
 
-            if (ImGui::MenuItem("Abrir Hub al iniciar", nullptr, general.openHubOnStartup))
+            if (ImGui::MenuItem(Loc("Abrir Hub al iniciar", "Open Hub on startup", "Abrir Hub ao iniciar"), nullptr, general.openHubOnStartup))
             {
                 general.openHubOnStartup = !general.openHubOnStartup;
                 ProyecThor::Settings::SettingsManager::Get().Save();
@@ -2216,12 +2218,12 @@ void UIManager::RenderMainMenuBar()
                 ProyecThor::External::OpenURL("https://proyecthor.web.app/");
 
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.345f, 0.403f, 0.941f, 1.0f));
-            if (ImGui::MenuItem("Reporte de bugs"))
+            if (ImGui::MenuItem(str.menuBugReport))
                 ProyecThor::External::OpenURL("https://github.com/TheVixcho/ProyecThor/issues");
             ImGui::PopStyleColor();
 
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.145f, 0.827f, 0.400f, 1.0f));
-            bool whatsappOpen = ImGui::BeginMenu("Canal de WhatsApp");
+            bool whatsappOpen = ImGui::BeginMenu(Loc("Canal de WhatsApp", "WhatsApp Channel", "Canal do WhatsApp"));
             ImGui::PopStyleColor();
             if (whatsappOpen)
             {
@@ -2231,7 +2233,7 @@ void UIManager::RenderMainMenuBar()
             }
 
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.290f, 0.780f, 0.490f, 1.0f));
-            bool mobileAppOpen = ImGui::BeginMenu("App movil (control remoto)");
+            bool mobileAppOpen = ImGui::BeginMenu(str.menuRemoteApp);
             ImGui::PopStyleColor();
             if (mobileAppOpen)
             {
@@ -2362,10 +2364,10 @@ void UIManager::BuildWorkspaceLayoutClassic(ImGuiID dockspace_id)
     ImGuiID dock_main_top, dock_main_bottom;
     ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Down, 0.30f, &dock_main_bottom, &dock_main_top);
 
-    ImGui::DockBuilderDockWindow(str.library,     dock_left_top);
-    ImGui::DockBuilderDockWindow("Home",          dock_main_top);
-    ImGui::DockBuilderDockWindow("Vista en Vivo", dock_right);
-    ImGui::DockBuilderDockWindow("Diseño",        dock_main_bottom);
+    ImGui::DockBuilderDockWindow(str.library,       dock_left_top);
+    ImGui::DockBuilderDockWindow("Home",            dock_main_top);
+    ImGui::DockBuilderDockWindow(str.panelLiveView, dock_right);
+    ImGui::DockBuilderDockWindow("Diseño",          dock_main_bottom);
 
     ImGuiID leafNodes[] = { dock_left_top, dock_left_bottom, dock_main_top, dock_main_bottom, dock_right };
     for (ImGuiID nodeId : leafNodes)
@@ -2418,10 +2420,10 @@ void UIManager::BuildWorkspaceLayoutSimple(ImGuiID dockspace_id)
     // mas ancha de las dos columnas del medio (~32% del total vs ~30% de
     // Home), en vez de quedar mas chica que Home.
 
-    ImGui::DockBuilderDockWindow(str.library,     dock_left_top);
-    ImGui::DockBuilderDockWindow("Home",          dock_main);
-    ImGui::DockBuilderDockWindow("Vista en Vivo", dock_mid_right);
-    ImGui::DockBuilderDockWindow("Diseño",        dock_right);
+    ImGui::DockBuilderDockWindow(str.library,       dock_left_top);
+    ImGui::DockBuilderDockWindow("Home",            dock_main);
+    ImGui::DockBuilderDockWindow(str.panelLiveView, dock_mid_right);
+    ImGui::DockBuilderDockWindow("Diseño",          dock_right);
 
     ImGuiID leafNodes[] = { dock_left_top, dock_left_bottom, dock_main, dock_mid_right, dock_right };
     for (ImGuiID nodeId : leafNodes)

@@ -38,6 +38,7 @@ namespace ProyecThor::Core {
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
         glfwWindowHint(GLFW_VISIBLE,               GLFW_FALSE);
+        glfwWindowHint(GLFW_AUTO_ICONIFY,          GLFW_FALSE);
 
         bool isWayland = false;
         #if defined(GLFW_PLATFORM_WAYLAND) && defined(GLFW_VERSION_MAJOR) && (GLFW_VERSION_MAJOR > 3 || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 4))
@@ -73,9 +74,10 @@ namespace ProyecThor::Core {
         {
             // Salida secundaria en monitor fisico dedicado (pantalla completa)
             glfwWindowHint(GLFW_DECORATED,     GLFW_FALSE);
-            glfwWindowHint(GLFW_FLOATING,      GLFW_TRUE);
+            glfwWindowHint(GLFW_FLOATING,      GLFW_FALSE);
             glfwWindowHint(GLFW_RESIZABLE,     GLFW_FALSE);
             glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_FALSE);
+            glfwWindowHint(GLFW_AUTO_ICONIFY,  GLFW_FALSE);
 
             if (isWayland) {
                 // En Wayland se debe pasar el monitor como 4to parametro para fullscreen nativo
@@ -94,7 +96,8 @@ namespace ProyecThor::Core {
             glfwWindowHint(GLFW_DECORATED,     GLFW_TRUE);
             glfwWindowHint(GLFW_FLOATING,      GLFW_FALSE);
             glfwWindowHint(GLFW_RESIZABLE,     GLFW_TRUE);
-            glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_TRUE);
+            glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_FALSE);
+            glfwWindowHint(GLFW_AUTO_ICONIFY,  GLFW_FALSE);
 
             std::string windowTitle = title;
             m_Window = glfwCreateWindow(winW, winH, windowTitle.c_str(), nullptr, sharedContext);
@@ -107,7 +110,13 @@ namespace ProyecThor::Core {
             // Reintentar con GL 3.0 por si el driver no soporta 3.3
             glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
             glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+            glfwWindowHint(GLFW_AUTO_ICONIFY,          GLFW_FALSE);
             if (isFullscreenOutput) {
+                glfwWindowHint(GLFW_DECORATED,     GLFW_FALSE);
+                glfwWindowHint(GLFW_FLOATING,      GLFW_FALSE);
+                glfwWindowHint(GLFW_RESIZABLE,     GLFW_FALSE);
+                glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_FALSE);
+                glfwWindowHint(GLFW_AUTO_ICONIFY,  GLFW_FALSE);
                 if (isWayland) {
                     m_Window = glfwCreateWindow(winW, winH, title.c_str(), target, sharedContext);
                 } else {
@@ -115,6 +124,11 @@ namespace ProyecThor::Core {
                     if (m_Window) glfwSetWindowPos(m_Window, monX, monY);
                 }
             } else {
+                glfwWindowHint(GLFW_DECORATED,     GLFW_TRUE);
+                glfwWindowHint(GLFW_FLOATING,      GLFW_FALSE);
+                glfwWindowHint(GLFW_RESIZABLE,     GLFW_TRUE);
+                glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_FALSE);
+                glfwWindowHint(GLFW_AUTO_ICONIFY,  GLFW_FALSE);
                 std::string windowTitle = title;
                 m_Window = glfwCreateWindow(winW, winH, windowTitle.c_str(), nullptr, sharedContext);
                 if (m_Window && target != nullptr && !isWayland) {
@@ -138,7 +152,14 @@ namespace ProyecThor::Core {
         ImFontAtlas* sharedAtlas = backupCtx ? ImGui::GetIO().Fonts : nullptr;
 
         glfwMakeContextCurrent(m_Window);
-        glfwSwapInterval(1);
+        // IMPORTANTE: swapInterval a 0 en ventanas secundarias para evitar que
+        // la aplicación se cuelgue/bloquee esperando vblank de un monitor secundario
+        // o cuando la ventana pierde el foco en Wayland/X11.
+        glfwSwapInterval(0);
+
+        // Guardar handlers de renderizado de la plataforma antes de inicializar OpenGL3
+        // para que ImGui_ImplOpenGL3_Init no pise Renderer_RenderWindow de la ventana principal.
+        ImGuiPlatformIO backupPlatformIO = ImGui::GetPlatformIO();
 
         m_ImGuiContext = ImGui::CreateContext(sharedAtlas);
         if (m_ImGuiContext)
@@ -155,6 +176,9 @@ namespace ProyecThor::Core {
                 io.Fonts->Build();
             }
         }
+
+        // Restaurar handlers de la plataforma para la ventana principal
+        ImGui::GetPlatformIO().Renderer_RenderWindow = backupPlatformIO.Renderer_RenderWindow;
 
         glfwShowWindow(m_Window);
         if (isFullscreenOutput) {
@@ -182,11 +206,20 @@ namespace ProyecThor::Core {
                 GLFWwindow* backupWin = glfwGetCurrentContext();
                 ImGuiContext* backupCtx = ImGui::GetCurrentContext();
 
+                ImGuiPlatformIO backupPlatformIO = ImGui::GetPlatformIO();
+
                 glfwMakeContextCurrent(m_Window);
                 ImGui::SetCurrentContext(m_ImGuiContext);
                 ImGui_ImplOpenGL3_Shutdown();
                 ImGui::DestroyContext(m_ImGuiContext);
                 m_ImGuiContext = nullptr;
+
+                // Restaurar handlers de renderizado para no dejar en nullptr los callbacks de la ventana principal
+                ImGui::GetPlatformIO().Renderer_RenderWindow  = backupPlatformIO.Renderer_RenderWindow;
+                ImGui::GetPlatformIO().Renderer_CreateWindow  = backupPlatformIO.Renderer_CreateWindow;
+                ImGui::GetPlatformIO().Renderer_DestroyWindow = backupPlatformIO.Renderer_DestroyWindow;
+                ImGui::GetPlatformIO().Renderer_SetWindowSize = backupPlatformIO.Renderer_SetWindowSize;
+                ImGui::GetPlatformIO().Renderer_SwapBuffers   = backupPlatformIO.Renderer_SwapBuffers;
 
                 glfwMakeContextCurrent(backupWin);
                 ImGui::SetCurrentContext(backupCtx);
@@ -204,6 +237,10 @@ namespace ProyecThor::Core {
 
         if (glfwWindowShouldClose(m_Window)) {
             Destroy();
+            return;
+        }
+
+        if (glfwGetWindowAttrib(m_Window, GLFW_ICONIFIED) || !glfwGetWindowAttrib(m_Window, GLFW_VISIBLE)) {
             return;
         }
 
@@ -246,9 +283,9 @@ namespace ProyecThor::Core {
 
             ImGui::Render();
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        }
 
-        glfwSwapBuffers(m_Window);
+            glfwSwapBuffers(m_Window);
+        }
 
         glfwMakeContextCurrent(backupWin);
         ImGui::SetCurrentContext(backupCtx);

@@ -48,6 +48,7 @@ static void PaintWindowBlack(GLFWwindow* window)
     FillRect(hdc, &rc, (HBRUSH)GetStockObject(BLACK_BRUSH));
     ReleaseDC(hwnd, hdc);
 #else
+    if (glfwGetPlatform() != GLFW_PLATFORM_X11) return;
     Display* dpy = glfwGetX11Display();
     ::Window  xwin = glfwGetX11Window(window);
     if (!dpy || !xwin) return;
@@ -111,6 +112,7 @@ void* NativeVideoOutputWindow::CreateHidden(int monitorIndex)
 #ifdef _WIN32
     return static_cast<void*>(glfwGetWin32Window(m_Window));
 #else
+    if (glfwGetPlatform() != GLFW_PLATFORM_X11) return nullptr;
     return reinterpret_cast<void*>(static_cast<uintptr_t>(glfwGetX11Window(m_Window)));
 #endif
 }

@@ -302,6 +302,8 @@ static ImGui_ImplGlfw_Data* ImGui_ImplGlfw_GetBackendData(GLFWwindow* window)
 {
     // Get data for a given GLFW window, regardless of current context (since GLFW events are sent together)
     ImGuiContext* ctx = ImGui_ImplGlfw_ContextMap_Get(window);
+    if (!ctx)
+        return nullptr;
     return (ImGui_ImplGlfw_Data*)ImGui::GetIO(ctx).BackendPlatformUserData;
 }
 
@@ -477,6 +479,8 @@ static bool ImGui_ImplGlfw_ShouldChainCallback(ImGui_ImplGlfw_Data* bd, GLFWwind
 void ImGui_ImplGlfw_MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
     ImGui_ImplGlfw_Data* bd = ImGui_ImplGlfw_GetBackendData(window);
+    if (bd == nullptr)
+        return;
     if (bd->PrevUserCallbackMousebutton != nullptr && ImGui_ImplGlfw_ShouldChainCallback(bd, window))
         bd->PrevUserCallbackMousebutton(window, button, action, mods);
 
@@ -493,6 +497,8 @@ void ImGui_ImplGlfw_MouseButtonCallback(GLFWwindow* window, int button, int acti
 void ImGui_ImplGlfw_ScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
 {
     ImGui_ImplGlfw_Data* bd = ImGui_ImplGlfw_GetBackendData(window);
+    if (bd == nullptr)
+        return;
     if (bd->PrevUserCallbackScroll != nullptr && ImGui_ImplGlfw_ShouldChainCallback(bd, window))
         bd->PrevUserCallbackScroll(window, xoffset, yoffset);
 
@@ -542,6 +548,8 @@ static int ImGui_ImplGlfw_TranslateUntranslatedKey(int key, int scancode)
 void ImGui_ImplGlfw_KeyCallback(GLFWwindow* window, int keycode, int scancode, int action, int mods)
 {
     ImGui_ImplGlfw_Data* bd = ImGui_ImplGlfw_GetBackendData(window);
+    if (bd == nullptr)
+        return;
     if (bd->PrevUserCallbackKey != nullptr && ImGui_ImplGlfw_ShouldChainCallback(bd, window))
         bd->PrevUserCallbackKey(window, keycode, scancode, action, mods);
 
@@ -564,6 +572,8 @@ void ImGui_ImplGlfw_KeyCallback(GLFWwindow* window, int keycode, int scancode, i
 void ImGui_ImplGlfw_WindowFocusCallback(GLFWwindow* window, int focused)
 {
     ImGui_ImplGlfw_Data* bd = ImGui_ImplGlfw_GetBackendData(window);
+    if (bd == nullptr)
+        return;
     if (bd->PrevUserCallbackWindowFocus != nullptr && ImGui_ImplGlfw_ShouldChainCallback(bd, window))
         bd->PrevUserCallbackWindowFocus(window, focused);
 
@@ -578,6 +588,8 @@ void ImGui_ImplGlfw_WindowFocusCallback(GLFWwindow* window, int focused)
 void ImGui_ImplGlfw_CursorPosCallback(GLFWwindow* window, double x, double y)
 {
     ImGui_ImplGlfw_Data* bd = ImGui_ImplGlfw_GetBackendData(window);
+    if (bd == nullptr)
+        return;
     if (bd->PrevUserCallbackCursorPos != nullptr && ImGui_ImplGlfw_ShouldChainCallback(bd, window))
         bd->PrevUserCallbackCursorPos(window, x, y);
 
@@ -598,6 +610,8 @@ void ImGui_ImplGlfw_CursorPosCallback(GLFWwindow* window, double x, double y)
 void ImGui_ImplGlfw_CursorEnterCallback(GLFWwindow* window, int entered)
 {
     ImGui_ImplGlfw_Data* bd = ImGui_ImplGlfw_GetBackendData(window);
+    if (bd == nullptr)
+        return;
     if (bd->PrevUserCallbackCursorEnter != nullptr && ImGui_ImplGlfw_ShouldChainCallback(bd, window))
         bd->PrevUserCallbackCursorEnter(window, entered);
 
@@ -618,6 +632,8 @@ void ImGui_ImplGlfw_CursorEnterCallback(GLFWwindow* window, int entered)
 void ImGui_ImplGlfw_CharCallback(GLFWwindow* window, unsigned int c)
 {
     ImGui_ImplGlfw_Data* bd = ImGui_ImplGlfw_GetBackendData(window);
+    if (bd == nullptr)
+        return;
     if (bd->PrevUserCallbackChar != nullptr && ImGui_ImplGlfw_ShouldChainCallback(bd, window))
         bd->PrevUserCallbackChar(window, c);
 
@@ -656,6 +672,8 @@ static LRESULT CALLBACK ImGui_ImplGlfw_WndProc(HWND hWnd, UINT msg, WPARAM wPara
 void ImGui_ImplGlfw_InstallCallbacks(GLFWwindow* window)
 {
     ImGui_ImplGlfw_Data* bd = ImGui_ImplGlfw_GetBackendData(window);
+    if (bd == nullptr)
+        return;
     IM_ASSERT(bd->InstalledCallbacks == false && "Callbacks already installed!");
     IM_ASSERT(bd->Window == window);
 
@@ -673,6 +691,8 @@ void ImGui_ImplGlfw_InstallCallbacks(GLFWwindow* window)
 void ImGui_ImplGlfw_RestoreCallbacks(GLFWwindow* window)
 {
     ImGui_ImplGlfw_Data* bd = ImGui_ImplGlfw_GetBackendData(window);
+    if (bd == nullptr)
+        return;
     IM_ASSERT(bd->InstalledCallbacks == true && "Callbacks not installed!");
     IM_ASSERT(bd->Window == window);
 
@@ -1172,7 +1192,7 @@ static void ImGui_ImplGlfw_GetWindowSizeAndFramebufferScale(GLFWwindow* window, 
     float fb_scale_y = (h > 0) ? (float)display_h / (float)h : 1.0f;
 #if GLFW_HAS_WAYLAND
     ImGui_ImplGlfw_Data* bd = ImGui_ImplGlfw_GetBackendData(window);
-    if (!bd->IsWayland)
+    if (bd && !bd->IsWayland)
         fb_scale_x = fb_scale_y = 1.0f;
 #endif
     if (out_size != nullptr)

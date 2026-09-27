@@ -327,7 +327,12 @@ bool PresentationCore::GetGlobalMute() const {
     }
 
     void PresentationCore::SetVideoRenderEngine(int engine) {
+#ifdef _WIN32
         if (m_Impl) m_Impl->background.SetUseNativeEngine(engine != 0);
+#else
+        (void)engine;
+        if (m_Impl) m_Impl->background.SetUseNativeEngine(false);
+#endif
     }
     int PresentationCore::GetVideoRenderEngine() const {
         return (m_Impl && m_Impl->background.GetUseNativeEngine()) ? 1 : 0;

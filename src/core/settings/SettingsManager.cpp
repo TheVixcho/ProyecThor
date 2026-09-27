@@ -722,7 +722,11 @@ void SettingsManager::ApplyProjection() {
     core.SetZonedDistortionFeather(p.zonedDistortionFeather);
     core.SetFillBlurEnabled(p.fillBlurEnabled);
     core.SetFillBlurBrightness(p.fillBlurBrightness);
+#ifdef _WIN32
     core.SetVideoRenderEngine(p.videoRenderEngine);
+#else
+    core.SetVideoRenderEngine(0);
+#endif
     core.SetVLCHardwareDecoder(p.vlcHardwareDecoder);
 }
 
@@ -1257,7 +1261,7 @@ void SettingsManager::LoadSettings() {
             p.zonedDistortionFeather       = jp.value("zonedDistortionFeather",       0.35f);
             p.fillBlurEnabled       = jp.value("fillBlurEnabled",       false);
             p.fillBlurBrightness    = jp.value("fillBlurBrightness",    0.6f);
-            p.videoRenderEngine     = jp.value("videoRenderEngine",     1);
+            p.videoRenderEngine     = jp.value("videoRenderEngine",     0);
             p.vlcHardwareDecoder    = jp.value("vlcHardwareDecoder",    "any");
         }
 

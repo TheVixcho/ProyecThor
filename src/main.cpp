@@ -714,7 +714,8 @@ void InstallViewportRenderHook()
 
     platform_io.Platform_CreateWindow = [](ImGuiViewport* viewport)
     {
-        s_OrigCreateWindow(viewport);
+        if (s_OrigCreateWindow)
+            s_OrigCreateWindow(viewport);
         GLFWwindow* w = static_cast<GLFWwindow*>(viewport->PlatformHandle);
         if (w)
         {
