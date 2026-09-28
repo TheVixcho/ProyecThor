@@ -1,0 +1,59 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Compilar Linux",
+            "type": "shell",
+            "command": "bash ./scripts/build.sh linux",
+            "windows": {
+                "command": "cmake -B build-linux && cmake --build build-linux"
+            },
+            "linux": {
+                "command": "bash ./scripts/build.sh linux"
+            },
+            "osx": {
+                "command": "bash ./scripts/build.sh linux"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$gcc"],
+            "detail": "Compila el binario nativo para Linux en build-linux/"
+        },
+        {
+            "label": "Compilar Windows",
+            "type": "shell",
+            "windows": {
+                "command": "cmake -B build-win && cmake --build build-win --config Release"
+            },
+            "linux": {
+                "command": "bash ./scripts/build.sh windows"
+            },
+            "osx": {
+                "command": "bash ./scripts/build.sh windows"
+            },
+            "group": {
+                "kind": "build"
+            },
+            "problemMatcher": ["$gcc"],
+            "detail": "Compila el ejecutable para Windows en build-win/ (cross-compile en Linux o nativo en Windows)"
+        },
+        {
+            "label": "Ejecutar con Wine",
+            "type": "shell",
+            "command": "bash ./scripts/build.sh windows-run",
+            "dependsOn": "Compilar Windows",
+            "problemMatcher": [],
+            "detail": "Compila (si es necesario) y ejecuta ProyecThor.exe bajo Wine en Linux"
+        },
+        {
+            "label": "Ejecutar Linux",
+            "type": "shell",
+            "command": "bash ./scripts/build.sh linux-run",
+            "dependsOn": "Compilar Linux",
+            "problemMatcher": [],
+            "detail": "Compila (si es necesario) y ejecuta ProyecThor nativo en Linux"
+        }
+    ]
+}

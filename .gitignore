@@ -50,7 +50,9 @@ src/notes.txt
 text.txt
 
 # ── IDEs / editores ───────────────────────────────────────────────────────────
-.vscode/
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
 .idea/
 .claude/
 *.user
