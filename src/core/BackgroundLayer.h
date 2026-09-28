@@ -204,10 +204,10 @@ namespace ProyecThor::Core {
             double                  retiredAt = 0.0; // 0 = todavia activo, no retirado
 
             explicit NativePlayback(bool forceSilentAudio)
-                : player(2, false, forceSilentAudio, /*nativeWindowOutput=*/true) {}
+                : player(2, /*useHardwareDecode=*/true, forceSilentAudio, /*nativeWindowOutput=*/true) {}
         };
 
-        bool m_UseNativeEngine = false;
+        bool m_UseNativeEngine = true;
         bool m_ActiveIsNative  = false;
         int  m_LastKnownMonitorIndex = -1;
         bool m_ForceSilentAudio = false; // recordado para poder crear NativePlayback mas adelante
@@ -357,6 +357,7 @@ namespace ProyecThor::Core {
         // CommitPrefetch() real.
         void SetUseNativeEngine(bool useNative) { m_UseNativeEngine = useNative; }
         bool GetUseNativeEngine() const { return m_UseNativeEngine; }
+        bool IsActiveNative() const { return m_ActiveIsNative && m_IsLiveToPublic && !m_NativeRevealPending; }
         void* GetProcessedTexture(int targetW, int targetH);
         void* GetTextureID();
 

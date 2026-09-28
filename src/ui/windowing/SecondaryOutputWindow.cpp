@@ -1,8 +1,14 @@
 #include "SecondaryOutputWindow.h"
+#include "core/PresentationCore.h"
 #include <GL/glew.h>
 #include "backends/imgui_impl_opengl3.h"
 #include <iostream>
 #include <filesystem>
+#if !defined(_WIN32)
+#define GLFW_EXPOSE_NATIVE_X11
+#include <GLFW/glfw3native.h>
+#include <X11/Xlib.h>
+#endif
 
 namespace ProyecThor::Core {
 
@@ -34,6 +40,7 @@ namespace ProyecThor::Core {
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
         glfwWindowHint(GLFW_VISIBLE,               GLFW_FALSE);
+        glfwWindowHint(GLFW_AUTO_ICONIFY,          GLFW_FALSE);
 
         #if defined(GLFW_HAS_GETPLATFORM) && GLFW_HAS_GETPLATFORM
         bool isWayland = (glfwGetPlatform() == GLFW_PLATFORM_WAYLAND);
@@ -46,7 +53,7 @@ namespace ProyecThor::Core {
         int monX = 0, monY = 0;
         bool isFullscreenOutput = false;
 
-        if (monitorCount > 1 && monitorIndex > 0 && target != nullptr)
+        if (target != nullptr && (monitorCount > 1 || monitorIndex > 0))
         {
             // Salida secundaria en monitor fisico dedicado (pantalla completa)
             isFullscreenOutput = true;
@@ -139,6 +146,17 @@ namespace ProyecThor::Core {
 
         glfwShowWindow(m_Window);
         if (isFullscreenOutput) {
+            glfwSetWindowPos(m_Window, monX, monY);
+            glfwSetWindowSize(m_Window, winW, winH);
+#if !defined(_WIN32)
+            Display* dpy = glfwGetX11Display();
+            ::Window xwin = glfwGetX11Window(m_Window);
+            if (dpy && xwin) {
+                XMoveResizeWindow(dpy, xwin, monX, monY, winW, winH);
+                XRaiseWindow(dpy, xwin);
+                XFlush(dpy);
+            }
+#endif
             glfwSetInputMode(m_Window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
         } else {
             glfwSetInputMode(m_Window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
@@ -183,8 +201,22 @@ namespace ProyecThor::Core {
     {
         if (!m_Window || !renderFn) return;
 
+        // Si hay un video nativo de VLC reproduciéndose a pantalla completa
+        // en esta misma salida, NO hacer glClear ni glfwSwapBuffers de negro
+        // continuo: evita el parpadeo negro entre las dos superficies en X11/compositor.
+        if (PresentationCore::Get().IsActiveNativeVideo()) {
+            return;
+        }
+
         if (glfwWindowShouldClose(m_Window)) {
             Destroy();
+            return;
+        }
+
+        // Si hay un video nativo de VLC reproduciéndose a pantalla completa
+        // en esta misma salida, NO hacer glClear ni glfwSwapBuffers de negro
+        // continuo: evita el parpadeo negro entre las dos superficies en X11/compositor.
+        if (PresentationCore::Get().IsActiveNativeVideo()) {
             return;
         }
 

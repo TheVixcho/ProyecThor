@@ -472,7 +472,9 @@ static void vlc_display(void* opaque, void* /*picture*/)
 
 namespace ProyecThor::Core {
 
-std::string VLCBasePlayer::s_HwDecoder = "any";
+std::string VLCBasePlayer::s_HwDecoder   = "any";
+std::string VLCBasePlayer::s_VideoOutput = "auto";
+std::string VLCBasePlayer::s_Deinterlace = "discard";
 
 void VLCBasePlayer::SetDefaultHwDecoder(const std::string& dec)
 {
@@ -482,6 +484,36 @@ void VLCBasePlayer::SetDefaultHwDecoder(const std::string& dec)
 std::string VLCBasePlayer::GetDefaultHwDecoder()
 {
     return s_HwDecoder;
+}
+
+void VLCBasePlayer::SetDefaultVideoOutput(const std::string& vout)
+{
+    s_VideoOutput = vout.empty() ? "auto" : vout;
+}
+
+std::string VLCBasePlayer::GetDefaultVideoOutput()
+{
+    return s_VideoOutput;
+}
+
+void VLCBasePlayer::SetDefaultDeinterlace(const std::string& deint)
+{
+    s_Deinterlace = deint.empty() ? "discard" : deint;
+}
+
+std::string VLCBasePlayer::GetDefaultDeinterlace()
+{
+    return s_Deinterlace;
+}
+
+void VLCBasePlayer::ApplyDeinterlace(const std::string& mode)
+{
+    if (!m_MediaPlayer) return;
+    if (mode.empty() || mode == "discard" || mode == "none") {
+        libvlc_video_set_deinterlace(m_MediaPlayer, nullptr);
+    } else {
+        libvlc_video_set_deinterlace(m_MediaPlayer, mode.c_str());
+    }
 }
 
 VLCBasePlayer::VLCBasePlayer(int decodeThreads, bool useHardwareDecode, bool forceSilent,
@@ -512,32 +544,41 @@ VLCBasePlayer::~VLCBasePlayer()
 
 void VLCBasePlayer::InitVLC()
 {
-#ifdef _WIN32
-    std::string threadsArg = "--avcodec-threads=" + std::to_string(m_DecodeThreads);
-    std::string hwDecodeArg = m_UseHardwareDecode
-        ? "--avcodec-hw=any"
-        : "--avcodec-hw=none";
+    std::vector<std::string> argStorage;
+    argStorage.push_back("--no-xlib");
+    argStorage.push_back("--quiet");
+    argStorage.push_back("--no-osd");
+    argStorage.push_back("--no-video-title-show");
+    argStorage.push_back("--file-caching=1000");
 
-    const char* args[] = {
-        "--no-xlib",
-        "--quiet",
-        "--no-osd",
-        "--no-video-title-show",
-        hwDecodeArg.c_str(),
-        threadsArg.c_str(),
-        "--file-caching=1000",
-    };
-    m_Instance = libvlc_new(sizeof(args) / sizeof(args[0]), args);
-#else
-    const char* args[] = {
-        "--no-xlib",
-        "--quiet",
-        "--no-osd",
-        "--no-video-title-show",
-        "--file-caching=1000",
-    };
-    m_Instance = libvlc_new(sizeof(args) / sizeof(args[0]), args);
-#endif
+    if (m_DecodeThreads > 0) {
+        argStorage.push_back("--avcodec-threads=" + std::to_string(m_DecodeThreads));
+    }
+
+    std::string hw = s_HwDecoder.empty() ? "any" : s_HwDecoder;
+    if (!m_UseHardwareDecode || hw == "none") {
+        argStorage.push_back("--avcodec-hw=none");
+    } else if (hw != "any") {
+        argStorage.push_back("--avcodec-hw=" + hw);
+    } else {
+        argStorage.push_back("--avcodec-hw=any");
+    }
+
+    // Salida de video (--vout) SOLO para reproductores que dibujan en ventana nativa
+    if (m_NativeWindowOutput) {
+        std::string vout = s_VideoOutput;
+        if (!vout.empty() && vout != "auto" && vout != "any") {
+            argStorage.push_back("--vout=" + vout);
+        }
+    }
+
+    std::vector<const char*> args;
+    args.reserve(argStorage.size());
+    for (const auto& a : argStorage) {
+        args.push_back(a.c_str());
+    }
+
+    m_Instance = libvlc_new(static_cast<int>(args.size()), args.data());
     if (!m_Instance)
     {
         const char* fallbackArgs[] = {
@@ -635,6 +676,8 @@ void VLCBasePlayer::CreatePersistentPlayer()
     libvlc_event_attach(em, libvlc_MediaPlayerEndReached,       &VLCBasePlayer::OnVlcEvent, this);
     libvlc_event_attach(em, libvlc_MediaPlayerEncounteredError, &VLCBasePlayer::OnVlcEvent, this);
     libvlc_event_attach(em, libvlc_MediaPlayerPlaying,          &VLCBasePlayer::OnVlcEvent, this);
+
+    ApplyDeinterlace(s_Deinterlace);
 }
 
 void VLCBasePlayer::DestroyVLC()
@@ -825,6 +868,7 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
 
         libvlc_media_player_set_media(m_MediaPlayer, media);
         libvlc_media_player_play(m_MediaPlayer);
+        ApplyDeinterlace(s_Deinterlace);
         m_Paused.store(false, std::memory_order_relaxed);
     }
 

@@ -722,8 +722,10 @@ void SettingsManager::ApplyProjection() {
     core.SetZonedDistortionFeather(p.zonedDistortionFeather);
     core.SetFillBlurEnabled(p.fillBlurEnabled);
     core.SetFillBlurBrightness(p.fillBlurBrightness);
-    core.SetVideoRenderEngine(p.videoRenderEngine);
+    core.SetVideoRenderEngine(1);
     core.SetVLCHardwareDecoder(p.vlcHardwareDecoder);
+    core.SetVLCVideoOutput(p.vlcVideoOutput);
+    core.SetVLCDeinterlace(p.vlcDeinterlace);
 }
 
 // ── Tema ─────────────────────────────────────────────────────────────────
@@ -942,8 +944,10 @@ void SettingsManager::SaveSettings() {
     j["projection"]["zonedDistortionFeather"]       = p.zonedDistortionFeather;
     j["projection"]["fillBlurEnabled"]      = p.fillBlurEnabled;
     j["projection"]["fillBlurBrightness"]   = p.fillBlurBrightness;
-    j["projection"]["videoRenderEngine"]    = p.videoRenderEngine;
+    j["projection"]["videoRenderEngine"]    = 1;
     j["projection"]["vlcHardwareDecoder"]   = p.vlcHardwareDecoder;
+    j["projection"]["vlcVideoOutput"]       = p.vlcVideoOutput;
+    j["projection"]["vlcDeinterlace"]       = p.vlcDeinterlace;
 
     const auto& sd = m_Settings.stageDisplay;
     j["stageDisplay"]["layoutTemplateIndex"] = sd.layoutTemplateIndex;
@@ -1249,8 +1253,10 @@ void SettingsManager::LoadSettings() {
             p.zonedDistortionFeather       = jp.value("zonedDistortionFeather",       0.35f);
             p.fillBlurEnabled       = jp.value("fillBlurEnabled",       false);
             p.fillBlurBrightness    = jp.value("fillBlurBrightness",    0.6f);
-            p.videoRenderEngine     = jp.value("videoRenderEngine",     1);
+            p.videoRenderEngine     = 1;
             p.vlcHardwareDecoder    = jp.value("vlcHardwareDecoder",    "any");
+            p.vlcVideoOutput        = jp.value("vlcVideoOutput",        "auto");
+            p.vlcDeinterlace        = jp.value("vlcDeinterlace",        "discard");
         }
 
         if (j.contains("stageDisplay")) {

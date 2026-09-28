@@ -340,6 +340,24 @@ bool PresentationCore::GetGlobalMute() const {
         return VLCBasePlayer::GetDefaultHwDecoder();
     }
 
+    void PresentationCore::SetVLCVideoOutput(const std::string& vout) {
+        VLCBasePlayer::SetDefaultVideoOutput(vout);
+    }
+    std::string PresentationCore::GetVLCVideoOutput() const {
+        return VLCBasePlayer::GetDefaultVideoOutput();
+    }
+
+    void PresentationCore::SetVLCDeinterlace(const std::string& deint) {
+        VLCBasePlayer::SetDefaultDeinterlace(deint);
+    }
+    std::string PresentationCore::GetVLCDeinterlace() const {
+        return VLCBasePlayer::GetDefaultDeinterlace();
+    }
+
+    bool PresentationCore::IsActiveNativeVideo() const {
+        return m_Impl ? m_Impl->background.IsActiveNative() : false;
+    }
+
     // NOTA multi-monitor: cada setter de aca abajo, ademas de aplicar al
     // primario (compositeFX), tambien aplica el mismo valor a CADA instancia
     // de m_Impl->extraCompositeFX (monitores de salida extra) -- asi un
@@ -1746,14 +1764,17 @@ void PresentationCore::SetNextText(const std::string& text) {
     }
 
     void PresentationCore::SetTargetMonitor(int index) {
-        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
-        m_State.targetMonitorIndex = index;
-        // Refresca los monitores adicionales desde Settings en el mismo
-        // golpe -- este es el unico punto donde arranca la proyeccion
-        // publica, asi que no hace falta que cada llamador (ToggleAudience,
-        // MonitorQueueEngine) se acuerde de hacerlo por su cuenta.
-        m_State.extraTargetMonitors =
-            ProyecThor::Settings::SettingsManager::Get().GetSettings().projection.extraMonitors;
+        bool projecting = false;
+        {
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+            m_State.targetMonitorIndex = index;
+            m_State.extraTargetMonitors =
+                ProyecThor::Settings::SettingsManager::Get().GetSettings().projection.extraMonitors;
+            projecting = m_State.isProjecting;
+        }
+        if (m_Impl) {
+            m_Impl->background.SetPubliclyLive(projecting, index);
+        }
     }
 
     void PresentationCore::SetStaging(bool active, int monitorIndex) {

@@ -66,16 +66,22 @@ void* NativeVideoOutputWindow::CreateHidden(int monitorIndex)
     int monitorCount = 0;
     GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
     if (monitorIndex < 0 || monitorIndex >= monitorCount) {
-        std::cerr << "[NativeVideoOutputWindow] Indice de monitor invalido: " << monitorIndex << "\n";
-        return nullptr;
+        monitorIndex = 0;
     }
 
-    GLFWmonitor* target = monitors[monitorIndex];
+    GLFWmonitor* target = (monitors && monitorCount > 0) ? monitors[monitorIndex] : nullptr;
+    if (!target) return nullptr;
+
     const GLFWvidmode* vm = glfwGetVideoMode(target);
     if (!vm) return nullptr;
 
     int monX = 0, monY = 0;
     glfwGetMonitorPos(target, &monX, &monY);
+
+    m_MonX   = monX;
+    m_MonY   = monY;
+    m_Width  = vm->width;
+    m_Height = vm->height;
 
     if (!m_Window)
     {
@@ -85,6 +91,7 @@ void* NativeVideoOutputWindow::CreateHidden(int monitorIndex)
         glfwWindowHint(GLFW_DECORATED,     GLFW_FALSE);
         glfwWindowHint(GLFW_FLOATING,      GLFW_TRUE);
         glfwWindowHint(GLFW_RESIZABLE,     GLFW_FALSE);
+        glfwWindowHint(GLFW_AUTO_ICONIFY,  GLFW_FALSE);
         glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_FALSE);
         glfwWindowHint(GLFW_VISIBLE,       GLFW_FALSE);
 
@@ -100,13 +107,21 @@ void* NativeVideoOutputWindow::CreateHidden(int monitorIndex)
             return nullptr;
         }
 
-        // Pintar apenas se crea: nunca debe llegar a mostrarse (ni
-        // siquiera un frame) con el fondo blanco por defecto.
+        // Pintar apenas se crea: nunca debe llegar a mostrarse con el fondo blanco por defecto.
         PaintWindowBlack(m_Window);
     }
 
     glfwSetWindowPos(m_Window, monX, monY);
     glfwSetWindowSize(m_Window, vm->width, vm->height);
+
+#ifndef _WIN32
+    Display* dpy = glfwGetX11Display();
+    ::Window xwin = glfwGetX11Window(m_Window);
+    if (dpy && xwin) {
+        XMoveResizeWindow(dpy, xwin, monX, monY, vm->width, vm->height);
+        XFlush(dpy);
+    }
+#endif
 
 #ifdef _WIN32
     return static_cast<void*>(glfwGetWin32Window(m_Window));
@@ -126,6 +141,19 @@ void NativeVideoOutputWindow::Reveal()
 {
     if (!m_Window) return;
     glfwShowWindow(m_Window);
+    glfwSetWindowPos(m_Window, m_MonX, m_MonY);
+    glfwSetWindowSize(m_Window, m_Width, m_Height);
+
+#ifndef _WIN32
+    Display* dpy = glfwGetX11Display();
+    ::Window xwin = glfwGetX11Window(m_Window);
+    if (dpy && xwin) {
+        XMoveResizeWindow(dpy, xwin, m_MonX, m_MonY, m_Width, m_Height);
+        XRaiseWindow(dpy, xwin);
+        XFlush(dpy);
+    }
+#endif
+
     m_Visible = true;
 }
 

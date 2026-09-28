@@ -1482,7 +1482,7 @@ void UIManager::ToggleAudience(bool active)
         int monitorCount = 0;
         glfwGetMonitors(&monitorCount);
         int monitorIndex = std::clamp(
-            settings.projection.targetMonitor < 0 ? 1 : settings.projection.targetMonitor,
+            settings.projection.targetMonitor < 0 ? (monitorCount > 1 ? 1 : 0) : settings.projection.targetMonitor,
             0, std::max(0, monitorCount - 1));
 
         core.SetTargetMonitor(monitorIndex);

@@ -52,6 +52,10 @@ public:
 private:
     GLFWwindow* m_Window  = nullptr;
     bool        m_Visible = false;
+    int         m_MonX    = 0;
+    int         m_MonY    = 0;
+    int         m_Width   = 1920;
+    int         m_Height  = 1080;
 };
 
 } // namespace ProyecThor::Core
