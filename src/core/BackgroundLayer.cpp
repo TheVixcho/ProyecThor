@@ -234,35 +234,11 @@ void main() {
         // el .h. Corre siempre, sin importar el motor actual.
         PollNativeReveal();
 
-        // Contenido activo por motor nativo: Active() reproduce el mismo video
-        // en silencio para mantener su textura OpenGL actualizada y alimentar
-        // la Vista en Vivo (ViewPanel).
+        // Contenido activo por motor nativo: el reproductor nativo maneja
+        // su propia ventana y audio. Retornar inmediatamente para evitar
+        // decodificación redundante y llamadas continuas a PulseAudio/PipeWire.
         if (m_ActiveIsNative)
         {
-            Active().UpdateTexture();
-            Active().SetAudioActive(false);
-            Active().SetMute(true);
-            Active().SetVolume(0);
-
-            if (m_ActiveNative)
-            {
-                bool nativePaused = m_ActiveNative->player.IsPaused();
-                if (Active().IsPaused() != nativePaused)
-                    Active().SetPause(nativePaused);
-
-                double now = NowSeconds();
-                if (now - m_LastNativeSyncTime > 1.5)
-                {
-                    m_LastNativeSyncTime = now;
-                    int64_t nativeTime = m_ActiveNative->player.GetTime();
-                    int64_t activeTime = Active().GetTime();
-                    int64_t len = m_ActiveNative->player.GetLength();
-                    if (len > 0 && std::abs(nativeTime - activeTime) > 1500)
-                    {
-                        Active().SetPosition(static_cast<float>(nativeTime) / static_cast<float>(len));
-                    }
-                }
-            }
             return;
         }
 
@@ -853,16 +829,9 @@ void main() {
             m_IsVideo             = true;
             m_ActiveIsNative      = true;
 
-            // Reproducir el video en Active() (OpenGL) en modo 100% silencioso
-            // para proveer la textura en tiempo real a ViewPanel (Vista en Vivo).
-            Active().Play(path, /*loop=*/!allowAudio, /*startMuted=*/true);
-            Active().SetAudioActive(false);
-            Active().SetMute(true);
-            Active().SetVolume(0);
-
-            Standby().SetAudioActive(false);
-            Standby().SetMute(true);
-            Standby().SetVolume(0);
+            // Detener reproductores OpenGL: el motor nativo de VLC toma control exclusivo
+            // de video y audio. Elimina decodificación dual en paralelo y conflictos de PulseAudio.
+            Active().Stop();
             Standby().Stop();
 
             m_SwapPending        = false;
@@ -891,7 +860,10 @@ void main() {
             if (!m_AudioDeviceId.empty())
                 fresh->player.SetAudioDevice(m_AudioDeviceId);
 
-            void* handle = m_IsLiveToPublic ? fresh->window.CreateHidden(m_LastKnownMonitorIndex) : nullptr;
+            // Mapear y mostrar la ventana en negro inmediatamente:
+            // en Linux X11 libVLC requiere que la ventana este mapeada para inicializar
+            // XVideo/GLX sin errores de BadDrawable/XvBadPort.
+            void* handle = m_IsLiveToPublic ? fresh->window.Show(m_LastKnownMonitorIndex) : nullptr;
             VLCBasePlayer* newPlayerPtr = &fresh->player;
 
             // Adjuntar la ventana tiene que pasar ANTES de Play() (la doc
@@ -1402,14 +1374,16 @@ void main() {
             bool activeAudioAllowed = m_ContentAllowsAudio.load(std::memory_order_relaxed);
             bool muted = m_TargetMuted.load(std::memory_order_relaxed);
             int volume = m_TargetVolume.load(std::memory_order_relaxed);
-            Active().SetAudioActive(activeAudioAllowed);
-            Active().SetMute(muted || !activeAudioAllowed);
-            Active().SetVolume(activeAudioAllowed && !muted ? volume : 0);
-            Standby().SetAudioActive(false);
-            Standby().SetMute(true);
-            Standby().SetVolume(0);
-
-            if (m_ActiveNative)
+            if (!m_ActiveIsNative)
+            {
+                Active().SetAudioActive(activeAudioAllowed);
+                Active().SetMute(muted || !activeAudioAllowed);
+                Active().SetVolume(activeAudioAllowed && !muted ? volume : 0);
+                Standby().SetAudioActive(false);
+                Standby().SetMute(true);
+                Standby().SetVolume(0);
+            }
+            else if (m_ActiveNative)
             {
                 m_ActiveNative->player.SetAudioActive(activeAudioAllowed);
                 m_ActiveNative->player.SetMute(muted || !activeAudioAllowed);

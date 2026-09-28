@@ -103,7 +103,7 @@ void* NativeVideoOutputWindow::CreateHidden(int monitorIndex)
         glfwWindowHint(GLFW_RESIZABLE,     wantFullscreen ? GLFW_FALSE : GLFW_TRUE);
         glfwWindowHint(GLFW_AUTO_ICONIFY,  GLFW_FALSE);
         glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_FALSE);
-        glfwWindowHint(GLFW_VISIBLE,       GLFW_FALSE);
+        glfwWindowHint(GLFW_VISIBLE,       GLFW_TRUE);
 
         m_Window = glfwCreateWindow(m_Width, m_Height,
                                     "ProyecThor - Video (VLC)", nullptr, nullptr);
@@ -117,7 +117,7 @@ void* NativeVideoOutputWindow::CreateHidden(int monitorIndex)
             return nullptr;
         }
 
-        // Pintar apenas se crea: nunca debe llegar a mostrarse con el fondo blanco por defecto.
+        // Pintar apenas se crea: fondo negro inmediato (evita cualquier flash blanco).
         PaintWindowBlack(m_Window);
     }
 

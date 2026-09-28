@@ -555,6 +555,10 @@ void VLCBasePlayer::InitVLC()
         argStorage.push_back("--avcodec-threads=" + std::to_string(m_DecodeThreads));
     }
 
+    if (m_ForceSilent.load(std::memory_order_relaxed)) {
+        argStorage.push_back("--no-audio");
+    }
+
     std::string hw = s_HwDecoder.empty() ? "any" : s_HwDecoder;
     if (!m_UseHardwareDecode || hw == "none") {
         argStorage.push_back("--avcodec-hw=none");
@@ -969,11 +973,12 @@ bool VLCBasePlayer::ConsumeHadError()
 void VLCBasePlayer::SetMute(bool mute)
 {
     bool effectiveMute = mute || m_ForceSilent.load(std::memory_order_relaxed);
+    bool prev = m_Muted.exchange(effectiveMute, std::memory_order_relaxed);
+    if (prev == effectiveMute) return;
 
     std::cerr << "[VLC#" << m_InstanceId << "] SetMute(" << (mute ? "true" : "false")
               << ") -> effectiveMute=" << (effectiveMute ? "true" : "false") << "\n";
 
-    m_Muted.store(effectiveMute, std::memory_order_relaxed);
 #ifdef _WIN32
     if (effectiveMute && m_AudioCtx)
     {
@@ -1000,11 +1005,12 @@ void VLCBasePlayer::SetMute(bool mute)
 void VLCBasePlayer::SetAudioActive(bool active)
 {
     bool effectiveActive = active && !m_ForceSilent.load(std::memory_order_relaxed);
+    bool prev = m_AudioActive.exchange(effectiveActive, std::memory_order_relaxed);
+    if (prev == effectiveActive) return;
 
     std::cerr << "[VLC#" << m_InstanceId << "] SetAudioActive(" << (active ? "true" : "false")
               << ") -> effectiveActive=" << (effectiveActive ? "true" : "false") << "\n";
 
-    m_AudioActive.store(effectiveActive, std::memory_order_relaxed);
 #ifdef _WIN32
     if (!effectiveActive && m_AudioCtx)
     {
@@ -1036,7 +1042,9 @@ void VLCBasePlayer::SetVolume(int volume)
 
     float multiplier = static_cast<float>(volume) / 100.0f;
     if (multiplier < 0.0f) multiplier = 0.0f;
-    m_VolumeMultiplier.store(multiplier, std::memory_order_relaxed);
+    float prev = m_VolumeMultiplier.exchange(multiplier, std::memory_order_relaxed);
+    if (std::abs(prev - multiplier) < 0.005f) return;
+
 #ifndef _WIN32
     // En Linux el volumen real lo aplica libVLC sobre su salida nativa.
     if (m_MediaPlayer)
@@ -1052,7 +1060,9 @@ void VLCBasePlayer::SetSoftwareVolume(float percent)
 
     float multiplier = percent / 100.0f;
     if (multiplier < 0.0f) multiplier = 0.0f;
-    m_VolumeMultiplier.store(multiplier, std::memory_order_relaxed);
+    float prev = m_VolumeMultiplier.exchange(multiplier, std::memory_order_relaxed);
+    if (std::abs(prev - multiplier) < 0.005f) return;
+
 #ifndef _WIN32
     if (m_MediaPlayer)
         libvlc_audio_set_volume(m_MediaPlayer, static_cast<int>(percent));
