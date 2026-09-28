@@ -561,7 +561,16 @@ void VLCBasePlayer::InitVLC()
     } else if (hw != "any") {
         argStorage.push_back("--avcodec-hw=" + hw);
     } else {
+#ifndef _WIN32
+        if (!m_NativeWindowOutput) {
+            // Software decode para vmem en Linux: elimina completamente el bug de stride de VA-API en memoria (líneas verdes)
+            argStorage.push_back("--avcodec-hw=none");
+        } else {
+            argStorage.push_back("--avcodec-hw=any");
+        }
+#else
         argStorage.push_back("--avcodec-hw=any");
+#endif
     }
 
     // Salida de video (--vout) SOLO para reproductores que dibujan en ventana nativa
@@ -825,9 +834,32 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
         libvlc_media_add_option(media, "input-repeat=65535");
 
     std::string hw = s_HwDecoder.empty() ? "any" : s_HwDecoder;
-    if (!m_UseHardwareDecode) hw = "none";
+    if (!m_UseHardwareDecode || hw == "none") {
+        hw = "none";
+    } else if (hw == "any" || hw.empty()) {
+#ifndef _WIN32
+        if (!m_NativeWindowOutput) {
+            hw = "none"; // En Linux vmem, evitar líneas verdes de VA-API
+        }
+#endif
+    }
     std::string hwOpt = ":avcodec-hw=" + hw;
     libvlc_media_add_option(media, hwOpt.c_str());
+
+    // Pasar salida de video a media si es ventana nativa
+    if (m_NativeWindowOutput && !s_VideoOutput.empty() && s_VideoOutput != "auto" && s_VideoOutput != "any") {
+        std::string voutOpt = ":vout=" + s_VideoOutput;
+        libvlc_media_add_option(media, voutOpt.c_str());
+    }
+
+    // Pasar desentrelazado a media
+    if (!s_Deinterlace.empty() && s_Deinterlace != "discard" && s_Deinterlace != "none") {
+        libvlc_media_add_option(media, ":deinterlace=1");
+        std::string deintMode = ":deinterlace-mode=" + s_Deinterlace;
+        libvlc_media_add_option(media, deintMode.c_str());
+    } else {
+        libvlc_media_add_option(media, ":deinterlace=0");
+    }
 
     {
         std::lock_guard<std::mutex> lock(m_MediaSwapMutex);
@@ -1306,6 +1338,28 @@ void VLCBasePlayer::DetachNativeWindow()
 #else
     libvlc_media_player_set_xwindow(m_MediaPlayer, 0);
 #endif
+}
+
+void VLCBasePlayer::Reinit()
+{
+    std::string prevPath = m_CurrentPath;
+    bool wasPlaying = m_VlcIsPlaying.load(std::memory_order_relaxed);
+    int64_t prevTime = GetTime();
+    bool prevMuted = m_Muted.load(std::memory_order_relaxed);
+
+    DestroyVLC();
+    InitVLC();
+    CreatePersistentPlayer();
+
+    if (!prevPath.empty()) {
+        m_CurrentPath.clear();
+        if (wasPlaying) {
+            Play(prevPath, /*loop=*/false, prevMuted);
+            if (prevTime > 0 && m_MediaPlayer) {
+                libvlc_media_player_set_time(m_MediaPlayer, prevTime);
+            }
+        }
+    }
 }
 
 } // namespace ProyecThor::Core

@@ -179,6 +179,7 @@ namespace ProyecThor::Core {
 
         bool isProjecting       = false;
         int  targetMonitorIndex = 0;
+        bool windowFullscreen   = true;
 
         // Monitores de salida publica ADICIONALES (opcional) -- espejo
         // runtime de Settings::ProjectionSettings::extraMonitors, poblado en
@@ -396,6 +397,14 @@ void SetGlobalMute(bool mute);
         std::string GetVLCDeinterlace() const;
 
         bool        IsActiveNativeVideo() const;
+
+        void        SetWindowFullscreen(bool fullscreen);
+        bool        GetWindowFullscreen() const;
+
+        void        SetVLCNativeForFondos(bool enable);
+        bool        GetVLCNativeForFondos() const;
+
+        void        ReloadVLCPlayers();
 
         // ── Post-proceso del composite completo de "ProjectorLive" (fondo +
         //    overlays + texto + anuncios + captura) — ver CompositePostChain.h

@@ -34,6 +34,8 @@ namespace ProyecThor::Core {
         GLFWmonitor* target = nullptr;
         if (monitorIndex >= 0 && monitorIndex < monitorCount) {
             target = monitors[monitorIndex];
+        } else if (monitors && monitorCount > 0) {
+            target = monitors[0];
         }
 
         glfwDefaultWindowHints();
@@ -51,11 +53,12 @@ namespace ProyecThor::Core {
         int winW = 1280;
         int winH = 720;
         int monX = 0, monY = 0;
+        bool wantFullscreen = PresentationCore::Get().GetWindowFullscreen();
         bool isFullscreenOutput = false;
 
-        if (target != nullptr && (monitorCount > 1 || monitorIndex > 0))
+        if (target != nullptr && wantFullscreen)
         {
-            // Salida secundaria en monitor fisico dedicado (pantalla completa)
+            // Salida en pantalla completa en el monitor fisico dedicado
             isFullscreenOutput = true;
             const GLFWvidmode* vm = glfwGetVideoMode(target);
             if (vm && vm->width > 0 && vm->height > 0) {
@@ -82,16 +85,27 @@ namespace ProyecThor::Core {
         }
         else
         {
-            // Sistema de un solo monitor (o vista previa de operador): ventana flotante
+            // Modo Ventana (flotante / redimensionable para pruebas o OBS)
             winW = 960;
             winH = 540;
+            if (target) {
+                glfwGetMonitorPos(target, &monX, &monY);
+                const GLFWvidmode* vm = glfwGetVideoMode(target);
+                if (vm) {
+                    monX += (vm->width - winW) / 2;
+                    monY += (vm->height - winH) / 2;
+                }
+            }
             glfwWindowHint(GLFW_DECORATED,     GLFW_TRUE);
-            glfwWindowHint(GLFW_FLOATING,      GLFW_TRUE);
+            glfwWindowHint(GLFW_FLOATING,      GLFW_FALSE);
             glfwWindowHint(GLFW_RESIZABLE,     GLFW_TRUE);
             glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_TRUE);
 
-            std::string windowTitle = title + " (Vista Previa)";
+            std::string windowTitle = title;
             m_Window = glfwCreateWindow(winW, winH, windowTitle.c_str(), nullptr, sharedContext);
+            if (m_Window) {
+                glfwSetWindowPos(m_Window, monX, monY);
+            }
         }
 
         if (!m_Window) {
@@ -106,8 +120,9 @@ namespace ProyecThor::Core {
                     if (m_Window) glfwSetWindowPos(m_Window, monX, monY);
                 }
             } else {
-                std::string windowTitle = title + " (Vista Previa)";
+                std::string windowTitle = title;
                 m_Window = glfwCreateWindow(winW, winH, windowTitle.c_str(), nullptr, sharedContext);
+                if (m_Window) glfwSetWindowPos(m_Window, monX, monY);
             }
         }
 

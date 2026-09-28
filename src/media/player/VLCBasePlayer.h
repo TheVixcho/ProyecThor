@@ -142,6 +142,9 @@ namespace ProyecThor::Core {
         void AttachNativeWindow(void* nativeHandle);
         void DetachNativeWindow();
 
+        // Reinicia la instancia y el reproductor de libVLC (aplica nuevos ajustes de decoder/vout)
+        void Reinit();
+
         // Enumera los dispositivos de salida de audio disponibles.
         // - Windows: enumera dispositivos WinMM reales via
         //   waveOutGetNumDevs()/waveOutGetDevCaps(), incluyendo siempre

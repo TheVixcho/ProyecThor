@@ -112,6 +112,37 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
                 HelpTooltip("Elige en que pantalla se mostrara la proyeccion.\n"
                             "Se recomienda usar la pantalla secundaria (indice 1 o superior).");
 
+                ImGui::Spacing();
+                ImGui::TextUnformatted("Modo de Ventana de Proyección");
+                float wDisp = ImGui::GetContentRegionAvail().x;
+                float btnWDisp = (wDisp - 6.0f) * 0.5f;
+
+                if (QualityModeButton("dispFull", "Pantalla Completa", p.windowFullscreen, btnWDisp)) {
+                    p.windowFullscreen = true;
+                    Core::PresentationCore::Get().SetWindowFullscreen(true);
+#ifndef _WIN32
+                    if (Core::PresentationCore::Get().IsProjecting()) {
+                        Core::PresentationCore::Get().DestroyProjectorWindow();
+                        Core::PresentationCore::Get().CreateProjectorWindow(p.targetMonitor);
+                    }
+#endif
+                    changed = true;
+                }
+                ImGui::SameLine(0.0f, 6.0f);
+                if (QualityModeButton("dispWin", "Modo Ventana (Flotante)", !p.windowFullscreen, btnWDisp)) {
+                    p.windowFullscreen = false;
+                    Core::PresentationCore::Get().SetWindowFullscreen(false);
+#ifndef _WIN32
+                    if (Core::PresentationCore::Get().IsProjecting()) {
+                        Core::PresentationCore::Get().DestroyProjectorWindow();
+                        Core::PresentationCore::Get().CreateProjectorWindow(p.targetMonitor);
+                    }
+#endif
+                    changed = true;
+                }
+                HelpTooltip("Pantalla Completa (Recomendado): Cubre por completo el monitor seleccionado sin bordes ni barra de título.\n\n"
+                            "Modo Ventana: Abre la proyección en una ventana flotante redimensionable con barra de título, ideal para probar en un solo monitor o capturar la ventana en OBS.");
+
                 // Monitores ADICIONALES (opcional) -- todos muestran
                 // exactamente lo mismo que el monitor principal de arriba.
                 // Pensado para quien maneja varias pantallas de salida al
@@ -303,6 +334,7 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
                     if (ImGui::Selectable(kVOutOpts[i].label, isSelected)) {
                         p.vlcVideoOutput = kVOutOpts[i].id;
                         Core::PresentationCore::Get().SetVLCVideoOutput(p.vlcVideoOutput);
+                        Core::PresentationCore::Get().ReloadVLCPlayers();
                         changed = true;
                     }
                     if (ImGui::IsItemHovered() && kVOutOpts[i].desc) {
@@ -427,6 +459,7 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
                     if (ImGui::Selectable(kHwOpts[i].label, isSelected)) {
                         p.vlcHardwareDecoder = kHwOpts[i].id;
                         Core::PresentationCore::Get().SetVLCHardwareDecoder(p.vlcHardwareDecoder);
+                        Core::PresentationCore::Get().ReloadVLCPlayers();
                         changed = true;
                     }
                     if (ImGui::IsItemHovered() && kHwOpts[i].desc) {
@@ -451,6 +484,15 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
                         "• VDPAU: Utilizado por GPUs NVIDIA con drivers privativos.\n\n"
 #endif
                         "Nota: Se aplica al reproducir el siguiente vídeo o cambiar de fondo.");
+
+            ImGui::Spacing();
+            if (ImGui::Checkbox("Forzar ventana nativa VLC también en Fondos de bucle", &p.vlcNativeForFondos)) {
+                Core::PresentationCore::Get().SetVLCNativeForFondos(p.vlcNativeForFondos);
+                changed = true;
+            }
+            ImGui::SameLine();
+            HelpTooltip("Por defecto, los Fondos de bucle se renderizan a través del compositor gráfico para permitir letras de canciones y versículos bíblicos superpuestos encima.\n\n"
+                        "Si activas esta opción, los Fondos se reproducirán también directamente en la ventana nativa acelerada de VLC con la salida elegida (ej. XVideo), eliminando cualquier procesamiento gráfico intermedio. Nota: mientras esta opción esté activa, las letras y textos en vivo no se superpondrán sobre el fondo de vídeo.");
 
             ImGui::Spacing();
 

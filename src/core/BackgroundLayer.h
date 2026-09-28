@@ -211,6 +211,7 @@ namespace ProyecThor::Core {
         bool m_ActiveIsNative  = false;
         int  m_LastKnownMonitorIndex = -1;
         bool m_ForceSilentAudio = false; // recordado para poder crear NativePlayback mas adelante
+        bool m_VLCNativeForFondos = false;
 
         // El par en uso ahora mismo (nullptr si nunca se cargo nada por
         // este motor todavia). Los que ya se retiraron (ver arriba) viven
@@ -357,6 +358,9 @@ namespace ProyecThor::Core {
         // CommitPrefetch() real.
         void SetUseNativeEngine(bool useNative) { m_UseNativeEngine = useNative; }
         bool GetUseNativeEngine() const { return m_UseNativeEngine; }
+        void SetVLCNativeForFondos(bool enable) { m_VLCNativeForFondos = enable; }
+        bool GetVLCNativeForFondos() const { return m_VLCNativeForFondos; }
+        void ReloadPlayers();
         bool IsActiveNative() const { return m_ActiveIsNative && m_IsLiveToPublic && !m_NativeRevealPending; }
         void* GetProcessedTexture(int targetW, int targetH);
         void* GetTextureID();

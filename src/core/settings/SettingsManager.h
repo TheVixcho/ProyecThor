@@ -25,6 +25,7 @@ namespace ProyecThor::Settings {
     // ── Proyección ───────────────────────────────────────────────────────
     struct ProjectionSettings {
         int   targetMonitor   = -1;
+        bool  windowFullscreen = true; // true: Pantalla Completa (sin bordes), false: Modo Ventana (flotante con bordes)
 
         // Monitores de salida publica ADICIONALES (opcional) -- todos
         // muestran exactamente lo mismo que targetMonitor. Ver
@@ -200,6 +201,9 @@ namespace ProyecThor::Settings {
 
         // ── Filtro de desentrelazado para libVLC ("discard", "auto", "yadif", "yadif2x", "blend", "linear", "bob")
         std::string vlcDeinterlace = "discard";
+
+        // ── Usar ventana nativa VLC también para fondos de bucle (sin overlays de texto)
+        bool vlcNativeForFondos = false;
     };
 
     // ── Audio ────────────────────────────────────────────────────────────

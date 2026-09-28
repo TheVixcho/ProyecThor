@@ -833,7 +833,7 @@ void main() {
         // siempre necesitan overlays/texto encima, asi que siempre van
         // por OpenGL sin importar este ajuste (ver comentario del
         // miembro m_UseNativeEngine en el .h).
-        if (m_UseNativeEngine && allowAudio)
+        if (m_UseNativeEngine && (allowAudio || m_VLCNativeForFondos))
         {
             // Sin crossfade/standby en este motor: corte directo.
             m_IsVideo             = true;
@@ -841,7 +841,7 @@ void main() {
 
             // Reproducir el video en Active() (OpenGL) en modo 100% silencioso
             // para proveer la textura en tiempo real a ViewPanel (Vista en Vivo).
-            Active().Play(path, /*loop=*/false, /*startMuted=*/true);
+            Active().Play(path, /*loop=*/!allowAudio, /*startMuted=*/true);
             Active().SetAudioActive(false);
             Active().SetMute(true);
             Active().SetVolume(0);
@@ -1064,7 +1064,7 @@ void main() {
 
         // Sin prefetch en el motor nativo (ver Prefetch()): cae directo a
         // un corte simple, igual que si nunca se hubiera precargado nada.
-        if (m_UseNativeEngine && allowAudio) { SetVideo(path, allowAudio); return; }
+        if (m_UseNativeEngine && (allowAudio || m_VLCNativeForFondos)) { SetVideo(path, allowAudio); return; }
 
         // Esto va por OpenGL: mismo apagado del nativo que en SetVideo(),
         // por si el contenido activo anterior venia de ahi.
@@ -1488,6 +1488,15 @@ void main() {
     {
         m_PlayerA.UnblockPath();
         m_PlayerB.UnblockPath();
+    }
+
+    void BackgroundLayer::ReloadPlayers()
+    {
+        m_PlayerA.Reinit();
+        m_PlayerB.Reinit();
+        if (m_ActiveNative) {
+            m_ActiveNative->player.Reinit();
+        }
     }
 
 } // namespace ProyecThor::Core

@@ -722,10 +722,13 @@ void SettingsManager::ApplyProjection() {
     core.SetZonedDistortionFeather(p.zonedDistortionFeather);
     core.SetFillBlurEnabled(p.fillBlurEnabled);
     core.SetFillBlurBrightness(p.fillBlurBrightness);
+    core.SetWindowFullscreen(p.windowFullscreen);
+    core.SetVLCNativeForFondos(p.vlcNativeForFondos);
     core.SetVideoRenderEngine(1);
     core.SetVLCHardwareDecoder(p.vlcHardwareDecoder);
     core.SetVLCVideoOutput(p.vlcVideoOutput);
     core.SetVLCDeinterlace(p.vlcDeinterlace);
+    core.ReloadVLCPlayers();
 }
 
 // ── Tema ─────────────────────────────────────────────────────────────────
@@ -944,6 +947,8 @@ void SettingsManager::SaveSettings() {
     j["projection"]["zonedDistortionFeather"]       = p.zonedDistortionFeather;
     j["projection"]["fillBlurEnabled"]      = p.fillBlurEnabled;
     j["projection"]["fillBlurBrightness"]   = p.fillBlurBrightness;
+    j["projection"]["windowFullscreen"]     = p.windowFullscreen;
+    j["projection"]["vlcNativeForFondos"]   = p.vlcNativeForFondos;
     j["projection"]["videoRenderEngine"]    = 1;
     j["projection"]["vlcHardwareDecoder"]   = p.vlcHardwareDecoder;
     j["projection"]["vlcVideoOutput"]       = p.vlcVideoOutput;
@@ -1253,6 +1258,8 @@ void SettingsManager::LoadSettings() {
             p.zonedDistortionFeather       = jp.value("zonedDistortionFeather",       0.35f);
             p.fillBlurEnabled       = jp.value("fillBlurEnabled",       false);
             p.fillBlurBrightness    = jp.value("fillBlurBrightness",    0.6f);
+            p.windowFullscreen      = jp.value("windowFullscreen",      true);
+            p.vlcNativeForFondos    = jp.value("vlcNativeForFondos",    false);
             p.videoRenderEngine     = 1;
             p.vlcHardwareDecoder    = jp.value("vlcHardwareDecoder",    "any");
             p.vlcVideoOutput        = jp.value("vlcVideoOutput",        "auto");

@@ -1,4 +1,5 @@
 #include "NativeVideoOutputWindow.h"
+#include "core/PresentationCore.h"
 
 #ifdef _WIN32
 #define GLFW_EXPOSE_NATIVE_WIN32
@@ -78,24 +79,32 @@ void* NativeVideoOutputWindow::CreateHidden(int monitorIndex)
     int monX = 0, monY = 0;
     glfwGetMonitorPos(target, &monX, &monY);
 
-    m_MonX   = monX;
-    m_MonY   = monY;
-    m_Width  = vm->width;
-    m_Height = vm->height;
+    bool wantFullscreen = PresentationCore::Get().GetWindowFullscreen();
+    if (!wantFullscreen) {
+        m_Width  = 960;
+        m_Height = 540;
+        m_MonX   = monX + (vm->width - m_Width) / 2;
+        m_MonY   = monY + (vm->height - m_Height) / 2;
+    } else {
+        m_MonX   = monX;
+        m_MonY   = monY;
+        m_Width  = vm->width;
+        m_Height = vm->height;
+    }
 
     if (!m_Window)
     {
         // GLFW_NO_API: sin contexto GL — VLC dibuja directo en la
         // superficie nativa via AttachNativeWindow().
         glfwWindowHint(GLFW_CLIENT_API,    GLFW_NO_API);
-        glfwWindowHint(GLFW_DECORATED,     GLFW_FALSE);
-        glfwWindowHint(GLFW_FLOATING,      GLFW_TRUE);
-        glfwWindowHint(GLFW_RESIZABLE,     GLFW_FALSE);
+        glfwWindowHint(GLFW_DECORATED,     wantFullscreen ? GLFW_FALSE : GLFW_TRUE);
+        glfwWindowHint(GLFW_FLOATING,      wantFullscreen ? GLFW_TRUE : GLFW_FALSE);
+        glfwWindowHint(GLFW_RESIZABLE,     wantFullscreen ? GLFW_FALSE : GLFW_TRUE);
         glfwWindowHint(GLFW_AUTO_ICONIFY,  GLFW_FALSE);
         glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_FALSE);
         glfwWindowHint(GLFW_VISIBLE,       GLFW_FALSE);
 
-        m_Window = glfwCreateWindow(vm->width, vm->height,
+        m_Window = glfwCreateWindow(m_Width, m_Height,
                                     "ProyecThor - Video (VLC)", nullptr, nullptr);
         glfwDefaultWindowHints();
 
@@ -111,14 +120,14 @@ void* NativeVideoOutputWindow::CreateHidden(int monitorIndex)
         PaintWindowBlack(m_Window);
     }
 
-    glfwSetWindowPos(m_Window, monX, monY);
-    glfwSetWindowSize(m_Window, vm->width, vm->height);
+    glfwSetWindowPos(m_Window, m_MonX, m_MonY);
+    glfwSetWindowSize(m_Window, m_Width, m_Height);
 
 #ifndef _WIN32
     Display* dpy = glfwGetX11Display();
     ::Window xwin = glfwGetX11Window(m_Window);
     if (dpy && xwin) {
-        XMoveResizeWindow(dpy, xwin, monX, monY, vm->width, vm->height);
+        XMoveResizeWindow(dpy, xwin, m_MonX, m_MonY, m_Width, m_Height);
         XFlush(dpy);
     }
 #endif

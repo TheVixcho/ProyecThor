@@ -358,6 +358,28 @@ bool PresentationCore::GetGlobalMute() const {
         return m_Impl ? m_Impl->background.IsActiveNative() : false;
     }
 
+    void PresentationCore::SetWindowFullscreen(bool fullscreen) {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        m_State.windowFullscreen = fullscreen;
+    }
+    bool PresentationCore::GetWindowFullscreen() const {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        return m_State.windowFullscreen;
+    }
+
+    void PresentationCore::SetVLCNativeForFondos(bool enable) {
+        if (m_Impl) m_Impl->background.SetVLCNativeForFondos(enable);
+    }
+    bool PresentationCore::GetVLCNativeForFondos() const {
+        return m_Impl ? m_Impl->background.GetVLCNativeForFondos() : false;
+    }
+
+    void PresentationCore::ReloadVLCPlayers() {
+        if (m_Impl) {
+            m_Impl->background.ReloadPlayers();
+        }
+    }
+
     // NOTA multi-monitor: cada setter de aca abajo, ademas de aplicar al
     // primario (compositeFX), tambien aplica el mismo valor a CADA instancia
     // de m_Impl->extraCompositeFX (monitores de salida extra) -- asi un
