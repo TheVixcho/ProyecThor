@@ -56,6 +56,7 @@ private:
     int         m_MonY    = 0;
     int         m_Width   = 1920;
     int         m_Height  = 1080;
+    int         m_MonitorIndex = 0;
 };
 
 } // namespace ProyecThor::Core

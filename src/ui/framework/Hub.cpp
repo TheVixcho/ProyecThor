@@ -303,6 +303,13 @@ static void DrawSectionHeader(const char* title, float width) {
     ImGui::Dummy(ImVec2(0.0f, 13.0f));
 }
 
+void Hub::RenderNovedadesStandalone() {
+    if (m_NovedadesOpen || m_IsUpdateModalOpen) {
+        RenderNovedadesPanel();
+        RenderUpdateDetailModal();
+    }
+}
+
 void Hub::RenderNovedadesPanel() {
     m_NovedadesAnim = m_NovedadesOpen ? 1.0f : 0.0f;
     if (!m_NovedadesOpen) return;

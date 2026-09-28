@@ -26,6 +26,10 @@ public:
     void ClearSettingsRequest()       { m_OpenSettingsRequested = false; }
     int  GetActiveTab()         const { return m_ActiveTab; }
 
+    void OpenNovedades()              { m_NovedadesOpen = true; }
+    bool IsNovedadesOpen()      const { return m_NovedadesOpen || m_IsUpdateModalOpen; }
+    void RenderNovedadesStandalone();
+
 private:
     // Layout de un solo flujo central de paneles, con las acciones principales
     // apiladas y las utilidades compactas debajo.

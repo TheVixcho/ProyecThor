@@ -279,7 +279,7 @@ private:
     int  m_WindowedX = 0, m_WindowedY = 0, m_WindowedW = 1280, m_WindowedH = 800;
 
     Hub           m_Hub;
-    WorkspaceMode m_Mode = WorkspaceMode::Hub;
+    WorkspaceMode m_Mode = WorkspaceMode::Projector;
 
     // Ver LibraryPanel::SetMediaOnlyMode -- se sincroniza cada frame en
     // RenderAll() segun si el preset activo (Settings::WorkspaceSettings::

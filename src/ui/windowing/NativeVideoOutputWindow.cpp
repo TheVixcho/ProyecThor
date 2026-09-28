@@ -69,6 +69,7 @@ void* NativeVideoOutputWindow::CreateHidden(int monitorIndex)
     if (monitorIndex < 0 || monitorIndex >= monitorCount) {
         monitorIndex = 0;
     }
+    m_MonitorIndex = monitorIndex;
 
     GLFWmonitor* target = (monitors && monitorCount > 0) ? monitors[monitorIndex] : nullptr;
     if (!target) return nullptr;
@@ -160,6 +161,22 @@ void NativeVideoOutputWindow::Reveal()
         bool wantFullscreen = PresentationCore::Get().GetWindowFullscreen();
         if (wantFullscreen) {
             ::Window root = DefaultRootWindow(dpy);
+
+            // 1. Asignar el monitor físico a KWin / EWMH vía _NET_WM_FULLSCREEN_MONITORS
+            Atom wmFullscreenMonitors = XInternAtom(dpy, "_NET_WM_FULLSCREEN_MONITORS", False);
+            XEvent xevMon = {};
+            xevMon.type = ClientMessage;
+            xevMon.xclient.window = xwin;
+            xevMon.xclient.message_type = wmFullscreenMonitors;
+            xevMon.xclient.format = 32;
+            xevMon.xclient.data.l[0] = m_MonitorIndex; // top
+            xevMon.xclient.data.l[1] = m_MonitorIndex; // bottom
+            xevMon.xclient.data.l[2] = m_MonitorIndex; // left
+            xevMon.xclient.data.l[3] = m_MonitorIndex; // right
+            xevMon.xclient.data.l[4] = 1;
+            XSendEvent(dpy, root, False, SubstructureRedirectMask | SubstructureNotifyMask, &xevMon);
+
+            // 2. Activar fullscreen y mantener encima
             Atom wmState = XInternAtom(dpy, "_NET_WM_STATE", False);
             Atom wmFullscreen = XInternAtom(dpy, "_NET_WM_STATE_FULLSCREEN", False);
             Atom wmAbove = XInternAtom(dpy, "_NET_WM_STATE_ABOVE", False);

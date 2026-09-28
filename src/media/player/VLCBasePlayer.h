@@ -141,6 +141,7 @@ namespace ProyecThor::Core {
         // instantaneo sobre un clip que ya esta reproduciendose.
         void AttachNativeWindow(void* nativeHandle);
         void DetachNativeWindow();
+        void* GetNativeWindowHandle() const { return m_NativeWindowHandle; }
 
         // Reinicia la instancia y el reproductor de libVLC (aplica nuevos ajustes de decoder/vout)
         void Reinit();

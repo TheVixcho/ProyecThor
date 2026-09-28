@@ -242,7 +242,7 @@ namespace ProyecThor::Settings {
         // ancho para el video.
         bool        showViewQuickActions = true;
         // Si es false, se inicia directo en modo Proyector tras la pantalla de carga (omite el Hub)
-        bool        openHubOnStartup     = true;
+        bool        openHubOnStartup     = false;
         // Boton opcional del Asistente de IA en la barra de herramientas inferior (toolbar).
         // Apagado por defecto para ahorrar espacio y botones innecesarios; activable en Espacio de trabajo > Ventanas.
         bool        showAIAssistantToolbar = false;

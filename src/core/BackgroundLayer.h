@@ -93,7 +93,7 @@ namespace ProyecThor::Core {
         // terminara, quedaba pisado por el valor viejo (bug real: video
         // quedaba mudo pese a haberse desmuteado).
         std::atomic<int>  m_TargetVolume{100};
-        std::atomic<bool> m_TargetMuted{true};
+        std::atomic<bool> m_TargetMuted{false};
 
         // ── Ecualizador en vivo (ver SetLiveEqualizer*) ──────────────────
         bool  m_TargetEqEnabled = false;

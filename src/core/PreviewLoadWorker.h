@@ -1,6 +1,7 @@
 #pragma once
 #include <atomic>
 #include <condition_variable>
+#include <deque>
 #include <functional>
 #include <mutex>
 #include <optional>
@@ -69,7 +70,7 @@ private:
     std::atomic<bool>                    m_Running{ false };
     std::mutex                           m_Mutex;
     std::condition_variable              m_Cv;
-    std::optional<std::function<void()>> m_Pending; // protegido por m_Mutex
+    std::deque<std::function<void()>>    m_Queue; // protegido por m_Mutex
 };
 
 } // namespace ProyecThor::Core

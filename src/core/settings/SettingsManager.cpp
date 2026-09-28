@@ -1485,7 +1485,7 @@ void SettingsManager::LoadSettings() {
             m_Settings.general.showRailLabels       = jg.value("showRailLabels",      false);
             m_Settings.general.showPerfPanel        = jg.value("showPerfPanel",       false);
             m_Settings.general.showViewQuickActions   = jg.value("showViewQuickActions",   true);
-            m_Settings.general.openHubOnStartup       = jg.value("openHubOnStartup",       true);
+            m_Settings.general.openHubOnStartup       = jg.value("openHubOnStartup",       false);
             m_Settings.general.showAIAssistantToolbar = jg.value("showAIAssistantToolbar", false);
             m_Settings.general.viewPanelDetached      = jg.value("viewPanelDetached",      false);
             m_Settings.general.quickNotesText         = jg.value("quickNotesText",         "");

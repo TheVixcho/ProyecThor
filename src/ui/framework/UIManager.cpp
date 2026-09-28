@@ -74,8 +74,7 @@ bool UIManager::Initialize(GLFWwindow* window)
     m_Window = window;
     if (!m_Window) return false;
 
-    auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
-    m_Mode = general.openHubOnStartup ? WorkspaceMode::Hub : WorkspaceMode::Projector;
+    m_Mode = WorkspaceMode::Projector;
 
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -922,6 +921,11 @@ void UIManager::RenderAll()
     if (m_ShowConnectionsWindow)
         RenderConnectionsWindow();
 
+    // Novedades (Changelog e historial de actualizaciones) como panel flotante
+    m_Hub.RenderNovedadesStandalone();
+    if (ImGui::IsKeyPressed(ImGuiKey_N, false) && !ImGui::GetIO().WantCaptureKeyboard && !ImGui::GetIO().WantTextInput)
+        m_Hub.OpenNovedades();
+
     // Editor a pantalla completa (Overlay/Estilos) activo -- ver
     // EnterFullscreenEditor. Reemplaza TODO lo de abajo (Hub/Proyector/
     // Ajustes/etc) por el contenido del editor, sin tocar la toolbar de
@@ -1209,7 +1213,6 @@ void UIManager::RenderModeToolbar()
     auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
 
     static const IconRailItem kItemsLeft[] = {
-        { (int)WorkspaceMode::Hub,        HomeIcons::DrawIcon_Home,      "Hub"        },
         { (int)WorkspaceMode::Projector,  AppIcons::DrawIcon_Monitor,    "Proyector"  },
     };
 
@@ -1360,7 +1363,7 @@ void UIManager::RenderModeToolbar()
             ImGui::Dummy(ImVec2(1.0f, btnH));
         }
 
-        // ── Grupo derecho: Notas, IA, Estilos, Streaming ───────────────────
+        // ── Grupo derecho: Notas, IA, Estilos, Conexiones, Novedades ─────
         {
             bool clicked = RenderPill("Notas", HomeIcons::DrawIcon_Notepad, m_ShowNotes, true, gap * 2.0f);
             if (clicked) ToggleNotesWindow();
@@ -1379,6 +1382,12 @@ void UIManager::RenderModeToolbar()
             bool clicked = RenderPill("Conexiones", HomeIcons::DrawIcon_Broadcast, m_ShowConnectionsWindow, true, gap);
             if (clicked) {
                 ToggleConnectionsWindow();
+            }
+        }
+        {
+            bool clicked = RenderPill("Novedades", HomeIcons::DrawIcon_Sparkle, m_Hub.IsNovedadesOpen(), true, gap);
+            if (clicked) {
+                m_Hub.OpenNovedades();
             }
         }
         RenderStylesPopup();
@@ -2188,16 +2197,6 @@ void UIManager::RenderMainMenuBar()
             }
 
             ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-
-            if (ImGui::MenuItem("Abrir Hub al iniciar", nullptr, general.openHubOnStartup))
-            {
-                general.openHubOnStartup = !general.openHubOnStartup;
-                ProyecThor::Settings::SettingsManager::Get().Save();
-            }
-
-            ImGui::Spacing();
             ImGui::EndMenu();
         }
 
@@ -2205,6 +2204,9 @@ void UIManager::RenderMainMenuBar()
         if (ImGui::BeginMenu(str.menuHelp))
         {
             ImGui::Spacing();
+            if (ImGui::MenuItem("Novedades", "N"))
+                m_Hub.OpenNovedades();
+
             if (ImGui::MenuItem(str.menuDocs, "F1"))
                 ProyecThor::External::OpenURL("https://proyecthor.web.app/");
 
@@ -2241,6 +2243,9 @@ void UIManager::RenderMainMenuBar()
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
+
+            if (ImGui::MenuItem("Novedades y Actualizaciones...", "N"))
+                m_Hub.OpenNovedades();
 
             if (ImGui::MenuItem(str.menuAbout))
                 g_ShowAbout = true;

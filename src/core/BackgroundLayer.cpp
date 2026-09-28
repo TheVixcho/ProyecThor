@@ -834,6 +834,21 @@ void main() {
         // crearse ni intentar reproducir (evita que VLC abra ventanas "VLC media player" sobre la UI).
         if (m_UseNativeEngine && m_IsLiveToPublic && (allowAudio || m_VLCNativeForFondos))
         {
+            if (m_ActiveNative && m_ActiveNative->player.GetCurrentPath() == path && !m_PendingRetireNative)
+            {
+                // El mismo video ya se encuentra reproduciendo en la ventana nativa:
+                // no recrear ventana ni matar el proceso de VLC para evitar parpadeos y congelamientos.
+                m_ActiveNative->player.SetPause(false);
+                bool live       = m_IsLiveToPublic.load(std::memory_order_relaxed);
+                bool muted      = m_TargetMuted.load(std::memory_order_relaxed);
+                int  volume     = m_TargetVolume.load(std::memory_order_relaxed);
+                bool wantActive = live && allowAudio;
+                m_ActiveNative->player.SetAudioActive(wantActive);
+                m_ActiveNative->player.SetMute(muted || !wantActive);
+                m_ActiveNative->player.SetVolume((wantActive && !muted) ? volume : 0);
+                return;
+            }
+
             // Sin crossfade/standby en este motor: corte directo.
             m_IsVideo             = true;
             m_ActiveIsNative      = true;
@@ -885,17 +900,13 @@ void main() {
             bool allowAudioCopy = allowAudio;
             m_NativeLoader.Request([this, newPlayerPtr, path, handle, allowAudioCopy]() {
                 if (handle) newPlayerPtr->AttachNativeWindow(handle);
-                // Los fondos (allowAudio=false) siempre deben repetirse en
-                // loop; los videos reales (allowAudio=true, cola del
-                // Monitor) NO -- MonitorQueueEngine::Update() depende de
-                // que ConsumeEndReached() dispare de verdad al terminar
-                // para avanzar la cola, cosa que nunca pasaria si loopean.
-                newPlayerPtr->Play(path, /*loop=*/!allowAudioCopy, /*startMuted=*/true);
-
                 bool live       = m_IsLiveToPublic.load(std::memory_order_relaxed);
                 bool muted      = m_TargetMuted.load(std::memory_order_relaxed);
                 int  volume     = m_TargetVolume.load(std::memory_order_relaxed);
                 bool wantActive = live && allowAudioCopy;
+                bool startMuted = !wantActive || muted;
+
+                newPlayerPtr->Play(path, /*loop=*/!allowAudioCopy, startMuted);
                 newPlayerPtr->SetAudioActive(wantActive);
                 newPlayerPtr->SetMute(muted || !wantActive);
                 newPlayerPtr->SetVolume((wantActive && !muted) ? volume : 0);
@@ -1289,7 +1300,16 @@ void main() {
         // recien ahora, nunca antes, para no exponer el instante de
         // inicializacion del modulo de video de VLC (ver comentario largo
         // de m_NativeRevealPending en el .h).
-        if (m_IsLiveToPublic) m_ActiveNative->window.Reveal();
+        if (m_IsLiveToPublic)
+        {
+            m_ActiveNative->window.Reveal();
+            bool active = m_ContentAllowsAudio.load(std::memory_order_relaxed);
+            bool muted  = m_TargetMuted.load(std::memory_order_relaxed);
+            int  volume = m_TargetVolume.load(std::memory_order_relaxed);
+            m_ActiveNative->player.SetAudioActive(active);
+            m_ActiveNative->player.SetMute(muted || !active);
+            m_ActiveNative->player.SetVolume((active && !muted) ? volume : 0);
+        }
         m_NativeRevealPending = false;
 
         // El anterior seguia visible (mudo) tapando la transicion — recien
@@ -1328,7 +1348,7 @@ void main() {
             // largo: evita que un SetLiveMute()/ApplyAV() posterior quede
             // pisado por un valor viejo).
             m_NativeLoader.Request([this, p, handle]() {
-                if (handle) p->AttachNativeWindow(handle);
+                if (handle && p->GetNativeWindowHandle() != handle) p->AttachNativeWindow(handle);
                 bool active = m_ContentAllowsAudio.load(std::memory_order_relaxed);
                 bool muted  = m_TargetMuted.load(std::memory_order_relaxed);
                 int  volume = m_TargetVolume.load(std::memory_order_relaxed);
@@ -1380,12 +1400,21 @@ void main() {
             // SetLiveVolume/SetLiveMute). Sin embargo, si el contenido
             // actualmente cargado no permite audio, debe permanecer mudo.
             bool activeAudioAllowed = m_ContentAllowsAudio.load(std::memory_order_relaxed);
+            bool muted = m_TargetMuted.load(std::memory_order_relaxed);
+            int volume = m_TargetVolume.load(std::memory_order_relaxed);
             Active().SetAudioActive(activeAudioAllowed);
-            Active().SetMute(m_TargetMuted || !activeAudioAllowed);
-            Active().SetVolume(activeAudioAllowed && !m_TargetMuted ? m_TargetVolume.load() : 0);
+            Active().SetMute(muted || !activeAudioAllowed);
+            Active().SetVolume(activeAudioAllowed && !muted ? volume : 0);
             Standby().SetAudioActive(false);
             Standby().SetMute(true);
             Standby().SetVolume(0);
+
+            if (m_ActiveNative)
+            {
+                m_ActiveNative->player.SetAudioActive(activeAudioAllowed);
+                m_ActiveNative->player.SetMute(muted || !activeAudioAllowed);
+                m_ActiveNative->player.SetVolume(activeAudioAllowed && !muted ? volume : 0);
+            }
         }
         else
         {

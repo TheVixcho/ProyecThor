@@ -843,14 +843,13 @@ int main(int argc, char** argv)
 #endif
 
 #ifndef _WIN32
-    // En Linux (X11 / Wayland):
-    // Permitir a GLFW seleccionar automáticamente la plataforma activa (Wayland o X11).
-    // Solo forzar X11 si el usuario lo requiere explícitamente via PROYECTHOR_FORCE_X11=1.
-    const char* forceX11 = std::getenv("PROYECTHOR_FORCE_X11");
-    if (forceX11 && std::string(forceX11) != "0")
+    // En Linux, forzar GLFW backend a X11/XWayland por defecto para máxima compatibilidad
+    // con libVLC (XVideo, GLX, VDPAU) y posicionamiento fullscreen EWMH en KWin/KDE Plasma.
+    const char* forceWayland = std::getenv("PROYECTHOR_FORCE_WAYLAND");
+    if (!forceWayland || std::string(forceWayland) == "0")
     {
         glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
-        std::cerr << "[DIAG] Forzando backend GLFW a X11 por PROYECTHOR_FORCE_X11\n";
+        std::cerr << "[DIAG] Forzando backend GLFW a X11/XWayland para compatibilidad con VLC y EWMH\n";
     }
 #endif
 
@@ -964,8 +963,20 @@ int main(int argc, char** argv)
 
     if (!skipSplash) {
         glfwMakeContextCurrent(splashWindow);
-        ProyecThor::Splash::Render(splashWindow, splashSize, "Preparando interfaz y paneles...", 1.0f,
+        ProyecThor::Splash::WaitForUserConfirmation(splashWindow, splashSize,
             logoTex, bgTex, splashFonts, creditText, theme);
+        if (glfwWindowShouldClose(splashWindow))
+        {
+            ImGui_ImplOpenGL3_Shutdown();
+            ImGui_ImplGlfw_Shutdown();
+            ImGui::DestroyContext();
+            if (logoTex != 0) glDeleteTextures(1, &logoTex);
+            if (bgTex   != 0) glDeleteTextures(1, &bgTex);
+            glfwDestroyWindow(splashWindow);
+            glfwDestroyWindow(mainWindow);
+            glfwTerminate();
+            return 0;
+        }
     }
 
     ImGui_ImplOpenGL3_Shutdown();

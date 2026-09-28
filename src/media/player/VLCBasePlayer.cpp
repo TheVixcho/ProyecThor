@@ -619,6 +619,19 @@ void VLCBasePlayer::OnVlcEvent(const libvlc_event_t* evt, void* userData)
     else if (evt->type == libvlc_MediaPlayerPlaying)
     {
         self->m_VlcIsPlaying.store(true, std::memory_order_relaxed);
+#ifndef _WIN32
+        if (self->m_MediaPlayer)
+        {
+            bool active = self->m_AudioActive.load(std::memory_order_relaxed) &&
+                          !self->m_ForceSilent.load(std::memory_order_relaxed);
+            bool muted  = !active || self->m_Muted.load(std::memory_order_relaxed);
+            libvlc_audio_set_mute(self->m_MediaPlayer, muted ? 1 : 0);
+            int vol = (active && !muted)
+                ? static_cast<int>(self->m_VolumeMultiplier.load(std::memory_order_relaxed) * 100.0f)
+                : 0;
+            libvlc_audio_set_volume(self->m_MediaPlayer, vol);
+        }
+#endif
     }
 }
 
@@ -1332,6 +1345,7 @@ void VLCBasePlayer::GetAudioLevels(float& left, float& right)
 
 void VLCBasePlayer::AttachNativeWindow(void* nativeHandle)
 {
+    if (m_NativeWindowHandle == nativeHandle) return;
     m_NativeWindowHandle = nativeHandle;
     if (!m_MediaPlayer || !nativeHandle) return;
 #ifdef _WIN32
