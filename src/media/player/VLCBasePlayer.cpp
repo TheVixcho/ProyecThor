@@ -752,6 +752,12 @@ void VLCBasePlayer::Play(const std::string& path, bool loop, bool startMuted)
 {
     if (!m_Instance || !m_MediaPlayer) return;
 
+    if (m_NativeWindowOutput && !m_NativeWindowHandle)
+    {
+        std::cerr << "[VLC#" << m_InstanceId << "] Play() omitido: reproductor nativo sin ventana asignada (evita ventana externa de VLC).\n";
+        return;
+    }
+
     if (m_PathBlocked && NormalizePathForCompare(m_BlockedPath) == NormalizePathForCompare(path))
     {
         std::cerr << "[VLC] Play() ignorado, ruta bloqueada: " << path << "\n";
@@ -813,6 +819,11 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
             finalPath = direct;
         else
             std::cerr << "[yt-dlp] Fallo al resolver la URL.\n";
+    }
+
+    if (m_NativeWindowOutput && !m_NativeWindowHandle)
+    {
+        return;
     }
 
     if (m_LoadGeneration.load(std::memory_order_relaxed) != myGeneration)
@@ -1321,7 +1332,8 @@ void VLCBasePlayer::GetAudioLevels(float& left, float& right)
 
 void VLCBasePlayer::AttachNativeWindow(void* nativeHandle)
 {
-    if (!m_MediaPlayer) return;
+    m_NativeWindowHandle = nativeHandle;
+    if (!m_MediaPlayer || !nativeHandle) return;
 #ifdef _WIN32
     libvlc_media_player_set_hwnd(m_MediaPlayer, nativeHandle);
 #else
@@ -1332,6 +1344,7 @@ void VLCBasePlayer::AttachNativeWindow(void* nativeHandle)
 
 void VLCBasePlayer::DetachNativeWindow()
 {
+    m_NativeWindowHandle = nullptr;
     if (!m_MediaPlayer) return;
 #ifdef _WIN32
     libvlc_media_player_set_hwnd(m_MediaPlayer, nullptr);
@@ -1342,14 +1355,21 @@ void VLCBasePlayer::DetachNativeWindow()
 
 void VLCBasePlayer::Reinit()
 {
+    if (m_NativeWindowOutput && !m_NativeWindowHandle) return;
+
     std::string prevPath = m_CurrentPath;
     bool wasPlaying = m_VlcIsPlaying.load(std::memory_order_relaxed);
     int64_t prevTime = GetTime();
     bool prevMuted = m_Muted.load(std::memory_order_relaxed);
+    void* prevHandle = m_NativeWindowHandle;
 
     DestroyVLC();
     InitVLC();
     CreatePersistentPlayer();
+
+    if (m_NativeWindowOutput && prevHandle) {
+        AttachNativeWindow(prevHandle);
+    }
 
     if (!prevPath.empty()) {
         m_CurrentPath.clear();

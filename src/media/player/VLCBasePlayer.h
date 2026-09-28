@@ -202,6 +202,7 @@ namespace ProyecThor::Core {
         int  m_DecodeThreads    = 0;
         bool m_UseHardwareDecode = true;
         bool m_NativeWindowOutput = false;
+        void* m_NativeWindowHandle = nullptr;
 
         libvlc_instance_t*       m_Instance    = nullptr;
         libvlc_media_player_t*   m_MediaPlayer = nullptr;

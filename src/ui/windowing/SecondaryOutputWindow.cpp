@@ -167,6 +167,39 @@ namespace ProyecThor::Core {
             Display* dpy = glfwGetX11Display();
             ::Window xwin = glfwGetX11Window(m_Window);
             if (dpy && xwin) {
+                ::Window root = DefaultRootWindow(dpy);
+
+                // 1. Asignar el monitor físico a KWin / EWMH vía _NET_WM_FULLSCREEN_MONITORS
+                Atom wmFullscreenMonitors = XInternAtom(dpy, "_NET_WM_FULLSCREEN_MONITORS", False);
+                XEvent xevMon = {};
+                xevMon.type = ClientMessage;
+                xevMon.xclient.window = xwin;
+                xevMon.xclient.message_type = wmFullscreenMonitors;
+                xevMon.xclient.format = 32;
+                xevMon.xclient.data.l[0] = monitorIndex; // top
+                xevMon.xclient.data.l[1] = monitorIndex; // bottom
+                xevMon.xclient.data.l[2] = monitorIndex; // left
+                xevMon.xclient.data.l[3] = monitorIndex; // right
+                xevMon.xclient.data.l[4] = 1;            // source indication
+                XSendEvent(dpy, root, False, SubstructureRedirectMask | SubstructureNotifyMask, &xevMon);
+
+                // 2. Activar _NET_WM_STATE_FULLSCREEN y _NET_WM_STATE_ABOVE en KWin
+                Atom wmState = XInternAtom(dpy, "_NET_WM_STATE", False);
+                Atom wmFullscreen = XInternAtom(dpy, "_NET_WM_STATE_FULLSCREEN", False);
+                Atom wmAbove = XInternAtom(dpy, "_NET_WM_STATE_ABOVE", False);
+
+                XEvent xevState = {};
+                xevState.type = ClientMessage;
+                xevState.xclient.window = xwin;
+                xevState.xclient.message_type = wmState;
+                xevState.xclient.format = 32;
+                xevState.xclient.data.l[0] = 1; // _NET_WM_STATE_ADD
+                xevState.xclient.data.l[1] = wmFullscreen;
+                xevState.xclient.data.l[2] = wmAbove;
+                xevState.xclient.data.l[3] = 1; // normal application
+                XSendEvent(dpy, root, False, SubstructureRedirectMask | SubstructureNotifyMask, &xevState);
+
+                // 3. Forzar posición y dimensiones
                 XMoveResizeWindow(dpy, xwin, monX, monY, winW, winH);
                 XRaiseWindow(dpy, xwin);
                 XFlush(dpy);

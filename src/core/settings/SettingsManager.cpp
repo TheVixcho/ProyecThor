@@ -728,7 +728,6 @@ void SettingsManager::ApplyProjection() {
     core.SetVLCHardwareDecoder(p.vlcHardwareDecoder);
     core.SetVLCVideoOutput(p.vlcVideoOutput);
     core.SetVLCDeinterlace(p.vlcDeinterlace);
-    core.ReloadVLCPlayers();
 }
 
 // ── Tema ─────────────────────────────────────────────────────────────────

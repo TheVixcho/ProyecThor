@@ -224,6 +224,7 @@ namespace ProyecThor::Core {
         int         m_StaticImageH     = 0;
         bool        m_IsStaticImage    = false;
         std::string m_StaticImagePath;
+        std::string m_CurrentVideoPath;
         bool LoadStaticImage(const std::string& path);
         void ClearStaticImage();
 

@@ -334,7 +334,6 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
                     if (ImGui::Selectable(kVOutOpts[i].label, isSelected)) {
                         p.vlcVideoOutput = kVOutOpts[i].id;
                         Core::PresentationCore::Get().SetVLCVideoOutput(p.vlcVideoOutput);
-                        Core::PresentationCore::Get().ReloadVLCPlayers();
                         changed = true;
                     }
                     if (ImGui::IsItemHovered() && kVOutOpts[i].desc) {

@@ -157,6 +157,24 @@ void NativeVideoOutputWindow::Reveal()
     Display* dpy = glfwGetX11Display();
     ::Window xwin = glfwGetX11Window(m_Window);
     if (dpy && xwin) {
+        bool wantFullscreen = PresentationCore::Get().GetWindowFullscreen();
+        if (wantFullscreen) {
+            ::Window root = DefaultRootWindow(dpy);
+            Atom wmState = XInternAtom(dpy, "_NET_WM_STATE", False);
+            Atom wmFullscreen = XInternAtom(dpy, "_NET_WM_STATE_FULLSCREEN", False);
+            Atom wmAbove = XInternAtom(dpy, "_NET_WM_STATE_ABOVE", False);
+
+            XEvent xevState = {};
+            xevState.type = ClientMessage;
+            xevState.xclient.window = xwin;
+            xevState.xclient.message_type = wmState;
+            xevState.xclient.format = 32;
+            xevState.xclient.data.l[0] = 1; // _NET_WM_STATE_ADD
+            xevState.xclient.data.l[1] = wmFullscreen;
+            xevState.xclient.data.l[2] = wmAbove;
+            xevState.xclient.data.l[3] = 1;
+            XSendEvent(dpy, root, False, SubstructureRedirectMask | SubstructureNotifyMask, &xevState);
+        }
         XMoveResizeWindow(dpy, xwin, m_MonX, m_MonY, m_Width, m_Height);
         XRaiseWindow(dpy, xwin);
         XFlush(dpy);

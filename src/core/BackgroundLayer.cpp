@@ -827,13 +827,12 @@ void main() {
         }
 
         ClearStaticImage();
+        m_CurrentVideoPath = path;
 
-        // El motor nativo aplica SOLO a video real (allowAudio=true —
-        // Videos/cola del Monitor): Fondos/imagenes (allowAudio=false)
-        // siempre necesitan overlays/texto encima, asi que siempre van
-        // por OpenGL sin importar este ajuste (ver comentario del
-        // miembro m_UseNativeEngine en el .h).
-        if (m_UseNativeEngine && (allowAudio || m_VLCNativeForFondos))
+        // El motor nativo aplica SOLO si estamos proyectando en vivo al público (m_IsLiveToPublic)
+        // y el motor nativo está activo. Si NO estamos proyectando en vivo, el motor nativo NO debe
+        // crearse ni intentar reproducir (evita que VLC abra ventanas "VLC media player" sobre la UI).
+        if (m_UseNativeEngine && m_IsLiveToPublic && (allowAudio || m_VLCNativeForFondos))
         {
             // Sin crossfade/standby en este motor: corte directo.
             m_IsVideo             = true;
@@ -1064,7 +1063,7 @@ void main() {
 
         // Sin prefetch en el motor nativo (ver Prefetch()): cae directo a
         // un corte simple, igual que si nunca se hubiera precargado nada.
-        if (m_UseNativeEngine && (allowAudio || m_VLCNativeForFondos)) { SetVideo(path, allowAudio); return; }
+        if (m_UseNativeEngine && m_IsLiveToPublic && (allowAudio || m_VLCNativeForFondos)) { SetVideo(path, allowAudio); return; }
 
         // Esto va por OpenGL: mismo apagado del nativo que en SetVideo(),
         // por si el contenido activo anterior venia de ahi.
@@ -1355,6 +1354,18 @@ void main() {
         m_IsLiveToPublic = live;
         if (monitorIndex >= 0) m_LastKnownMonitorIndex = monitorIndex;
 
+        if (live && m_UseNativeEngine && (m_ContentAllowsAudio.load(std::memory_order_relaxed) || m_VLCNativeForFondos))
+        {
+            if (!m_ActiveNative && m_IsVideo && !m_CurrentVideoPath.empty())
+            {
+                SetVideo(m_CurrentVideoPath, m_ContentAllowsAudio.load(std::memory_order_relaxed));
+            }
+        }
+        else if (!live && m_ActiveNative)
+        {
+            RetireActiveNative();
+        }
+
         // Independiente de si lo activo AHORA es nativo o no: sincroniza
         // la ventana nativa (la esconde si live paso a false, o si lo
         // activo no es nativo) y, mas abajo, el audio del path OpenGL de
@@ -1494,8 +1505,8 @@ void main() {
     {
         m_PlayerA.Reinit();
         m_PlayerB.Reinit();
-        if (m_ActiveNative) {
-            m_ActiveNative->player.Reinit();
+        if (m_ActiveNative && m_IsLiveToPublic) {
+            m_ActiveNative->player.ApplyDeinterlace(VLCBasePlayer::GetDefaultDeinterlace());
         }
     }
 
