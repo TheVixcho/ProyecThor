@@ -222,6 +222,7 @@ namespace ProyecThor::Core {
         std::atomic<bool>  m_AudioActive{true};
         std::atomic<bool>  m_ForceSilent{false};
         std::atomic<bool>  m_SilenceEnforced{false};
+        std::atomic<bool>  m_AudioNeedsSync{false};
 
         // Ecualizador — ver SetEqualizerEnabled/Preamp/Band.
         bool  m_EqEnabled = false;

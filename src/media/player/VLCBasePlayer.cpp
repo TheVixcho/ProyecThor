@@ -389,13 +389,6 @@ static unsigned vlc_format(void** opaque, char* chroma, unsigned* width, unsigne
     auto* ctx = static_cast<VLCVideoCtx*>(*opaque);
     std::lock_guard<std::mutex> lock(ctx->mutex);
 
-    unsigned realW = 0, realH = 0;
-    if (ctx && ctx->mp && libvlc_video_get_size(ctx->mp, 0, &realW, &realH) == 0 && realW > 0 && realH > 0)
-    {
-        *width  = realW;
-        *height = realH;
-    }
-
 #ifdef _WIN32
     std::memcpy(chroma, "RGBA", 4);
 #else
@@ -591,19 +584,7 @@ void VLCBasePlayer::OnVlcEvent(const libvlc_event_t* evt, void* userData)
     else if (evt->type == libvlc_MediaPlayerPlaying)
     {
         self->m_VlcIsPlaying.store(true, std::memory_order_relaxed);
-#ifndef _WIN32
-        if (self->m_MediaPlayer)
-        {
-            bool active = self->m_AudioActive.load(std::memory_order_relaxed) &&
-                          !self->m_ForceSilent.load(std::memory_order_relaxed);
-            bool muted  = !active || self->m_Muted.load(std::memory_order_relaxed);
-            libvlc_audio_set_mute(self->m_MediaPlayer, muted ? 1 : 0);
-            int vol = (active && !muted)
-                ? static_cast<int>(self->m_VolumeMultiplier.load(std::memory_order_relaxed) * 100.0f)
-                : 0;
-            libvlc_audio_set_volume(self->m_MediaPlayer, vol);
-        }
-#endif
+        self->m_AudioNeedsSync.store(true, std::memory_order_relaxed);
     }
 }
 
@@ -906,6 +887,7 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
         ApplyDeinterlace(s_Deinterlace);
         m_Paused.store(false, std::memory_order_relaxed);
         m_SilenceEnforced.store(false, std::memory_order_relaxed);
+        m_AudioNeedsSync.store(true, std::memory_order_relaxed);
     }
 
     libvlc_media_release(media); // el player ya tomo su propia referencia
@@ -1066,9 +1048,11 @@ void VLCBasePlayer::EnforceSilenceIfNeeded()
     bool shouldBeSilent = m_ForceSilent.load(std::memory_order_relaxed) ||
                            !m_AudioActive.load(std::memory_order_relaxed);
 
+    bool needsSync = m_AudioNeedsSync.exchange(false, std::memory_order_relaxed);
+
     if (shouldBeSilent)
     {
-        if (!m_SilenceEnforced.exchange(true, std::memory_order_relaxed))
+        if (needsSync || !m_SilenceEnforced.exchange(true, std::memory_order_relaxed))
         {
             libvlc_audio_set_mute(m_MediaPlayer, 1);
             libvlc_audio_set_volume(m_MediaPlayer, 0);
@@ -1076,12 +1060,14 @@ void VLCBasePlayer::EnforceSilenceIfNeeded()
     }
     else
     {
-        if (m_SilenceEnforced.exchange(false, std::memory_order_relaxed))
+        if (needsSync || m_SilenceEnforced.exchange(false, std::memory_order_relaxed))
         {
             bool isMuted = m_Muted.load(std::memory_order_relaxed);
             libvlc_audio_set_mute(m_MediaPlayer, isMuted ? 1 : 0);
             int vol = isMuted ? 0 : static_cast<int>(m_VolumeMultiplier.load(std::memory_order_relaxed) * 100.0f);
             libvlc_audio_set_volume(m_MediaPlayer, vol);
+            if (!m_AudioDeviceId.empty() && m_AudioDeviceId != "default")
+                libvlc_audio_output_device_set(m_MediaPlayer, nullptr, m_AudioDeviceId.c_str());
         }
     }
 #endif
@@ -1239,6 +1225,7 @@ bool VLCBasePlayer::IsLoading() const
 bool VLCBasePlayer::UpdateTexture()
 {
     if (!m_MediaPlayer || !m_VideoCtx) return false;
+    EnforceSilenceIfNeeded();
     auto* ctx = static_cast<VLCVideoCtx*>(m_VideoCtx);
 
     void*    pixelsToUpload = nullptr;
