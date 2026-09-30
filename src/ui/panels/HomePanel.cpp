@@ -53,9 +53,6 @@ void HomePanel::RenderHomeContent()
     else if (selection.type == Core::ItemType::Video)
     {
         m_MonitorView.Render(previewPlayer);
-        ImGui::Separator();
-        ImGui::Spacing();
-        m_MediaView.Render(previewPlayer);
     }
     else if (selection.type == Core::ItemType::Documents)
     {

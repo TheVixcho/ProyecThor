@@ -396,11 +396,7 @@ static unsigned vlc_format(void** opaque, char* chroma, unsigned* width, unsigne
         *height = realH;
     }
 
-#ifdef _WIN32
     std::memcpy(chroma, "RGBA", 4);
-#else
-    std::memcpy(chroma, "RV32", 4);
-#endif
     ctx->width  = *width;
     ctx->height = *height;
     *pitches    = (*width) * 4;
@@ -428,26 +424,12 @@ static void* vlc_lock(void* opaque, void** planes)
     return nullptr;
 }
 
-// FIX (desincronizacion audio/video en hardware lento): antes, esta
-// funcion marcaba dirty=true apenas terminaba de DECODIFICAR un frame —
-// segun la doc de libVLC (libvlc_media_player.h: libvlc_video_unlock_cb),
-// unlock() se invoca "despues de decodificar, pero ANTES de mostrarse",
-// sin ninguna relacion con el reloj de reproduccion. En hardware rapido el
-// decode alcanza el ritmo real y "de casualidad" se veia bien, pero en
-// hardware lento (Pentium dual-core ~2GHz reportado por usuarios) el
-// decode se atrasa y, como no habia ningun mecanismo de correccion, el
-// video quedaba cada vez mas atras del audio (que sigue su propio reloj
-// real) sin recuperarse nunca. El swap de buffers sigue haciendose aca
-// (necesario: deja backBuf libre para el proximo decode sin pisar el
-// frame recien terminado) y everHadFrame tambien (lo sigue necesitando
-// HasVideoFrame()/GetLoadState() para detectar "ya se decodifico algo",
-// sin depender de cuando el reloj decida mostrarlo) — lo unico que se
-// saca de aca es el flag "dirty", que ahora se marca en vlc_display().
 static void vlc_unlock(void* opaque, void* /*picture*/, void* const* /*planes*/)
 {
     auto* ctx = static_cast<VLCVideoCtx*>(opaque);
     std::swap(ctx->frontBuf, ctx->backBuf);
     ctx->everHadFrame = true;
+    ctx->dirty        = true;
     ctx->mutex.unlock();
 }
 
@@ -732,11 +714,7 @@ void VLCBasePlayer::EnsureTexture(int w, int h)
 
     glGenTextures(1, &m_TextureID);
     glBindTexture(GL_TEXTURE_2D, m_TextureID);
-#ifdef _WIN32
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-#else
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_BGRA, GL_UNSIGNED_BYTE, nullptr);
-#endif
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -846,13 +824,12 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
     std::string hw = s_HwDecoder.empty() ? "any" : s_HwDecoder;
     if (!m_UseHardwareDecode || hw == "none") {
         hw = "none";
-    } else if (hw == "any" || hw.empty()) {
-#ifndef _WIN32
-        if (!m_NativeWindowOutput) {
-            hw = "none"; // En Linux vmem, evitar líneas verdes de VA-API
-        }
-#endif
     }
+#ifndef _WIN32
+    if (!m_NativeWindowOutput) {
+        hw = "none"; // En Linux vmem, evitar líneas verdes y bloqueos de VA-API/VDPAU
+    }
+#endif
     std::string hwOpt = ":avcodec-hw=" + hw;
     libvlc_media_add_option(media, hwOpt.c_str());
 
@@ -1033,13 +1010,18 @@ void VLCBasePlayer::SetVolume(int volume)
 
     float multiplier = static_cast<float>(volume) / 100.0f;
     if (multiplier < 0.0f) multiplier = 0.0f;
-    float prev = m_VolumeMultiplier.exchange(multiplier, std::memory_order_relaxed);
-    if (std::abs(prev - multiplier) < 0.005f) return;
+    m_VolumeMultiplier.store(multiplier, std::memory_order_relaxed);
 
 #ifndef _WIN32
     // En Linux el volumen real lo aplica libVLC sobre su salida nativa.
     if (m_MediaPlayer)
-        libvlc_audio_set_volume(m_MediaPlayer, volume);
+    {
+        bool shouldMute = m_Muted.load(std::memory_order_relaxed) ||
+                          !m_AudioActive.load(std::memory_order_relaxed) ||
+                          m_ForceSilent.load(std::memory_order_relaxed);
+        libvlc_audio_set_mute(m_MediaPlayer, shouldMute ? 1 : 0);
+        libvlc_audio_set_volume(m_MediaPlayer, shouldMute ? 0 : volume);
+    }
 #endif
     // En Windows lo aplica vlc_audio_play() multiplicando los samples.
 }
@@ -1052,30 +1034,44 @@ void VLCBasePlayer::SetSoftwareVolume(float percent)
 
     float multiplier = percent / 100.0f;
     if (multiplier < 0.0f) multiplier = 0.0f;
-    float prev = m_VolumeMultiplier.exchange(multiplier, std::memory_order_relaxed);
-    if (std::abs(prev - multiplier) < 0.005f) return;
+    m_VolumeMultiplier.store(multiplier, std::memory_order_relaxed);
 
 #ifndef _WIN32
     if (m_MediaPlayer)
-        libvlc_audio_set_volume(m_MediaPlayer, static_cast<int>(percent));
+    {
+        bool shouldMute = m_Muted.load(std::memory_order_relaxed) ||
+                          !m_AudioActive.load(std::memory_order_relaxed) ||
+                          m_ForceSilent.load(std::memory_order_relaxed);
+        libvlc_audio_set_mute(m_MediaPlayer, shouldMute ? 1 : 0);
+        libvlc_audio_set_volume(m_MediaPlayer, shouldMute ? 0 : static_cast<int>(percent));
+    }
 #endif
 }
 
 void VLCBasePlayer::EnforceSilenceIfNeeded()
 {
 #ifndef _WIN32
+    if (!m_MediaPlayer) return;
     bool shouldBeSilent = m_ForceSilent.load(std::memory_order_relaxed) ||
                            !m_AudioActive.load(std::memory_order_relaxed);
-    if (!shouldBeSilent || !m_MediaPlayer)
-    {
-        m_SilenceEnforced.store(false, std::memory_order_relaxed);
-        return;
-    }
 
-    if (!m_SilenceEnforced.exchange(true, std::memory_order_relaxed))
+    if (shouldBeSilent)
     {
-        libvlc_audio_set_mute(m_MediaPlayer, 1);
-        libvlc_audio_set_volume(m_MediaPlayer, 0);
+        if (!m_SilenceEnforced.exchange(true, std::memory_order_relaxed))
+        {
+            libvlc_audio_set_mute(m_MediaPlayer, 1);
+            libvlc_audio_set_volume(m_MediaPlayer, 0);
+        }
+    }
+    else
+    {
+        if (m_SilenceEnforced.exchange(false, std::memory_order_relaxed))
+        {
+            bool isMuted = m_Muted.load(std::memory_order_relaxed);
+            libvlc_audio_set_mute(m_MediaPlayer, isMuted ? 1 : 0);
+            int vol = isMuted ? 0 : static_cast<int>(m_VolumeMultiplier.load(std::memory_order_relaxed) * 100.0f);
+            libvlc_audio_set_volume(m_MediaPlayer, vol);
+        }
     }
 #endif
 }
@@ -1247,11 +1243,7 @@ bool VLCBasePlayer::UpdateTexture()
 
     EnsureTexture(static_cast<int>(w), static_cast<int>(h));
     glBindTexture(GL_TEXTURE_2D, m_TextureID);
-#ifdef _WIN32
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixelsToUpload);
-#else
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_BGRA, GL_UNSIGNED_BYTE, pixelsToUpload);
-#endif
     glBindTexture(GL_TEXTURE_2D, 0);
     return true;
 }

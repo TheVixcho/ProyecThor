@@ -327,7 +327,14 @@ bool PresentationCore::GetGlobalMute() const {
     }
 
     void PresentationCore::SetVideoRenderEngine(int engine) {
+#ifdef _WIN32
         if (m_Impl) m_Impl->background.SetUseNativeEngine(engine != 0);
+#else
+        // En Linux, usar siempre el compositor OpenGL unificado (0).
+        // Evita abrir ventanas separadas de VLC o ventanas detrás del proyector,
+        // garantizando que el video y las letras/fondos se dibujen en la misma ventana.
+        if (m_Impl) m_Impl->background.SetUseNativeEngine(false);
+#endif
     }
     int PresentationCore::GetVideoRenderEngine() const {
         return (m_Impl && m_Impl->background.GetUseNativeEngine()) ? 1 : 0;
@@ -1770,11 +1777,6 @@ void PresentationCore::SetNextText(const std::string& text) {
             monitorIndex = m_State.targetMonitorIndex;
         }
 
-#ifndef _WIN32
-        if (projecting && !IsProjectorWindowActive()) {
-            CreateProjectorWindow(monitorIndex);
-        }
-#endif
 
         // Unico punto que habilita/corta el audio real hacia el publico
         // (y, con el motor "VLC ventana nativa", tambien la ventana de
