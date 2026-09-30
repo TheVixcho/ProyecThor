@@ -1770,6 +1770,12 @@ void PresentationCore::SetNextText(const std::string& text) {
             monitorIndex = m_State.targetMonitorIndex;
         }
 
+#ifndef _WIN32
+        if (projecting && !IsProjectorWindowActive()) {
+            CreateProjectorWindow(monitorIndex);
+        }
+#endif
+
         // Unico punto que habilita/corta el audio real hacia el publico
         // (y, con el motor "VLC ventana nativa", tambien la ventana de
         // video en si — ver BackgroundLayer::SetPubliclyLive). Fuera del

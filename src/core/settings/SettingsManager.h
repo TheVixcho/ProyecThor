@@ -190,8 +190,8 @@ namespace ProyecThor::Settings {
         float fillBlurBrightness    = 0.6f;
 
         // ── Motor de renderizado del fondo de video ──────────────────────
-        // Siempre VLC nativo (1) con aceleración propia por hardware.
-        int videoRenderEngine = 1;
+        // 0 = Compositor unificado OpenGL (ventana única con overlays de letras y versículos)
+        int videoRenderEngine = 0;
 
         // ── Decodificador de hardware para libVLC ("any", "none", "vaapi", "vdpau", "d3d11va", "dxva2")
         std::string vlcHardwareDecoder = "any";

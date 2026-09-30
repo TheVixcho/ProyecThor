@@ -724,7 +724,7 @@ void SettingsManager::ApplyProjection() {
     core.SetFillBlurBrightness(p.fillBlurBrightness);
     core.SetWindowFullscreen(p.windowFullscreen);
     core.SetVLCNativeForFondos(p.vlcNativeForFondos);
-    core.SetVideoRenderEngine(1);
+    core.SetVideoRenderEngine(p.videoRenderEngine);
     core.SetVLCHardwareDecoder(p.vlcHardwareDecoder);
     core.SetVLCVideoOutput(p.vlcVideoOutput);
     core.SetVLCDeinterlace(p.vlcDeinterlace);
@@ -948,7 +948,7 @@ void SettingsManager::SaveSettings() {
     j["projection"]["fillBlurBrightness"]   = p.fillBlurBrightness;
     j["projection"]["windowFullscreen"]     = p.windowFullscreen;
     j["projection"]["vlcNativeForFondos"]   = p.vlcNativeForFondos;
-    j["projection"]["videoRenderEngine"]    = 1;
+    j["projection"]["videoRenderEngine"]    = p.videoRenderEngine;
     j["projection"]["vlcHardwareDecoder"]   = p.vlcHardwareDecoder;
     j["projection"]["vlcVideoOutput"]       = p.vlcVideoOutput;
     j["projection"]["vlcDeinterlace"]       = p.vlcDeinterlace;
@@ -1259,7 +1259,7 @@ void SettingsManager::LoadSettings() {
             p.fillBlurBrightness    = jp.value("fillBlurBrightness",    0.6f);
             p.windowFullscreen      = jp.value("windowFullscreen",      true);
             p.vlcNativeForFondos    = jp.value("vlcNativeForFondos",    false);
-            p.videoRenderEngine     = 1;
+            p.videoRenderEngine     = jp.value("videoRenderEngine",     0);
             p.vlcHardwareDecoder    = jp.value("vlcHardwareDecoder",    "any");
             p.vlcVideoOutput        = jp.value("vlcVideoOutput",        "auto");
             p.vlcDeinterlace        = jp.value("vlcDeinterlace",        "discard");

@@ -207,7 +207,7 @@ namespace ProyecThor::Core {
                 : player(2, /*useHardwareDecode=*/true, forceSilentAudio, /*nativeWindowOutput=*/true) {}
         };
 
-        bool m_UseNativeEngine = true;
+        bool m_UseNativeEngine = false;
         bool m_ActiveIsNative  = false;
         int  m_LastKnownMonitorIndex = -1;
         bool m_ForceSilentAudio = false; // recordado para poder crear NativePlayback mas adelante

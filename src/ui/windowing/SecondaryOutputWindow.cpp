@@ -86,8 +86,8 @@ namespace ProyecThor::Core {
         else
         {
             // Modo Ventana (flotante / redimensionable para pruebas o OBS)
-            winW = 960;
-            winH = 540;
+            winW = 1280;
+            winH = 720;
             if (target) {
                 glfwGetMonitorPos(target, &monX, &monY);
                 const GLFWvidmode* vm = glfwGetVideoMode(target);
@@ -249,22 +249,8 @@ namespace ProyecThor::Core {
     {
         if (!m_Window || !renderFn) return;
 
-        // Si hay un video nativo de VLC reproduciéndose a pantalla completa
-        // en esta misma salida, NO hacer glClear ni glfwSwapBuffers de negro
-        // continuo: evita el parpadeo negro entre las dos superficies en X11/compositor.
-        if (PresentationCore::Get().IsActiveNativeVideo()) {
-            return;
-        }
-
         if (glfwWindowShouldClose(m_Window)) {
             Destroy();
-            return;
-        }
-
-        // Si hay un video nativo de VLC reproduciéndose a pantalla completa
-        // en esta misma salida, NO hacer glClear ni glfwSwapBuffers de negro
-        // continuo: evita el parpadeo negro entre las dos superficies en X11/compositor.
-        if (PresentationCore::Get().IsActiveNativeVideo()) {
             return;
         }
 

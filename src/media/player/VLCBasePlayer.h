@@ -117,6 +117,8 @@ namespace ProyecThor::Core {
         bool IsEqualizerEnabled() const { return m_EqEnabled; }
 
         void SetPosition(float pos);
+        float GetPosition() const;
+        bool  IsPlaying() const;
 
         int64_t GetTime() const;
         int64_t GetLength() const;
@@ -219,6 +221,7 @@ namespace ProyecThor::Core {
         std::atomic<bool>  m_Paused{false};
         std::atomic<bool>  m_AudioActive{true};
         std::atomic<bool>  m_ForceSilent{false};
+        std::atomic<bool>  m_SilenceEnforced{false};
 
         // Ecualizador — ver SetEqualizerEnabled/Preamp/Band.
         bool  m_EqEnabled = false;

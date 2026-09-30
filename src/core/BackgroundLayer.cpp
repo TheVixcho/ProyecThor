@@ -913,7 +913,14 @@ void main() {
         // nivel VLCBasePlayer por si solo no cubre (cada swap deja al
         // player saliente con la ruta limpiada por su propio Stop()).
         if (!m_SwapPending && GetTextureID() != nullptr && path == Active().GetCurrentPath())
+        {
+            if (Active().GetPosition() >= 0.99f || !Active().IsPlaying())
+            {
+                Active().SetPosition(0.0f);
+                Active().SetPause(false);
+            }
             return;
+        }
 
         m_IsVideo = true;
 

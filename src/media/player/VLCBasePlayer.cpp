@@ -735,7 +735,7 @@ void VLCBasePlayer::EnsureTexture(int w, int h)
 #ifdef _WIN32
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 #else
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_BGRA, GL_UNSIGNED_BYTE, nullptr);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_BGRA, GL_UNSIGNED_BYTE, nullptr);
 #endif
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -917,6 +917,7 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
         libvlc_media_player_play(m_MediaPlayer);
         ApplyDeinterlace(s_Deinterlace);
         m_Paused.store(false, std::memory_order_relaxed);
+        m_SilenceEnforced.store(false, std::memory_order_relaxed);
     }
 
     libvlc_media_release(media); // el player ya tomo su propia referencia
@@ -959,6 +960,7 @@ bool VLCBasePlayer::ConsumeHadError()
 
 void VLCBasePlayer::SetMute(bool mute)
 {
+    m_SilenceEnforced.store(false, std::memory_order_relaxed);
     bool effectiveMute = mute || m_ForceSilent.load(std::memory_order_relaxed);
     bool prev = m_Muted.exchange(effectiveMute, std::memory_order_relaxed);
     if (prev == effectiveMute) return;
@@ -991,6 +993,7 @@ void VLCBasePlayer::SetMute(bool mute)
 
 void VLCBasePlayer::SetAudioActive(bool active)
 {
+    m_SilenceEnforced.store(false, std::memory_order_relaxed);
     bool effectiveActive = active && !m_ForceSilent.load(std::memory_order_relaxed);
     bool prev = m_AudioActive.exchange(effectiveActive, std::memory_order_relaxed);
     if (prev == effectiveActive) return;
@@ -1024,6 +1027,7 @@ void VLCBasePlayer::SetAudioActive(bool active)
 
 void VLCBasePlayer::SetVolume(int volume)
 {
+    m_SilenceEnforced.store(false, std::memory_order_relaxed);
     if (m_ForceSilent.load(std::memory_order_relaxed))
         volume = 0;
 
@@ -1042,6 +1046,7 @@ void VLCBasePlayer::SetVolume(int volume)
 
 void VLCBasePlayer::SetSoftwareVolume(float percent)
 {
+    m_SilenceEnforced.store(false, std::memory_order_relaxed);
     if (m_ForceSilent.load(std::memory_order_relaxed))
         percent = 0.0f;
 
@@ -1062,10 +1067,16 @@ void VLCBasePlayer::EnforceSilenceIfNeeded()
     bool shouldBeSilent = m_ForceSilent.load(std::memory_order_relaxed) ||
                            !m_AudioActive.load(std::memory_order_relaxed);
     if (!shouldBeSilent || !m_MediaPlayer)
+    {
+        m_SilenceEnforced.store(false, std::memory_order_relaxed);
         return;
+    }
 
-    libvlc_audio_set_mute(m_MediaPlayer, 1);
-    libvlc_audio_set_volume(m_MediaPlayer, 0);
+    if (!m_SilenceEnforced.exchange(true, std::memory_order_relaxed))
+    {
+        libvlc_audio_set_mute(m_MediaPlayer, 1);
+        libvlc_audio_set_volume(m_MediaPlayer, 0);
+    }
 #endif
 }
 
@@ -1117,6 +1128,16 @@ void VLCBasePlayer::SetPosition(float pos)
 {
     if (m_MediaPlayer)
         libvlc_media_player_set_position(m_MediaPlayer, pos);
+}
+
+float VLCBasePlayer::GetPosition() const
+{
+    return m_MediaPlayer ? libvlc_media_player_get_position(m_MediaPlayer) : 0.0f;
+}
+
+bool VLCBasePlayer::IsPlaying() const
+{
+    return m_MediaPlayer ? (libvlc_media_player_is_playing(m_MediaPlayer) != 0) : false;
 }
 
 int64_t VLCBasePlayer::GetTime() const
