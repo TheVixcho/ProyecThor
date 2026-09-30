@@ -396,7 +396,11 @@ static unsigned vlc_format(void** opaque, char* chroma, unsigned* width, unsigne
         *height = realH;
     }
 
+#ifdef _WIN32
     std::memcpy(chroma, "RGBA", 4);
+#else
+    std::memcpy(chroma, "RV32", 4);
+#endif
     ctx->width  = *width;
     ctx->height = *height;
     *pitches    = (*width) * 4;
@@ -719,6 +723,13 @@ void VLCBasePlayer::EnsureTexture(int w, int h)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    // En Linux (o cualquier entorno donde vmem no use alpha real, ej. RV32),
+    // el byte 4 es 0x00 (padding). Con GL_TEXTURE_SWIZZLE_A = GL_ONE,
+    // garantizamos que OpenGL/ImGui siempre muestree alpha 1.0 (opaco),
+    // evitando que el video se dibuje transparente (negro).
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_ONE);
+
     glBindTexture(GL_TEXTURE_2D, 0);
 
     m_VideoW = w;
@@ -1243,7 +1254,11 @@ bool VLCBasePlayer::UpdateTexture()
 
     EnsureTexture(static_cast<int>(w), static_cast<int>(h));
     glBindTexture(GL_TEXTURE_2D, m_TextureID);
+#ifdef _WIN32
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixelsToUpload);
+#else
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_BGRA, GL_UNSIGNED_BYTE, pixelsToUpload);
+#endif
     glBindTexture(GL_TEXTURE_2D, 0);
     return true;
 }
