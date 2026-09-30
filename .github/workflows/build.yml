@@ -13,8 +13,8 @@ permissions:
   contents: write
 
 jobs:
-  build-windows:
-    name: Compilar Binarios Windows (MinGW)
+  build-and-release-windows:
+    name: Compilar y Publicar Windows (MinGW + NSIS)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout del repositorio
@@ -22,64 +22,28 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Instalar dependencias MinGW y Ninja
+      - name: Instalar dependencias MinGW, Ninja y NSIS
         run: |
           sudo apt-get update
-          sudo apt-get install -y mingw-w64 ninja-build
+          sudo apt-get install -y mingw-w64 ninja-build nsis
           sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
           sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
 
-      - name: Configurar CMake para Windows
+      - name: Configurar CMake para Windows (MinGW)
         run: |
           cmake -B build-win -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchain-mingw.cmake" \
             -DPROYECTHOR_BUILD_NUMBER=${{ github.run_number }}
 
-      - name: Compilar ejecutable y recursos
+      - name: Compilar ejecutable y recursos de Windows
         run: cmake --build build-win
-
-      - name: Subir artefactos de compilación Windows
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-win
-          path: |
-            build-win/**
-            !build-win/CMakeFiles/**
-            !build-win/_deps/**
-            !build-win/generated/**
-            !build-win/**/*.o
-            !build-win/**/*.ninja
-            !build-win/.ninja_log
-            !build-win/.ninja_deps
-            !build-win/CMakeCache.txt
-            !build-win/cmake_install.cmake
-          if-no-files-found: error
-
-  package-and-release:
-    name: Generar Instalador Inno Setup y Publicar Release
-    needs: build-windows
-    runs-on: windows-latest
-    steps:
-      - name: Checkout del repositorio
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Descargar artefactos compilados de Windows
-        uses: actions/download-artifact@v4
-        with:
-          name: build-win
-          path: build-win
-
-      - name: Instalar Inno Setup
-        run: choco install innosetup -y
 
       - name: Calcular Versión, Metadatos y Listado de Commits
         id: meta
         shell: bash
         run: |
           # 1. Obtener versión declarada en CMakeLists.txt
-          VERSION=$(grep -oP 'project\(\s*ProyecThor\s+VERSION\s+\K[0-9.]+' CMakeLists.txt || echo "1.0.2")
+          VERSION=$(grep -A 2 'project(ProyecThor' CMakeLists.txt | grep -oP 'VERSION\s+\K[0-9.]+' || echo "1.0.2")
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
           # 2. Configurar etiqueta y tipo de release según rama o tag
@@ -98,7 +62,7 @@ jobs:
           elif [ "$REF_NAME" = "beta" ]; then
               TAG_NAME="v${VERSION}-beta"
               IS_PRERELEASE="true"
-              RELEASE_NAME="ProyecThor v${VERSION} (Pre-release Beta)"
+              RELEASE_NAME="ProyecThor v${VERSION} Beta (Pre-release)"
           else
               TAG_NAME="v${VERSION}"
               IS_PRERELEASE="false"
@@ -109,8 +73,8 @@ jobs:
           echo "IS_PRERELEASE=$IS_PRERELEASE" >> $GITHUB_ENV
           echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_ENV
 
-          # 3. Generar listado de commits
-          echo "## Lista de cambios y commits incluidos:" > release_notes.md
+          # 3. Generar listado de commits para las notas de versión
+          echo "## 🚀 Lista de cambios incluidos en esta entrega:" > release_notes.md
           echo "" >> release_notes.md
 
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
@@ -123,18 +87,24 @@ jobs:
           fi
           echo "" >> release_notes.md
 
-      - name: Compilar Instalador Inno Setup (.exe)
-        shell: bash
+      - name: Generar Instalador Windows con NSIS (.exe)
         run: |
-          "C:/Program Files (x86)/Inno Setup 6/ISCC.exe" \
-            "/DBuildDir=$(pwd)/build-win" \
-            "/DProductVersion=${{ env.VERSION }}" \
-            "packaging/windows/ProyecThor.iss"
+          mkdir -p packaging/windows/dist
+          makensis -DVERSION="${{ env.VERSION }}" \
+                   -DBUILD_DIR="$(pwd)/build-win" \
+                   -DOUT_DIR="$(pwd)/packaging/windows/dist" \
+                   packaging/windows/ProyecThor.nsi
 
-          # Copia versionada para descarga directa
+          # Copia adicional con número de versión para descarga directa
           cp packaging/windows/dist/ProyecThor_Setup.exe packaging/windows/dist/ProyecThor_Setup_v${{ env.VERSION }}.exe
 
-      - name: Publicar Release en GitHub
+      - name: Guardar instalador en los artefactos del Workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: ProyecThor-Windows-Installer
+          path: packaging/windows/dist/*.exe
+
+      - name: Publicar Release / Pre-release en GitHub
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG_NAME }}
@@ -142,6 +112,7 @@ jobs:
           name: ${{ env.RELEASE_NAME }}
           body_path: release_notes.md
           prerelease: ${{ env.IS_PRERELEASE == 'true' }}
+          make_latest: ${{ env.IS_PRERELEASE != 'true' }}
           generate_release_notes: true
           files: |
             packaging/windows/dist/ProyecThor_Setup.exe
