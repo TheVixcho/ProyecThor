@@ -43,7 +43,7 @@ std::string FullVideoPath(const std::string& filename) {
     if (filename.empty()) return "";
     if (std::filesystem::path(filename).is_absolute()) return filename;
     if (filename.rfind("http://", 0) == 0 || filename.rfind("https://", 0) == 0 || filename.rfind("rtsp://", 0) == 0) return filename;
-    return GetAssetsPath() + "/videos/" + filename;
+    return GetVideoLibraryPath() + "/" + filename;
 }
 
 void LoadIndex(LibraryContext& ctx, int index) {

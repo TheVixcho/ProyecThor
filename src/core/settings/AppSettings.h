@@ -45,6 +45,7 @@ namespace ProyecThor::Settings {
         bool     openHubOnStartup = false;
         std::string defaultBiblesFolder = "assets/bibles";
         std::string defaultMediaFolder  = "assets/videos";
+        bool        duplicateMediaFiles = false;
         std::string lastOpenedBible     = "";
     };
 

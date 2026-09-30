@@ -12,6 +12,7 @@
 #include <thread>
 #include <chrono>
 #include "Version.h"
+#include "framework/PatchNotesData.h"
 
 std::string GetAppDataFilePath(const std::string& filename);
 
@@ -106,11 +107,6 @@ void Render(GLFWwindow* window, ImVec2 size, const std::string& status, float pr
     const float padX     = 50.0f;
     const float logoSize = 88.0f * scaleY;
     const float logoY    = 58.0f * scaleY;
-    const ImVec2 logoCenter(padX + logoSize * 0.5f, logoY + logoSize * 0.5f);
-
-    const float pulse = 0.5f + 0.5f * sinf(elapsed * 1.8f);
-    dl->AddCircleFilled(logoCenter, logoSize * 0.72f + pulse * 5.0f,
-        ThemeColorU32(theme.accent, (0.05f + pulse * 0.05f) * appear), 40);
 
     if (logoTexture != 0)
         dl->AddImage((void*)(intptr_t)logoTexture, ImVec2(padX, logoY), ImVec2(padX + logoSize, logoY + logoSize));
@@ -245,11 +241,6 @@ void WaitForUserConfirmation(GLFWwindow* window, ImVec2 size,
         const float padX     = 50.0f;
         const float logoSize = 88.0f * scaleY;
         const float logoY    = 58.0f * scaleY;
-        const ImVec2 logoCenter(padX + logoSize * 0.5f, logoY + logoSize * 0.5f);
-
-        const float pulse = 0.5f + 0.5f * sinf(elapsed * 2.2f);
-        dl->AddCircleFilled(logoCenter, logoSize * 0.72f + pulse * 6.0f,
-            ThemeColorU32(theme.accent, 0.08f + pulse * 0.08f), 40);
 
         if (logoTexture != 0)
             dl->AddImage((void*)(intptr_t)logoTexture, ImVec2(padX, logoY), ImVec2(padX + logoSize, logoY + logoSize));
@@ -285,39 +276,171 @@ void WaitForUserConfirmation(GLFWwindow* window, ImVec2 size,
         dl->AddRectFilled(ImVec2(0.0f, footerY), size, ThemeColorU32(theme.base, 218.0f / 255.0f));
         dl->AddLine(ImVec2(0.0f, footerY), ImVec2(size.x, footerY), ThemeColorU32(theme.borderFaint, 18.0f / 255.0f), 1.0f);
 
-        // --- Botón interactivo central / profesional "Presiona aquí para continuar" ---
-        const float btnW = 300.0f * scaleY;
-        const float btnH = 38.0f * scaleY;
-        const float btnX = padX;
-        const float btnY = footerY + (footerH - btnH) * 0.5f - 2.0f;
+        // --- Botones interactivos limpios: "Iniciar" y "Notas de versión" ---
+        const float btnW      = 120.0f * scaleY;
+        const float notesBtnW = 150.0f * scaleY;
+        const float btnH      = 34.0f * scaleY;
+        const float btnX      = padX;
+        const float btnY      = footerY + (footerH - btnH) * 0.5f - 2.0f;
+
+        static bool s_ShowPatchNotesModal = false;
 
         ImGui::SetCursorPos(ImVec2(btnX, btnY));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f * scaleY);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f * scaleY);
 
-        float btnPulse = 0.5f + 0.5f * sinf(elapsed * 3.0f);
-        ImVec4 btnBaseCol = ThemeColorVec4(theme.accent);
-        btnBaseCol.w = 0.85f + 0.15f * btnPulse;
-
-        ImGui::PushStyleColor(ImGuiCol_Button,        btnBaseCol);
+        ImGui::PushStyleColor(ImGuiCol_Button,        ThemeColorVec4(theme.accent));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ThemeColorVec4(theme.accentLight));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ThemeColorVec4(theme.accent));
         ImGui::PushStyleColor(ImGuiCol_Text,          ThemeColorVec4(theme.textPrimary));
 
         if (fonts.small) ImGui::PushFont(fonts.small);
-        if (ImGui::Button("Presiona aqui para continuar  >", ImVec2(btnW, btnH))) {
+        if (ImGui::Button("Iniciar", ImVec2(btnW, btnH))) {
             confirmed = true;
         }
+
+        ImGui::SameLine(0.0f, 10.0f * scaleY);
+        ImGui::PushStyleColor(ImGuiCol_Button,        ThemeColorVec4(theme.surface1));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ThemeColorVec4(theme.surface2));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ThemeColorVec4(theme.surface3));
+        ImGui::PushStyleColor(ImGuiCol_Text,          ThemeColorVec4(theme.textPrimary));
+        if (ImGui::Button("Notas de versión", ImVec2(notesBtnW, btnH))) {
+            s_ShowPatchNotesModal = !s_ShowPatchNotesModal;
+        }
+        ImGui::PopStyleColor(4);
+
         if (fonts.small) ImGui::PopFont();
         ImGui::PopStyleColor(4);
         ImGui::PopStyleVar();
 
-        // Si el usuario presiona Enter, Espacio o hace click en la ventana: continuar
-        if (ImGui::IsKeyPressed(ImGuiKey_Enter) ||
-            ImGui::IsKeyPressed(ImGuiKey_Space) ||
-            ImGui::IsKeyPressed(ImGuiKey_KeypadEnter) ||
-            (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && (elapsed - startTime > 0.35f)))
-        {
-            confirmed = true;
+        // Si el modal de notas está abierto, mostrar el diálogo interactivo
+        if (s_ShowPatchNotesModal) {
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+                s_ShowPatchNotesModal = false;
+            }
+
+            const float padM    = 14.0f * scaleY;
+            const float mWidth  = size.x - padM * 2.0f;
+            const float mHeight = size.y - padM * 2.0f;
+
+            ImGui::SetNextWindowPos(ImVec2(padM, padM));
+            ImGui::SetNextWindowSize(ImVec2(mWidth, mHeight));
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ThemeColorVec4(theme.surface0, 0.98f));
+            ImGui::PushStyleColor(ImGuiCol_Border,   ThemeColorVec4(theme.accent, 0.75f));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f * scaleY);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.5f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f * scaleY, 12.0f * scaleY));
+
+            if (ImGui::Begin("##PatchNotesModal", &s_ShowPatchNotesModal,
+                             ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
+                             ImGuiWindowFlags_NoMove     | ImGuiWindowFlags_NoTitleBar))
+            {
+                // Cabecera
+                if (fonts.regular) ImGui::PushFont(fonts.regular);
+                ImGui::TextColored(ThemeColorVec4(theme.accentLight), "Notas de Versión");
+                if (fonts.regular) ImGui::PopFont();
+
+                ImGui::SameLine(0.0f, 8.0f * scaleY);
+                if (fonts.small) ImGui::PushFont(fonts.small);
+                ImGui::TextColored(ThemeColorVec4(theme.textDim), "— Historial Completo");
+                if (fonts.small) ImGui::PopFont();
+
+                const float closeIconSize = 22.0f * scaleY;
+                ImGui::SameLine(mWidth - closeIconSize - 32.0f * scaleY);
+                ImGui::PushStyleColor(ImGuiCol_Button,        ThemeColorVec4(theme.surface2));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ThemeColorVec4(theme.surface3));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ThemeColorVec4(theme.surface1));
+                ImGui::PushStyleColor(ImGuiCol_Text,          ThemeColorVec4(theme.textPrimary));
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f * scaleY);
+                if (ImGui::Button("X##close_notes_top", ImVec2(closeIconSize, closeIconSize))) {
+                    s_ShowPatchNotesModal = false;
+                }
+                ImGui::PopStyleVar();
+                ImGui::PopStyleColor(4);
+
+                ImGui::Separator();
+                ImGui::Dummy(ImVec2(0.0f, 4.0f * scaleY));
+
+                // Área de notas con scroll vertical hacia abajo (estilo Hub)
+                const float footerAreaH = 40.0f * scaleY;
+                ImGui::BeginChild("##NotesScroll", ImVec2(0.0f, -footerAreaH), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+
+                const auto& patchNotes = ProyecThor::UI::GetPatchNotesRegistry();
+                for (size_t i = 0; i < patchNotes.size(); ++i) {
+                    const auto& info = patchNotes[i];
+                    ImGui::PushID(static_cast<int>(i));
+
+                    ImGui::PushStyleColor(ImGuiCol_ChildBg, ThemeColorVec4(theme.surface1, 0.65f));
+                    ImGui::PushStyleColor(ImGuiCol_Border,  info.isBeta ? ThemeColorVec4(theme.borderFaint, 0.40f) : ThemeColorVec4(theme.accent, 0.55f));
+                    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6.0f * scaleY);
+                    ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.2f);
+                    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f * scaleY, 8.0f * scaleY));
+
+                    char cardId[32];
+                    snprintf(cardId, sizeof(cardId), "##card_%d", info.id);
+                    if (ImGui::BeginChild(cardId, ImVec2(0.0f, 0.0f),
+                            ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_Borders,
+                            ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+                    {
+                        if (fonts.small) ImGui::PushFont(fonts.small);
+                        const char* badge = (info.modalBadge && info.modalBadge[0]) ? info.modalBadge : (info.isBeta ? "ETAPA BETA" : "ACTUALIZACIÓN ESTABLE");
+                        ImGui::TextColored(info.isBeta ? ThemeColorVec4(theme.textDim) : ThemeColorVec4(theme.accentLight), "[ %s ]", badge);
+                        ImGui::SameLine(0.0f, 10.0f * scaleY);
+                        ImGui::TextColored(ThemeColorVec4(theme.textPrimary), "•  Versión v%s", info.version);
+                        if (fonts.small) ImGui::PopFont();
+
+                        ImGui::Dummy(ImVec2(0.0f, 2.0f * scaleY));
+
+                        if (fonts.small) ImGui::PushFont(fonts.small);
+                        ImGui::PushTextWrapPos(0.0f);
+                        ImGui::TextColored(ThemeColorVec4(theme.textDim), "%s", info.summary);
+                        ImGui::PopTextWrapPos();
+                        if (fonts.small) ImGui::PopFont();
+                    }
+                    ImGui::EndChild();
+                    ImGui::PopStyleVar(3);
+                    ImGui::PopStyleColor(2);
+
+                    ImGui::Dummy(ImVec2(0.0f, 6.0f * scaleY));
+                    ImGui::PopID();
+                }
+
+                ImGui::EndChild(); // ##NotesScroll
+
+                // Barra inferior de acciones (Cerrar / Iniciar) limpia y sin cortes
+                ImGui::Dummy(ImVec2(0.0f, 4.0f * scaleY));
+
+                const float btnH       = 28.0f * scaleY;
+                const float closeBtnW  = 100.0f * scaleY;
+                const float launchBtnW = 160.0f * scaleY;
+
+                ImGui::PushStyleColor(ImGuiCol_Button,        ThemeColorVec4(theme.surface2));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ThemeColorVec4(theme.surface3));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ThemeColorVec4(theme.surface1));
+                ImGui::PushStyleColor(ImGuiCol_Text,          ThemeColorVec4(theme.textPrimary));
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f * scaleY);
+
+                if (fonts.small) ImGui::PushFont(fonts.small);
+                if (ImGui::Button("Cerrar", ImVec2(closeBtnW, btnH))) {
+                    s_ShowPatchNotesModal = false;
+                }
+
+                ImGui::SameLine(0.0f, 12.0f * scaleY);
+                ImGui::PushStyleColor(ImGuiCol_Button,        ThemeColorVec4(theme.accent));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ThemeColorVec4(theme.accentLight));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ThemeColorVec4(theme.accent));
+                ImGui::PushStyleColor(ImGuiCol_Text,          ThemeColorVec4(theme.textPrimary));
+                if (ImGui::Button("Iniciar ProyecThor", ImVec2(launchBtnW, btnH))) {
+                    confirmed = true;
+                }
+                ImGui::PopStyleColor(4);
+
+                if (fonts.small) ImGui::PopFont();
+                ImGui::PopStyleVar();
+                ImGui::PopStyleColor(4);
+            }
+            ImGui::End();
+            ImGui::PopStyleVar(3);
+            ImGui::PopStyleColor(2);
         }
 
         static const std::string versionLine =

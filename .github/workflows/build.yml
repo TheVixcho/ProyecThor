@@ -1,84 +1,150 @@
-name: Build
+name: Build & Release Windows
 
-# Solo build-linux: el build de Windows lo compila el autor a mano en su
-# propia PC (no usa el instalador .msi), asi que no tiene sentido gastar
-# minutos de CI en eso -- ver commit que retiro build-windows/package-msi.
 on:
   push:
-    branches: [main, beta]
-    tags: ["v*"]
-  pull_request:
+    branches:
+      - main
+      - beta
+    tags:
+      - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  build-linux:
+  build-windows:
+    name: Compilar Binarios Windows (MinGW)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Instalar dependencias
-        # libglfw3-dev NO se instala a proposito: GLFW se compila desde
-        # fuente en CMakeLists.txt (FetchContent, tag 3.4) porque Ubuntu
-        # todavia empaqueta la 3.3.x, que le falta glfwGetPlatform() (usada
-        # por el backend de ImGui, ver comentario en CMakeLists.txt) -- en
-        # cambio se instalan los paquetes de desarrollo que GLFW necesita
-        # para compilar sus backends X11 y Wayland el mismo.
+      - name: Instalar dependencias MinGW y Ninja
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            ninja-build libgl1-mesa-dev libx11-dev \
-            libxcomposite-dev libopencv-dev libpipewire-0.3-dev libdbus-1-dev \
-            libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev \
-            libwayland-dev libxkbcommon-dev wayland-protocols extra-cmake-modules
+          sudo apt-get install -y mingw-w64 ninja-build
+          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
 
-      - name: Configurar
-        run: cmake -B build-linux -G Ninja -DPROYECTHOR_BUILD_NUMBER=${{ github.run_number }}
+      - name: Configurar CMake para Windows
+        run: |
+          cmake -B build-win -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchain-mingw.cmake" \
+            -DPROYECTHOR_BUILD_NUMBER=${{ github.run_number }}
 
-      - name: Compilar
-        run: cmake --build build-linux
+      - name: Compilar ejecutable y recursos
+        run: cmake --build build-win
 
-      - name: Subir artifact
+      - name: Subir artefactos de compilación Windows
         uses: actions/upload-artifact@v4
         with:
-          name: ProyecThor-linux-${{ github.run_number }}
+          name: build-win
           path: |
-            build-linux/**
-            !build-linux/CMakeFiles/**
-            !build-linux/_deps/**
-            !build-linux/generated/**
-            !build-linux/**/*.o
-            !build-linux/**/*.ninja
-            !build-linux/.ninja_log
-            !build-linux/.ninja_deps
-            !build-linux/CMakeCache.txt
-            !build-linux/cmake_install.cmake
+            build-win/**
+            !build-win/CMakeFiles/**
+            !build-win/_deps/**
+            !build-win/generated/**
+            !build-win/**/*.o
+            !build-win/**/*.ninja
+            !build-win/.ninja_log
+            !build-win/.ninja_deps
+            !build-win/CMakeCache.txt
+            !build-win/cmake_install.cmake
           if-no-files-found: error
 
-  # Valida que packaging/arch/PKGBUILD compila y empaqueta de verdad -- sin
-  # esto, un PKGBUILD roto solo se descubriria cuando alguien intentara
-  # instalarlo en su propia maquina (CachyOS/Arch). makepkg se niega a
-  # correr como root, asi que hace falta crear un usuario de build aparte.
-  package-arch:
-    needs: build-linux
-    runs-on: ubuntu-latest
-    container: archlinux:base-devel
+  package-and-release:
+    name: Generar Instalador Inno Setup y Publicar Release
+    needs: build-windows
+    runs-on: windows-latest
     steps:
-      - name: Preparar usuario de build
-        run: |
-          pacman -Syu --noconfirm --needed sudo git
-          useradd -m builder
-          echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builder
-
-      - uses: actions/checkout@v4
-
-      - name: Compilar PKGBUILD (makepkg -s instala las dependencias declaradas solo)
-        run: |
-          chown -R builder:builder "$GITHUB_WORKSPACE"
-          su builder -c "cd '$GITHUB_WORKSPACE/packaging/arch' && makepkg -s --noconfirm"
-
-      - name: Subir paquete
-        uses: actions/upload-artifact@v4
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
         with:
-          name: proyecthor-arch-${{ github.run_number }}
-          path: packaging/arch/*.pkg.tar.zst
-          if-no-files-found: error
+          fetch-depth: 0
+
+      - name: Descargar artefactos compilados de Windows
+        uses: actions/download-artifact@v4
+        with:
+          name: build-win
+          path: build-win
+
+      - name: Instalar Inno Setup
+        run: choco install innosetup -y
+
+      - name: Calcular Versión, Metadatos y Listado de Commits
+        id: meta
+        shell: bash
+        run: |
+          # 1. Obtener versión declarada en CMakeLists.txt
+          VERSION=$(grep -oP 'project\(\s*ProyecThor\s+VERSION\s+\K[0-9.]+' CMakeLists.txt || echo "1.0.2")
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+          # 2. Configurar etiqueta y tipo de release según rama o tag
+          REF_NAME="${{ github.ref_name }}"
+          IS_TAG="${{ github.ref_type == 'tag' }}"
+
+          if [ "$IS_TAG" = "true" ]; then
+              TAG_NAME="$REF_NAME"
+              if [[ "$REF_NAME" == *"beta"* || "$REF_NAME" == *"rc"* ]]; then
+                  IS_PRERELEASE="true"
+                  RELEASE_NAME="ProyecThor ${REF_NAME} (Pre-release)"
+              else
+                  IS_PRERELEASE="false"
+                  RELEASE_NAME="ProyecThor ${REF_NAME}"
+              fi
+          elif [ "$REF_NAME" = "beta" ]; then
+              TAG_NAME="v${VERSION}-beta"
+              IS_PRERELEASE="true"
+              RELEASE_NAME="ProyecThor v${VERSION} (Pre-release Beta)"
+          else
+              TAG_NAME="v${VERSION}"
+              IS_PRERELEASE="false"
+              RELEASE_NAME="ProyecThor v${VERSION}"
+          fi
+
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
+          echo "IS_PRERELEASE=$IS_PRERELEASE" >> $GITHUB_ENV
+          echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_ENV
+
+          # 3. Generar listado de commits
+          echo "## Lista de cambios y commits incluidos:" > release_notes.md
+          echo "" >> release_notes.md
+
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+              echo "### Commits desde la versión previa ($PREV_TAG):" >> release_notes.md
+              git log "${PREV_TAG}..HEAD" --pretty=format:"* %s (%h - %an)" >> release_notes.md
+          else
+              echo "### Últimos commits de esta versión:" >> release_notes.md
+              git log -n 25 --pretty=format:"* %s (%h - %an)" >> release_notes.md
+          fi
+          echo "" >> release_notes.md
+
+      - name: Compilar Instalador Inno Setup (.exe)
+        shell: bash
+        run: |
+          "C:/Program Files (x86)/Inno Setup 6/ISCC.exe" \
+            "/DBuildDir=$(pwd)/build-win" \
+            "/DProductVersion=${{ env.VERSION }}" \
+            "packaging/windows/ProyecThor.iss"
+
+          # Copia versionada para descarga directa
+          cp packaging/windows/dist/ProyecThor_Setup.exe packaging/windows/dist/ProyecThor_Setup_v${{ env.VERSION }}.exe
+
+      - name: Publicar Release en GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ env.RELEASE_NAME }}
+          body_path: release_notes.md
+          prerelease: ${{ env.IS_PRERELEASE == 'true' }}
+          generate_release_notes: true
+          files: |
+            packaging/windows/dist/ProyecThor_Setup.exe
+            packaging/windows/dist/ProyecThor_Setup_v${{ env.VERSION }}.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

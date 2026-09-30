@@ -45,7 +45,6 @@
 #include "ui/panels/biblio/LibraryMultimedia.h"
 #include "ui/panels/overlay/OverlayExportService.h"
 #include "ui/panels/HomePanel.h"
-#include "ui/framework/Hub.h"
 #include "ui/panels/ViewPanel.h"
 #include "ui/panels/StylesHubPanel.h"
 #include "ui/panels/StreamingWorkspacePanel.h"
@@ -200,24 +199,49 @@ void ImportAndPreviewExternalFile(const std::string& externalPath)
             return;
         }
 
-        const std::string destDirUtf8 = (kind == PendingMediaKind::Audio)
-            ? GetAudioLibraryPath()
-            : (ProyecThor::Library::GetAssetsPath() + "/videos");
-
+        std::string filenameUtf8;
+        if (kind == PendingMediaKind::Video) {
+            auto& settings = ProyecThor::Settings::SettingsManager::Get().GetSettings();
+            if (!settings.general.duplicateMediaFiles) {
+                settings.general.defaultMediaFolder = src.parent_path().string();
+                ProyecThor::Settings::SettingsManager::Get().SaveSettings();
 #ifdef _WIN32
-        std::filesystem::path destDir{ProyecThor::Library::Utf8ToWide(destDirUtf8)};
+                filenameUtf8 = ProyecThor::Library::WideToUtf8(src.filename().wstring());
 #else
-        std::filesystem::path destDir{destDirUtf8};
+                filenameUtf8 = src.filename().string();
 #endif
-        std::filesystem::create_directories(destDir);
-        std::filesystem::path dest = destDir / src.filename();
-        std::filesystem::copy(src, dest, std::filesystem::copy_options::overwrite_existing);
-
+            } else {
+                const std::string destDirUtf8 = ProyecThor::Library::GetVideoLibraryPath();
 #ifdef _WIN32
-        std::string filenameUtf8 = ProyecThor::Library::WideToUtf8(dest.filename().wstring());
+                std::filesystem::path destDir{ProyecThor::Library::Utf8ToWide(destDirUtf8)};
 #else
-        std::string filenameUtf8 = dest.filename().string();
+                std::filesystem::path destDir{destDirUtf8};
 #endif
+                std::filesystem::create_directories(destDir);
+                std::filesystem::path dest = destDir / src.filename();
+                std::filesystem::copy(src, dest, std::filesystem::copy_options::overwrite_existing);
+#ifdef _WIN32
+                filenameUtf8 = ProyecThor::Library::WideToUtf8(dest.filename().wstring());
+#else
+                filenameUtf8 = dest.filename().string();
+#endif
+            }
+        } else {
+            const std::string destDirUtf8 = GetAudioLibraryPath();
+#ifdef _WIN32
+            std::filesystem::path destDir{ProyecThor::Library::Utf8ToWide(destDirUtf8)};
+#else
+            std::filesystem::path destDir{destDirUtf8};
+#endif
+            std::filesystem::create_directories(destDir);
+            std::filesystem::path dest = destDir / src.filename();
+            std::filesystem::copy(src, dest, std::filesystem::copy_options::overwrite_existing);
+#ifdef _WIN32
+            filenameUtf8 = ProyecThor::Library::WideToUtf8(dest.filename().wstring());
+#else
+            filenameUtf8 = dest.filename().string();
+#endif
+        }
 
         ProyecThor::Core::LibrarySelection sel;
         sel.title = filenameUtf8;

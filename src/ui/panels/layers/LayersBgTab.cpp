@@ -3,6 +3,7 @@
 #include "core/PresentationCore.h"
 #include "core/FileDeletionManager.h"
 #include "core/AppPaths.h"
+#include "ui/panels/biblio/LibraryHelpers.h"
 #include "ui/panels/biblio/LibraryMultimedia.h"
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
@@ -360,8 +361,8 @@ void LayersBgTab::BgContextMenu(const BgEntry& entry) {
     if (ImGui::Selectable("  Mover a Biblioteca (Media)")) {
         std::error_code ec;
         fs::path src(entry.fullPath);
-        std::string targetDir = entry.isImage ? (GetAssetsPath() + "/images") : (GetAssetsPath() + "/videos");
-        fs::create_directories(targetDir, ec);
+        std::string targetDir = entry.isImage ? (GetAssetsPath() + "/images") : Library::GetVideoLibraryPath();
+        fs::create_directories(Library::U8Path(targetDir), ec);
         fs::path dst = fs::path(targetDir) / src.filename();
         fs::rename(src, dst, ec);
         ReloadList();
@@ -370,8 +371,8 @@ void LayersBgTab::BgContextMenu(const BgEntry& entry) {
     if (ImGui::Selectable("  Copiar a Biblioteca (Media)")) {
         std::error_code ec;
         fs::path src(entry.fullPath);
-        std::string targetDir = entry.isImage ? (GetAssetsPath() + "/images") : (GetAssetsPath() + "/videos");
-        fs::create_directories(targetDir, ec);
+        std::string targetDir = entry.isImage ? (GetAssetsPath() + "/images") : Library::GetVideoLibraryPath();
+        fs::create_directories(Library::U8Path(targetDir), ec);
         fs::path dst = fs::path(targetDir) / src.filename();
         fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
         Library::RefreshMultimediaLists();

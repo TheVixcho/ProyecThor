@@ -47,7 +47,7 @@ static std::vector<MMItem> s_Videos, s_Audios, s_Images;
 static bool  s_GridMode  = true;
 static float s_ThumbZoom = 1.0f;
 
-static std::string VideoFolder() { return GetAssetsPath() + "/videos"; }
+static std::string VideoFolder() { return GetVideoLibraryPath(); }
 static std::string ImageFolder() { return GetAssetsPath() + "/images"; }
 static std::string AudioFolder() { return ProyecThor::Audio::GetAudioPath(); }
 

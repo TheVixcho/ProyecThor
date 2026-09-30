@@ -535,27 +535,15 @@ void ShadersPanel::RenderContent() {
 
     ImGui::Dummy(ImVec2(0.0f, 3.0f));
 
-    // ── 2. Barra de Búsqueda y Botón Restablecer (Fila 1) ──────────────────────
-    const float resetBtnW = 120.0f;
-    const float searchW   = std::max(120.0f, availW - resetBtnW - 14.0f);
+    // ── 2. Botón Restablecer Todo ─────────────────────────────────────────────
+    const float resetBtnW = 140.0f;
 
-    ImGui::SetNextItemWidth(std::min(searchW, 320.0f));
-    ImGui::InputTextWithHint("##shaderSearch", "🔍 Buscar efecto...", m_SearchFilter, sizeof(m_SearchFilter));
-    if (m_SearchFilter[0] != '\0') {
-        ImGui::SameLine();
-        if (ImGui::Button("✕##clearSearch", ImVec2(24.0f, 0.0f))) {
-            m_SearchFilter[0] = '\0';
-        }
-    }
-
-    // Botón Restablecer Todo — fijado a la derecha de la fila de búsqueda para que NUNCA se corte
-    ImGui::SameLine(std::max(ImGui::GetCursorPosX(), ImGui::GetWindowContentRegionMax().x - resetBtnW));
     ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(80, 35, 45, 180));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(140, 45, 60, 230));
     ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(245, 140, 150, 255));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6.0f, 3.0f));
-    if (ImGui::Button("↺ Restablecer", ImVec2(resetBtnW, 0.0f))) {
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 4.0f));
+    if (ImGui::Button("↺ Restablecer Todo", ImVec2(resetBtnW, 0.0f))) {
         p.crtEnabled = false; p.grainEnabled = false; p.fxaaEnabled = false;
         p.saturationEnabled = false; p.vignetteEnabled = false; p.blurEnabled = false;
         p.sharpenEnabled = false; p.bloomEnabled = false; p.chromaticAberrationEnabled = false;
@@ -579,8 +567,8 @@ void ShadersPanel::RenderContent() {
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(3);
 
-    // ── 3. Presets Rápidos con Auto-Wrap Responsivo (Fila 2) ───────────────────
-    ImGui::Dummy(ImVec2(0.0f, 2.0f));
+    // ── 3. Presets Rápidos con Auto-Wrap Responsivo ───────────────────────────
+    ImGui::SameLine(0.0f, 12.0f);
     ImGui::TextColored(ImVec4(0.6f, 0.65f, 0.75f, 0.9f), "Presets:");
 
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
@@ -636,48 +624,6 @@ void ShadersPanel::RenderContent() {
     });
 
     ImGui::PopStyleVar(2);
-
-    ImGui::Dummy(ImVec2(0.0f, 4.0f));
-
-    // ── 4. Pestañas de Categoría con Auto-Wrap (Fila 3) ────────────────────────
-    const char* kCategories[] = {
-        "Todos los Efectos",
-        "✨ Calidad & Color",
-        "🎬 Cine & Estilo",
-        "📺 Retro & Distorsión",
-        "🌊 Óptico & Creativo",
-        "🌫 Volumétricos & Zonas"
-    };
-
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(9.0f, 4.0f));
-    for (int catIdx = 0; catIdx < 6; ++catIdx) {
-        float btnW = ImGui::CalcTextSize(kCategories[catIdx]).x + 20.0f;
-        if (catIdx > 0) {
-            if (ImGui::GetContentRegionAvail().x >= btnW + 4.0f) {
-                ImGui::SameLine(0.0f, 4.0f);
-            }
-        }
-        bool isSel = (m_SelectedCategory == catIdx);
-
-        if (isSel) {
-            ImGui::PushStyleColor(ImGuiCol_Button, DS::AccentColor);
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, DS::AccentColorHov);
-            ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32_WHITE);
-        } else {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill));
-            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
-        }
-
-        if (ImGui::Button(kCategories[catIdx])) {
-            m_SelectedCategory = catIdx;
-        }
-
-        ImGui::PopStyleColor(3);
-    }
-    ImGui::PopStyleVar(2);
-
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
     // ── 5. Definición de Efectos y Filtro ─────────────────────────────────────
@@ -931,29 +877,10 @@ void ShadersPanel::RenderContent() {
     });
 
     // ── 6. Filtrado por Categoría y Búsqueda ──────────────────────────────────
-    std::string searchLower = m_SearchFilter;
-    std::transform(searchLower.begin(), searchLower.end(), searchLower.begin(), ::tolower);
-
-    std::vector<Effect> filteredEffects;
+    // ── 6. Efectos Activos ────────────────────────────────────────────────────
     int activeCount = 0;
-
     for (const auto& e : allEffects) {
         if (*e.enabled) activeCount++;
-
-        // Filtro por categoría
-        if (m_SelectedCategory > 0 && e.category != m_SelectedCategory) continue;
-
-        // Filtro por búsqueda
-        if (!searchLower.empty()) {
-            std::string tLower = e.title;
-            std::string dLower = e.desc;
-            std::transform(tLower.begin(), tLower.end(), tLower.begin(), ::tolower);
-            std::transform(dLower.begin(), dLower.end(), dLower.begin(), ::tolower);
-            if (tLower.find(searchLower) == std::string::npos && dLower.find(searchLower) == std::string::npos)
-                continue;
-        }
-
-        filteredEffects.push_back(e);
     }
 
     // Badge contador de efectos activos
@@ -972,19 +899,19 @@ void ShadersPanel::RenderContent() {
     const int   cols      = std::max(1, (int)((availW + gap) / (baseCardW + gap)));
     const float cardW     = (availW - gap * (float)(cols - 1)) / (float)cols;
 
-    const int   count    = (int)filteredEffects.size();
+    const int   count    = (int)allEffects.size();
     const float originX  = ImGui::GetCursorScreenPos().x;
     float       cursorY  = ImGui::GetCursorScreenPos().y;
 
     for (int i = 0; i < count; i += cols) {
         float rowH = 0.0f;
         for (int c = 0; c < cols && i + c < count; c++) {
-            Effect& e = filteredEffects[i + c];
+            Effect& e = allEffects[i + c];
             rowH = std::max(rowH, ComputeCardHeight(e.sliderLabel != nullptr, e.secSliderLabel != nullptr, *e.enabled, e.modeVal != nullptr, e.modeCount));
         }
 
         for (int c = 0; c < cols && i + c < count; c++) {
-            Effect& e = filteredEffects[i + c];
+            Effect& e = allEffects[i + c];
             ImVec2  origin(originX + (float)c * (cardW + gap), cursorY);
             if (ShaderCard(origin, e.id, e.icon, e.accent, e.title, e.desc,
                            e.enabled, e.sliderLabel, e.sliderVal, e.sliderMin, e.sliderMax, cardW,
@@ -999,12 +926,6 @@ void ShadersPanel::RenderContent() {
         }
 
         cursorY += rowH + gap;
-    }
-
-    if (filteredEffects.empty()) {
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 40.0f);
-        ImGui::SetCursorPosX(availW * 0.5f - 120.0f);
-        ImGui::TextColored(ImVec4(0.6f, 0.65f, 0.75f, 0.7f), "No se encontraron efectos con ese filtro.");
     }
 
     ImGui::SetCursorScreenPos(ImVec2(originX, cursorY));

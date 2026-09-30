@@ -225,6 +225,60 @@ void SettingsPanel::RenderCategoryData()
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    //  Subcategoría: Gestión de Videos y Duplicación
+    // ─────────────────────────────────────────────────────────────────────────
+    if (SectionTitle("Gestión de Videos", "Almacenamiento")) {
+        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextPrimary),
+            "Carpeta de Videos Asignada y Opciones de Duplicación");
+        ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextSecondary),
+            "Para ahorrar espacio en disco, ProyecThor reproduce los videos directamente desde la carpeta asignada "
+            "sin copiarlos ni duplicarlos a la app.");
+
+        ImGui::Dummy(ImVec2(0.0f, 10.0f));
+
+        std::string currentVideoDir = settings.general.defaultMediaFolder.empty()
+            ? (ProyecThor::GetAssetsPath() + "/videos")
+            : settings.general.defaultMediaFolder;
+
+        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextHint), "Carpeta activa:");
+        ImGui::SameLine();
+        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::AccentColor), "%s", currentVideoDir.c_str());
+
+        ImGui::Dummy(ImVec2(0.0f, 6.0f));
+
+        if (DS::GlassButton("Cambiar carpeta de videos...", ImVec2(220.0f, 30.0f), DS::AccentColor)) {
+            std::string picked = ProyecThor::UI::PickFolder("Seleccionar carpeta de videos");
+            if (!picked.empty()) {
+                settings.general.defaultMediaFolder = picked;
+                mgr.SaveSettings();
+            }
+        }
+        ImGui::SameLine(0.0f, 10.0f);
+        if (!settings.general.defaultMediaFolder.empty()) {
+            if (DS::GlassButton("Restablecer por defecto", ImVec2(170.0f, 30.0f))) {
+                settings.general.defaultMediaFolder = "";
+                mgr.SaveSettings();
+            }
+            ImGui::SameLine(0.0f, 10.0f);
+        }
+        if (DS::GlassButton("Abrir en Explorador", ImVec2(150.0f, 30.0f))) {
+            OpenFolderInExplorer(currentVideoDir);
+        }
+
+        ImGui::Dummy(ImVec2(0.0f, 12.0f));
+
+        if (ImGui::Checkbox("Duplicar archivos de video en los archivos del programa", &settings.general.duplicateMediaFiles)) {
+            mgr.SaveSettings();
+        }
+        HelpTooltip("Desactivado por defecto. Si está activado, ProyecThor copiará una versión duplicada de cada video a la carpeta interna del programa. "
+                    "Si está desactivado, ProyecThor reproducirá los videos originales directamente desde la carpeta asignada.");
+
+        ImGui::Dummy(ImVec2(0.0f, 14.0f));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     //  Subcategoría 2: Carpetas de Importe Automático y Vinculadas (Watched Folders)
     // ─────────────────────────────────────────────────────────────────────────
     if (SectionTitle("Carpetas Vinculadas", "Almacenamiento")) {

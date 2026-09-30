@@ -10,6 +10,7 @@
 #include <cmath>
 #include "ui/framework/bin/StyleGeneralApp.h"
 #include "core/AppPaths.h"
+#include "ui/panels/biblio/LibraryHelpers.h"
 #include "ui/views/audio/AudioHelpers.h"
 #include "ui/views/audio/AudioAlbumArt.h"
 #include <filesystem>
@@ -109,7 +110,7 @@ void MonitorView::Render(Core::VLCBasePlayer* player)
 {
     std::string path = currentSel.title;
     if (path.rfind("http", 0) != 0 && !std::filesystem::path(path).is_absolute())
-        path = GetAssetsPath() + "/videos/" + path;
+        path = Library::GetVideoLibraryPath() + "/" + path;
 
     // Carga en un hilo aparte (ver PresentationCore::RequestPreviewLoad):
     // el video en vivo al publico nunca debe esperar a que el Preview

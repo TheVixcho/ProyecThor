@@ -25,7 +25,7 @@
   #define BuildDir "..\..\build-win"
 #endif
 #ifndef ProductVersion
-  #define ProductVersion "1.0.1"
+  #define ProductVersion "1.0.2"
 #endif
 
 [Setup]
@@ -60,6 +60,7 @@ WizardStyle=modern
 DisableWelcomePage=yes
 DisableDirPage=yes
 DisableReadyPage=yes
+CloseApplications=yes
 LicenseFile=LICENSE.rtf
 
 [Languages]

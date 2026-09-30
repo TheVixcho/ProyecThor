@@ -35,15 +35,6 @@ namespace {
 
 std::atomic<int> g_NextVlcInstanceId{0};
 
-// popen()/_popen() bloquean hasta que el proceso hijo termina (o el pipe se
-// cierra). yt-dlp puede tardar de mas o colgarse (red caida, proceso
-// zombie) — sin limite de tiempo eso congela quien haya llamado a Play()
-// (tipicamente el hilo principal de render). Corremos el trabajo bloqueante
-// en un hilo aparte y esperamos con timeout (mismo patron que
-// NetworkStreamServer::Start(), que ya usa promise/future + wait_for).
-// Si expira, devolvemos vacio para que Play() falle de forma controlada en
-// vez de colgar la app; el hilo detached simplemente termina en background
-// y se descarta cuando yt-dlp finalice por su cuenta.
 std::string GetDirectYoutubeURL(const std::string& youtubeURL)
 {
     auto runYtDlp = [](const std::string& url) -> std::string {
@@ -93,9 +84,6 @@ std::string GetDirectYoutubeURL(const std::string& youtubeURL)
     return "";
 }
 
-// Normaliza una ruta para comparacion: pasa todo a minusculas y reemplaza
-// backslashes por forward slashes. Se usa unicamente para decidir si una
-// ruta solicitada en Play() coincide con la ruta bloqueada por BlockPath().
 std::string NormalizePathForCompare(const std::string& path)
 {
     std::string result = path;
@@ -106,10 +94,7 @@ std::string NormalizePathForCompare(const std::string& path)
 }
 
 #ifdef _WIN32
-// Actualiza un maximo atomico sin locks. Se usa para los picos de audio,
-// leidos cada frame por el VU meter sin competir con el hilo de audio real.
-// Solo se usa en Windows: es la unica plataforma donde interceptamos los
-// samples crudos.
+
 static inline void AtomicUpdateMax(std::atomic<float>& target, float value)
 {
     float current = target.load(std::memory_order_relaxed);
@@ -135,19 +120,10 @@ struct VLCAudioCtx {
     WAVEHDR waveHeaders[NUM_BUFFERS] = {};
     int currentHeader = 0;
 
-    // true una vez que waveOutOpen tuvo exito. El dispositivo se abre al
-    // arrancar el audio y se mantiene abierto mientras no cambie de
-    // dispositivo (ver SetAudioDevice / OpenWaveOutDeviceLocked /
-    // CloseWaveOutDeviceLocked).
     bool deviceInitialized = false;
 
-    // Dispositivo WinMM deseado. WAVE_MAPPER = predeterminado del sistema.
-    // Se puede cambiar en caliente via VLCBasePlayer::SetAudioDevice(),
-    // que cierra y reabre el HWAVEOUT en el nuevo id.
     UINT_PTR deviceId = WAVE_MAPPER;
 
-    // Protege apertura/cierre/reapertura de hWaveOut contra el callback
-    // de audio (vlc_audio_play), que corre en un hilo interno de libVLC.
     std::mutex deviceMutex;
 #endif
 };
@@ -155,29 +131,18 @@ struct VLCAudioCtx {
 struct VLCVideoCtx {
     std::mutex mutex;
     libvlc_media_player_t* mp = nullptr;
-    void*    frontBuf = nullptr; // listo para subir a GL
-    void*    backBuf  = nullptr; // lo escribe el decoder de VLC
+    void*    frontBuf = nullptr;
+    void*    backBuf  = nullptr;
     unsigned width  = 0;
     unsigned height = 0;
+    unsigned pitch  = 0;
     bool     dirty  = false;
 
-    // Distinto de "dirty": dirty es "hay un frame NUEVO sin subir todavia a
-    // GL" y se consume (pasa a false) en cada UpdateTexture(). everHadFrame
-    // es pegajoso — una vez que se decodifico el primer frame real, queda
-    // en true hasta el proximo vlc_format() (nueva carga). HasVideoFrame()
-    // debe reflejar "ya se vio al menos un frame alguna vez", no "hay uno
-    // pendiente de subir ESTE instante" — mezclar ambas cosas hacia que
-    // GetLoadState()==Ready practicamente nunca se observara true: el
-    // mismo Update() que llamaba a UpdateTexture() (consumiendo dirty)
-    // chequeaba Ready statement despues, viendo dirty ya en false.
     bool     everHadFrame = false;
 };
 
 #ifdef _WIN32
 
-// Abre el dispositivo WinMM indicado con el formato fijo que usa este
-// reproductor (PCM 16-bit, 44.1kHz, estereo) y prepara los buffers de
-// multiple buffering. Debe llamarse con ctx->deviceMutex tomado.
 static bool OpenWaveOutDeviceLocked(VLCAudioCtx* ctx, UINT_PTR deviceId)
 {
     WAVEFORMATEX wfx       = {};
@@ -208,8 +173,6 @@ static bool OpenWaveOutDeviceLocked(VLCAudioCtx* ctx, UINT_PTR deviceId)
     return true;
 }
 
-// Cierra el dispositivo WinMM actualmente abierto (si lo hay). Debe
-// llamarse con ctx->deviceMutex tomado.
 static void CloseWaveOutDeviceLocked(VLCAudioCtx* ctx)
 {
     if (!ctx->hWaveOut)
@@ -262,7 +225,7 @@ static void vlc_audio_destroy_device(VLCAudioCtx* ctx)
     CloseWaveOutDeviceLocked(ctx);
 }
 
-static void vlc_audio_pause(void* opaque, int64_t /*pts*/)
+static void vlc_audio_pause(void* opaque, int64_t )
 {
     auto* ctx = static_cast<VLCAudioCtx*>(opaque);
     std::lock_guard<std::mutex> lock(ctx->deviceMutex);
@@ -270,7 +233,7 @@ static void vlc_audio_pause(void* opaque, int64_t /*pts*/)
         waveOutPause(ctx->hWaveOut);
 }
 
-static void vlc_audio_resume(void* opaque, int64_t /*pts*/)
+static void vlc_audio_resume(void* opaque, int64_t )
 {
     auto* ctx = static_cast<VLCAudioCtx*>(opaque);
     std::lock_guard<std::mutex> lock(ctx->deviceMutex);
@@ -278,7 +241,7 @@ static void vlc_audio_resume(void* opaque, int64_t /*pts*/)
         waveOutRestart(ctx->hWaveOut);
 }
 
-static void vlc_audio_flush(void* opaque, int64_t /*pts*/)
+static void vlc_audio_flush(void* opaque, int64_t )
 {
     auto* ctx = static_cast<VLCAudioCtx*>(opaque);
     std::lock_guard<std::mutex> lock(ctx->deviceMutex);
@@ -316,7 +279,7 @@ static void vlc_audio_drain(void* opaque)
     }
 }
 
-static void vlc_audio_play(void* opaque, const void* samples, unsigned count, int64_t /*pts*/)
+static void vlc_audio_play(void* opaque, const void* samples, unsigned count, int64_t )
 {
     auto* ctx = static_cast<VLCAudioCtx*>(opaque);
 
@@ -327,7 +290,6 @@ static void vlc_audio_play(void* opaque, const void* samples, unsigned count, in
 
     if (!ctx->deviceInitialized) return;
 
-    // Esperar a que el buffer actual esté disponible sin descartar muestras
     while (true)
     {
         {
@@ -381,7 +343,7 @@ static void vlc_audio_play(void* opaque, const void* samples, unsigned count, in
     waveOutWrite(ctx->hWaveOut, &hdr, sizeof(WAVEHDR));
     ctx->currentHeader = (ctx->currentHeader + 1) % VLCAudioCtx::NUM_BUFFERS;
 }
-#endif // _WIN32
+#endif
 
 static unsigned vlc_format(void** opaque, char* chroma, unsigned* width, unsigned* height,
                             unsigned* pitches, unsigned* lines)
@@ -394,24 +356,29 @@ static unsigned vlc_format(void** opaque, char* chroma, unsigned* width, unsigne
 #else
     std::memcpy(chroma, "RV32", 4);
 #endif
+
+    const unsigned alignedW = (*width  + 7u)  & ~7u;
+    const unsigned alignedH = (*height + 31u) & ~31u;
+
     ctx->width  = *width;
     ctx->height = *height;
-    *pitches    = (*width) * 4;
-    *lines      = *height;
+    ctx->pitch  = alignedW * 4;
+    *pitches    = ctx->pitch;
+    *lines      = alignedH;
 
-    size_t sz = static_cast<size_t>(*pitches) * (*lines);
+    size_t sz = static_cast<size_t>(ctx->pitch) * alignedH;
     delete[] static_cast<uint8_t*>(ctx->frontBuf);
     delete[] static_cast<uint8_t*>(ctx->backBuf);
     ctx->frontBuf = new uint8_t[sz];
     ctx->backBuf  = new uint8_t[sz];
     std::memset(ctx->frontBuf, 0, sz);
     std::memset(ctx->backBuf,  0, sz);
-    ctx->dirty       = false;
-    ctx->everHadFrame = false; // nueva carga: todavia no se decodifico nada
+    ctx->dirty        = false;
+    ctx->everHadFrame = false;
     return 1;
 }
 
-static void vlc_cleanup(void* /*opaque*/) {}
+static void vlc_cleanup(void* ) {}
 
 static void* vlc_lock(void* opaque, void** planes)
 {
@@ -421,7 +388,7 @@ static void* vlc_lock(void* opaque, void** planes)
     return nullptr;
 }
 
-static void vlc_unlock(void* opaque, void* /*picture*/, void* const* /*planes*/)
+static void vlc_unlock(void* opaque, void* , void* const* )
 {
     auto* ctx = static_cast<VLCVideoCtx*>(opaque);
     std::swap(ctx->frontBuf, ctx->backBuf);
@@ -430,24 +397,14 @@ static void vlc_unlock(void* opaque, void* /*picture*/, void* const* /*planes*/)
     ctx->mutex.unlock();
 }
 
-// display() SI esta atado al reloj de reproduccion de libVLC (doc:
-// libvlc_video_display_cb — "se invoca cuando el frame necesita
-// mostrarse, segun lo determine el reloj de reproduccion del medio", que
-// usa el audio como maestro cuando hay audio presente). Marcar dirty aca
-// en vez de en unlock() es lo que deja que el auto-corrector de drift de
-// libVLC (ver --file-caching en InitVLC(), clock-jitter/clock-synchro
-// deliberadamente NO forzados a 0) realmente actue: si el decode se
-// atrasa, es libVLC quien salta frames internamente para alcanzar de
-// nuevo al audio, en vez de que este reproductor muestre "lo ultimo
-// decodificado" sin ninguna relacion con el tiempo real.
-static void vlc_display(void* opaque, void* /*picture*/)
+static void vlc_display(void* opaque, void* )
 {
     auto* ctx = static_cast<VLCVideoCtx*>(opaque);
     std::lock_guard<std::mutex> lock(ctx->mutex);
     ctx->dirty = true;
 }
 
-} // anonymous namespace
+}
 
 namespace ProyecThor::Core {
 
@@ -534,7 +491,6 @@ void VLCBasePlayer::InitVLC()
         argStorage.push_back("--no-audio");
     }
 
-    // Salida de video (--vout) SOLO para reproductores que dibujan en ventana nativa
     if (m_NativeWindowOutput) {
         std::string vout = s_VideoOutput;
         if (!vout.empty() && vout != "auto" && vout != "any") {
@@ -566,7 +522,7 @@ void VLCBasePlayer::InitVLC()
 
 void VLCBasePlayer::OnVlcEvent(const libvlc_event_t* evt, void* userData)
 {
-    // Corre en un hilo interno de libVLC: solo tocar atomicos.
+
     auto* self = static_cast<VLCBasePlayer*>(userData);
     if (evt->type == libvlc_MediaPlayerEndReached ||
         evt->type == libvlc_MediaPlayerEncounteredError)
@@ -599,12 +555,6 @@ void VLCBasePlayer::CreatePersistentPlayer()
         return;
     }
 
-    // nativeWindowOutput: NO se registran los callbacks vmem — este
-    // player se adjunta a una ventana nativa via AttachNativeWindow() y
-    // deja que libVLC dibuje ahi con su propio renderer acelerado. Los
-    // callbacks vmem y la salida por ventana nativa son mutuamente
-    // excluyentes; m_VideoCtx queda nullptr (GetVideoSize/HasVideoFrame/
-    // UpdateTexture ya toleran eso, ver sus chequeos existentes).
     if (!m_NativeWindowOutput)
     {
         auto* vCtx = new VLCVideoCtx();
@@ -622,21 +572,13 @@ void VLCBasePlayer::CreatePersistentPlayer()
     m_AudioCtx = aCtx;
 
 #ifdef _WIN32
-    // Solo en Windows interceptamos los samples crudos para mandarlos a
-    // WinMM manualmente (necesario para el VU meter con picos reales y
-    // para poder elegir el dispositivo de salida explicitamente).
+
     libvlc_audio_set_format_callbacks(m_MediaPlayer, vlc_audio_setup, vlc_audio_cleanup);
     libvlc_audio_set_callbacks(m_MediaPlayer, vlc_audio_play,
                                vlc_audio_pause, vlc_audio_resume,
                                vlc_audio_flush, vlc_audio_drain, aCtx);
 #else
-    // En Linux NO registramos callbacks de audio: dejamos que libVLC use
-    // su salida nativa (PulseAudio/ALSA autodetectado), que es la unica
-    // que realmente reproduce sonido en esta plataforma. Volumen/mute/
-    // dispositivo se controlan via libvlc_audio_set_volume()/
-    // libvlc_audio_set_mute()/libvlc_audio_output_device_set() (ver
-    // SetVolume/SetMute/SetAudioDevice mas abajo). Si el player es
-    // forceSilent, el estado inicial ya queda mudo y en volumen 0.
+
     bool initialMute = m_Muted.load(std::memory_order_relaxed) ||
                         m_ForceSilent.load(std::memory_order_relaxed);
     libvlc_audio_set_mute(m_MediaPlayer, initialMute ? 1 : 0);
@@ -657,14 +599,12 @@ void VLCBasePlayer::CreatePersistentPlayer()
 
 void VLCBasePlayer::DestroyVLC()
 {
-    // Sin hilo de trabajo propio: no hay nada que apagar/join-ear antes de
-    // liberar recursos de libVLC. Stop() detiene sincronicamente.
+
     Stop();
 
     if (m_MediaPlayer)
     {
-        // release() garantiza que los callbacks de audio/video terminaron
-        // antes de retornar — solo entonces es seguro borrar los ctx.
+
         libvlc_media_player_release(m_MediaPlayer);
         m_MediaPlayer = nullptr;
     }
@@ -705,10 +645,6 @@ void VLCBasePlayer::EnsureTexture(int w, int h)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-    // En Linux (o cualquier entorno donde vmem no use alpha real, ej. RV32),
-    // el byte 4 es 0x00 (padding). Con GL_TEXTURE_SWIZZLE_A = GL_ONE,
-    // garantizamos que OpenGL/ImGui siempre muestree alpha 1.0 (opaco),
-    // evitando que el video se dibuje transparente (negro).
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_ONE);
 
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -733,15 +669,6 @@ void VLCBasePlayer::Play(const std::string& path, bool loop, bool startMuted)
         return;
     }
 
-    // FIX (freeze en clicks repetidos sobre el mismo video): si esta MISMA
-    // instancia ya tiene esta MISMA ruta como contenido actual (cargando o
-    // ya activo), un Play() reentrante para ella es un reintento espurio,
-    // no un pedido nuevo real — LoadAndPlay() haria un
-    // stop()+set_media()+play() COMPLETO de nuevo, sincronico, por cada
-    // click extra (N clicks = N ciclos serializados en el hilo de UI).
-    // m_CurrentPath se limpia en Stop(), asi que un replay LEGITIMO de la
-    // misma ruta despues de que el contenido termino/se detuvo de verdad
-    // sigue funcionando normalmente.
     if (!path.empty() && path == m_CurrentPath)
     {
         std::cerr << "[VLC#" << m_InstanceId << "] Play() ignorado, reentrante para ruta ya activa/cargando: "
@@ -777,7 +704,7 @@ void VLCBasePlayer::UnblockPath()
     m_BlockedPath.clear();
 }
 
-void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*startMuted*/, uint64_t myGeneration)
+void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool , uint64_t myGeneration)
 {
     std::string finalPath = path;
     if (finalPath.find("youtube.com") != std::string::npos ||
@@ -819,7 +746,7 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
     }
 #ifndef _WIN32
     if (!m_NativeWindowOutput) {
-        hw = "none"; // En Linux vmem, evitar líneas verdes y bloqueos de VA-API/VDPAU
+        hw = "none";
     }
 #endif
     std::string hwOpt = ":avcodec-hw=" + hw;
@@ -830,13 +757,11 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
         libvlc_media_add_option(media, thrOpt.c_str());
     }
 
-    // Pasar salida de video a media si es ventana nativa
     if (m_NativeWindowOutput && !s_VideoOutput.empty() && s_VideoOutput != "auto" && s_VideoOutput != "any") {
         std::string voutOpt = ":vout=" + s_VideoOutput;
         libvlc_media_add_option(media, voutOpt.c_str());
     }
 
-    // Pasar desentrelazado a media
     if (!s_Deinterlace.empty() && s_Deinterlace != "discard" && s_Deinterlace != "none") {
         libvlc_media_add_option(media, ":deinterlace=1");
         std::string deintMode = ":deinterlace-mode=" + s_Deinterlace;
@@ -854,26 +779,12 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
             return;
         }
 
-        // Detener primero, de forma sincrona, ANTES de cargar lo nuevo:
-        // evita correr dos pipelines de decode en paralelo.
         libvlc_media_player_stop(m_MediaPlayer);
         m_EndReached.store(false, std::memory_order_relaxed);
         m_HadError.store(false, std::memory_order_relaxed);
         m_LoadHasError.store(false, std::memory_order_relaxed);
         m_VlcIsPlaying.store(false, std::memory_order_relaxed);
 
-        // FIX: everHadFrame (ver HasVideoFrame()) se reseteaba SOLO dentro
-        // de vlc_format(), pero libVLC no vuelve a llamar ese callback si el
-        // video nuevo tiene la MISMA resolucion/chroma que el anterior —
-        // reutiliza el buffer tal cual esta. Si eso pasaba, everHadFrame
-        // seguia en true desde la carga ANTERIOR, asi que HasVideoFrame()
-        // (y por lo tanto el crossfade en BackgroundLayer) daba por listo
-        // este Play() ANTES de que hubiera decodificado un solo frame real
-        // — el publico veia el crossfade animar hacia el frame VIEJO que
-        // seguia en el buffer, hasta que el frame nuevo de verdad lo pisaba
-        // (ahi "se corregia" solo, de golpe). Resetear aca, en el punto
-        // donde SABEMOS que arranca una carga nueva (sin depender de que
-        // vlc_format() se dispare o no), lo hace correcto siempre.
         if (m_VideoCtx)
         {
             auto* ctx = static_cast<VLCVideoCtx*>(m_VideoCtx);
@@ -890,13 +801,10 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
         m_AudioNeedsSync.store(true, std::memory_order_relaxed);
     }
 
-    libvlc_media_release(media); // el player ya tomo su propia referencia
+    libvlc_media_release(media);
 
 #ifndef _WIN32
-    // En Linux, cada Play()/set_media reinicia el modulo de salida de
-    // audio (aout) de libVLC, lo que puede perder la seleccion de
-    // dispositivo hecha con SetAudioDevice(). La reaplicamos aca para que
-    // el dispositivo elegido por el usuario persista entre clips.
+
     if (!m_AudioDeviceId.empty() && m_AudioDeviceId != "default")
         libvlc_audio_output_device_set(m_MediaPlayer, nullptr, m_AudioDeviceId.c_str());
 #endif
@@ -908,7 +816,7 @@ void VLCBasePlayer::Stop()
 
     m_EndReached.store(false, std::memory_order_relaxed);
     m_VlcIsPlaying.store(false, std::memory_order_relaxed);
-    m_CurrentPath.clear(); // libera el guard de reentrancia de Play()
+    m_CurrentPath.clear();
 
     std::lock_guard<std::mutex> lock(m_MediaSwapMutex);
     if (m_MediaPlayer)
@@ -1006,7 +914,7 @@ void VLCBasePlayer::SetVolume(int volume)
     m_VolumeMultiplier.store(multiplier, std::memory_order_relaxed);
 
 #ifndef _WIN32
-    // En Linux el volumen real lo aplica libVLC sobre su salida nativa.
+
     if (m_MediaPlayer)
     {
         bool shouldMute = m_Muted.load(std::memory_order_relaxed) ||
@@ -1016,7 +924,7 @@ void VLCBasePlayer::SetVolume(int volume)
         libvlc_audio_set_volume(m_MediaPlayer, shouldMute ? 0 : volume);
     }
 #endif
-    // En Windows lo aplica vlc_audio_play() multiplicando los samples.
+
 }
 
 void VLCBasePlayer::SetSoftwareVolume(float percent)
@@ -1170,43 +1078,15 @@ bool VLCBasePlayer::HasVideoFrame() const
     if (!m_VideoCtx) return false;
     auto* ctx = static_cast<VLCVideoCtx*>(m_VideoCtx);
     std::lock_guard<std::mutex> lock(ctx->mutex);
-    // FIX: antes chequeaba ctx->dirty (= "hay un frame NUEVO sin subir a GL
-    // todavia"), que UpdateTexture() consume (pone en false) cada vez que
-    // sube algo. Como BackgroundLayer::Update() llama a UpdateTexture() y
-    // JUSTO DESPUES pregunta GetLoadState()==Ready (que depende de esto),
-    // el frame recien decodificado ya aparecia consumido para cuando se
-    // hacia esa pregunta — Ready practicamente nunca se observaba true, y
-    // el prefetch de la cola quedaba reproduciendo sin pausar hasta el
-    // timeout de 3s de BackgroundLayer::Update(), avanzando de mas antes
-    // del corte (el video "salia a la mitad"). everHadFrame es pegajoso
-    // (no se consume): refleja "ya se decodifico al menos un frame real",
-    // que es la pregunta que este metodo siempre quiso responder.
+
     return ctx->everHadFrame && ctx->frontBuf != nullptr && ctx->width > 0 && ctx->height > 0;
 }
 
-// Estado derivado (no un evento propio): Idle antes del primer Play(),
-// Error si el load actual encontro libvlc_MediaPlayerEncounteredError,
-// Ready en cuanto HasVideoFrame() es true (SOLO esa condicion — igual que
-// el chequeo que ya funcionaba antes de que existiera este LoadState),
-// Opening/Buffering mientras tanto (distincion informativa via el evento
-// libvlc_MediaPlayerPlaying, para el spinner/ETA — NUNCA condiciona
-// Ready). FIX: la primera version de esto exigia ADEMAS que
-// libvlc_MediaPlayerPlaying hubiera disparado para reportar Ready — ese
-// evento no siempre llega a tiempo (o de forma confiable) en todos los
-// codecs/containers, asi que la mayoria de los swaps terminaban cayendo
-// al timeout de 3s de BackgroundLayer::Update() en vez de swapear en
-// cuanto el primer frame estaba listo (que es lo que hacia, bien, el
-// codigo anterior a este LoadState). Eso se sentia como "todo tarda /
-// esta desfasado" — este fix restaura el gate real a HasVideoFrame() solo.
 VLCBasePlayer::LoadState VLCBasePlayer::GetLoadState() const
 {
     if (!m_HasEverPlayed.load(std::memory_order_relaxed)) return LoadState::Idle;
     if (m_LoadHasError.load(std::memory_order_relaxed))   return LoadState::Error;
 
-    // Un player nativeWindowOutput no tiene VLCVideoCtx (sin callbacks
-    // vmem, ver CreatePersistentPlayer), asi que HasVideoFrame() siempre
-    // seria false — el evento libvlc_MediaPlayerPlaying es la unica señal
-    // de "listo" disponible en este modo.
     bool ready = m_NativeWindowOutput
         ? m_VlcIsPlaying.load(std::memory_order_relaxed)
         : HasVideoFrame();
@@ -1228,24 +1108,26 @@ bool VLCBasePlayer::UpdateTexture()
     EnforceSilenceIfNeeded();
     auto* ctx = static_cast<VLCVideoCtx*>(m_VideoCtx);
 
-    void*    pixelsToUpload = nullptr;
-    unsigned w = 0, h = 0;
-    {
-        std::lock_guard<std::mutex> lock(ctx->mutex);
-        if (!ctx->dirty || !ctx->frontBuf || ctx->width == 0 || ctx->height == 0) return false;
-        pixelsToUpload = ctx->frontBuf;
-        w = ctx->width;
-        h = ctx->height;
-        ctx->dirty = false;
-    } // lock liberado antes de tocar GL: la subida a GL nunca bloquea al decoder
+    std::lock_guard<std::mutex> lock(ctx->mutex);
+    if (!ctx->dirty || !ctx->frontBuf || ctx->width == 0 || ctx->height == 0 || ctx->pitch == 0)
+        return false;
+
+    const unsigned w     = ctx->width;
+    const unsigned h     = ctx->height;
+    const unsigned pitch = ctx->pitch;
+    ctx->dirty = false;
 
     EnsureTexture(static_cast<int>(w), static_cast<int>(h));
     glBindTexture(GL_TEXTURE_2D, m_TextureID);
+
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, static_cast<GLint>(pitch / 4));
 #ifdef _WIN32
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixelsToUpload);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, ctx->frontBuf);
 #else
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_BGRA, GL_UNSIGNED_BYTE, pixelsToUpload);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_BGRA, GL_UNSIGNED_BYTE, ctx->frontBuf);
 #endif
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+
     glBindTexture(GL_TEXTURE_2D, 0);
     return true;
 }
@@ -1255,10 +1137,7 @@ std::vector<VLCBasePlayer::AudioDevice> VLCBasePlayer::GetAvailableAudioDevices(
     std::vector<AudioDevice> devices;
 
 #ifdef _WIN32
-    // En Windows este player no usa el modulo de audio nativo de libVLC
-    // (usamos callbacks WinMM propios, ver CreatePersistentPlayer), asi
-    // que libvlc_audio_output_device_enum() NO reflejaria los
-    // dispositivos reales del sistema. Enumeramos directamente via WinMM.
+
     devices.push_back({ "default", "Dispositivo predeterminado del sistema" });
 
     UINT numDevs = waveOutGetNumDevs();
@@ -1286,9 +1165,7 @@ std::vector<VLCBasePlayer::AudioDevice> VLCBasePlayer::GetAvailableAudioDevices(
 
 void VLCBasePlayer::SetAudioDevice(const std::string& deviceId)
 {
-    // Se recuerda siempre, incluso si todavia no hay nada reproduciendose:
-    // asi, cuando arranque el audio (Windows: vlc_audio_setup / Linux:
-    // proximo Play()), se abre directamente en el dispositivo correcto.
+
     m_AudioDeviceId = deviceId;
 
     std::cerr << "[VLC#" << m_InstanceId << "] SetAudioDevice(\""
@@ -1308,7 +1185,7 @@ void VLCBasePlayer::SetAudioDevice(const std::string& deviceId)
     std::lock_guard<std::mutex> lock(ctx->deviceMutex);
 
     if (ctx->deviceInitialized && ctx->deviceId == targetId)
-        return; // ya esta en ese dispositivo, nada que hacer
+        return;
 
     bool wasInitialized = ctx->deviceInitialized;
     if (wasInitialized)
@@ -1316,16 +1193,13 @@ void VLCBasePlayer::SetAudioDevice(const std::string& deviceId)
 
     if (wasInitialized)
     {
-        // Habia audio en curso: reabrimos de inmediato en el nuevo
-        // dispositivo para no interrumpir la reproduccion.
+
         if (!OpenWaveOutDeviceLocked(ctx, targetId))
             std::cerr << "[Audio] No se pudo cambiar al dispositivo " << targetId << ".\n";
     }
     else
     {
-        // Todavia no se abrio ningun dispositivo: solo dejamos el id
-        // pedido guardado, y vlc_audio_setup() lo abrira cuando arranque
-        // el audio.
+
         ctx->deviceId = targetId;
     }
 #else
@@ -1343,14 +1217,11 @@ void VLCBasePlayer::GetAudioLevels(float& left, float& right)
         return;
     }
     auto* ctx = static_cast<VLCAudioCtx*>(m_AudioCtx);
-    // Lock-free: lee el pico acumulado y lo resetea a 0 en la misma
-    // operacion atomica, sin bloquear ni competir con el hilo de audio.
+
     left  = ctx->peakL.exchange(0.0f, std::memory_order_relaxed);
     right = ctx->peakR.exchange(0.0f, std::memory_order_relaxed);
 #else
-    // En Linux no interceptamos los samples crudos (libVLC usa su salida
-    // nativa), asi que no hay picos reales que reportar. Se devuelve 0.0f
-    // para no romper a quien consuma el VU meter.
+
     left = right = 0.0f;
 #endif
 }
@@ -1400,7 +1271,7 @@ void VLCBasePlayer::Reinit()
     if (!prevPath.empty()) {
         m_CurrentPath.clear();
         if (wasPlaying) {
-            Play(prevPath, /*loop=*/false, prevMuted);
+            Play(prevPath, false, prevMuted);
             if (prevTime > 0 && m_MediaPlayer) {
                 libvlc_media_player_set_time(m_MediaPlayer, prevTime);
             }
@@ -1408,4 +1279,4 @@ void VLCBasePlayer::Reinit()
     }
 }
 
-} // namespace ProyecThor::Core
+}

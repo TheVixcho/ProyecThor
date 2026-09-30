@@ -22,7 +22,6 @@
 #include "ui/views/OClock.h"
 #include "ui/panels/overlay/OverlayLayerRender.h"
 #include "ui/views/Audio.h"
-#include "Hub.h"
 #include "ui/panels/StreamingPanel.h"
 #include "qrcodegen.hpp"
 #include "core/settings/SettingsManager.h"
@@ -163,8 +162,12 @@ void UIManager::AddPanel(std::shared_ptr<IPanel> panel)
 
 void UIManager::OpenHub()
 {
-    m_Hub.ForceOpen();
-    m_Mode = WorkspaceMode::Hub;
+    OpenPatchNotes();
+}
+
+void UIManager::OpenPatchNotes()
+{
+    m_ShowPatchNotesModal = true;
 }
 
 // Ver comentario en UIManager.h. Cambia el preset SOLO en memoria (nunca
@@ -887,89 +890,40 @@ void UIManager::RenderAll()
     m_Sync.Update();
     m_OSC.Update();
 
-    // La toolbar de modos (pills "Hub"/"Proyector" + Notas/Estilos/Streaming)
-    if (m_Mode != WorkspaceMode::Hub &&
-        !(m_FullscreenEditorActive && m_FullscreenEditorHidesToolbar))
+    // La toolbar de modos (Notas/Estilos/Streaming/PatchNotes)
+    if (!(m_FullscreenEditorActive && m_FullscreenEditorHidesToolbar))
         RenderModeToolbar();
 
     // Salida real ("ProjectorLive"/"StageLive") -- SIEMPRE se renderiza aca,
-    // antes de cualquier return anticipado de abajo (editor a pantalla
-    // completa o Hub), para que la transmision al publico nunca se
+    // antes de cualquier return anticipado de abajo, para que la transmision al publico nunca se
     // interrumpa solo porque el operador esta mirando otra cosa en su
     // propia pantalla. Ver comentario en UIManager.h.
     RenderLiveOutputWindows();
 
     // Se renderiza siempre, sin importar el modo/return anticipado de mas
-    // abajo, para que "Archivo > Importar > Importar desde URL" funcione
-    // igual desde el Hub que desde el Proyector.
+    // abajo, para que "Archivo > Importar > Importar desde URL" funcione.
     RenderUrlImportModal();
 
-    // Idem Notas: antes solo vivia dentro del workspace de Proyector, asi
-    // que Shift+Z no hacia nada desde el Hub y la ventana se cerraba de
-    // golpe (sin guardar) apenas se volvia a el mientras se seguia
-    // proyectando. Ahora se somete siempre, sin importar el modo/editor a
-    // pantalla completa activo, igual que la salida real de arriba.
     if (m_ShowNotes)
         RenderNotesWindow();
 
-    // Se somete siempre (no solo cuando m_ShowAIAssistant es true): el
-    // WebView2 embebido necesita que se le avise UpdateBounds(...,
-    // visible=false) todos los frames mientras esta oculto.
+    // Se somete siempre: el WebView2 embebido necesita que se le avise UpdateBounds(..., visible=false)
     RenderAIAssistantWindow();
 
     // Ventana flotante "Centro de Conexiones" (Red LAN, App Móvil, Transmisión, OSC, Chat)
     if (m_ShowConnectionsWindow)
         RenderConnectionsWindow();
 
-    // Novedades (Changelog e historial de actualizaciones) como panel flotante
-    m_Hub.RenderNovedadesStandalone();
+    // Notas de Versión / PatchNotes modal
+    if (m_ShowPatchNotesModal)
+        RenderPatchNotesModal();
     if (ImGui::IsKeyPressed(ImGuiKey_N, false) && !ImGui::GetIO().WantCaptureKeyboard && !ImGui::GetIO().WantTextInput)
-        m_Hub.OpenNovedades();
+        m_ShowPatchNotesModal = !m_ShowPatchNotesModal;
 
-    // Editor a pantalla completa (Overlay/Estilos) activo -- ver
-    // EnterFullscreenEditor. Reemplaza TODO lo de abajo (Hub/Proyector/
-    // Ajustes/etc) por el contenido del editor, sin tocar la toolbar de
-    // arriba (esa nunca se oculta, ver comentario en el header) ni la
-    // salida real de arriba.
+    // Editor a pantalla completa (Overlay/Estilos) activo -- ver EnterFullscreenEditor.
     if (m_FullscreenEditorActive && m_FullscreenEditorRenderFn)
     {
         m_FullscreenEditorRenderFn();
-        return;
-    }
-
-if (m_Mode == WorkspaceMode::Hub)
-    {
-        if (m_Hub.Render())
-        {
-            if (!m_Hub.SettingsRequested())
-            {
-                m_Mode        = WorkspaceMode::Projector;
-                m_ResetLayout = true;
-            }
-        }
-
-        if (m_Hub.SettingsRequested())
-        {
-            m_ShowConfig = true;
-            m_SettingsPanel.SetInitialCategory(m_Hub.GetActiveTab());
-            m_Hub.ClearSettingsRequest();
-        }
-
-        if (m_ShowConfig)
-            m_SettingsPanel.Render(&m_ShowConfig);
-
-        {
-            auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
-            if (general.showPerfPanel)
-            {
-                bool wasOpen = general.showPerfPanel;
-                m_PerformancePanel.Render(&general.showPerfPanel);
-                if (wasOpen && !general.showPerfPanel)
-                    ProyecThor::Settings::SettingsManager::Get().Save();
-            }
-        }
-
-        RenderMainMenuBar();
         return;
     }
 
@@ -1343,12 +1297,11 @@ void UIManager::RenderModeToolbar()
             if (clicked && !active)
             {
                 m_Mode = (WorkspaceMode)item.index;
-                if (m_Mode == WorkspaceMode::Hub)       m_Hub.ForceOpen();
-                if (m_Mode == WorkspaceMode::Projector) m_ResetLayout = true;
+                m_ResetLayout = true;
             }
         };
 
-        // ── Grupo izquierdo: Hub / Proyector ─────────────────────────────
+        // ── Grupo izquierdo: Proyector ───────────────────────────────────
         for (int i = 0; i < (int)(sizeof(kItemsLeft) / sizeof(kItemsLeft[0])); i++)
             RenderModeItem(kItemsLeft[i], i > 0, gap);
 
@@ -1363,7 +1316,7 @@ void UIManager::RenderModeToolbar()
             ImGui::Dummy(ImVec2(1.0f, btnH));
         }
 
-        // ── Grupo derecho: Notas, IA, Estilos, Conexiones, Novedades ─────
+        // ── Grupo derecho: Notas, IA, Estilos, Conexiones, PatchNotes ─────
         {
             bool clicked = RenderPill("Notas", HomeIcons::DrawIcon_Notepad, m_ShowNotes, true, gap * 2.0f);
             if (clicked) ToggleNotesWindow();
@@ -1385,9 +1338,9 @@ void UIManager::RenderModeToolbar()
             }
         }
         {
-            bool clicked = RenderPill("Novedades", HomeIcons::DrawIcon_Sparkle, m_Hub.IsNovedadesOpen(), true, gap);
+            bool clicked = RenderPill("PatchNotes", HomeIcons::DrawIcon_Sparkle, m_ShowPatchNotesModal, true, gap);
             if (clicked) {
-                m_Hub.OpenNovedades();
+                m_ShowPatchNotesModal = !m_ShowPatchNotesModal;
             }
         }
         RenderStylesPopup();
@@ -1889,10 +1842,9 @@ void UIManager::RenderQuickSwitcher()
 {
     struct QSItem { WorkspaceMode mode; DrawIconFn icon; const char* label; };
     static const QSItem kItems[] = {
-        { WorkspaceMode::Hub,        HomeIcons::DrawIcon_Home,      "Hub"        },
         { WorkspaceMode::Projector,  AppIcons::DrawIcon_Monitor,    "Proyector"  },
     };
-    constexpr int kCount = 2;
+    constexpr int kCount = 1;
 
     ImGuiIO& io = ImGui::GetIO();
     if (io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_Space, false))
@@ -1904,9 +1856,9 @@ void UIManager::RenderQuickSwitcher()
     if (!m_QuickSwitchOpen) return;
 
     auto Activate = [&](int idx) {
-        m_Mode = kItems[idx].mode;
-        if (m_Mode == WorkspaceMode::Hub)       m_Hub.ForceOpen();
-        if (m_Mode == WorkspaceMode::Projector) m_ResetLayout = true;
+        (void)idx;
+        m_Mode = WorkspaceMode::Projector;
+        m_ResetLayout = true;
         m_QuickSwitchOpen = false;
     };
 
@@ -2050,7 +2002,7 @@ void UIManager::RenderMainMenuBar()
             if (ImGui::MenuItem(str.menuResetLayout))
                 m_ResetLayout = true;
 
-            if (ImGui::MenuItem("Hub de inicio"))
+            if (ImGui::MenuItem("Notas de versión (PatchNotes)"))
                 OpenHub();
 
             ImGui::Spacing();
@@ -2204,8 +2156,8 @@ void UIManager::RenderMainMenuBar()
         if (ImGui::BeginMenu(str.menuHelp))
         {
             ImGui::Spacing();
-            if (ImGui::MenuItem("Novedades", "N"))
-                m_Hub.OpenNovedades();
+            if (ImGui::MenuItem("Notas de versión (PatchNotes)", "N"))
+                m_ShowPatchNotesModal = true;
 
             if (ImGui::MenuItem(str.menuDocs, "F1"))
                 ProyecThor::External::OpenURL("https://proyecthor.web.app/");
@@ -2244,8 +2196,8 @@ void UIManager::RenderMainMenuBar()
             ImGui::Separator();
             ImGui::Spacing();
 
-            if (ImGui::MenuItem("Novedades y Actualizaciones...", "N"))
-                m_Hub.OpenNovedades();
+            if (ImGui::MenuItem("Notas de versión (PatchNotes)...", "N"))
+                m_ShowPatchNotesModal = true;
 
             if (ImGui::MenuItem(str.menuAbout))
                 g_ShowAbout = true;
@@ -2580,6 +2532,87 @@ void UIManager::Shutdown()
     if (m_UrlImportThread.joinable())
         m_UrlImportThread.join();
     m_Panels.clear();
+}
+
+void UIManager::RenderPatchNotesModal()
+{
+    if (!m_ShowPatchNotesModal) return;
+
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float modalW = std::min(vp->WorkSize.x - 40.0f, 760.0f);
+    const float modalH = std::min(vp->WorkSize.y - 40.0f, 620.0f);
+
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(modalW, modalH), ImGuiCond_Appearing);
+
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.12f, 0.13f, 0.16f, 0.98f));
+    ImGui::PushStyleColor(ImGuiCol_Border,   ImGui::ColorConvertU32ToFloat4(DS::AccentColor));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.5f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20.0f, 16.0f));
+
+    if (ImGui::Begin("Notas de Versión (PatchNotes)##Modal", &m_ShowPatchNotesModal,
+                     ImGuiWindowFlags_NoCollapse))
+    {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+            m_ShowPatchNotesModal = false;
+        }
+
+        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::AccentColor), "ProyecThor — Historial de Versiones");
+        ImGui::SameLine();
+        ImGui::TextDisabled("• v" PROYECTHOR_VERSION_STRING);
+        ImGui::Separator();
+        ImGui::Dummy(ImVec2(0.0f, 6.0f));
+
+        const float footerAreaH = 44.0f;
+        ImGui::BeginChild("##PatchNotesScrollApp", ImVec2(0.0f, -footerAreaH), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+
+        const auto& patchNotes = ProyecThor::UI::GetPatchNotesRegistry();
+        for (size_t i = 0; i < patchNotes.size(); ++i) {
+            const auto& info = patchNotes[i];
+            ImGui::PushID(static_cast<int>(i));
+
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.16f, 0.17f, 0.22f, 0.70f));
+            ImGui::PushStyleColor(ImGuiCol_Border,  info.isBeta ? ImVec4(0.30f, 0.30f, 0.35f, 0.40f) : ImGui::ColorConvertU32ToFloat4(DS::AccentColor));
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.2f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f, 10.0f));
+
+            char cardId[32];
+            snprintf(cardId, sizeof(cardId), "##app_card_%d", info.id);
+            if (ImGui::BeginChild(cardId, ImVec2(0.0f, 0.0f),
+                    ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_Borders,
+                    ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+            {
+                const char* badge = (info.modalBadge && info.modalBadge[0]) ? info.modalBadge : (info.isBeta ? "ETAPA BETA" : "ACTUALIZACIÓN ESTABLE");
+                ImGui::TextColored(info.isBeta ? ImVec4(0.6f, 0.6f, 0.6f, 1.0f) : ImGui::ColorConvertU32ToFloat4(DS::AccentColor), "[ %s ]", badge);
+                ImGui::SameLine(0.0f, 10.0f);
+                ImGui::Text("•  Versión v%s", info.version);
+
+                ImGui::Dummy(ImVec2(0.0f, 2.0f));
+
+                ImGui::PushTextWrapPos(0.0f);
+                ImGui::TextDisabled("%s", info.summary);
+                ImGui::PopTextWrapPos();
+            }
+            ImGui::EndChild();
+            ImGui::PopStyleVar(3);
+            ImGui::PopStyleColor(2);
+
+            ImGui::Dummy(ImVec2(0.0f, 8.0f));
+            ImGui::PopID();
+        }
+
+        ImGui::EndChild();
+
+        ImGui::Dummy(ImVec2(0.0f, 6.0f));
+        if (ImGui::Button("Cerrar", ImVec2(100.0f, 30.0f))) {
+            m_ShowPatchNotesModal = false;
+        }
+    }
+    ImGui::End();
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(2);
 }
 
 }

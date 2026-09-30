@@ -7,6 +7,7 @@
 #include "ui/framework/bin/StyleGeneralApp.h"
 #include "ui/panels/layers/LayersTheme.h"
 #include "core/ThumbnailWorker.h"
+#include "ui/framework/FilePicker.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -179,7 +180,7 @@ static void DrainVideoThumbnails() {
 
 static std::string VideoFullPath(const std::string& filename) {
     if (std::filesystem::path(filename).is_absolute()) return filename;
-    return GetAssetsPath() + "/videos/" + filename;
+    return GetVideoLibraryPath() + "/" + filename;
 }
 
 // =============================================================================
@@ -481,7 +482,7 @@ void RenderLocalVideoList(LibraryContext& ctx)
         const float btnSz = 26.0f;
         const float zoomW = 76.0f;
         const float gap   = 4.0f;
-        const float rowW  = zoomW + gap + btnSz*2.0f + gap*2.0f;
+        const float rowW  = zoomW + gap + btnSz*3.0f + gap*3.0f;
         const float avail = ImGui::GetWindowContentRegionMax().x;
         ImGui::SameLine(std::max(ImGui::GetCursorPosX(), avail - rowW));
 
@@ -499,6 +500,17 @@ void RenderLocalVideoList(LibraryContext& ctx)
         ImGui::SameLine(0, gap);
         if (UI::LPCornerIconBtn("##listm", UI::LPDrawList, "Vista en lista", {btnSz, btnSz}, !s_GridMode))
             s_GridMode = false;
+        ImGui::SameLine(0, gap);
+        if (UI::LPCornerIconBtn("##chfolder", UI::LPDrawFolderGlyph, "Asignar carpeta de videos...", {btnSz, btnSz}, false)) {
+            std::string picked = ProyecThor::UI::PickFolder("Seleccionar carpeta de videos");
+            if (!picked.empty()) {
+                auto& settings = ProyecThor::Settings::SettingsManager::Get().GetSettings();
+                settings.general.defaultMediaFolder = picked;
+                ProyecThor::Settings::SettingsManager::Get().SaveSettings();
+                ctx.refreshList();
+                ForceListUpdate() = true;
+            }
+        }
         ImGui::PopID();
     }
 
@@ -594,11 +606,18 @@ void RenderLocalVideoList(LibraryContext& ctx)
                 if (droppedPath && *droppedPath) {
                     std::error_code ec;
                     fs::path src(droppedPath);
-                    std::string targetDir = GetAssetsPath() + "/videos";
-                    fs::create_directories(targetDir, ec);
-                    fs::path dst = fs::path(targetDir) / src.filename();
-                    fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
-                    ctx.refreshList();
+                    auto& settings = ProyecThor::Settings::SettingsManager::Get().GetSettings();
+                    if (!settings.general.duplicateMediaFiles) {
+                        settings.general.defaultMediaFolder = src.parent_path().string();
+                        ProyecThor::Settings::SettingsManager::Get().SaveSettings();
+                        ctx.refreshList();
+                    } else {
+                        std::string targetDir = GetVideoLibraryPath();
+                        fs::create_directories(U8Path(targetDir), ec);
+                        fs::path dst = fs::path(targetDir) / src.filename();
+                        fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+                        ctx.refreshList();
+                    }
                 }
             };
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("BG_FILE")) {

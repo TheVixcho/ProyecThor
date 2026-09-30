@@ -14,6 +14,7 @@
 #endif
 
 #include "core/AppPaths.h"
+#include "core/settings/SettingsManager.h"
 
 namespace fs = std::filesystem;
 
@@ -139,6 +140,19 @@ inline fs::path U8Path(const std::string& utf8)
 #else
     return fs::path(utf8);
 #endif
+}
+
+inline std::string GetVideoLibraryPath()
+{
+    const auto& custom = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.defaultMediaFolder;
+    if (!custom.empty()) {
+        std::error_code ec;
+        fs::path p = U8Path(custom);
+        if (fs::exists(p, ec) && fs::is_directory(p, ec)) {
+            return custom;
+        }
+    }
+    return GetAssetsPath() + "/videos";
 }
 
 // =============================================================================

@@ -1097,6 +1097,7 @@ void SettingsManager::SaveSettings() {
     j["general"]["autoSaveIntervalSec"] = m_Settings.general.autoSaveIntervalSec;
     j["general"]["defaultBiblesFolder"] = m_Settings.general.defaultBiblesFolder;
     j["general"]["defaultMediaFolder"]  = m_Settings.general.defaultMediaFolder;
+    j["general"]["duplicateMediaFiles"] = m_Settings.general.duplicateMediaFiles;
     j["general"]["showRailLabels"]      = m_Settings.general.showRailLabels;
     j["general"]["showPerfPanel"]       = m_Settings.general.showPerfPanel;
     j["general"]["showViewQuickActions"]   = m_Settings.general.showViewQuickActions;
@@ -1482,6 +1483,7 @@ void SettingsManager::LoadSettings() {
             m_Settings.general.autoSaveIntervalSec  = jg.value("autoSaveIntervalSec", 120);
             m_Settings.general.defaultBiblesFolder  = jg.value("defaultBiblesFolder", "");
             m_Settings.general.defaultMediaFolder   = jg.value("defaultMediaFolder",  "");
+            m_Settings.general.duplicateMediaFiles  = jg.value("duplicateMediaFiles", false);
             m_Settings.general.showRailLabels       = jg.value("showRailLabels",      false);
             m_Settings.general.showPerfPanel        = jg.value("showPerfPanel",       false);
             m_Settings.general.showViewQuickActions   = jg.value("showViewQuickActions",   true);

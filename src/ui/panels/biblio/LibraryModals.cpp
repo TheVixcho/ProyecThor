@@ -126,7 +126,7 @@ void RenderRenameModal(LibraryContext& ctx)
                         std::string folder;
                         switch (ctx.currentCategoryInt) {
                             case kCat_Songs:     folder = base + "/songs/";     break;
-                            case kCat_Videos:    folder = base + "/videos/";    break;
+                            case kCat_Videos:    folder = GetVideoLibraryPath() + "/"; break;
                             case 2:              folder = base + "/images/";    break;
                             case kCat_Bibles:    folder = base + "/bibles/";    break;
                             case 4:              folder = base + "/documents/"; break;

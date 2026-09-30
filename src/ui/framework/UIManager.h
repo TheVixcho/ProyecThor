@@ -13,7 +13,7 @@
 #include "settings/SettingsPanel.h"
 #include "panels/capture/CapturePanel.h"
 #include "panels/TransitionPanel.h"
-#include "Hub.h"
+#include "PatchNotesData.h"
 #include "GlassRenderer.h"
 #include "panels/PerformancePanel.h"
 #include "panels/StreamingPanel.h"
@@ -51,7 +51,6 @@ enum class ActiveLeftPanel {
 // Red/Chat ya estaban duplicados en Library/Vista en Vivo, y Biblia ya se
 // puede buscar desde Home -- ninguno necesitaba su propio modo de workspace.
 enum class WorkspaceMode {
-    Hub,
     Projector,
 };
 
@@ -71,23 +70,16 @@ uint64_t m_LastTransitionTrigger = 0;
 
     GlassRenderer& GetGlassRenderer() { return m_GlassRenderer; }
 
-    // true si ESE panel (por su GetName(): "Library"/"Diseño"/"Vista en
-    // Vivo"/"Home") esta lo bastante colapsado (Alt Gr + 1..4) como para
-    // que el panel mismo deba omitir dibujar su ventana/toolbar este frame.
-    // Cada panel la consulta desde su propio Render() -- DESPUES de correr
-    // cualquier "pump incondicional" propio (ver LibraryPanel::m_OClock.
-    // Update() / HomePanel::m_MonitorView.Update()), nunca antes: esos
-    // pumps deben seguir corriendo aunque el panel este oculto.
     bool IsPanelCollapsedForRender(const std::string& name) const;
 
-    // Antes enfocaba "Control" (eliminado) al resetear el layout; ahora
-    // enfoca "Vista en Vivo", que es el panel principal de ese dock.
     bool m_FocusViewNextFrame = false;
 
     ActiveLeftPanel GetActiveLeftPanel() const { return m_ActiveLeftPanel; }
     void SetActiveLeftPanel(ActiveLeftPanel p) { m_ActiveLeftPanel = p; }
 
     void OpenHub();
+    void OpenPatchNotes();
+    bool IsPatchNotesOpen() const { return m_ShowPatchNotesModal; }
 
     // "Biblioteca" (Settings::WorkspaceLayoutPreset::Library) es un preset
     // MAS de Entorno de trabajo (ver BuildWorkspaceLayoutLibrary), igual que
@@ -278,7 +270,8 @@ private:
     // restaurarla al salir (glfwSetWindowMonitor no la recuerda solo).
     int  m_WindowedX = 0, m_WindowedY = 0, m_WindowedW = 1280, m_WindowedH = 800;
 
-    Hub           m_Hub;
+    bool          m_ShowPatchNotesModal = false;
+    void          RenderPatchNotesModal();
     WorkspaceMode m_Mode = WorkspaceMode::Projector;
 
     // Ver LibraryPanel::SetMediaOnlyMode -- se sincroniza cada frame en

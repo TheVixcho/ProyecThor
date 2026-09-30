@@ -29,42 +29,17 @@ namespace ProyecThor::Core {
 
    class PresentationCoreImpl {
     public:
-        // background: layer de fondo/decorativo. Por requisito de
-        // producto NUNCA debe emitir audio real, sin importar el estado
-        // de m_IsLiveToPublic, m_TargetMuted, ni ninguna llamada a
-        // SetLiveVolume/SetLiveMute. Se construye forceSilent=true por la
-        // misma razon que preview: es una garantia estructural dentro de
-        // VLCBasePlayer (ver m_ForceSilent), no una convencion que
-        // dependa de que el resto del codigo se comporte bien.
+
         BackgroundLayer background{ false };
 
-        // preview: instancia separada usada por los paneles de biblioteca
-        // para scrubbing/preview. Se construye forceSilentAudio=true, asi
-        // que estructuralmente NUNCA puede sonar, sin importar que boton
-        // de UI la toque (ver VLCBasePlayer::m_ForceSilent).
         BackgroundLayer preview{ true };
 
-        // Ver PreviewLoadWorker.h: saca el Play()/Stop() del Preview del
-        // hilo principal, para que una carga lenta ahi nunca le robe
-        // tiempo al hilo que actualiza/dibuja el video en vivo al publico.
         PreviewLoadWorker previewLoader;
 
-        // Post-proceso del composite completo de "ProjectorLive" (CRT/
-        // Grano/FXAA) — ver CompositePostChain.h. Vive aca (no dentro de
-        // background) porque corre en un punto distinto del pipeline (sobre
-        // el ImDrawData ya compuesto, no sobre una textura de fondo).
         Shaders::CompositePostChain compositeFX;
 
-        // Una instancia INDEPENDIENTE de post-FX por cada viewport de
-        // monitor extra activo (ver PresentationCore::RegisterExtra
-        // ProjectorViewport) -- compositeFX de arriba sigue siendo la unica
-        // instancia del monitor PRIMARIO, sin cambios.
         std::unordered_map<ImGuiID, std::unique_ptr<Shaders::CompositePostChain>> extraCompositeFX;
 
-        // Overlay (ver SetOverlayMedia/ClearOverlay) -- un PNG estatico con
-        // transparencia, no necesita nada del aparato de BackgroundLayer
-        // (VLC/crossfade/audio): se carga una vez con stb_image, se sube a
-        // una sola textura GL y listo.
         GLuint overlayTex  = 0;
         int    overlayTexW = 0;
         int    overlayTexH = 0;
@@ -93,17 +68,13 @@ LibrarySelection PresentationCore::GetSelection() {
         return m_CurrentSelection;
     }
 
-void PresentationCore::SetLiveQuickNote(const std::string& text, const float* /*colorOverride*/) {
+void PresentationCore::SetLiveQuickNote(const std::string& text, const float* ) {
     std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     m_State.currentText   = text;
     m_State.showText      = !text.empty();
     m_State.showQuickNote = true;
     m_State.isProjecting  = true;
-    // FIX: esto muta currentText (el mismo campo que las letras/Layer2), asi
-    // que dispara textTransitionTrigger, no transitionTrigger (ese es solo
-    // para fondo/video — ver PresentationState). Antes compartian un unico
-    // contador y un cambio de fondo animaba el texto sin que este hubiera
-    // cambiado, y viceversa.
+
     ++m_State.textTransitionTrigger;
     ++m_StreamVersion;
 }
@@ -212,10 +183,8 @@ bool PresentationCore::GetGlobalMute() const {
         std::transform(normTarget.begin(), normTarget.end(), normTarget.begin(),
                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
-        // 1. Detener preview sincronicamente
         StopPreviewSync();
 
-        // 2. Comprobar si la seleccion actual contiene la ruta o nombre del archivo
         bool clearSel = false;
         {
             std::lock_guard<std::recursive_mutex> lock(m_Mutex);
@@ -232,7 +201,6 @@ bool PresentationCore::GetGlobalMute() const {
             ClearSelection();
         }
 
-        // 3. Comprobar si el fondo en vivo esta reproduciendo este archivo
         bool stopBg = false;
         {
             std::lock_guard<std::recursive_mutex> lock(m_Mutex);
@@ -291,8 +259,7 @@ bool PresentationCore::GetGlobalMute() const {
     void PresentationCore::SetFSREnabled(bool enabled) {
         if (!m_Impl) return;
         m_Impl->background.SetFSREnabled(enabled);
-        // Mutua exclusion: los dos son upscalers de la misma etapa, no
-        // tiene sentido correr ambos (ver PostProcessorNIS.h).
+
         if (enabled) m_Impl->background.SetNISEnabled(false);
     }
 
@@ -330,9 +297,7 @@ bool PresentationCore::GetGlobalMute() const {
 #ifdef _WIN32
         if (m_Impl) m_Impl->background.SetUseNativeEngine(engine != 0);
 #else
-        // En Linux, usar siempre el compositor OpenGL unificado (0).
-        // Evita abrir ventanas separadas de VLC o ventanas detrás del proyector,
-        // garantizando que el video y las letras/fondos se dibujen en la misma ventana.
+
         if (m_Impl) m_Impl->background.SetUseNativeEngine(false);
 #endif
     }
@@ -387,12 +352,6 @@ bool PresentationCore::GetGlobalMute() const {
         }
     }
 
-    // NOTA multi-monitor: cada setter de aca abajo, ademas de aplicar al
-    // primario (compositeFX), tambien aplica el mismo valor a CADA instancia
-    // de m_Impl->extraCompositeFX (monitores de salida extra) -- asi un
-    // cambio en Ajustes > Proyeccion se refleja igual en todos los
-    // monitores (ver RegisterExtraProjectorViewport, que siembra cada
-    // instancia nueva con los valores actuales).
     void PresentationCore::SetCRTEnabled(bool enabled) {
         if (!m_Impl) return;
         m_Impl->compositeFX.SetCRTEnabled(enabled);
@@ -831,7 +790,6 @@ bool PresentationCore::GetGlobalMute() const {
         return m_Impl ? m_Impl->compositeFX.GetHalftoneMode() : 0;
     }
 
-    // ── Volumetric Fog ──
     void PresentationCore::SetVolumetricFogEnabled(bool enabled) {
         if (!m_Impl) return;
         m_Impl->compositeFX.SetVolumetricFogEnabled(enabled);
@@ -873,7 +831,6 @@ bool PresentationCore::GetGlobalMute() const {
         return m_Impl ? m_Impl->compositeFX.GetVolumetricFogColorMode() : 0;
     }
 
-    // ── Volumetric Clouds ──
     void PresentationCore::SetVolumetricCloudsEnabled(bool enabled) {
         if (!m_Impl) return;
         m_Impl->compositeFX.SetVolumetricCloudsEnabled(enabled);
@@ -915,7 +872,6 @@ bool PresentationCore::GetGlobalMute() const {
         return m_Impl ? m_Impl->compositeFX.GetVolumetricCloudsSunIntensity() : 0.65f;
     }
 
-    // ── Zoned Distortion ──
     void PresentationCore::SetZonedDistortionEnabled(bool enabled) {
         if (!m_Impl) return;
         m_Impl->compositeFX.SetZonedDistortionEnabled(enabled);
@@ -970,12 +926,6 @@ bool PresentationCore::GetGlobalMute() const {
         ImGuiViewport* vp = ImGui::FindViewportByID(m_ProjectorPostFXViewportID);
         if (!vp) return nullptr;
 
-        // El backend multi-viewport de esta app es GLFW (ver imgui_impl_glfw),
-        // no el backend nativo Win32 -- PlatformHandleRaw puede quedar en
-        // null segun la version; PlatformHandle SI es siempre el GLFWwindow*
-        // real (eso es lo que crea/gestiona el backend GLFW), asi que se
-        // resuelve el HWND desde ahi, mismo mecanismo que AIWebViewPanel::
-        // NavigateTo usa para la ventana principal.
         if (vp->PlatformHandleRaw) return vp->PlatformHandleRaw;
         if (vp->PlatformHandle)
             return (void*)glfwGetWin32Window(static_cast<GLFWwindow*>(vp->PlatformHandle));
@@ -1119,9 +1069,7 @@ bool PresentationCore::GetGlobalMute() const {
     void PresentationCore::RenderProjectorWindow() {
     if (m_Impl) {
         if (ShouldShowLoadingScreen()) {
-            // Pantalla de carga: se muestra el logo en vez del fondo mientras
-            // algo esta cargando, para que el publico nunca vea un frame
-            // entrecortado o desactualizado (ver Ajustes > Proyeccion > Logo).
+
             m_Impl->background.RenderLogo(
                 static_cast<unsigned int>(reinterpret_cast<uintptr_t>(GetLoadingLogoTexture())),
                 m_LoadingLogoW, m_LoadingLogoH, m_ProjectorWidth, m_ProjectorHeight);
@@ -1130,7 +1078,7 @@ bool PresentationCore::GetGlobalMute() const {
         }
     }
 }
-    // ── Ventanas secundarias, API generica ──────────────────────────────
+
     bool PresentationCore::CreateSecondaryWindow(const std::string& id, int monitorIndex,
                                                   const std::string& title,
                                                   SecondaryOutputWindow::RenderFn renderFn)
@@ -1143,7 +1091,7 @@ bool PresentationCore::GetGlobalMute() const {
 
         std::lock_guard<std::mutex> lock(m_SecondaryWindowsMutex);
 
-        SecondaryOutput& out = m_SecondaryWindows[id]; // crea si no existe
+        SecondaryOutput& out = m_SecondaryWindows[id];
         if (!out.window.Create(m_MainWindow, monitorIndex, title))
         {
             m_SecondaryWindows.erase(id);
@@ -1156,7 +1104,7 @@ bool PresentationCore::GetGlobalMute() const {
     void PresentationCore::DestroySecondaryWindow(const std::string& id)
     {
         std::lock_guard<std::mutex> lock(m_SecondaryWindowsMutex);
-        m_SecondaryWindows.erase(id); // el destructor de SecondaryOutputWindow limpia la ventana
+        m_SecondaryWindows.erase(id);
     }
 
     void PresentationCore::DestroyAllSecondaryWindows()
@@ -1174,9 +1122,7 @@ bool PresentationCore::GetGlobalMute() const {
 
     void PresentationCore::RenderAllSecondaryWindows()
     {
-        // Copia de punteros bajo lock, render fuera del lock: RenderFrame
-        // hace MakeContextCurrent + swap, no queremos tener el mutex
-        // tomado durante llamadas GL potencialmente bloqueantes (vsync).
+
         std::vector<SecondaryOutput*> active;
         {
             std::lock_guard<std::mutex> lock(m_SecondaryWindowsMutex);
@@ -1190,12 +1136,10 @@ bool PresentationCore::GetGlobalMute() const {
             out->window.RenderFrame(out->renderFn);
     }
 
-    // ── Atajos con nombre fijo: Proyector ────────────────────────────────
     bool PresentationCore::CreateProjectorWindow(int monitorIndex)
     {
 #ifdef _WIN32
-        // En Windows se usa el pipeline multi-viewport nativo de ImGui (RenderProjectorOutput).
-        // No se crea ventana GLFW secundaria extra.
+
         std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_State.targetMonitorIndex = monitorIndex;
         return false;
@@ -1204,7 +1148,7 @@ bool PresentationCore::GetGlobalMute() const {
         GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
         if (monitorIndex >= 0 && monitorIndex < monitorCount) {
             if (const GLFWvidmode* vm = glfwGetVideoMode(monitors[monitorIndex])) {
-                SetProjectorSize(vm->width, vm->height); // <-- clave
+                SetProjectorSize(vm->width, vm->height);
             }
         }
 
@@ -1246,8 +1190,7 @@ bool PresentationCore::GetGlobalMute() const {
     bool PresentationCore::CreateStageWindow(int monitorIndex)
     {
 #ifdef _WIN32
-        // En Windows se usa el pipeline multi-viewport nativo de ImGui (RenderStageOutput).
-        // No se crea ventana GLFW secundaria extra.
+
         std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_State.stageMonitorIndex = monitorIndex;
         return false;
@@ -1302,7 +1245,6 @@ bool PresentationCore::GetGlobalMute() const {
         m_StageAlertMessage.clear();
     }
 
-// Unico lugar que escribe m_State.bgType — ver comentario en el header.
 void PresentationCore::SetBgTypeLocked(PresentationState::BackgroundType newType)
 {
     if (m_State.bgType == PresentationState::BackgroundType::Audio &&
@@ -1314,12 +1256,12 @@ void PresentationCore::SetBgTypeLocked(PresentationState::BackgroundType newType
     m_State.bgType = newType;
 }
 
-void PresentationCore::SetBackgroundMedia(const std::string& path, bool /*isVideo*/, bool allowAudio) {
+void PresentationCore::SetBackgroundMedia(const std::string& path, bool , bool allowAudio) {
     {
         std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_State.bgPath = path;
         SetBgTypeLocked(PresentationState::BackgroundType::Video);
-        ++m_State.transitionTrigger;   // NUEVO
+        ++m_State.transitionTrigger;
         ++m_StreamVersion;
     }
     if (m_Impl)
@@ -1338,13 +1280,12 @@ void PresentationCore::StopBackgroundMedia() {
         m_State.bgPath     = "";
         SetBgTypeLocked(PresentationState::BackgroundType::SolidColor);
         m_State.bgColor[0] = 0.0f; m_State.bgColor[1] = 0.0f; m_State.bgColor[2] = 0.0f;
-        ++m_State.transitionTrigger;   // NUEVO
+        ++m_State.transitionTrigger;
         ++m_StreamVersion;
     }
     if (m_Impl) m_Impl->background.SetSolidColor(0.0f, 0.0f, 0.0f);
 }
 
-// Ver comentario en el header (junto a la declaracion) para el porque.
 void PresentationCore::SetBackgroundAudio() {
     {
         std::lock_guard<std::recursive_mutex> lock(m_Mutex);
@@ -1353,8 +1294,7 @@ void PresentationCore::SetBackgroundAudio() {
         ++m_State.transitionTrigger;
         ++m_StreamVersion;
     }
-    // Mismo criterio que StopBackgroundMedia: un video de fondo previo no
-    // debe seguir sonando por debajo del audio que se acaba de mandar en vivo.
+
     if (m_Impl) m_Impl->background.SetSolidColor(0.0f, 0.0f, 0.0f);
 }
 
@@ -1472,13 +1412,11 @@ void PresentationCore::SetBackgroundAudio() {
     }
 
     void PresentationCore::PreloadNextBackgroundMedia(const std::string& path, bool allowAudio) {
-        // A proposito NO toca m_State/transitionTrigger: este preload debe
-        // ser invisible para el operador y para TransitionPanel — solo
-        // adelanta la carga en standby (ver BackgroundLayer::Prefetch).
+
         if (m_Impl) m_Impl->background.Prefetch(path, allowAudio);
     }
 
-    void PresentationCore::CommitNextBackgroundMedia(const std::string& path, bool /*isVideo*/, bool allowAudio) {
+    void PresentationCore::CommitNextBackgroundMedia(const std::string& path, bool , bool allowAudio) {
         {
             std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             m_State.bgPath = path;
@@ -1526,7 +1464,7 @@ void PresentationCore::SetBackgroundAudio() {
     }
 
     void PresentationCore::SetLoadingLogoPath(const std::string& path) {
-        if (path == m_LoadingLogoPath) return; // sin cambios, no recargar cada frame
+        if (path == m_LoadingLogoPath) return;
 
         if (m_LoadingLogoTex != 0) {
             GLuint old = m_LoadingLogoTex;
@@ -1598,11 +1536,7 @@ void PresentationCore::SetBackgroundAudio() {
     }
 
     bool PresentationCore::ShouldShowLoadingScreen() const {
-        // Se elimino el logo/pantalla de carga: sumado al preflight de la
-        // cola, era una fuente constante de cortes y arranques lentos —
-        // BackgroundLayer::Render() ya sigue mostrando el frame actual de
-        // Active() mientras un swap esta en curso (asi funciona el
-        // crossfade), asi que nunca hace falta tapar la salida con un logo.
+
         return false;
     }
 
@@ -1620,7 +1554,7 @@ void PresentationCore::SetLayer0_Color(float r, float g, float b) {
         m_State.bgColor[0] = r; m_State.bgColor[1] = g; m_State.bgColor[2] = b;
         SetBgTypeLocked(PresentationState::BackgroundType::SolidColor);
         m_State.bgPath     = "";
-        ++m_State.transitionTrigger;   // NUEVO
+        ++m_State.transitionTrigger;
         ++m_StreamVersion;
     }
     if (m_Impl) m_Impl->background.SetSolidColor(r, g, b);
@@ -1632,10 +1566,6 @@ void PresentationCore::SetBackgroundBlendDuration(float seconds) {
     if (m_Impl) m_Impl->background.SetBlendSeconds(seconds);
 }
 
-    // Definida mas abajo en este archivo (junto a ApplySavedStyleToState);
-    // espeja una caja de Letras hacia los campos planos legacy de
-    // PresentationState. Forward-declarada aca porque UpdateLyricsBoxStyle
-    // la necesita antes en el archivo.
     static void ApplyLyricsBoxToState(const TextBoxStyle& box, PresentationState& state,
                                        std::string& activeFontName);
 
@@ -1667,10 +1597,7 @@ void PresentationCore::SetLayer2_Text(const std::string& text, int slideIndex, b
     std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     m_State.currentText = text;
     m_State.showText    = !text.empty();
-    // Limpia la referencia biblica: solo BibleView/SyncServer la vuelven a
-    // poner (con SetCurrentRef) justo despues de llamar esto para un
-    // versiculo -- para cualquier otro contenido (canciones, media, notas)
-    // no debe quedar una referencia vieja pegada en pantalla.
+
     m_State.currentRef.clear();
     if (slideIndex >= 0) {
         m_ActiveSlideIndex = slideIndex;
@@ -1777,13 +1704,6 @@ void PresentationCore::SetNextText(const std::string& text) {
             monitorIndex = m_State.targetMonitorIndex;
         }
 
-
-        // Unico punto que habilita/corta el audio real hacia el publico
-        // (y, con el motor "VLC ventana nativa", tambien la ventana de
-        // video en si — ver BackgroundLayer::SetPubliclyLive). Fuera del
-        // lock: BackgroundLayer solo toca atomicos de los players (mas la
-        // ventana nativa, que vive en el hilo principal igual que esto),
-        // no hace falta serializarlo con m_State.
         if (m_Impl)
             m_Impl->background.SetPubliclyLive(projecting, monitorIndex);
     }
@@ -1914,23 +1834,23 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
     m_State.transitionDuration = std::max(0.05f, durationSeconds);
 }
     static const ImWchar kProjectionGlyphRanges[] = {
-        0x0020, 0x00FF, // Basic Latin + Latin Supplement
-        0x0100, 0x024F, // Latin Extended-A & B
-        0x0370, 0x03FF, // Greek
-        0x0400, 0x052F, // Cyrillic
-        0x2000, 0x206F, // General Punctuation
-        0x20A0, 0x20CF, // Currency Symbols
-        0x2100, 0x214F, // Letterlike Symbols
-        0x2190, 0x21FF, // Arrows
-        0x2200, 0x22FF, // Math Operators
-        0x25A0, 0x25FF, // Geometric Shapes
-        0x2600, 0x26FF, // Misc Symbols
-        0x2700, 0x27BF, // Dingbats
-        0x2B00, 0x2BFF, // Misc Symbols and Arrows
-        0x1F300, 0x1F5FF, // Pictographs
-        0x1F600, 0x1F64F, // Emoticons
-        0x1F680, 0x1F6FF, // Transport
-        0x1F900, 0x1F9FF, // Supplemental
+        0x0020, 0x00FF,
+        0x0100, 0x024F,
+        0x0370, 0x03FF,
+        0x0400, 0x052F,
+        0x2000, 0x206F,
+        0x20A0, 0x20CF,
+        0x2100, 0x214F,
+        0x2190, 0x21FF,
+        0x2200, 0x22FF,
+        0x25A0, 0x25FF,
+        0x2600, 0x26FF,
+        0x2700, 0x27BF,
+        0x2B00, 0x2BFF,
+        0x1F300, 0x1F5FF,
+        0x1F600, 0x1F64F,
+        0x1F680, 0x1F6FF,
+        0x1F900, 0x1F9FF,
         0
     };
 
@@ -1979,12 +1899,6 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
             m_ImGuiFonts[fontName] = font;
     }
 
-    // -------------------------------------------------------------------------
-    //  ThemesDirPath — multiplataforma.
-    //  En Windows usa la carpeta AppData del usuario (via SHGetFolderPathW).
-    //  En Linux sigue la convencion XDG: usa $XDG_CONFIG_HOME si esta definida,
-    //  o $HOME/.config en caso contrario.
-    // -------------------------------------------------------------------------
     static std::string ThemesDirPath()
     {
         std::filesystem::path dir;
@@ -2013,16 +1927,6 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         return dir.string();
     }
 
-    // Empaqueta/desempaqueta TextEffectsData como una sola linea CSV en el
-    // archivo .theme -- evita 7 bloques de bool/color/intensidad repetidos
-    // (uno por efecto) en el formato "key=value" de este archivo. Orden fijo:
-    // bg(enabled,r,g,b,a) border(enabled,r,g,b,a,width) shadow(enabled,r,g,b,a,intensity)
-    // chromaticAberration(enabled,intensity) glow(enabled,r,g,b,a,intensity)
-    // neon(enabled,r,g,b,a,intensity) underline(enabled,r,g,b,a,thickness)
-    // text3d(enabled,r,g,b,a,depth) gradient(enabled,Ar,Ag,Ab,Aa,Br,Bg,Bb,Ba,angle)
-    // opacityGradient(enabled,angle,strength) -- los ultimos 3 bloques se
-    // agregaron despues; UnpackTextEffects los trata como opcionales para
-    // que un .theme viejo (37 floats) siga cargando el resto sin resetear.
     std::string PackTextEffects(const TextEffectsData& e)
     {
         std::ostringstream ss;
@@ -2070,7 +1974,7 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         while (std::getline(ss, tok, ',')) {
             if (!tok.empty()) f.push_back(std::stof(tok));
         }
-        if (f.size() < 37) return; // linea corrupta/vieja -- deja los defaults
+        if (f.size() < 37) return;
 
         size_t i = 0;
         e.bgEnabled = f[i++] != 0.0f;
@@ -2093,9 +1997,6 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         for (float& c : e.underlineColor) c = f[i++];
         e.underlineThickness = f[i++];
 
-        // Campos nuevos (3D + degradados), opcionales -- ver comentario de
-        // PackTextEffects. Si el archivo es viejo (solo 37 floats) se dejan
-        // los defaults de TextEffectsData en vez de fallar.
         if (f.size() >= i + 19) {
             e.text3dEnabled = f[i++] != 0.0f;
             for (float& c : e.text3dColor) c = f[i++];
@@ -2112,10 +2013,6 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         }
     }
 
-    // Convierte margenes planos (L,T,R,B en px @1920x1080) al rect
-    // centro-relativo normalizado de TextBoxStyle -- inversa exacta de
-    // ApplyLyricsBoxToState. Usada solo como fallback de migracion al leer
-    // un .theme guardado antes de la reforma a cajas.
     static void BoxFromLegacyMargins(const float margins[4], TextBoxStyle& box)
     {
         box.sizeW = std::max(0.02f, (1920.0f - margins[0] - margins[2]) / 1920.0f);
@@ -2166,8 +2063,6 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
             std::string k = line.substr(0, sep);
             std::string v = line.substr(sep + 1);
 
-            // Claves legacy (planas) -- se conservan solo por compatibilidad
-            // hacia atras / fallback de migracion, ver abajo.
             if      (k == "textSize")   out.size      = std::stof(v);
             else if (k == "textAlign")  out.hAlign    = std::stoi(v);
             else if (k == "vAlign")     out.vAlign    = std::stoi(v);
@@ -2182,7 +2077,6 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
                        &out.margins[0], &out.margins[1],
                        &out.margins[2], &out.margins[3]);
 
-            // Claves nuevas (cajas independientes Letras/Indice).
             else if (k == "lyricsPosX")    { out.lyrics.posX  = std::stof(v); hasLyricsBoxKeys = true; }
             else if (k == "lyricsPosY")    out.lyrics.posY    = std::stof(v);
             else if (k == "lyricsSizeW")   out.lyrics.sizeW   = std::stof(v);
@@ -2222,11 +2116,6 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
                 UnpackTextEffects(v, out.effects);
         }
 
-        // Fallback de migracion: un .theme guardado antes de la reforma a
-        // cajas no tiene las claves "lyrics*"/"index*" -- se deriva una caja
-        // inicial desde los campos legacy ya leidos arriba, para no
-        // resetear estilos guardados por el usuario. El indice arranca
-        // deshabilitado (los estilos viejos no tenian este concepto).
         if (!hasLyricsBoxKeys) {
             out.lyrics.fontName  = out.fontName;
             out.lyrics.textSize  = out.size;
@@ -2248,9 +2137,6 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         std::ofstream f(std::filesystem::path(dir) / (style.name + ".theme"));
         if (!f.is_open()) return;
 
-        // Claves legacy -- se derivan de la caja de Letras para que un
-        // .theme guardado con el editor nuevo siga siendo legible por
-        // codigo viejo/externo que solo conozca el formato plano.
         f << "textColor="  << style.lyrics.color[0] << "," << style.lyrics.color[1] << ","
                             << style.lyrics.color[2] << "," << style.lyrics.color[3] << "\n";
         f << "textSize="   << style.lyrics.textSize << "\n";
@@ -2317,10 +2203,6 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         return ProyecThor::GetAssetsPath() + "/../category_styles.ini";
     }
 
-    // Compartido entre PresentationCore::UpdateLyricsBoxStyle (que llama a
-    // esto ya con el mutex tomado) y ApplySavedStyleToState -- centraliza el
-    // espejo hacia los campos planos legacy de PresentationState (ver
-    // comentario en PresentationState::lyricsBox, PresentationCore.h).
     static void ApplyLyricsBoxToState(const TextBoxStyle& box, PresentationState& state,
                                        std::string& activeFontName)
     {
@@ -2419,7 +2301,7 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         return m_ActiveFontName;
     }
 
-    ImFont* PresentationCore::GetImGuiFont(const std::string& fontName, float /*size*/) {
+    ImFont* PresentationCore::GetImGuiFont(const std::string& fontName, float ) {
         auto it = m_ImGuiFonts.find(fontName);
         if (it != m_ImGuiFonts.end())
             return it->second;
@@ -2503,9 +2385,6 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         ++m_StreamVersion;
     }
 
-    // Arma los providers de un NetworkStreamServer recien creado. Lo llaman
-    // tanto ToggleNetworkStream como ToggleChatServer cuando les toca ser
-    // los que crean el server compartido (el primero de los dos en pedirlo).
     void PresentationCore::WireNetworkServerProviders(NetworkStreamServer& srv)
     {
         srv.SetSnapshotProvider([this]() -> StreamSnapshot
@@ -2513,11 +2392,7 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
             PresentationState st = GetState();
 
             StreamSnapshot snap;
-            // El cliente web usa "isProjecting" solo para decidir si oculta el overlay
-// de idle y muestra el texto. No debe confundirse con el "isProjecting"
-// real que controla el proyector principal y el audio publico — por eso
-// aqui se OR-ea con showLanQuickNote: si hay una nota SOLO-LAN activa,
-// el cliente de red debe mostrarla aunque la pantalla principal este idle.
+
 snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
 
             if (st.showLanQuickNote) {
@@ -2528,10 +2403,6 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
                 snap.showText    = st.showText;
             }
 
-            // OutputContentMode de LAN (ver ViewPanel::RenderContent, pestaña
-            // "Inalambrica") -- pisa lo de arriba SI el operador clavo esta
-            // salida en "Solo reloj"/"En blanco", independiente de que este
-            // en vivo Publico/Stage en este momento.
             switch (GetLanContentMode()) {
                 case OutputContentMode::ClockOnly: {
                     std::time_t now = std::time(nullptr);
@@ -2668,8 +2539,7 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
         {
             if (m_NetworkServer && m_NetworkServer->IsRunning())
             {
-                // Ya esta corriendo (lo pudo haber arrancado el Chat) —
-                // Streaming solo se "suma" como usuario, no reinicia nada.
+
                 std::lock_guard<std::recursive_mutex> lk(m_Mutex);
                 m_State.isStreamingNet = true;
                 m_State.networkURL     = m_NetworkServer->GetBaseURL();
@@ -2705,10 +2575,6 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
                 m_LatestFrame.clear();
             }
 
-            // El server entero solo se apaga si Chat tampoco lo esta usando
-            // — si esta activo, se queda arriba para el (sin video: dejamos
-            // de pushear frames arriba, asi que /frame y /stream vuelven a
-            // quedar "vacios" para quien mire el video por LAN).
             if (m_NetworkServer && !IsChatRunning())
             {
                 m_NetworkServer->Stop();
@@ -2729,8 +2595,7 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
         {
             if (m_NetworkServer && m_NetworkServer->IsRunning())
             {
-                // Ya esta corriendo (lo pudo haber arrancado Streaming) —
-                // solo conectamos el store de mensajes si todavia no estaba.
+
                 m_NetworkServer->SetChatStore(&m_ChatMessageStore);
                 std::lock_guard<std::recursive_mutex> lk(m_Mutex);
                 m_State.isChatRunning = true;
@@ -2761,8 +2626,6 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
                 m_State.chatURL.clear();
             }
 
-            // Igual que del otro lado: el server entero solo se apaga si
-            // Streaming tampoco lo esta usando.
             if (m_NetworkServer && !IsStreamingNet())
             {
                 m_NetworkServer->Stop();
@@ -2867,15 +2730,9 @@ outRGB.resize(static_cast<size_t>(w) * h * 3);
         }
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // OutputContentMode de LAN (ver SetLanContentMode): "Solo reloj"/"En
-        // blanco" no deben dejar pasar el fondo real (video/imagen en vivo)
-        // -- ya se limpio a negro arriba, alcanza con NO pintar nada mas; el
-        // texto del reloj lo agrega el cliente web (ver snap.currentText en
-        // WireNetworkServerProviders), este FBO solo aporta los pixeles de fondo.
         if (GetLanContentMode() == OutputContentMode::Live)
         {
-            // Mismo criterio que RenderProjectorWindow(): el stream de red
-            // tampoco debe mostrar un frame entrecortado mientras algo carga.
+
             if (ShouldShowLoadingScreen()) {
                 m_Impl->background.RenderLogo(
                     static_cast<unsigned int>(reinterpret_cast<uintptr_t>(GetLoadingLogoTexture())),
@@ -2898,9 +2755,7 @@ GLubyte* ptr = static_cast<GLubyte*>(
     glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
 if (ptr)
 {
-    // glReadPixels entrega fila 0 = abajo de la pantalla. JPEG/PNG
-    // esperan fila 0 = arriba. Invertimos filas aca, una sola vez,
-    // antes de que el buffer salga hacia el compresor JPEG.
+
     const size_t rowBytes = static_cast<size_t>(w) * 3;
     for (int row = 0; row < h; ++row)
     {
@@ -2964,4 +2819,4 @@ if (ptr)
         return m_PendingNavigateDelta.exchange(0);
     }
 
-} // namespace ProyecThor::Core
+}

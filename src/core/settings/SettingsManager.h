@@ -227,6 +227,7 @@ namespace ProyecThor::Settings {
         int         autoSaveIntervalSec = 120;
         std::string defaultBiblesFolder = "";
         std::string defaultMediaFolder  = "";
+        bool        duplicateMediaFiles = false;
         Language    language            = Language::Spanish;
         std::string dismissedChangelog  = "";
         // Titulos bajo los iconos de los 4 rails (Biblioteca/Home/Control/Diseño).

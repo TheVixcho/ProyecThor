@@ -97,8 +97,15 @@ void ImportSelectedFileToLibrary(const fs::path& src, LibraryCategory category, 
             static const std::vector<std::string> kImageExts = { ".jpg", ".jpeg", ".png" };
 
             std::string destFolder;
-            if (std::find(kVideoExts.begin(), kVideoExts.end(), ext) != kVideoExts.end())
-                destFolder = base + "/videos";
+            if (std::find(kVideoExts.begin(), kVideoExts.end(), ext) != kVideoExts.end()) {
+                auto& settings = ProyecThor::Settings::SettingsManager::Get().GetSettings();
+                if (!settings.general.duplicateMediaFiles) {
+                    settings.general.defaultMediaFolder = src.parent_path().string();
+                    ProyecThor::Settings::SettingsManager::Get().SaveSettings();
+                    return;
+                }
+                destFolder = GetVideoLibraryPath();
+            }
             else if (std::find(kImageExts.begin(), kImageExts.end(), ext) != kImageExts.end())
                 destFolder = base + "/images";
             else
@@ -110,7 +117,16 @@ void ImportSelectedFileToLibrary(const fs::path& src, LibraryCategory category, 
             std::string destFolder;
             switch (category) {
                 case LibraryCategory::Songs:  destFolder = base + "/songs";  break;
-                case LibraryCategory::Videos: destFolder = base + "/videos"; break;
+                case LibraryCategory::Videos: {
+                    auto& settings = ProyecThor::Settings::SettingsManager::Get().GetSettings();
+                    if (!settings.general.duplicateMediaFiles) {
+                        settings.general.defaultMediaFolder = src.parent_path().string();
+                        ProyecThor::Settings::SettingsManager::Get().SaveSettings();
+                        return;
+                    }
+                    destFolder = GetVideoLibraryPath();
+                    break;
+                }
                 case LibraryCategory::Images: destFolder = base + "/images"; break;
                 case LibraryCategory::Bibles: destFolder = base + "/bibles"; break;
                 default:                      destFolder = base + "/audio";  break;
@@ -359,7 +375,7 @@ void LibraryPanel::RefreshList()
     std::string path;
     switch (m_CurrentCategory) {
         case LibraryCategory::Songs:     path = base + "/songs";     break;
-        case LibraryCategory::Videos:    path = base + "/videos";    break;
+        case LibraryCategory::Videos:    path = GetVideoLibraryPath(); break;
         case LibraryCategory::Images:    path = base + "/images";    break;
         case LibraryCategory::Bibles:    path = base + "/bibles";    break;
         case LibraryCategory::Documents: path = base + "/documents"; break;
@@ -407,7 +423,7 @@ void LibraryPanel::DeleteSelectedItem()
     std::string folder;
     switch (m_CurrentCategory) {
         case LibraryCategory::Songs:     folder = base + "/songs/";     break;
-        case LibraryCategory::Videos:    folder = base + "/videos/";    break;
+        case LibraryCategory::Videos:    folder = GetVideoLibraryPath() + "/"; break;
         case LibraryCategory::Images:    folder = base + "/images/";    break;
         case LibraryCategory::Documents: folder = base + "/documents/"; break;
         case LibraryCategory::Audio:     folder = base + "/audio/";     break;
@@ -987,7 +1003,7 @@ void LibraryPanel::RefreshConvertibleItems()
             m_ConvertibleItems.push_back({ PathToUtf8(entry.path().filename()), isVideo });
         }
     };
-    scan(GetAssetsPath() + "/videos/", { ".mp4", ".mkv", ".avi", ".mov" }, true);
+    scan(GetVideoLibraryPath() + "/", { ".mp4", ".mkv", ".avi", ".mov" }, true);
     scan(ProyecThor::Audio::GetAudioPath() + "/",
         { ".mp3", ".flac", ".wav", ".ogg", ".aac", ".m4a", ".wma", ".opus", ".aiff" }, false);
 
@@ -1194,7 +1210,7 @@ void LibraryPanel::RenderConverterSection()
         // Estimacion de peso -- se calcula sobre el tamaño REAL del archivo
         // de origen (ver EstimateSizeRatio, es aproximado a proposito).
         std::error_code sizeEc;
-        fs::path srcPath = U8Path(GetAssetsPath() + "/videos/" + m_ConvertibleItems[m_ConvertSourceIndex].filename);
+        fs::path srcPath = U8Path(GetVideoLibraryPath() + "/" + m_ConvertibleItems[m_ConvertSourceIndex].filename);
         uint64_t srcSize = fs::file_size(srcPath, sizeEc);
         if (!sizeEc && srcSize > 0) {
             float ratio = codecIsAuto ? 1.0f : EstimateSizeRatio(m_ConvertCodec, m_ConvertCompression);
@@ -1274,7 +1290,7 @@ void LibraryPanel::RenderConverterSection()
     if (!haveSource) { ImGui::BeginDisabled(); }
     if (DS::GlassButton("Convertir", ImVec2(200.0f, DS::ButtonHeight + 6.0f)) && haveSource) {
         const auto& src     = m_ConvertibleItems[m_ConvertSourceIndex];
-        std::string dirPath = src.isVideo ? (GetAssetsPath() + "/videos/") : (ProyecThor::Audio::GetAudioPath() + "/");
+        std::string dirPath = src.isVideo ? (GetVideoLibraryPath() + "/") : (ProyecThor::Audio::GetAudioPath() + "/");
         std::string stem    = StripExtension(src.filename);
         std::string ext     = formats[m_ConvertFormatIndex];
         std::string inputPath = dirPath + src.filename;
