@@ -1,5 +1,6 @@
 #include "BackgroundLayer.h"
 #include "ui/windowing/SecondaryOutputWindow.h"
+#include "core/PresentationCore.h"
 #include "stb_image.h"
 #include <iostream>
 #include <chrono>
@@ -860,6 +861,10 @@ void main() {
             if (!m_AudioDeviceId.empty())
                 fresh->player.SetAudioDevice(m_AudioDeviceId);
 
+            if (m_LastKnownMonitorIndex < 0) {
+                m_LastKnownMonitorIndex = PresentationCore::Get().GetState().targetMonitorIndex;
+            }
+
             // Mapear y mostrar la ventana en negro inmediatamente:
             // en Linux X11 libVLC requiere que la ventana este mapeada para inicializar
             // XVideo/GLX sin errores de BadDrawable/XvBadPort.
@@ -1264,8 +1269,18 @@ void main() {
     {
         if (!m_NativeRevealPending || !m_ActiveNative) return;
 
-        bool ready = m_ActiveNative->player.GetLoadState() == VLCBasePlayer::LoadState::Ready;
-        bool timedOut = (NowSeconds() - m_NativeRevealStart) > kNativeRevealGiveUpSeconds;
+        auto loadState = m_ActiveNative->player.GetLoadState();
+        bool ready     = (loadState == VLCBasePlayer::LoadState::Ready);
+        bool errored   = (loadState == VLCBasePlayer::LoadState::Error);
+        bool timedOut  = (NowSeconds() - m_NativeRevealStart) > kNativeRevealGiveUpSeconds;
+
+        if (errored)
+        {
+            m_NativeRevealPending = false;
+            if (m_PendingRetireNative) RetireNativePlayback(std::move(m_PendingRetireNative));
+            return;
+        }
+
         if (!ready && !timedOut) return;
 
         // Listo (o se agoto el tiempo de gracia): revelar el nuevo YA —

@@ -9,7 +9,10 @@
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build-linux",
-            "environment": [],
+            "environment": [
+                { "name": "LD_LIBRARY_PATH", "value": "${workspaceFolder}/build-linux" },
+                { "name": "VLC_PLUGIN_PATH", "value": "${workspaceFolder}/build-linux/plugins" }
+            ],
             "externalConsole": false,
             "MIMode": "gdb",
             "setupCommands": [

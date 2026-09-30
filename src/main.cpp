@@ -822,11 +822,48 @@ void RunMainLoop(GLFWwindow* window, ProyecThor::UI::UIManager& uiManager,
     }
 }
 
+} // namespace
+
+#ifndef _WIN32
+static void EnsureLinuxEnvironment(int argc, char** argv)
+{
+    char exePath[PATH_MAX] = {};
+    ssize_t len = readlink("/proc/self/exe", exePath, sizeof(exePath) - 1);
+    if (len <= 0) return;
+    exePath[len] = '\0';
+    std::filesystem::path dir = std::filesystem::path(exePath).parent_path();
+
+    const char* currentLd = std::getenv("LD_LIBRARY_PATH");
+    bool hasDirInLd = false;
+    if (currentLd)
+    {
+        std::string ldStr = currentLd;
+        if (ldStr.find(dir.string()) != std::string::npos)
+            hasDirInLd = true;
+    }
+
+    if (!hasDirInLd && !std::getenv("PROYECTHOR_ENV_READY"))
+    {
+        std::string newLd = dir.string();
+        if (currentLd && *currentLd)
+            newLd += ":" + std::string(currentLd);
+        setenv("LD_LIBRARY_PATH", newLd.c_str(), 1);
+
+        std::filesystem::path localPlugins = dir / "plugins";
+        if (std::filesystem::exists(localPlugins))
+            setenv("VLC_PLUGIN_PATH", localPlugins.c_str(), 1);
+
+        setenv("PROYECTHOR_ENV_READY", "1", 1);
+        execv("/proc/self/exe", argv);
+    }
 }
+#endif
 
 int main(int argc, char** argv)
 {
-
+#ifndef _WIN32
+    EnsureLinuxEnvironment(argc, argv);
+#endif
     ChangeToExecutableDirectory();
     std::cerr << "[DIAG] Iniciando main()\n";
     const std::string pendingOpenFilePath = GetPendingOpenFilePath(argc, argv);

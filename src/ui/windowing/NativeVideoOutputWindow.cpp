@@ -67,7 +67,10 @@ void* NativeVideoOutputWindow::CreateHidden(int monitorIndex)
     int monitorCount = 0;
     GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
     if (monitorIndex < 0 || monitorIndex >= monitorCount) {
-        monitorIndex = 0;
+        monitorIndex = PresentationCore::Get().GetState().targetMonitorIndex;
+        if (monitorIndex < 0 || monitorIndex >= monitorCount) {
+            monitorIndex = (monitorCount > 1) ? 1 : 0;
+        }
     }
     m_MonitorIndex = monitorIndex;
 
@@ -82,8 +85,12 @@ void* NativeVideoOutputWindow::CreateHidden(int monitorIndex)
 
     bool wantFullscreen = PresentationCore::Get().GetWindowFullscreen();
     if (!wantFullscreen) {
-        m_Width  = 960;
-        m_Height = 540;
+        m_Width  = 1280;
+        m_Height = 720;
+        if (vm->width < m_Width || vm->height < m_Height) {
+            m_Width  = vm->width * 3 / 4;
+            m_Height = vm->height * 3 / 4;
+        }
         m_MonX   = monX + (vm->width - m_Width) / 2;
         m_MonY   = monY + (vm->height - m_Height) / 2;
     } else {
@@ -100,7 +107,7 @@ void* NativeVideoOutputWindow::CreateHidden(int monitorIndex)
         glfwWindowHint(GLFW_CLIENT_API,    GLFW_NO_API);
         glfwWindowHint(GLFW_DECORATED,     wantFullscreen ? GLFW_FALSE : GLFW_TRUE);
         glfwWindowHint(GLFW_FLOATING,      wantFullscreen ? GLFW_TRUE : GLFW_FALSE);
-        glfwWindowHint(GLFW_RESIZABLE,     wantFullscreen ? GLFW_FALSE : GLFW_TRUE);
+        glfwWindowHint(GLFW_RESIZABLE,     GLFW_TRUE);
         glfwWindowHint(GLFW_AUTO_ICONIFY,  GLFW_FALSE);
         glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_FALSE);
         glfwWindowHint(GLFW_VISIBLE,       GLFW_TRUE);
@@ -119,6 +126,12 @@ void* NativeVideoOutputWindow::CreateHidden(int monitorIndex)
 
         // Pintar apenas se crea: fondo negro inmediato (evita cualquier flash blanco).
         PaintWindowBlack(m_Window);
+    }
+    else
+    {
+        glfwSetWindowAttrib(m_Window, GLFW_DECORATED, wantFullscreen ? GLFW_FALSE : GLFW_TRUE);
+        glfwSetWindowAttrib(m_Window, GLFW_FLOATING,  wantFullscreen ? GLFW_TRUE : GLFW_FALSE);
+        glfwSetWindowAttrib(m_Window, GLFW_RESIZABLE, GLFW_TRUE);
     }
 
     glfwSetWindowPos(m_Window, m_MonX, m_MonY);
@@ -159,39 +172,21 @@ void NativeVideoOutputWindow::Reveal()
     ::Window xwin = glfwGetX11Window(m_Window);
     if (dpy && xwin) {
         bool wantFullscreen = PresentationCore::Get().GetWindowFullscreen();
-        if (wantFullscreen) {
-            ::Window root = DefaultRootWindow(dpy);
+        Atom wmState = XInternAtom(dpy, "_NET_WM_STATE", False);
+        Atom wmAbove = XInternAtom(dpy, "_NET_WM_STATE_ABOVE", False);
 
-            // 1. Asignar el monitor físico a KWin / EWMH vía _NET_WM_FULLSCREEN_MONITORS
-            Atom wmFullscreenMonitors = XInternAtom(dpy, "_NET_WM_FULLSCREEN_MONITORS", False);
-            XEvent xevMon = {};
-            xevMon.type = ClientMessage;
-            xevMon.xclient.window = xwin;
-            xevMon.xclient.message_type = wmFullscreenMonitors;
-            xevMon.xclient.format = 32;
-            xevMon.xclient.data.l[0] = m_MonitorIndex; // top
-            xevMon.xclient.data.l[1] = m_MonitorIndex; // bottom
-            xevMon.xclient.data.l[2] = m_MonitorIndex; // left
-            xevMon.xclient.data.l[3] = m_MonitorIndex; // right
-            xevMon.xclient.data.l[4] = 1;
-            XSendEvent(dpy, root, False, SubstructureRedirectMask | SubstructureNotifyMask, &xevMon);
+        XEvent xevState = {};
+        xevState.type = ClientMessage;
+        xevState.xclient.window = xwin;
+        xevState.xclient.message_type = wmState;
+        xevState.xclient.format = 32;
+        xevState.xclient.data.l[0] = wantFullscreen ? 1 : 0; // 1 = _NET_WM_STATE_ADD, 0 = _NET_WM_STATE_REMOVE
+        xevState.xclient.data.l[1] = wmAbove;
+        xevState.xclient.data.l[2] = 0;
+        xevState.xclient.data.l[3] = 1;
+        ::Window root = DefaultRootWindow(dpy);
+        XSendEvent(dpy, root, False, SubstructureRedirectMask | SubstructureNotifyMask, &xevState);
 
-            // 2. Activar fullscreen y mantener encima
-            Atom wmState = XInternAtom(dpy, "_NET_WM_STATE", False);
-            Atom wmFullscreen = XInternAtom(dpy, "_NET_WM_STATE_FULLSCREEN", False);
-            Atom wmAbove = XInternAtom(dpy, "_NET_WM_STATE_ABOVE", False);
-
-            XEvent xevState = {};
-            xevState.type = ClientMessage;
-            xevState.xclient.window = xwin;
-            xevState.xclient.message_type = wmState;
-            xevState.xclient.format = 32;
-            xevState.xclient.data.l[0] = 1; // _NET_WM_STATE_ADD
-            xevState.xclient.data.l[1] = wmFullscreen;
-            xevState.xclient.data.l[2] = wmAbove;
-            xevState.xclient.data.l[3] = 1;
-            XSendEvent(dpy, root, False, SubstructureRedirectMask | SubstructureNotifyMask, &xevState);
-        }
         XMoveResizeWindow(dpy, xwin, m_MonX, m_MonY, m_Width, m_Height);
         XRaiseWindow(dpy, xwin);
         XFlush(dpy);

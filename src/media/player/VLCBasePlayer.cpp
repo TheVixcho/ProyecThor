@@ -551,30 +551,8 @@ void VLCBasePlayer::InitVLC()
     argStorage.push_back("--no-video-title-show");
     argStorage.push_back("--file-caching=1000");
 
-    if (m_DecodeThreads > 0) {
-        argStorage.push_back("--avcodec-threads=" + std::to_string(m_DecodeThreads));
-    }
-
     if (m_ForceSilent.load(std::memory_order_relaxed)) {
         argStorage.push_back("--no-audio");
-    }
-
-    std::string hw = s_HwDecoder.empty() ? "any" : s_HwDecoder;
-    if (!m_UseHardwareDecode || hw == "none") {
-        argStorage.push_back("--avcodec-hw=none");
-    } else if (hw != "any") {
-        argStorage.push_back("--avcodec-hw=" + hw);
-    } else {
-#ifndef _WIN32
-        if (!m_NativeWindowOutput) {
-            // Software decode para vmem en Linux: elimina completamente el bug de stride de VA-API en memoria (líneas verdes)
-            argStorage.push_back("--avcodec-hw=none");
-        } else {
-            argStorage.push_back("--avcodec-hw=any");
-        }
-#else
-        argStorage.push_back("--avcodec-hw=any");
-#endif
     }
 
     // Salida de video (--vout) SOLO para reproductores que dibujan en ventana nativa
@@ -617,6 +595,10 @@ void VLCBasePlayer::OnVlcEvent(const libvlc_event_t* evt, void* userData)
         if (evt->type == libvlc_MediaPlayerEncounteredError) {
             self->m_HadError.store(true, std::memory_order_relaxed);
             self->m_LoadHasError.store(true, std::memory_order_relaxed);
+            const char* msg = libvlc_errmsg();
+            std::cerr << "[VLC#" << self->m_InstanceId << "] Error reportado por libVLC: "
+                      << (msg ? msg : "desconocido") << "\n";
+            libvlc_clearerr();
         }
         self->m_EndReached.store(true, std::memory_order_relaxed);
     }
@@ -873,6 +855,11 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool /*start
     }
     std::string hwOpt = ":avcodec-hw=" + hw;
     libvlc_media_add_option(media, hwOpt.c_str());
+
+    if (m_DecodeThreads > 0) {
+        std::string thrOpt = ":avcodec-threads=" + std::to_string(m_DecodeThreads);
+        libvlc_media_add_option(media, thrOpt.c_str());
+    }
 
     // Pasar salida de video a media si es ventana nativa
     if (m_NativeWindowOutput && !s_VideoOutput.empty() && s_VideoOutput != "auto" && s_VideoOutput != "any") {
