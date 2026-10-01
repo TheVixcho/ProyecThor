@@ -17,6 +17,8 @@
 #include "model3d/Model3DPanel.h"
 #include "lab/LabPanel.h"
 #include <memory>
+#include <atomic>
+#include <thread>
 
 namespace ProyecThor::UI { class UIManager; class MonitorView; class PanelPickerFullscreen; }
 enum class ActiveLeftPanel;
@@ -139,6 +141,9 @@ private:
     std::vector<std::string> m_Items;
     int                      m_SelectedIndex       = -1;
     char                     m_SearchBuffer[256]{};
+
+    std::atomic<bool>        m_ImportRunning{false};
+    std::atomic<bool>        m_NeedsRefreshList{false};
 
     UIManager*               m_UIManagerRef        = nullptr;
     MonitorView*             m_MonitorRef          = nullptr;

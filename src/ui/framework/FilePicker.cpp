@@ -241,6 +241,8 @@ struct PortalResponseData {
     GMainLoop* loop = nullptr;
     int responseCode = -1;
     std::vector<std::string> uris;
+    std::string expectedHandle;
+    std::string token;
 };
 
 static void OnPortalResponse(GDBusConnection* connection,
@@ -251,9 +253,23 @@ static void OnPortalResponse(GDBusConnection* connection,
                              GVariant* parameters,
                              gpointer user_data)
 {
-    (void)connection; (void)sender_name; (void)object_path;
+    (void)connection; (void)sender_name;
     (void)interface_name; (void)signal_name;
     auto* data = static_cast<PortalResponseData*>(user_data);
+
+    // Filtrar si la señal pertenece a otra petición
+    if (object_path != nullptr) {
+        bool match = false;
+        if (!data->expectedHandle.empty() && data->expectedHandle == object_path) {
+            match = true;
+        } else if (!data->token.empty() && g_str_has_suffix(object_path, data->token.c_str())) {
+            match = true;
+        }
+        if (!match) {
+            return;
+        }
+    }
+
     guint32 response = 1;
     GVariantIter* iter = nullptr;
     g_variant_get(parameters, "(ua{sv})", &response, &iter);
@@ -299,26 +315,22 @@ static bool RunPortalFileChooser(const std::string& title,
     static std::atomic<uint64_t> s_token_counter{0};
     std::string token = "proyecthor_portal_" + std::to_string(++s_token_counter);
 
-    std::string sender = g_dbus_connection_get_unique_name(conn);
-    if (!sender.empty() && sender[0] == ':') {
-        sender = sender.substr(1);
-    }
-    std::replace(sender.begin(), sender.end(), '.', '_');
-    std::string expectedPath = "/org/freedesktop/portal/desktop/request/" + sender + "/" + token;
-
     PortalResponseData respData;
+    respData.token = token;
+
     GMainContext* context = g_main_context_new();
     g_main_context_push_thread_default(context);
     respData.loop = g_main_loop_new(context, FALSE);
 
+    // Suscribirse a Response con G_DBUS_SIGNAL_FLAGS_NONE para que D-Bus cree la regla AddMatch
     guint subId = g_dbus_connection_signal_subscribe(
         conn,
         "org.freedesktop.portal.Desktop",
         "org.freedesktop.portal.Request",
         "Response",
-        expectedPath.c_str(),
+        nullptr, // null para capturar el handle retornado independientemente del formato de bus name
         nullptr,
-        G_DBUS_SIGNAL_FLAGS_NO_MATCH_RULE,
+        G_DBUS_SIGNAL_FLAGS_NONE,
         OnPortalResponse,
         &respData,
         nullptr
@@ -380,6 +392,12 @@ static bool RunPortalFileChooser(const std::string& title,
         g_object_unref(conn);
         if (err) g_error_free(err);
         return false;
+    }
+
+    const gchar* returnedHandle = nullptr;
+    g_variant_get(ret, "(&o)", &returnedHandle);
+    if (returnedHandle) {
+        respData.expectedHandle = returnedHandle;
     }
     g_variant_unref(ret);
 

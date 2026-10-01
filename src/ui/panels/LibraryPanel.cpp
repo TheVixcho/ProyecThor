@@ -560,6 +560,11 @@ void LibraryPanel::Render()
     if (m_UIManagerRef && m_UIManagerRef->IsPanelCollapsedForRender(GetName()))
         return;
 
+    if (m_NeedsRefreshList.exchange(false))
+    {
+        RefreshList();
+    }
+
     // Un archivo pudo haber cambiado de nombre en disco desde un lugar sin
     // acceso directo a este ctx (ver SongEditView::FlushIfDirty /
     // RenameNewSongToTitleIfApplicable) -- reescanea de verdad (RefreshList)
@@ -866,6 +871,11 @@ void LibraryPanel::SelectPlaylistSong(const std::string& playlistName, int index
 
 void LibraryPanel::ImportFile()
 {
+    if (m_ImportRunning.exchange(true))
+    {
+        return;
+    }
+
     std::vector<UI::FileFilterItem> filters;
     switch (m_CurrentCategory) {
         case LibraryCategory::Videos:
@@ -892,16 +902,20 @@ void LibraryPanel::ImportFile()
     }
     filters.push_back({"Todos los archivos", {"*"}});
 
-    std::vector<std::string> chosenFiles = UI::PickMultipleFiles("Importar archivos", filters);
-    for (const auto& pathStr : chosenFiles) {
-        if (!pathStr.empty()) {
-            fs::path src(pathStr);
-            ImportSelectedFileToLibrary(src, m_CurrentCategory, GetAssetsPath());
+    LibraryCategory cat = m_CurrentCategory;
+    std::string assetsPath = GetAssetsPath();
+
+    std::thread([this, filters, cat, assetsPath]() {
+        std::vector<std::string> chosenFiles = UI::PickMultipleFiles("Importar archivos", filters);
+        for (const auto& pathStr : chosenFiles) {
+            if (!pathStr.empty()) {
+                fs::path src(pathStr);
+                ImportSelectedFileToLibrary(src, cat, assetsPath);
+            }
         }
-    }
-
-
-    RefreshList();
+        m_NeedsRefreshList = true;
+        m_ImportRunning = false;
+    }).detach();
 }
 
 // =============================================================================
