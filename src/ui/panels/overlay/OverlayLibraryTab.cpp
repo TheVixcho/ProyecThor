@@ -6,6 +6,7 @@
 #include "core/PresentationCore.h"
 #include "core/FileDeletionManager.h"
 #include "core/AppPaths.h"
+#include "ui/framework/FilePicker.h"
 #include <imgui.h>
 #ifdef _WIN32
 #include <windows.h>
@@ -88,49 +89,7 @@ static fs::path BgImagesRootDir() {
     return dir / "assets" / "backgrounds";
 }
 
-#ifndef _WIN32
-static std::string OpenImageFileDialogUnix() {
-    const char* commands[] = {
-        "zenity --file-selection --title=\"Seleccionar imagen\" "
-        "--file-filter=\"Imágenes | *.jpg *.jpeg *.png\" 2>/dev/null",
-        "kdialog --getopenfilename . \"*.jpg *.jpeg *.png|Imágenes\" 2>/dev/null"
-    };
-    for (const char* cmd : commands) {
-        std::string result;
-        char buffer[1024];
-        FILE* pipe = popen(cmd, "r");
-        if (!pipe) continue;
-        while (fgets(buffer, sizeof(buffer), pipe) != nullptr) result += buffer;
-        int status = pclose(pipe);
-        if (status != 0) continue;
-        while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
-            result.pop_back();
-        if (!result.empty()) return result;
-    }
-    return {};
-}
 
-static std::string OpenSvgFileDialogUnix() {
-    const char* commands[] = {
-        "zenity --file-selection --title=\"Seleccionar SVG\" "
-        "--file-filter=\"SVG | *.svg\" 2>/dev/null",
-        "kdialog --getopenfilename . \"*.svg|SVG\" 2>/dev/null"
-    };
-    for (const char* cmd : commands) {
-        std::string result;
-        char buffer[1024];
-        FILE* pipe = popen(cmd, "r");
-        if (!pipe) continue;
-        while (fgets(buffer, sizeof(buffer), pipe) != nullptr) result += buffer;
-        int status = pclose(pipe);
-        if (status != 0) continue;
-        while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
-            result.pop_back();
-        if (!result.empty()) return result;
-    }
-    return {};
-}
-#endif
 
 static ImTextureID LoadImageThumb(const char* path) {
     int w, h, n;
@@ -311,22 +270,8 @@ std::vector<std::string> OverlayLibraryTab::ListBgImages() {
 }
 
 std::string OverlayLibraryTab::ImportOverlayImage() {
-    std::string selectedPath;
-#ifdef _WIN32
-    char filename[MAX_PATH] = {};
-    OPENFILENAMEA ofn = {};
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner   = NULL;
-    ofn.lpstrFilter = "Imágenes\0*.jpg;*.jpeg;*.png\0Todos los archivos\0*.*\0";
-    ofn.lpstrFile   = filename;
-    ofn.nMaxFile    = MAX_PATH;
-    ofn.Flags       = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
-    if (!GetOpenFileNameA(&ofn)) return {};
-    selectedPath = filename;
-#else
-    selectedPath = OpenImageFileDialogUnix();
+    std::string selectedPath = ProyecThor::UI::PickImageFile();
     if (selectedPath.empty()) return {};
-#endif
 
     std::error_code ec;
     fs::path dstDir = OverlayImagesDir();
@@ -338,20 +283,7 @@ std::string OverlayLibraryTab::ImportOverlayImage() {
 }
 
 std::string OverlayLibraryTab::PickSvgFile() {
-#ifdef _WIN32
-    char filename[MAX_PATH] = {};
-    OPENFILENAMEA ofn = {};
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner   = NULL;
-    ofn.lpstrFilter = "Archivos SVG\0*.svg\0Todos los archivos\0*.*\0";
-    ofn.lpstrFile   = filename;
-    ofn.nMaxFile    = MAX_PATH;
-    ofn.Flags       = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
-    if (!GetOpenFileNameA(&ofn)) return {};
-    return filename;
-#else
-    return OpenSvgFileDialogUnix();
-#endif
+    return ProyecThor::UI::PickSvgFile();
 }
 
 std::vector<OverlayLayer> OverlayLibraryTab::ImportOverlaySvgAsLayers(int canvasW, int canvasH) {

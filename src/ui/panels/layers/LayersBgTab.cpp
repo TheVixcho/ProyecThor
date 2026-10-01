@@ -5,6 +5,7 @@
 #include "core/AppPaths.h"
 #include "ui/panels/biblio/LibraryHelpers.h"
 #include "ui/panels/biblio/LibraryMultimedia.h"
+#include "ui/framework/FilePicker.h"
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
 #ifdef _WIN32
@@ -231,68 +232,16 @@ void LayersBgTab::ReloadList() {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Operaciones de disco
 // ─────────────────────────────────────────────────────────────────────────────
-#ifdef _WIN32
 bool LayersBgTab::ImportBackground() {
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    IFileOpenDialog* dlg = nullptr;
-    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&dlg))))
-        return false;
-    COMDLG_FILTERSPEC fs[] = {
-        {L"Video e Imagen", L"*.mp4;*.mkv;*.avi;*.mov;*.jpg;*.jpeg;*.png"},
-        {L"Videos",         L"*.mp4;*.mkv;*.avi;*.mov"},
-        {L"Imágenes",       L"*.jpg;*.jpeg;*.png"}
+    std::vector<UI::FileFilterItem> filters = {
+        {"Video e Imagen", {"*.mp4", "*.mkv", "*.avi", "*.mov", "*.webm", "*.jpg", "*.jpeg", "*.png"}},
+        {"Videos",         {"*.mp4", "*.mkv", "*.avi", "*.mov", "*.webm"}},
+        {"Imágenes",       {"*.jpg", "*.jpeg", "*.png"}},
+        {"Todos los archivos", {"*"}}
     };
-    dlg->SetFileTypes(3, fs); dlg->SetFileTypeIndex(1); dlg->SetTitle(L"Importar Fondo");
-    FILEOPENDIALOGOPTIONS o = 0; dlg->GetOptions(&o);
-    dlg->SetOptions(o | FOS_ALLOWMULTISELECT | FOS_FILEMUSTEXIST);
 
-    bool imported = false;
-    if (SUCCEEDED(dlg->Show(nullptr))) {
-        IShellItemArray* items = nullptr;
-        if (SUCCEEDED(dlg->GetResults(&items))) {
-            DWORD count = 0; items->GetCount(&count);
-            ::fs::path dest = BgRootDir();
-            if (!m_CurrentBgFolder.empty()) dest = dest / m_CurrentBgFolder;
-            std::error_code ec; ::fs::create_directories(dest, ec);
-            for (DWORD i = 0; i < count; i++) {
-                IShellItem* item = nullptr;
-                if (SUCCEEDED(items->GetItemAt(i, &item))) {
-                    PWSTR pp = nullptr;
-                    if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &pp))) {
-                        ::fs::path src = pp;
-                        ::fs::path dst = dest / src.filename();
-                        ::fs::copy_file(src, dst, ::fs::copy_options::overwrite_existing, ec);
-                        if (!ec) imported = true;
-                        CoTaskMemFree(pp);
-                    }
-                    item->Release();
-                }
-            }
-            items->Release();
-        }
-    }
-    dlg->Release();
-    return imported;
-}
-#else
-bool LayersBgTab::ImportBackground() {
-    // En Linux se usa "zenity --file-selection" con selección multiple como
-    // reemplazo del dialogo IFileOpenDialog de Windows. Requiere que zenity
-    // este instalado en el sistema (paquete "zenity" en la mayoria de las
-    // distribuciones).
-    std::string command =
-        "zenity --file-selection --multiple --separator=\"\\n\" "
-        "--file-filter=\"Video e Imagen | *.mp4 *.mkv *.avi *.mov *.jpg *.jpeg *.png\" "
-        "--title=\"Importar Fondo\" 2>/dev/null";
-
-    std::string result;
-    char buffer[1024];
-    FILE* pipe = popen(command.c_str(), "r");
-    if (!pipe) return false;
-    while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
-        result += buffer;
-    int status = pclose(pipe);
-    if (status != 0 || result.empty()) return false;
+    std::vector<std::string> chosen = UI::PickMultipleFiles("Importar Fondo", filters);
+    if (chosen.empty()) return false;
 
     fs::path dest = BgRootDir();
     if (!m_CurrentBgFolder.empty()) dest = dest / m_CurrentBgFolder;
@@ -300,20 +249,16 @@ bool LayersBgTab::ImportBackground() {
     fs::create_directories(dest, ec);
 
     bool imported = false;
-    std::istringstream iss(result);
-    std::string line;
-    while (std::getline(iss, line)) {
-        while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
-            line.pop_back();
-        if (line.empty()) continue;
-        fs::path src(line);
-        fs::path dst = dest / src.filename();
-        fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
-        if (!ec) imported = true;
+    for (const auto& fileStr : chosen) {
+        fs::path src(fileStr);
+        if (fs::exists(src)) {
+            fs::path dst = dest / src.filename();
+            fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+            if (!ec) imported = true;
+        }
     }
     return imported;
 }
-#endif
 
 bool LayersBgTab::CreateBgFolder(const std::string& name) {
     if (name.empty()) return false;

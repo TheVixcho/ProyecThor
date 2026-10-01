@@ -5,6 +5,7 @@
 #include "core/PresentationCore.h"
 #include "core/FileDeletionManager.h"
 #include "ui/panels/monitor/MonitorTheme.h"
+#include "ui/framework/FilePicker.h"
 
 namespace { namespace MT = ProyecThor::UI::MonitorTheme; }
 
@@ -322,37 +323,7 @@ static void DrawTextCenteredFree(ImDrawList* dl, ImFont* font, float fontSize,
                 color, text);
 }
 
-#ifndef _WIN32
-static std::string OpenAudioFileDialogUnix() {
-    const char* commands[] = {
-        "zenity --file-selection --title=\"Seleccionar audio\" "
-        "--file-filter=\"Audio | *.mp3 *.flac *.wav *.ogg *.aac *.m4a *.wma *.opus *.aiff\" 2>/dev/null",
-        "kdialog --getopenfilename . "
-        "\"*.mp3 *.flac *.wav *.ogg *.aac *.m4a *.wma *.opus *.aiff|Audio\" 2>/dev/null"
-    };
 
-    for (const char* cmd : commands) {
-        std::array<char, 1024> buffer{};
-        std::string result;
-
-        FILE* pipe = popen(cmd, "r");
-        if (!pipe) continue;
-
-        while (fgets(buffer.data(), (int)buffer.size(), pipe) != nullptr)
-            result += buffer.data();
-
-        int status = pclose(pipe);
-        if (status != 0) continue;
-
-        while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
-            result.pop_back();
-
-        if (!result.empty())
-            return result;
-    }
-    return {};
-}
-#endif
 
 }
 
@@ -895,34 +866,7 @@ void AudioPanel::RequestLyricsImport(const std::string& url) {
 }
 
 void AudioPanel::ImportAudioFile() {
-#ifdef _WIN32
-    wchar_t filename[MAX_PATH] = {};
-    OPENFILENAMEW ofn;
-    ZeroMemory(&ofn, sizeof(ofn));
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner   = nullptr;
-    ofn.lpstrFilter =
-        L"Audio\0*.mp3;*.flac;*.wav;*.ogg;*.aac;*.m4a;*.wma;*.opus;*.aiff\0"
-        L"Todos\0*.*\0";
-    ofn.lpstrFile = filename;
-    ofn.nMaxFile  = MAX_PATH;
-    ofn.Flags     = OFN_EXPLORER | OFN_FILEMUSTEXIST |
-                    OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
-
-    if (GetOpenFileNameW(&ofn)) {
-        try {
-            fs::path src{std::wstring(filename)};
-            fs::path destDir{ProyecThor::Audio::Utf8ToWide(ProyecThor::Audio::GetAudioPath())};
-            fs::path dest = destDir / src.filename();
-            fs::create_directories(destDir);
-            fs::copy(src, dest, fs::copy_options::overwrite_existing);
-            RefreshLibrary();
-        } catch (const std::exception& e) {
-            std::cerr << "[AudioPanel] Import error: " << e.what() << '\n';
-        }
-    }
-#else
-    std::string selected = OpenAudioFileDialogUnix();
+    std::string selected = ProyecThor::UI::PickAudioFile();
     if (selected.empty()) return;
 
     try {
@@ -935,7 +879,6 @@ void AudioPanel::ImportAudioFile() {
     } catch (const std::exception& e) {
         std::cerr << "[AudioPanel] Import error: " << e.what() << '\n';
     }
-#endif
 }
 
 void AudioPanel::Update() {

@@ -866,110 +866,40 @@ void LibraryPanel::SelectPlaylistSong(const std::string& playlistName, int index
 
 void LibraryPanel::ImportFile()
 {
-#ifdef _WIN32
-    std::vector<wchar_t> buffer(65536, 0);
-    OPENFILENAMEW ofn;
-    ZeroMemory(&ofn, sizeof(ofn));
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner   = nullptr;
-
-    if      (m_CurrentCategory == LibraryCategory::Videos)
-        ofn.lpstrFilter = L"Videos\0*.mp4;*.mkv;*.avi;*.mov\0Todos\0*.*\0";
-    else if (m_CurrentCategory == LibraryCategory::Images)
-        ofn.lpstrFilter = L"Imágenes\0*.jpg;*.png;*.jpeg\0Todos\0*.*\0";
-    else if (m_CurrentCategory == LibraryCategory::Multimedia)
-        ofn.lpstrFilter = L"Video, audio o imagen\0*.mp4;*.mkv;*.avi;*.mov;*.mp3;*.flac;*.wav;*.ogg;*.aac;*.m4a;*.wma;*.opus;*.aiff;*.jpg;*.jpeg;*.png\0Todos\0*.*\0";
-    else if (m_CurrentCategory == LibraryCategory::Songs)
-        ofn.lpstrFilter = L"Textos\0*.txt\0Todos\0*.*\0";
-    else if (m_CurrentCategory == LibraryCategory::Documents)
-        ofn.lpstrFilter = L"Documentos\0*.pdf;*.pptx;*.ppt;*.odp\0Todos\0*.*\0";
-    else
-        ofn.lpstrFilter = L"Todos los archivos\0*.*\0";
-
-    ofn.lpstrFile = buffer.data();
-    ofn.nMaxFile  = static_cast<DWORD>(buffer.size());
-    ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR | OFN_ALLOWMULTISELECT;
-
-    if (!GetOpenFileNameW(&ofn)) return;
-
-    const wchar_t* p = buffer.data();
-    std::wstring first(p);
-    p += first.length() + 1;
-
-    if (*p == 0) {
-        // Solo un archivo seleccionado
-        fs::path src(first);
-        ImportSelectedFileToLibrary(src, m_CurrentCategory, GetAssetsPath());
-    } else {
-        // Multiples archivos: 'first' es el directorio base
-        fs::path dir(first);
-        while (*p != 0) {
-            std::wstring filename(p);
-            fs::path src = dir / filename;
-            ImportSelectedFileToLibrary(src, m_CurrentCategory, GetAssetsPath());
-            p += filename.length() + 1;
-        }
-    }
-#else
-    std::string filter;
+    std::vector<UI::FileFilterItem> filters;
     switch (m_CurrentCategory) {
         case LibraryCategory::Videos:
-            filter = "--file-filter=Videos | *.mp4 *.mkv *.avi *.mov";
+            filters.push_back({"Videos", {"*.mp4", "*.mkv", "*.avi", "*.mov", "*.webm"}});
             break;
         case LibraryCategory::Images:
-            filter = "--file-filter=Imágenes | *.jpg *.jpeg *.png";
+            filters.push_back({"Imágenes", {"*.jpg", "*.jpeg", "*.png"}});
             break;
         case LibraryCategory::Multimedia:
-            filter = "--file-filter=Video, audio o imagen | *.mp4 *.mkv *.avi *.mov "
-                     "*.mp3 *.flac *.wav *.ogg *.aac *.m4a *.wma *.opus *.aiff *.jpg *.jpeg *.png";
+            filters.push_back({"Video, audio o imagen", {"*.mp4", "*.mkv", "*.avi", "*.mov", "*.webm",
+                                                         "*.mp3", "*.flac", "*.wav", "*.ogg",
+                                                         "*.aac", "*.m4a", "*.wma", "*.opus",
+                                                         "*.aiff", "*.jpg", "*.jpeg", "*.png"}});
             break;
         case LibraryCategory::Songs:
-            filter = "--file-filter=Textos | *.txt";
+            filters.push_back({"Textos", {"*.txt"}});
             break;
         case LibraryCategory::Documents:
-            filter = "--file-filter=Documentos | *.pdf *.pptx *.ppt *.odp";
+            filters.push_back({"Documentos", {"*.pdf", "*.pptx", "*.ppt", "*.odp"}});
             break;
         default:
-            filter = "--file-filter=Todos | *";
+            filters.push_back({"Todos los archivos", {"*"}});
             break;
     }
+    filters.push_back({"Todos los archivos", {"*"}});
 
-    std::string command = "zenity --file-selection --multiple --separator=\"|\" --title=\"Importar archivos\" \"" +
-                          filter + "\" 2>/dev/null";
-
-    std::string result;
-    char buffer[4096];
-    FILE* pipe = popen(command.c_str(), "r");
-    if (!pipe) {
-        std::cerr << "[LibraryPanel] No se pudo abrir el selector de archivos (zenity).\n";
-        return;
-    }
-    while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
-        result += buffer;
-    int status = pclose(pipe);
-
-    if (status != 0 || result.empty()) return;
-    while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
-        result.pop_back();
-    if (result.empty()) return;
-
-    size_t start = 0, end = 0;
-    while ((end = result.find('|', start)) != std::string::npos) {
-        std::string pathStr = result.substr(start, end - start);
-        if (!pathStr.empty()) {
-            fs::path src(pathStr);
-            ImportSelectedFileToLibrary(src, m_CurrentCategory, GetAssetsPath());
-        }
-        start = end + 1;
-    }
-    if (start < result.size()) {
-        std::string pathStr = result.substr(start);
+    std::vector<std::string> chosenFiles = UI::PickMultipleFiles("Importar archivos", filters);
+    for (const auto& pathStr : chosenFiles) {
         if (!pathStr.empty()) {
             fs::path src(pathStr);
             ImportSelectedFileToLibrary(src, m_CurrentCategory, GetAssetsPath());
         }
     }
-#endif
+
 
     RefreshList();
 }

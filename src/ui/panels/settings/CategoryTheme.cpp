@@ -3,6 +3,7 @@
 #include "core/PresentationCore.h"
 #include "core/AppPaths.h"
 #include "ui/panels/biblio/LibraryIcons.h"
+#include "ui/framework/FilePicker.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <string>
@@ -22,61 +23,8 @@ namespace ProyecThor::UI::Settings {
 
 using namespace ProyecThor::Settings;
 
-#ifndef _WIN32
-// Selector de archivos para Linux/macOS: no hay dialogo nativo unico en
-// estos sistemas, asi que se delega en zenity/kdialog (lo que este
-// instalado). Mismo enfoque que TabTypography::OpenFontFileDialogUnix
-// (reimplementado localmente aca, no se comparte cabecera entre ambos por
-// ser un helper chico y de un solo uso en cada archivo).
-static std::string OpenFontFileDialogUnix() {
-    const char* commands[] = {
-        "zenity --file-selection --title=\"Seleccionar fuente de la interfaz\" "
-        "--file-filter=\"Fuentes | *.ttf *.otf *.ttc\" 2>/dev/null",
-        "kdialog --getopenfilename . \"*.ttf *.otf *.ttc|Fuentes\" 2>/dev/null"
-    };
-
-    for (const char* cmd : commands) {
-        std::array<char, 1024> buffer{};
-        std::string result;
-
-        FILE* pipe = popen(cmd, "r");
-        if (!pipe) continue;
-
-        while (fgets(buffer.data(), (int)buffer.size(), pipe) != nullptr)
-            result += buffer.data();
-
-        int status = pclose(pipe);
-        if (status != 0) continue; // el usuario cancelo o la herramienta no existe
-
-        while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
-            result.pop_back();
-
-        if (!result.empty())
-            return result;
-    }
-    return {};
-}
-#endif
-
-// Abre el dialogo nativo (Windows) o zenity/kdialog (Linux/macOS) para
-// elegir un archivo de fuente. Devuelve la ruta absoluta, o vacio si el
-// usuario cancelo / no hay herramienta disponible.
 static std::string PickFontFileDialog() {
-#ifdef _WIN32
-    char filename[MAX_PATH] = {};
-    OPENFILENAMEA ofn       = {};
-    ofn.lStructSize         = sizeof(ofn);
-    ofn.hwndOwner           = NULL;
-    ofn.lpstrFilter         = "Fuentes\0*.ttf;*.otf;*.ttc\0Todos los archivos\0*.*\0";
-    ofn.lpstrFile           = filename;
-    ofn.nMaxFile            = MAX_PATH;
-    ofn.Flags               = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
-
-    if (!GetOpenFileNameA(&ofn)) return {};
-    return filename;
-#else
-    return OpenFontFileDialogUnix();
-#endif
+    return ProyecThor::UI::PickFontFile();
 }
 
 // Resuelve un nombre de fuente (stem, sin extension) a su ruta completa

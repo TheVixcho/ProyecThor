@@ -68,11 +68,6 @@ case "$PLATFORM" in
             --device=dri \
             --socket=pulseaudio \
             --share=network \
-            --filesystem=xdg-documents \
-            --filesystem=xdg-videos \
-            --filesystem=xdg-pictures \
-            --filesystem=xdg-music \
-            --filesystem=xdg-download \
             --talk-name=org.freedesktop.portal.FileChooser \
             --talk-name=org.freedesktop.portal.OpenURI
         $FLATPAK_BIN build-export "$PROJECT_ROOT/build-flatpak/repo" "$PROJECT_ROOT/build-flatpak/app"
