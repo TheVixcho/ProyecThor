@@ -353,11 +353,13 @@ static bool RunPortalFileChooser(const std::string& title,
             GVariantBuilder patBuilder;
             g_variant_builder_init(&patBuilder, G_VARIANT_TYPE("a(us)"));
             for (const auto& pat : f.patterns) {
-                g_variant_builder_add(&patBuilder, "(us)", 0, pat.c_str());
+                g_variant_builder_add(&patBuilder, "(us)", (guint32)0, pat.c_str());
             }
-            g_variant_builder_add(&filtersBuilder, "(sa(us))", f.name.c_str(), &patBuilder);
+            GVariant* patVariant = g_variant_builder_end(&patBuilder);
+            g_variant_builder_add(&filtersBuilder, "(s@a(us))", f.name.c_str(), patVariant);
         }
-        g_variant_builder_add(&optBuilder, "{sv}", "filters", g_variant_builder_end(&filtersBuilder));
+        GVariant* filtersVariant = g_variant_builder_end(&filtersBuilder);
+        g_variant_builder_add(&optBuilder, "{sv}", "filters", filtersVariant);
     }
 
     if (isSave && !defaultPath.empty()) {
@@ -376,7 +378,7 @@ static bool RunPortalFileChooser(const std::string& title,
         "/org/freedesktop/portal/desktop",
         "org.freedesktop.portal.FileChooser",
         isSave ? "SaveFile" : "OpenFile",
-        g_variant_new("(ssa{sv})", "", title.c_str(), options),
+        g_variant_new("(ss@a{sv})", "", title.c_str(), options),
         G_VARIANT_TYPE("(o)"),
         G_DBUS_CALL_FLAGS_NONE,
         -1,
