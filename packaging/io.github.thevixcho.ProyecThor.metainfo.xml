@@ -91,6 +91,16 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="1.0.3" date="2026-10-01">
+      <description>
+        <p>ProyecThor 1.0.3 release:</p>
+        <ul>
+          <li>Default multilingual Welcome song bundled and auto-seeded</li>
+          <li>Removed broken test song references from library</li>
+          <li>FileChooser portal fixes for Linux and Flatpak environments</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.0.1" date="2026-09-26">
       <description>
         <p>ProyecThor 1.0.1 release:</p>

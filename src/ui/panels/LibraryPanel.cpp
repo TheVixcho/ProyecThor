@@ -158,17 +158,44 @@ void SeedDefaultLibraryContent(const std::string& base)
     for (const char* category : kCategories) {
         std::error_code ec;
         fs::path destDir = U8Path(base + "/" + category);
-        if (!fs::is_empty(destDir, ec) || ec) continue; // tiene contenido (o no se pudo leer): no tocar
+        fs::create_directories(destDir, ec);
+        if (!fs::is_empty(destDir, ec) && !ec) continue;
 
-        fs::path srcDir = U8Path(std::string("bin/assets/") + category);
-        if (!fs::exists(srcDir, ec) || !fs::is_directory(srcDir, ec)) continue;
+        static const std::vector<std::string> kCandidates = {
+            "bin/assets/",
+            "assets/bin/assets/",
+            "build-linux/bin/assets/",
+            "build-win/bin/assets/"
+        };
 
-        for (const auto& entry : fs::directory_iterator(srcDir, ec)) {
-            if (ec) break;
-            if (!entry.is_regular_file()) continue;
-            std::error_code copyEc;
-            fs::copy_file(entry.path(), destDir / entry.path().filename(),
-                          fs::copy_options::skip_existing, copyEc);
+        fs::path srcDir;
+        for (const auto& c : kCandidates) {
+            fs::path p = U8Path(c + category);
+            if (fs::exists(p, ec) && fs::is_directory(p, ec)) {
+                srcDir = p;
+                break;
+            }
+        }
+
+        if (!srcDir.empty()) {
+            for (const auto& entry : fs::directory_iterator(srcDir, ec)) {
+                if (ec) break;
+                if (!entry.is_regular_file()) continue;
+                std::error_code copyEc;
+                fs::copy_file(entry.path(), destDir / entry.path().filename(),
+                              fs::copy_options::skip_existing, copyEc);
+            }
+        }
+
+        if (std::string(category) == "songs") {
+            fs::path welcomePath = destDir / "Welcome.txt";
+            if (!fs::exists(welcomePath, ec)) {
+                std::ofstream f(welcomePath, std::ios::binary);
+                if (f.is_open()) {
+                    f << "\xEF\xBB\xBF"
+                      << "Welcome To ProyecThor!\n\nBienvenido a ProyecThor\n\nBem-vindo ao ProyecThor!\n";
+                }
+            }
         }
     }
 }
@@ -403,7 +430,21 @@ void LibraryPanel::RefreshList()
     }
 
     if (m_Items.empty() && m_CurrentCategory == LibraryCategory::Songs)
-        m_Items = { "Cuan_Grande_es_El.txt", "Gracia_Sublime.txt" };
+    {
+        fs::path welcomePath = U8Path(base + "/songs/Welcome.txt");
+        if (!fs::exists(welcomePath)) {
+            std::error_code ec;
+            fs::create_directories(welcomePath.parent_path(), ec);
+            std::ofstream f(welcomePath, std::ios::binary);
+            if (f.is_open()) {
+                f << "\xEF\xBB\xBF"
+                  << "Welcome To ProyecThor!\n\nBienvenido a ProyecThor\n\nBem-vindo ao ProyecThor!\n";
+            }
+        }
+        if (fs::exists(welcomePath)) {
+            m_Items.push_back("Welcome.txt");
+        }
+    }
 
     if (m_CurrentCategory == LibraryCategory::Videos)
         LoadStreamURLs();
