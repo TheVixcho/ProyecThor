@@ -67,9 +67,7 @@ case "$PLATFORM" in
             --socket=wayland \
             --device=dri \
             --socket=pulseaudio \
-            --share=network \
-            --talk-name=org.freedesktop.portal.FileChooser \
-            --talk-name=org.freedesktop.portal.OpenURI
+            --share=network
         $FLATPAK_BIN build-export "$PROJECT_ROOT/build-flatpak/repo" "$PROJECT_ROOT/build-flatpak/app"
         $FLATPAK_BIN build-bundle "$PROJECT_ROOT/build-flatpak/repo" "$PROJECT_ROOT/ProyecThor.flatpak" io.github.thevixcho.ProyecThor
         echo "=========================================================="
