@@ -54,6 +54,13 @@
             "dependsOn": "Compilar Linux",
             "problemMatcher": [],
             "detail": "Compila (si es necesario) y ejecuta ProyecThor nativo en Linux"
+        },
+        {
+            "label": "Ejecutar Flatpak (Flathub)",
+            "type": "shell",
+            "command": "flatpak-spawn --host flatpak run io.github.thevixcho.ProyecThor",
+            "problemMatcher": [],
+            "detail": "Ejecuta la versión instalada de Flatpak bajo el sandbox de Flathub"
         }
     ]
 }

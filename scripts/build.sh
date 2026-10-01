@@ -63,7 +63,7 @@ case "$PLATFORM" in
         $FLATPAK_BIN build-finish "$PROJECT_ROOT/build-flatpak/app" \
             --command=proyecthor \
             --share=ipc \
-            --socket=fallback-x11 \
+            --socket=x11 \
             --socket=wayland \
             --device=dri \
             --socket=pulseaudio \

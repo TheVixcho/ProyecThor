@@ -907,23 +907,35 @@ int main(int argc, char** argv)
 #endif
 
 #ifndef _WIN32
-    // En Linux, forzar GLFW backend a X11/XWayland por defecto para máxima compatibilidad
-    // con libVLC (XVideo, GLX, VDPAU) y posicionamiento fullscreen EWMH en KWin/KDE Plasma.
+    // En Linux, si DISPLAY está disponible, preferir X11/XWayland por compatibilidad con libVLC y EWMH.
+    // Si no hay DISPLAY o se fuerza Wayland, usar backend nativo Wayland.
     const char* forceWayland = std::getenv("PROYECTHOR_FORCE_WAYLAND");
-    if (!forceWayland || std::string(forceWayland) == "0")
+    const char* displayEnv   = std::getenv("DISPLAY");
+    if ((!forceWayland || std::string(forceWayland) == "0") && displayEnv && *displayEnv)
     {
         glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
         std::cerr << "[DIAG] Forzando backend GLFW a X11/XWayland para compatibilidad con VLC y EWMH\n";
+    }
+    else
+    {
+        std::cerr << "[DIAG] Usando backend nativo de GLFW (Wayland/auto)\n";
     }
 #endif
 
     if (!glfwInit())
     {
-        const char* desc = nullptr;
-        int err = glfwGetError(&desc);
-        std::cerr << "[DIAG] FALLO: glfwInit() devolvio false. Error " << err << ": "
-                  << (desc ? desc : "desconocido") << "\n";
-        return -1;
+#ifndef _WIN32
+        // Reintentar con detección automática de plataforma si X11 falló
+        glfwInitHint(GLFW_PLATFORM, GLFW_ANY_PLATFORM);
+        if (!glfwInit())
+#endif
+        {
+            const char* desc = nullptr;
+            int err = glfwGetError(&desc);
+            std::cerr << "[DIAG] FALLO: glfwInit() devolvio false. Error " << err << ": "
+                      << (desc ? desc : "desconocido") << "\n";
+            return -1;
+        }
     }
     int platform = glfwGetPlatform();
     const char* platName = (platform == GLFW_PLATFORM_WAYLAND) ? "Wayland" :
