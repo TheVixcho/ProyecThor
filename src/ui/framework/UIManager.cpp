@@ -1755,8 +1755,8 @@ void UIManager::RenderModeToolbar()
         float clearGroupW  = clearIconSz + clearIconGap + ImGui::CalcTextSize("Borrar Todo").x;
         float clearBtnW    = clearGroupW + 20.0f;
         float dotAudienceW = 5.0f * 2.0f + 6.0f + ImGui::CalcTextSize("Público").x + 14.0f;
-        float dotStageW    = 5.0f * 2.0f + 6.0f + ImGui::CalcTextSize("Stage").x    + 14.0f;
-        float statusTotalW = dotAudienceW + 8.0f + dotStageW + 8.0f + clearBtnW;
+        float dotStageW    = isProActive ? (5.0f * 2.0f + 6.0f + ImGui::CalcTextSize("Stage").x + 14.0f) : 0.0f;
+        float statusTotalW = dotAudienceW + (isProActive ? (8.0f + dotStageW) : 0.0f) + 8.0f + clearBtnW;
         float statusIslandW = statusTotalW + 12.0f;
 
         // Isla de estados: extremo derecho
@@ -1936,12 +1936,11 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
     float       clearGroupW  = clearIconSz + clearIconGap + clearTxtSz.x;
     float       clearBtnW    = clearGroupW + 20.0f;
 
-    const char* stageLabel = isPro ? "Stage" : "Stage [PRO]";
-    ImVec2 dotSzAudience = ImVec2(5.0f * 2.0f + 6.0f + ImGui::CalcTextSize("Público").x + 14.0f, rowH);
-    ImVec2 dotSzStage    = ImVec2(5.0f * 2.0f + 6.0f + ImGui::CalcTextSize(stageLabel).x    + 14.0f, rowH);
+    ImVec2      dotSzAudience = ImVec2(5.0f * 2.0f + 6.0f + ImGui::CalcTextSize("Público").x + 14.0f, rowH);
+    ImVec2      dotSzStage    = isPro ? ImVec2(5.0f * 2.0f + 6.0f + ImGui::CalcTextSize("Stage").x + 14.0f, rowH) : ImVec2(0.0f, 0.0f);
 
     const float gap   = 8.0f;
-    float       totalW = dotSzAudience.x + gap + dotSzStage.x + gap + clearBtnW;
+    float       totalW = dotSzAudience.x + (isPro ? (gap + dotSzStage.x) : 0.0f) + gap + clearBtnW;
 
     float islandW = totalW + 12.0f;
     float islandY = (railH - islandH) * 0.5f;
@@ -1964,14 +1963,9 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
     if (StatusDotToggle(dl, "##modeTbDotAudience", "Público", audienceOn, MT::k_LiveAccent, rowH))
         ToggleAudience(!audienceOn);
 
-    ImGui::SameLine(0.0f, gap);
-
-    if (StatusDotToggle(dl, "##modeTbDotStage", stageLabel, stageOn, isPro ? MT::k_PrevAccent : ImVec4(0.85f, 0.65f, 0.15f, 1.0f), rowH)) {
-        if (!isPro) {
-            ShowProFeatureModal(
-                "Monitor de Escenario (Stage Display)",
-                "La salida de Monitor de Escenario (Stage Display) para predicadores y músicos es una función exclusiva de ProyecThor for Professionals.\n\nEn la versión estándar puedes proyectar a 1 pantalla secundaria estándar. Activa tu suscripción Pro para habilitar el monitor de escenario.");
-        } else {
+    if (isPro) {
+        ImGui::SameLine(0.0f, gap);
+        if (StatusDotToggle(dl, "##modeTbDotStage", "Stage", stageOn, MT::k_PrevAccent, rowH)) {
             ToggleStageQuick(!stageOn);
         }
     }

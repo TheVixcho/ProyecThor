@@ -1,6 +1,7 @@
 #include "SettingsPanel.h"
 #include "SettingsManager.h"
 #include "core/PresentationCore.h"
+#include "core/AuthLicenseManager.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <GLFW/glfw3.h>
@@ -587,6 +588,11 @@ void SettingsPanel::RenderSidebar() {
         }
     };
 
+    const bool isPro = ProyecThor::Core::AuthLicenseManager::Get().IsPro();
+    if (!isPro && m_SelectedCategory == 3) {
+        m_SelectedCategory = 1;
+    }
+
     const bool searching = m_SearchBuffer[0] != '\0';
 
     if (searching) {
@@ -595,6 +601,7 @@ void SettingsPanel::RenderSidebar() {
         std::string query = ToLowerAscii(m_SearchBuffer);
         int matches = 0;
         for (int i = 0; i < k_CategoryCount; i++) {
+            if (i == 3 && !isPro) continue;
             std::string label = ToLowerAscii(k_Categories[i].label);
             std::string desc  = ToLowerAscii(k_Categories[i].description);
             if (label.find(query) == std::string::npos && desc.find(query) == std::string::npos)
@@ -625,8 +632,11 @@ void SettingsPanel::RenderSidebar() {
             ImGui::PopStyleColor();
             ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
-            for (int gi = 0; gi < group.count; gi++)
-                RenderCategoryRow(group.items[gi]);
+            for (int gi = 0; gi < group.count; gi++) {
+                int catIdx = group.items[gi];
+                if (catIdx == 3 && !isPro) continue;
+                RenderCategoryRow(catIdx);
+            }
         }
     }
 
@@ -711,7 +721,13 @@ void SettingsPanel::RenderContent() {
         case 0: RenderCategoryTheme();       break;
         case 1: RenderCategoryProjection();  break;
         case 2: RenderCategoryConnections(); break;
-        case 3: RenderCategoryStage();       break;
+        case 3:
+            if (ProyecThor::Core::AuthLicenseManager::Get().IsPro()) {
+                RenderCategoryStage();
+            } else {
+                RenderCategoryProjection();
+            }
+            break;
         case 4: RenderCategoryAudio();       break;
         case 5: RenderCategorySongs();       break;
         case 6: RenderCategoryShortcuts();   break;

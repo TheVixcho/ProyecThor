@@ -361,10 +361,12 @@ void SongEditView::RenderTopBar(bool& outWantsBack)
     if (DS::GlassIconButton("exceptions", "cards_star", "#", "Excepciones", ImVec2(btnW, DS::ButtonHeight)))
         ImGui::OpenPopup("Excepciones##exceptionsModal");
 
-    ImGui::SameLine(0.0f, 8.0f);
-    if (DS::GlassIconButton("aiAssistant", "sparkles", "IA", "Asistente IA para Letras", ImVec2(btnW, DS::ButtonHeight))) {
-        m_ShowAIModal = true;
-        m_AIStatusFeedback.clear();
+    if (ProyecThor::Core::AuthLicenseManager::Get().IsPro()) {
+        ImGui::SameLine(0.0f, 8.0f);
+        if (DS::GlassIconButton("aiAssistant", "sparkles", "IA", "Asistente IA para Letras", ImVec2(btnW, DS::ButtonHeight))) {
+            m_ShowAIModal = true;
+            m_AIStatusFeedback.clear();
+        }
     }
 
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
@@ -601,16 +603,18 @@ void SongEditView::RenderLeftPane(float width)
     ImGui::TextUnformatted("Letra");
     ImGui::PopStyleColor();
 
-    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 125.0f);
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.40f, 0.65f, 0.85f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.50f, 0.80f, 1.0f));
-    if (ImGui::Button("Asistente IA##btn_ai_lyrics", ImVec2(125.0f, 22.0f))) {
-        m_ShowAIModal = true;
-        m_AIStatusFeedback.clear();
-    }
-    ImGui::PopStyleColor(2);
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Corregir ortografía, borrar puntos suspensivos o modificar esta letra con IA");
+    if (ProyecThor::Core::AuthLicenseManager::Get().IsPro()) {
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x - 125.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.40f, 0.65f, 0.85f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.50f, 0.80f, 1.0f));
+        if (ImGui::Button("Asistente IA##btn_ai_lyrics", ImVec2(125.0f, 22.0f))) {
+            m_ShowAIModal = true;
+            m_AIStatusFeedback.clear();
+        }
+        ImGui::PopStyleColor(2);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Corregir ortografía, borrar puntos suspensivos o modificar esta letra con IA");
+        }
     }
 
     const float lyricsH = std::max(120.0f, ImGui::GetContentRegionAvail().y - 4.0f);

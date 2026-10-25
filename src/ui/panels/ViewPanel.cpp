@@ -797,16 +797,38 @@ void ViewPanel::RenderQuickActionsConfig(float stripH)
         m_PreviewSource = PreviewSource::Publico;
     }
 
-    const bool previewingAlt = (m_PreviewSource != PreviewSource::Publico);
-    const char* previewSourceLabel[4] = { "Público", "Stage", "Transmisión", "Inalámbrica" };
-    int previewSourceIdx = static_cast<int>(m_PreviewSource);
-    int nextPreviewSourceIdx = (previewSourceIdx + 1) % 4;
-    if (!isPro && nextPreviewSourceIdx == static_cast<int>(PreviewSource::Stage)) {
-        nextPreviewSourceIdx = (nextPreviewSourceIdx + 1) % 4; // Saltar Stage para usuarios sin suscripción Pro
+    std::vector<PreviewSource> availableSources;
+    availableSources.push_back(PreviewSource::Publico);
+    if (isPro) {
+        availableSources.push_back(PreviewSource::Stage);
     }
+    availableSources.push_back(PreviewSource::Transmision);
+    availableSources.push_back(PreviewSource::Lan);
+
+    auto getPreviewSourceLabel = [](PreviewSource s) -> const char* {
+        switch (s) {
+            case PreviewSource::Publico:     return "Público";
+            case PreviewSource::Stage:       return "Stage";
+            case PreviewSource::Transmision: return "Transmisión";
+            case PreviewSource::Lan:         return "Inalámbrica";
+            default:                         return "Público";
+        }
+    };
+
+    int curSourceIdx = 0;
+    for (size_t idx = 0; idx < availableSources.size(); ++idx) {
+        if (availableSources[idx] == m_PreviewSource) {
+            curSourceIdx = (int)idx;
+            break;
+        }
+    }
+    int nextSourceIdx = (curSourceIdx + 1) % (int)availableSources.size();
+
+    const bool previewingAlt = (m_PreviewSource != PreviewSource::Publico);
     char previewSourceTooltip[96];
     snprintf(previewSourceTooltip, sizeof(previewSourceTooltip), "Viendo: %s (click para ver %s)",
-             previewSourceLabel[previewSourceIdx], previewSourceLabel[nextPreviewSourceIdx]);
+             getPreviewSourceLabel(availableSources[curSourceIdx]),
+             getPreviewSourceLabel(availableSources[nextSourceIdx]));
 
     const bool overlaysOn = (m_ActiveTool == InlineTool::Overlays);
     const bool chatOn     = (m_ActiveTool == InlineTool::Chat);
@@ -860,20 +882,7 @@ void ViewPanel::RenderQuickActionsConfig(float stripH)
             else if (i == 1) m_ActiveTool = tilesOn    ? InlineTool::None : InlineTool::Tiles;
             else if (i == 2)
             {
-                if (nextPreviewSourceIdx == static_cast<int>(PreviewSource::Stage) && !isPro)
-                {
-                    if (m_UIManager)
-                    {
-                        m_UIManager->ShowProFeatureModal(
-                            "Monitor de Escenario (Stage Display)",
-                            "La vista y salida de Monitor de Escenario (Stage Display) es una función exclusiva de ProyecThor for Professionals.\n\nEn la versión estándar puedes proyectar a 1 pantalla secundaria estándar. Activa tu suscripción Pro para habilitar el monitor de escenario.");
-                    }
-                    m_PreviewSource = PreviewSource::Transmision;
-                }
-                else
-                {
-                    m_PreviewSource = static_cast<PreviewSource>(nextPreviewSourceIdx);
-                }
+                m_PreviewSource = availableSources[nextSourceIdx];
             }
             else if (i == 3) m_ActiveTool = overlaysOn ? InlineTool::None : InlineTool::Overlays;
             else if (i == 4) m_ActiveTool = chatOn     ? InlineTool::None : InlineTool::Chat;
