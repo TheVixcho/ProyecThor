@@ -250,10 +250,13 @@ export default function App() {
               Descargar Versión Gratuita
             </a>
             <a
-              href="#gratuito"
-              className="px-7 py-3.5 rounded-lg text-xs font-semibold bg-neutral-900 border border-neutral-700 text-neutral-200 hover:border-cyan-500 hover:text-white transition-all duration-200 hover:scale-[1.02]"
+              href="#profesionales"
+              className="px-7 py-3.5 rounded-lg text-xs font-semibold bg-neutral-900 border border-neutral-700 text-neutral-200 hover:border-cyan-400 hover:text-white transition-all duration-200 hover:scale-[1.02] inline-flex items-center gap-2"
             >
-              ¿Por qué Gratis es Excelente?
+              <span>Ver versión para profesionales</span>
+              <svg className="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
             </a>
           </div>
 
