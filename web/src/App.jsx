@@ -224,7 +224,7 @@ export default function App() {
       <main className="relative z-10 flex-1 pt-16">
         {/* HERO SECTION: ENFOQUE EN LA CALIDAD DE LA VERSIÓN BASE GRATUITA */}
         <section id="inicio" className="pt-24 pb-20 px-6 max-w-5xl mx-auto text-center space-y-8">
-          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-tight">
+          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-tight text-center">
             <span className="block">Proyección profesional para tu auditorio,</span>
             <span className="block bg-gradient-to-r from-white via-neutral-200 to-cyan-400 bg-clip-text text-transparent">
               a la velocidad del rayo
@@ -294,11 +294,11 @@ export default function App() {
 
         {/* SECCIÓN: LO BUENO QUE ES EL PROGRAMA DE FORMA GRATUITA */}
         <section id="gratuito" className="py-20 px-6 max-w-6xl mx-auto space-y-12">
-          <div className="max-w-3xl mx-auto space-y-3">
-            <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
+          <div className="max-w-3xl mx-auto space-y-3 text-center">
+            <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight text-center">
               La versión gratuita ya es todo lo que tu auditorio necesita
             </h2>
-            <p className="text-neutral-400 text-sm leading-relaxed max-w-2xl text-justify">
+            <p className="text-neutral-400 text-sm leading-relaxed max-w-2xl mx-auto text-justify">
               ProyecThor se diseñó con una premisa clara: las iglesias y auditorios merecen una herramienta de proyección moderna, rápida y fiable sin tener que pagar licencias prohibitivas ni tolerar marcas de agua molestas.
             </p>
           </div>
@@ -379,8 +379,8 @@ export default function App() {
 
         {/* CARACTERÍSTICAS TÉCNICAS Y ESPECIFICACIONES BASE */}
         <section id="especificaciones" className="py-16 px-6 max-w-6xl mx-auto space-y-10">
-          <div className="border-b border-neutral-800 pb-4">
-            <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
+          <div className="border-b border-neutral-800 pb-4 text-center">
+            <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight text-center">
               Capacidades técnicas del motor de proyección
             </h2>
           </div>
@@ -407,8 +407,8 @@ export default function App() {
 
         {/* PLATAFORMAS COMPATIBLES */}
         <section id="compatibilidad" className="py-16 px-6 max-w-4xl mx-auto space-y-6">
-          <div className="border-b border-neutral-800 pb-3">
-            <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
+          <div className="border-b border-neutral-800 pb-3 text-center">
+            <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight text-center">
               Entornos de Ejecución Soportados
             </h2>
           </div>
@@ -452,15 +452,15 @@ export default function App() {
           <div className="rounded-2xl border border-neutral-800 bg-gradient-to-b from-neutral-900/60 to-neutral-950/80 p-8 sm:p-12 space-y-10 shadow-2xl relative overflow-hidden backdrop-blur-sm">
             <div className="absolute top-0 right-0 w-80 h-80 bg-cyan-500/5 blur-[120px] rounded-full pointer-events-none" />
 
-            <div className="max-w-3xl space-y-3">
-              <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-cyan-400">
+            <div className="max-w-3xl mx-auto space-y-3 text-center">
+              <div className="inline-flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-widest text-cyan-400">
                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
                 Suscripción Institucional y Técnica
               </div>
-              <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
+              <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight text-center">
                 ProyecThor for Professionals
               </h2>
-              <p className="text-neutral-400 text-sm leading-relaxed text-justify">
+              <p className="text-neutral-400 text-sm leading-relaxed max-w-2xl mx-auto text-justify">
                 Una infraestructura integral que complementa el motor local con servicios distribuidos en la nube, optimizada para coordinadores de medios, directores técnicos y ministerios con múltiples auditorios.
               </p>
             </div>
@@ -502,7 +502,7 @@ export default function App() {
           {/* COMPARACIÓN DE EDICIONES Y SUSCRIPCIÓN */}
           <div id="planes" className="pt-8 space-y-10">
             <div className="text-center max-w-2xl mx-auto space-y-2">
-              <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
+              <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight text-center">
                 Elige el modelo adecuado para tu auditorio
               </h2>
               <p className="text-neutral-400 text-xs sm:text-sm leading-relaxed">
