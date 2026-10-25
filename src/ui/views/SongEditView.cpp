@@ -923,7 +923,12 @@ void SongEditView::RenderAIEditModal()
         ImGui::Text("Tokens totales: %s", tokensStr.c_str());
         ImGui::PopStyleColor();
 
-        ImGui::SameLine(0.0f, 28.0f);
+        ImGui::SameLine(0.0f, 22.0f);
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.80f, 0.88f, 0.96f, 0.85f));
+        ImGui::Text("Consultas hoy: %d / %d", proMgr.GetDailyQueriesUsed(), proMgr.GetMaxDailyQueries());
+        ImGui::PopStyleColor();
+
+        ImGui::SameLine(0.0f, 22.0f);
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextHint));
         ImGui::Text("Gasto en esta solicitud: %u tokens", m_AILastTokensCost);
         ImGui::PopStyleColor();

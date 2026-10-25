@@ -94,9 +94,14 @@ void ProAIChatPanel::Render(bool* pOpen, GlassRenderer& glass) {
         uint64_t availTokens = proMgr.GetAvailableTokens();
         std::string tokensStr = FormatNumberWithCommas(availTokens);
 
-        // Mostrar únicamente tokens totales
+        // Mostrar tokens totales y consultas diarias
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.70f, 0.90f, 1.0f, 1.0f));
         ImGui::Text("Tokens totales: %s", tokensStr.c_str());
+        ImGui::PopStyleColor();
+
+        ImGui::SameLine(0.0f, 24.0f);
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.80f, 0.88f, 0.96f, 0.85f));
+        ImGui::Text("Consultas hoy: %d / %d", proMgr.GetDailyQueriesUsed(), proMgr.GetMaxDailyQueries());
         ImGui::PopStyleColor();
 
         // Botón Limpiar Chat
@@ -260,11 +265,12 @@ void ProAIChatPanel::Render(bool* pOpen, GlassRenderer& glass) {
 
         // ── Área de Entrada con Botón '+' para Adjuntar Canción ───────────────
         const bool isBusy = proMgr.IsChatBusy();
-        const bool canSend = proMgr.CanSendMessage();
+        std::string cannotSendReason;
+        const bool canSend = proMgr.CanSendMessage(&cannotSendReason);
 
         if (!canSend) {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.40f, 0.40f, 1.0f));
-            ImGui::TextWrapped("Has alcanzado el límite mensual de tokens de tu suscripción. Tu cuota se renovará al finalizar el mes o al ampliar tu suscripción a una de mayor capacidad (próximamente).");
+            ImGui::TextWrapped("%s", cannotSendReason.c_str());
             ImGui::PopStyleColor();
         } else {
             if (isBusy) ImGui::BeginDisabled();

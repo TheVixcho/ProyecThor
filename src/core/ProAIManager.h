@@ -5,6 +5,8 @@
 #include <functional>
 #include <mutex>
 #include <atomic>
+#include <deque>
+#include <chrono>
 #include <nlohmann/json.hpp>
 
 namespace ProyecThor::Core {
@@ -45,14 +47,21 @@ public:
     std::string GetDecryptedApiKey() const; // Retorna la del proveedor activo
     void SetRemoteApiKey(const std::string& key);
 
-    // ── Control de Cuotas y Tokens (Límites Pro) ──────────────────────────────
-    // Control de límite de $5 USD en tokens DeepSeek y 30 imágenes mensuales
+    // ── Control de Cuotas, Límites y Tokens (Límites Pro) ───────────────────
     void CheckMonthlyReset();
+    void CheckDailyReset();
 
-    bool     CanSendMessage() const;
+    bool     CanSendMessage(std::string* outReason = nullptr) const;
     uint64_t GetAvailableTokens() const;
     uint64_t GetMaxMonthlyTokens() const;
     uint64_t GetUsedTokens() const;
+
+    int      GetDailyQueriesUsed() const;
+    int      GetMaxDailyQueries() const;
+    int      GetAvailableDailyQueries() const;
+
+    // Control de límite de velocidad (5 peticiones por minuto)
+    bool     CheckAndRecordRateLimit(std::string* outReason = nullptr);
 
     bool     CanGenerateImage() const;
     int      GetAvailableImages() const;
@@ -94,6 +103,10 @@ private:
     std::string GetQuotaFilePath() const;
     std::string GetCloudSongsCachePath() const;
     std::string GetCurrentMonthKey() const;
+    std::string GetCurrentDayKey() const;
+
+    void CheckMonthlyResetLocked();
+    void CheckDailyResetLocked();
 
     // Helper nativo HTTPS en Windows
     static std::string PerformHttpsPost(const std::string& host, const std::string& path,
@@ -106,14 +119,20 @@ private:
 
     AIProvider m_CurrentProvider = AIProvider::Gemini;
 
-    // Tokens y cuotas mensuales
-    // ~$5.00 USD en DeepSeek V3 equivalen a ~15,000,000 de tokens
-    const uint64_t m_MaxMonthlyTokens = 15000000;
-    const int      m_MaxMonthlyImages = 30;
+    // Tokens y cuotas mensuales / diarias / velocidad
+    const uint64_t m_MaxMonthlyTokens     = 250000;
+    const int      m_MaxMonthlyImages     = 30;
+    const int      m_MaxDailyTextQueries  = 150;
+    const int      m_MaxRequestsPerMinute = 5;
+    const std::chrono::seconds m_RateLimitWindow{60};
 
     std::string m_CurrentMonthCycle;
-    uint64_t    m_TokensUsedThisMonth = 0;
-    int         m_ImagesUsedThisMonth = 0;
+    std::string m_CurrentDayCycle;
+    uint64_t    m_TokensUsedThisMonth   = 0;
+    int         m_ImagesUsedThisMonth   = 0;
+    int         m_DailyTextQueriesUsed  = 0;
+
+    std::deque<std::chrono::steady_clock::time_point> m_RequestTimestamps;
 
     std::string m_RemoteApiKeyOverride;
 

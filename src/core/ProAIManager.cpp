@@ -53,11 +53,13 @@ ProAIManager& ProAIManager::Get() {
 
 ProAIManager::ProAIManager() {
     m_CurrentMonthCycle = GetCurrentMonthKey();
+    m_CurrentDayCycle   = GetCurrentDayKey();
 }
 
 void ProAIManager::Initialize() {
     LoadQuota();
     CheckMonthlyReset();
+    CheckDailyReset();
     RefreshCloudSongs(nullptr);
 }
 
@@ -74,8 +76,20 @@ std::string ProAIManager::GetCurrentMonthKey() const {
     return std::string(buf);
 }
 
-void ProAIManager::CheckMonthlyReset() {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+std::string ProAIManager::GetCurrentDayKey() const {
+    std::time_t t = std::time(nullptr);
+    std::tm tmNow{};
+#ifdef _WIN32
+    localtime_s(&tmNow, &t);
+#else
+    localtime_r(&t, &tmNow);
+#endif
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02d", tmNow.tm_year + 1900, tmNow.tm_mon + 1, tmNow.tm_mday);
+    return std::string(buf);
+}
+
+void ProAIManager::CheckMonthlyResetLocked() {
     std::string nowMonth = GetCurrentMonthKey();
     if (m_CurrentMonthCycle != nowMonth) {
         m_CurrentMonthCycle = nowMonth;
@@ -83,6 +97,25 @@ void ProAIManager::CheckMonthlyReset() {
         m_ImagesUsedThisMonth = 0;
         SaveQuota();
     }
+}
+
+void ProAIManager::CheckDailyResetLocked() {
+    std::string nowDay = GetCurrentDayKey();
+    if (m_CurrentDayCycle != nowDay) {
+        m_CurrentDayCycle = nowDay;
+        m_DailyTextQueriesUsed = 0;
+        SaveQuota();
+    }
+}
+
+void ProAIManager::CheckMonthlyReset() {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    CheckMonthlyResetLocked();
+}
+
+void ProAIManager::CheckDailyReset() {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    CheckDailyResetLocked();
 }
 
 std::string ProAIManager::GetQuotaFilePath() const {
@@ -127,9 +160,11 @@ std::string ProAIManager::GetAIImagesDir() const {
 
 void ProAIManager::SaveQuota() {
     json j;
-    j["month"]       = m_CurrentMonthCycle;
-    j["tokens_used"] = m_TokensUsedThisMonth;
-    j["images_used"] = m_ImagesUsedThisMonth;
+    j["month"]                   = m_CurrentMonthCycle;
+    j["day"]                     = m_CurrentDayCycle;
+    j["tokens_used"]             = m_TokensUsedThisMonth;
+    j["images_used"]             = m_ImagesUsedThisMonth;
+    j["daily_text_queries_used"] = m_DailyTextQueriesUsed;
 
     std::string path = GetQuotaFilePath();
     std::ofstream f(path);
@@ -150,11 +185,17 @@ void ProAIManager::LoadQuota() {
         if (j.contains("month") && j["month"].is_string()) {
             m_CurrentMonthCycle = j["month"];
         }
+        if (j.contains("day") && j["day"].is_string()) {
+            m_CurrentDayCycle = j["day"];
+        }
         if (j.contains("tokens_used") && j["tokens_used"].is_number()) {
             m_TokensUsedThisMonth = j["tokens_used"].get<uint64_t>();
         }
         if (j.contains("images_used") && j["images_used"].is_number()) {
             m_ImagesUsedThisMonth = j["images_used"].get<int>();
+        }
+        if (j.contains("daily_text_queries_used") && j["daily_text_queries_used"].is_number()) {
+            m_DailyTextQueriesUsed = j["daily_text_queries_used"].get<int>();
         }
     } catch (...) {}
 }
@@ -220,10 +261,25 @@ void ProAIManager::SetRemoteApiKey(const std::string& key) {
     m_RemoteApiKeyOverride = key;
 }
 
-// ── Control de Cuotas ────────────────────────────────────────────────────────
-bool ProAIManager::CanSendMessage() const {
+// ── Control de Cuotas y Límites ──────────────────────────────────────────────
+bool ProAIManager::CanSendMessage(std::string* outReason) const {
     std::lock_guard<std::mutex> lock(m_Mutex);
-    return m_TokensUsedThisMonth < m_MaxMonthlyTokens;
+    const_cast<ProAIManager*>(this)->CheckMonthlyResetLocked();
+    const_cast<ProAIManager*>(this)->CheckDailyResetLocked();
+
+    if (m_TokensUsedThisMonth >= m_MaxMonthlyTokens) {
+        if (outReason) {
+            *outReason = "Has alcanzado el límite mensual de 250,000 tokens de tu plan Pro. Tu cuota se renovará al finalizar el mes o al ampliar tu suscripción.";
+        }
+        return false;
+    }
+    if (m_DailyTextQueriesUsed >= m_MaxDailyTextQueries) {
+        if (outReason) {
+            *outReason = "Has alcanzado el límite diario de 150 consultas de texto. Tu cuota diaria se renovará mañana.";
+        }
+        return false;
+    }
+    return true;
 }
 
 uint64_t ProAIManager::GetAvailableTokens() const {
@@ -239,6 +295,49 @@ uint64_t ProAIManager::GetMaxMonthlyTokens() const {
 uint64_t ProAIManager::GetUsedTokens() const {
     std::lock_guard<std::mutex> lock(m_Mutex);
     return m_TokensUsedThisMonth;
+}
+
+int ProAIManager::GetDailyQueriesUsed() const {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    return m_DailyTextQueriesUsed;
+}
+
+int ProAIManager::GetMaxDailyQueries() const {
+    return m_MaxDailyTextQueries;
+}
+
+int ProAIManager::GetAvailableDailyQueries() const {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    if (m_DailyTextQueriesUsed >= m_MaxDailyTextQueries) return 0;
+    return m_MaxDailyTextQueries - m_DailyTextQueriesUsed;
+}
+
+bool ProAIManager::CheckAndRecordRateLimit(std::string* outReason) {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    auto now = std::chrono::steady_clock::now();
+
+    // Eliminar timestamps mayores a 60 segundos
+    while (!m_RequestTimestamps.empty()) {
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - m_RequestTimestamps.front());
+        if (elapsed >= m_RateLimitWindow) {
+            m_RequestTimestamps.pop_front();
+        } else {
+            break;
+        }
+    }
+
+    if (static_cast<int>(m_RequestTimestamps.size()) >= m_MaxRequestsPerMinute) {
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - m_RequestTimestamps.front());
+        int waitSeconds = static_cast<int>(m_RateLimitWindow.count() - elapsed.count());
+        if (waitSeconds < 1) waitSeconds = 1;
+        if (outReason) {
+            *outReason = "Límite de velocidad: máximo 5 peticiones por minuto. Espera " + std::to_string(waitSeconds) + " segundo" + (waitSeconds == 1 ? "" : "s") + " antes de enviar otra solicitud.";
+        }
+        return false;
+    }
+
+    m_RequestTimestamps.push_back(now);
+    return true;
 }
 
 bool ProAIManager::CanGenerateImage() const {
@@ -448,12 +547,18 @@ bool ProAIManager::DownloadFileHttps(const std::string& urlStr, const std::strin
 // ── Chat IA (Gemini / DeepSeek) ──────────────────────────────────────────────
 void ProAIManager::SendChatMessage(const std::vector<ProChatMessage>& history,
                                    std::function<void(bool success, const std::string& reply, uint32_t tokensUsed, const std::string& error)> callback) {
-    CheckMonthlyReset();
-
-    if (!CanSendMessage()) {
+    std::string cannotSendReason;
+    if (!CanSendMessage(&cannotSendReason)) {
         if (callback) {
-            callback(false, "", 0,
-                     "Has alcanzado el límite mensual de tokens de tu plan Pro. Tu cuota se renovará al finalizar el mes o al ampliar tu suscripción.");
+            callback(false, "", 0, cannotSendReason);
+        }
+        return;
+    }
+
+    std::string rateErr;
+    if (!CheckAndRecordRateLimit(&rateErr)) {
+        if (callback) {
+            callback(false, "", 0, rateErr);
         }
         return;
     }
@@ -585,6 +690,7 @@ void ProAIManager::SendChatMessage(const std::vector<ProChatMessage>& history,
         if (success) {
             std::lock_guard<std::mutex> lock(m_Mutex);
             m_TokensUsedThisMonth += tokensUsed;
+            m_DailyTextQueriesUsed++;
             SaveQuota();
         }
 
@@ -597,12 +703,18 @@ void ProAIManager::SendChatMessage(const std::vector<ProChatMessage>& history,
 void ProAIManager::EditLyricsWithAI(const std::string& currentLyrics,
                                     const std::string& userPrompt,
                                     std::function<void(bool success, const std::string& modifiedLyrics, uint32_t tokensUsed, const std::string& error)> callback) {
-    CheckMonthlyReset();
-
-    if (!CanSendMessage()) {
+    std::string cannotSendReason;
+    if (!CanSendMessage(&cannotSendReason)) {
         if (callback) {
-            callback(false, "", 0,
-                     "Has alcanzado el límite mensual de tokens de tu plan Pro. Tu cuota se renovará al finalizar el mes.");
+            callback(false, "", 0, cannotSendReason);
+        }
+        return;
+    }
+
+    std::string rateErr;
+    if (!CheckAndRecordRateLimit(&rateErr)) {
+        if (callback) {
+            callback(false, "", 0, rateErr);
         }
         return;
     }
@@ -706,6 +818,7 @@ void ProAIManager::EditLyricsWithAI(const std::string& currentLyrics,
         if (success) {
             std::lock_guard<std::mutex> lock(m_Mutex);
             m_TokensUsedThisMonth += tokensUsed;
+            m_DailyTextQueriesUsed++;
             SaveQuota();
         }
 
@@ -722,6 +835,14 @@ void ProAIManager::GenerateImage(const std::string& prompt,
     if (!CanGenerateImage()) {
         if (callback) {
             callback(false, "", "Has alcanzado el límite de 30 imágenes este mes. Tu cuota se renovará al finalizar el mes.");
+        }
+        return;
+    }
+
+    std::string rateErr;
+    if (!CheckAndRecordRateLimit(&rateErr)) {
+        if (callback) {
+            callback(false, "", rateErr);
         }
         return;
     }
