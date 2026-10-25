@@ -19,6 +19,11 @@ private:
     char m_InputBuf[1024] = "";
     bool m_ScrollToBottom = false;
     std::string m_StatusFeedback = "";
+
+    // Canción adjunta para enviar a la IA
+    std::string m_AttachedSongName;
+    std::string m_AttachedSongContent;
+    bool m_ShowLocalLibraryModal = false;
 };
 
 } // namespace ProyecThor::UI

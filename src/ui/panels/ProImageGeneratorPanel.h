@@ -23,6 +23,11 @@ private:
     std::string m_StatusFeedback;
     bool m_StatusIsSuccess = true;
 
+    // Imagen de referencia adjunta
+    std::string m_AttachedImagePath;
+    std::string m_AttachedImageName;
+    bool m_ShowLocalBgModal = false;
+
     void LoadPreviewTexture(const std::string& path);
     void FreePreviewTexture();
 };
