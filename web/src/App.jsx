@@ -164,7 +164,7 @@ const plataformas = [
 
 export default function App() {
   return (
-    <div className="min-h-screen flex flex-col bg-neutral-950 text-neutral-300 font-sans antialiased selection:bg-neutral-800 selection:text-white relative overflow-x-hidden">
+    <div className="min-h-screen flex flex-col bg-neutral-950 text-neutral-300 font-['Arial',sans-serif] antialiased selection:bg-neutral-800 selection:text-white relative overflow-x-hidden">
       {/* Iluminación de fondo ambiental animada */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         <div className="ambient-glow-1 absolute top-0 left-1/3 -translate-x-1/2 w-[650px] h-[360px] bg-cyan-600/15 blur-[160px] rounded-full" />
@@ -299,7 +299,7 @@ export default function App() {
 
         {/* SECCIÓN: LO BUENO QUE ES EL PROGRAMA DE FORMA GRATUITA */}
         <section id="gratuito" className="py-20 px-6 max-w-6xl mx-auto space-y-12">
-          <div className="text-center max-w-3xl mx-auto space-y-3">
+          <div className="max-w-3xl mx-auto space-y-3">
             <div className="inline-flex items-center gap-2 text-xs uppercase tracking-widest text-cyan-400 font-semibold">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
               Software Completo y Robusto sin Costo
@@ -307,7 +307,7 @@ export default function App() {
             <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
               La versión gratuita ya es todo lo que tu auditorio necesita
             </h2>
-            <p className="text-neutral-400 text-sm leading-relaxed max-w-2xl mx-auto">
+            <p className="text-neutral-400 text-sm leading-relaxed max-w-2xl text-justify">
               ProyecThor se diseñó con una premisa clara: las iglesias y auditorios merecen una herramienta de proyección moderna, rápida y fiable sin tener que pagar licencias prohibitivas ni tolerar marcas de agua molestas.
             </p>
           </div>
@@ -325,7 +325,7 @@ export default function App() {
                   <h3 className="text-base font-bold text-white tracking-tight">
                     {p.titulo}
                   </h3>
-                  <p className="text-xs text-neutral-400 leading-relaxed">
+                  <p className="text-xs text-neutral-400 leading-relaxed text-justify">
                     {p.desc}
                   </p>
                 </div>
@@ -409,7 +409,7 @@ export default function App() {
                 <h3 className="text-sm font-semibold text-white group-hover:text-cyan-300 transition-colors">
                   {c.titulo}
                 </h3>
-                <p className="text-xs text-neutral-400 leading-relaxed">
+                <p className="text-xs text-neutral-400 leading-relaxed text-justify">
                   {c.descripcion}
                 </p>
               </div>
@@ -475,7 +475,7 @@ export default function App() {
               <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
                 ProyecThor for Professionals
               </h2>
-              <p className="text-neutral-400 text-sm leading-relaxed">
+              <p className="text-neutral-400 text-sm leading-relaxed text-justify">
                 Una infraestructura integral que complementa el motor local con servicios distribuidos en la nube, optimizada para coordinadores de medios, directores técnicos y ministerios con múltiples auditorios.
               </p>
             </div>
@@ -493,7 +493,7 @@ export default function App() {
                     <h3 className="text-sm font-semibold text-white tracking-tight group-hover:text-cyan-300 transition-colors">
                       {adv.title}
                     </h3>
-                    <p className="text-xs text-neutral-400 leading-relaxed">
+                    <p className="text-xs text-neutral-400 leading-relaxed text-justify">
                       {adv.desc}
                     </p>
                   </div>

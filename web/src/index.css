@@ -1,8 +1,14 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: Arial, "Helvetica Neue", Helvetica, sans-serif;
+}
+
 @layer base {
-  html {
+  html,
+  body {
     scroll-behavior: smooth;
+    font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
   }
 }
 
