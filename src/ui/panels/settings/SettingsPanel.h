@@ -14,6 +14,7 @@ namespace ProyecThor::UI::Settings {
         void Render(bool* isOpen);
         void InitializeTheme();
         void SetInitialCategory(int idx) { m_SelectedCategory = idx; }
+        int  GetSelectedCategory() const { return m_SelectedCategory; }
 
         void SetUIManagerRef(ProyecThor::UI::UIManager* ref) { m_UIManagerRef = ref; }
 

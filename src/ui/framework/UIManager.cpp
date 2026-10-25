@@ -1429,14 +1429,25 @@ void UIManager::RenderModeToolbar()
             float* pColG     = storage->GetFloatRef(islandAnimId ^ 0x6666u, targetColor.y);
             float* pColB     = storage->GetFloatRef(islandAnimId ^ 0x7777u, targetColor.z);
 
+            const bool isWindowFocused = m_Window ? (glfwGetWindowAttrib(m_Window, GLFW_FOCUSED) != 0) : true;
+
             float dt = ImGui::GetIO().DeltaTime;
-            float animSpeed = 16.0f;
+            if (dt < 0.0f || dt > 0.05f) dt = 0.05f;
+            float animSpeed = 18.0f;
 
             float dx = targetCenterX - *pCurX;
-            *pCurX     += dx * std::min(1.0f, dt * animSpeed);
-            *pCurY     += (targetCenterY - *pCurY) * std::min(1.0f, dt * animSpeed);
+            if (std::abs(dx) > islandW) {
+                *pCurX = targetCenterX;
+                *pCurY = targetCenterY;
+            } else {
+                *pCurX += dx * std::min(1.0f, dt * animSpeed);
+                *pCurY += (targetCenterY - *pCurY) * std::min(1.0f, dt * animSpeed);
+            }
             *pCurR     += (targetRadius - *pCurR) * std::min(1.0f, dt * animSpeed);
-            *pCurAlpha += ((activeIndex >= 0 ? 1.0f : 0.0f) - *pCurAlpha) * std::min(1.0f, dt * animSpeed);
+            float targetAlpha = (activeIndex >= 0) ? 1.0f : 0.0f;
+            *pCurAlpha += (targetAlpha - *pCurAlpha) * std::min(1.0f, dt * animSpeed);
+            if (std::abs(*pCurAlpha - targetAlpha) < 0.01f) *pCurAlpha = targetAlpha;
+
             *pColR     += (targetColor.x - *pColR) * std::min(1.0f, dt * animSpeed);
             *pColG     += (targetColor.y - *pColG) * std::min(1.0f, dt * animSpeed);
             *pColB     += (targetColor.z - *pColB) * std::min(1.0f, dt * animSpeed);
@@ -1498,11 +1509,14 @@ void UIManager::RenderModeToolbar()
 
                 bool active = item.isActive ? item.isActive() : false;
 
-                ImGuiID hovId = ImGui::GetID(item.label);
-                float* pHoverT = storage->GetFloatRef(hovId ^ 0x51A17E5u, 0.0f);
-                bool hovered = ImGui::IsMouseHoveringRect(bMin, bMax, false);
-                *pHoverT += ((hovered ? 1.0f : 0.0f) - *pHoverT) * std::min(1.0f, dt * 14.0f);
-                float tHov = *pHoverT;
+                ImGui::SetCursorScreenPos(bMin);
+                const std::string btnId = std::string("##islandBtn_") + item.label;
+                bool clicked = ImGui::InvisibleButton(btnId.c_str(), { bMax.x - bMin.x, bMax.y - bMin.y });
+                bool hovered = isWindowFocused && ImGui::IsItemHovered();
+
+                if (clicked && item.onClick) {
+                    item.onClick();
+                }
 
                 ImVec4 baseCol = ImGui::ColorConvertU32ToFloat4(DS::TextSecondary);
                 ImVec4 actCol  = ImGui::ColorConvertU32ToFloat4(item.themeColor);
@@ -1512,23 +1526,16 @@ void UIManager::RenderModeToolbar()
                 dl->AddCircle(iconCenter, targetRadius, IM_COL32(255, 255, 255, 14), 24, 1.0f);
 
                 // Círculo con el color del botón en hover si no está activo
-                if (tHov > 0.005f && !active) {
+                if (hovered && !active) {
                     ImVec4 hovCircle = actCol;
-                    hovCircle.w = tHov * 0.28f;
+                    hovCircle.w = 0.28f;
                     dl->AddCircleFilled(iconCenter, targetRadius, ImGui::ColorConvertFloat4ToU32(hovCircle), 24);
-                    hovCircle.w = tHov * 0.45f;
+                    hovCircle.w = 0.45f;
                     dl->AddCircle(iconCenter, targetRadius, ImGui::ColorConvertFloat4ToU32(hovCircle), 24, 1.0f);
                 }
 
-                ImGui::SetCursorScreenPos(bMin);
-                const std::string btnId = std::string("##islandBtn_") + item.label;
-                if (ImGui::InvisibleButton(btnId.c_str(), { bMax.x - bMin.x, bMax.y - bMin.y })) {
-                    if (item.onClick) item.onClick();
-                }
-
                 // ── Color de Icono y Texto (aparece en hover o cuando está presionado/activo) ──
-                float colorT = active ? 1.0f : tHov;
-                ImVec4 finalV = LerpVec4(baseCol, actCol, colorT);
+                ImVec4 finalV = (active || hovered) ? actCol : baseCol;
                 finalV.w = 1.0f;
                 ImU32 textIconCol = ImGui::ColorConvertFloat4ToU32(finalV);
 
@@ -1547,7 +1554,7 @@ void UIManager::RenderModeToolbar()
                     dl->AddText({ lblX, lblY }, textIconCol, item.label);
                 }
 
-                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+                if (hovered && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
                     ImGui::SetTooltip("%s", item.label);
                 }
             }
@@ -1642,6 +1649,25 @@ void UIManager::RenderModeToolbar()
                     SetPanelCollapsed(1, true);
                 },
                 IM_COL32(52, 211, 153, 255) // Verde esmeralda
+            },
+            {
+                "Reloj",
+                HomeIcons::DrawIcon_Clock,
+                [this]() {
+                    return !IsAnyToolWindowOpen() &&
+                           (m_LibraryPanelRef &&
+                            m_LibraryPanelRef->GetSideMode() == LibrarySideMode::Clock);
+                },
+                [this]() {
+                    CloseAllToolWindows();
+                    if (m_LibraryPanelRef) {
+                        m_LibraryPanelRef->SelectSideMode(LibrarySideMode::Clock);
+                    }
+                    SetActiveLeftPanel(ActiveLeftPanel::Library);
+                    SetPanelCollapsed(0, false);
+                    SetPanelCollapsed(1, true);
+                },
+                IM_COL32(245, 158, 11, 255) // Ámbar reloj
             }
         };
 
@@ -1692,20 +1718,6 @@ void UIManager::RenderModeToolbar()
             }
         };
 
-        if (general.showAIAssistantToolbar) {
-            island2.push_back({
-                "Asistente IA",
-                HomeIcons::DrawIcon_Sparkle,
-                [this]() { return m_ShowAIAssistant; },
-                [this]() {
-                    bool wasOpen = m_ShowAIAssistant;
-                    CloseAllToolWindows();
-                    m_ShowAIAssistant = !wasOpen;
-                },
-                IM_COL32(217, 70, 239, 255) // Magenta IA
-            });
-        }
-
         // ── Isla 3: Cuenta/Pro - Configuración - Ayuda ────────────
         auto& authMgr = ProyecThor::Core::AuthLicenseManager::Get();
         const bool isProActive = authMgr.IsPro();
@@ -1718,7 +1730,7 @@ void UIManager::RenderModeToolbar()
             {
                 accountLabel,
                 AppIcons::DrawIcon_Account,
-                [this]() { return m_ShowConfig; },
+                [this]() { return m_ShowConfig && m_SettingsPanel.GetSelectedCategory() == 10; },
                 [this]() {
                     CloseAllToolWindows();
                     RequestSettings(10);
@@ -1728,7 +1740,7 @@ void UIManager::RenderModeToolbar()
             {
                 "Configuración",
                 AppIcons::DrawIcon_Settings,
-                [this]() { return m_ShowConfig; },
+                [this]() { return m_ShowConfig && m_SettingsPanel.GetSelectedCategory() != 10; },
                 [this]() {
                     bool wasOpen = m_ShowConfig;
                     CloseAllToolWindows();

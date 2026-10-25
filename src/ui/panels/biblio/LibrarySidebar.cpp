@@ -70,11 +70,11 @@ static bool RenderSidebarButton(ImDrawList* dl, ImGuiStorage* storage,
     ImVec2 bMin   = cursor;
     ImVec2 bMax   = { cursor.x + sidebarW, cursor.y + btnH };
 
-    ImGuiID hovId = ImGui::GetID(label);
-    float*  pT    = storage->GetFloatRef(hovId ^ 0xABCD1234u, 0.0f);
-    bool hovered  = ImGui::IsMouseHoveringRect(bMin, bMax, false);
-    *pT = Lerp(*pT, hovered ? 1.0f : 0.0f, ImGui::GetIO().DeltaTime * 14.0f);
-    float t = *pT;
+    ImGui::SetCursorScreenPos(bMin);
+    const std::string btnId = std::string("##cat_") + label;
+    bool clicked = ImGui::InvisibleButton(btnId.c_str(), { sidebarW, btnH });
+    bool hovered = ImGui::IsItemHovered();
+    float t = hovered ? 1.0f : 0.0f;
 
     // ── Fondo ─────────────────────────────────────────────────────────
     if (active) {
@@ -99,10 +99,6 @@ static bool RenderSidebarButton(ImDrawList* dl, ImGuiStorage* storage,
             { bMin.x + 3.0f, barY0 + barH },
             ImGui::ColorConvertFloat4ToU32(ac), 2.0f);
     }
-
-    ImGui::SetCursorScreenPos(bMin);
-    const std::string btnId = std::string("##cat_") + label;
-    bool clicked = ImGui::InvisibleButton(btnId.c_str(), { sidebarW, btnH });
 
     // ── Icono + label ──────────────────────────────────────────────────
     // Base theme-aware (DS::TextSecondary..TextPrimary) en vez de gris/
@@ -163,11 +159,11 @@ static bool RenderSidebarButtonHorizontal(ImDrawList* dl, ImGuiStorage* storage,
     ImVec2 bMin   = { cursor.x, cursor.y + 2.0f };
     ImVec2 bMax   = { cursor.x + btnW, cursor.y + btnH - 2.0f };
 
-    ImGuiID hovId = ImGui::GetID(label);
-    float*  pT    = storage->GetFloatRef(hovId ^ 0xABCD1234u, 0.0f);
-    bool hovered  = ImGui::IsMouseHoveringRect(bMin, bMax, false);
-    *pT = Lerp(*pT, hovered ? 1.0f : 0.0f, ImGui::GetIO().DeltaTime * 14.0f);
-    float t = *pT;
+    ImGui::SetCursorScreenPos(cursor);
+    const std::string btnId = std::string("##cat_h_") + label;
+    bool clicked = ImGui::InvisibleButton(btnId.c_str(), { btnW, btnH });
+    bool hovered = ImGui::IsItemHovered();
+    float t = hovered ? 1.0f : 0.0f;
 
     // ── Fondo ─────────────────────────────────────────────────────────
     if (active) {
@@ -192,10 +188,6 @@ static bool RenderSidebarButtonHorizontal(ImDrawList* dl, ImGuiStorage* storage,
             { barX0 + barW, bMin.y + 2.5f },
             ImGui::ColorConvertFloat4ToU32(ac), 1.0f);
     }
-
-    ImGui::SetCursorScreenPos(cursor);
-    const std::string btnId = std::string("##cat_h_") + label;
-    bool clicked = ImGui::InvisibleButton(btnId.c_str(), { btnW, btnH });
 
     // ── Icono + label ──────────────────────────────────────────────────
     dl->PushClipRect(bMin, bMax, true);

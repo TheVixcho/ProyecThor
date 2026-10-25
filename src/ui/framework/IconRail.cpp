@@ -75,11 +75,11 @@ static bool RenderVertical(const IconRailItem* items, int count, int& currentInd
         ImVec2 bMin   = cursor;
         ImVec2 bMax   = { cursor.x + railW, cursor.y + btnH };
 
-        ImGuiID hovId = ImGui::GetID(item.label);
-        float*  pT    = storage->GetFloatRef(hovId ^ 0xABCD1234u, 0.0f);
-        bool hovered  = ImGui::IsMouseHoveringRect(bMin, bMax, false);
-        *pT = Lerp(*pT, hovered ? 1.0f : 0.0f, ImGui::GetIO().DeltaTime * 14.0f);
-        float t = *pT;
+        ImGui::SetCursorScreenPos(bMin);
+        const std::string btnId = std::string("##rail_") + item.label;
+        bool clicked = ImGui::InvisibleButton(btnId.c_str(), { railW, btnH });
+        bool hovered = ImGui::IsItemHovered();
+        float t = hovered ? 1.0f : 0.0f;
 
         if (active) {
             ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accent);
@@ -89,9 +89,9 @@ static bool RenderVertical(const IconRailItem* items, int count, int& currentInd
             dl->AddRect(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding, 0, 1.0f);
         } else if (t > 0.01f) {
             ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accent);
-            ac.w = t * 0.12f;
+            ac.w = 0.12f;
             dl->AddRectFilled(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding);
-            ac.w = t * 0.22f;
+            ac.w = 0.22f;
             dl->AddRect(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding, 0, 1.0f);
         }
 
@@ -100,16 +100,12 @@ static bool RenderVertical(const IconRailItem* items, int count, int& currentInd
         {
             float barH     = btnH * 0.60f * (active ? 1.0f : t);
             float barY0    = cursor.y + (btnH - barH) * 0.5f;
-            float barAlpha = active ? 1.0f : t * 0.65f;
+            float barAlpha = active ? 1.0f : 0.65f;
             ImVec4 ac      = ImGui::ColorConvertU32ToFloat4(accent);
             ac.w           = barAlpha;
             dl->AddRectFilled({ bMin.x, barY0 }, { bMin.x + 3.0f, barY0 + barH },
                               ImGui::ColorConvertFloat4ToU32(ac), 2.0f);
         }
-
-        ImGui::SetCursorScreenPos(bMin);
-        const std::string btnId = std::string("##rail_") + item.label;
-        bool clicked = ImGui::InvisibleButton(btnId.c_str(), { railW, btnH });
 
         {
             ImVec4 textDimV = ImGui::ColorConvertU32ToFloat4(DS::TextSecondary);
@@ -219,11 +215,11 @@ static bool RenderHorizontal(const IconRailItem* items, int count, int& currentI
         ImVec2 bMin   = { cursor.x, cursor.y + 3.0f };
         ImVec2 bMax   = { cursor.x + btnW, cursor.y + railH - 3.0f };
 
-        ImGuiID hovId = ImGui::GetID(item.label);
-        float*  pT    = storage->GetFloatRef(hovId ^ 0xABCD1234u, 0.0f);
-        bool hovered  = ImGui::IsMouseHoveringRect(bMin, bMax, false);
-        *pT = Lerp(*pT, hovered ? 1.0f : 0.0f, ImGui::GetIO().DeltaTime * 14.0f);
-        float t = *pT;
+        ImGui::SetCursorScreenPos(cursor);
+        const std::string btnId = std::string("##rail_") + item.label;
+        bool clicked = ImGui::InvisibleButton(btnId.c_str(), { btnW, railH });
+        bool hovered = ImGui::IsItemHovered();
+        float t = hovered ? 1.0f : 0.0f;
 
         if (active) {
             ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accent);
@@ -250,10 +246,6 @@ static bool RenderHorizontal(const IconRailItem* items, int count, int& currentI
             dl->AddRectFilled({ barX0, bMax.y - 2.5f }, { barX0 + barW, bMax.y },
                               ImGui::ColorConvertFloat4ToU32(ac), 1.5f);
         }
-
-        ImGui::SetCursorScreenPos(cursor);
-        const std::string btnId = std::string("##rail_") + item.label;
-        bool clicked = ImGui::InvisibleButton(btnId.c_str(), { btnW, railH });
 
         {
             ImVec4 textDimV = ImGui::ColorConvertU32ToFloat4(DS::TextSecondary);

@@ -316,12 +316,11 @@ bool QuickActionButton(const char* id, const char* iconKey, DrawIconFn vectorIco
     ImVec2 bMin   = cursor;
     ImVec2 bMax   = { cursor.x + size.x, cursor.y + size.y };
 
-    ImGuiStorage* storage = ImGui::GetStateStorage();
-    ImGuiID hovId = ImGui::GetID(id);
-    float*  pT    = storage->GetFloatRef(hovId ^ 0x9876FEDCu, 0.0f);
-    bool hovered  = ImGui::IsMouseHoveringRect(bMin, bMax, false);
-    *pT += ((hovered ? 1.0f : 0.0f) - *pT) * std::min(1.0f, ImGui::GetIO().DeltaTime * 14.0f);
-    float t = *pT;
+    ImGui::SetCursorScreenPos(bMin);
+    const std::string btnId = std::string("##btn_") + id;
+    bool clicked = ImGui::InvisibleButton(btnId.c_str(), size);
+    bool hovered = ImGui::IsItemHovered();
+    float t = hovered ? 1.0f : 0.0f;
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
@@ -337,16 +336,12 @@ bool QuickActionButton(const char* id, const char* iconKey, DrawIconFn vectorIco
         dl->AddRectFilled({ barX0, bMax.y - 2.5f }, { barX0 + barW, bMax.y },
                           ImGui::ColorConvertFloat4ToU32(tint), 1.5f);
     } else {
-        if (t > 0.01f) {
-            dl->AddRectFilled(bMin, bMax, IM_COL32(255, 255, 255, (int)(t * 18.0f)), rounding);
+        if (hovered) {
+            dl->AddRectFilled(bMin, bMax, IM_COL32(255, 255, 255, 18), rounding);
         } else {
             dl->AddRectFilled(bMin, bMax, ImGui::ColorConvertFloat4ToU32(bgColor), rounding);
         }
     }
-
-    ImGui::SetCursorScreenPos(bMin);
-    const std::string btnId = std::string("##btn_") + id;
-    bool clicked = ImGui::InvisibleButton(btnId.c_str(), size);
 
     auto it = StyleGeneralApp::Icons.find(iconKey);
     bool hasTexture = (it != StyleGeneralApp::Icons.end() && it->second.textureID != nullptr);

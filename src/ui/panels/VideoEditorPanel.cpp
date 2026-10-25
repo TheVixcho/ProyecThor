@@ -26,12 +26,11 @@ bool RailButton(ImDrawList* dl, float railW, float btnH, const char* label, Draw
     ImVec2 cursor = ImGui::GetCursorScreenPos();
     ImVec2 bMin = cursor, bMax = { cursor.x + railW, cursor.y + btnH };
 
-    ImGuiID hovId = ImGui::GetID(label);
-    ImGuiStorage* storage = ImGui::GetStateStorage();
-    float* pT = storage->GetFloatRef(hovId ^ 0x5A11u, 0.0f);
-    bool hovered = ImGui::IsMouseHoveringRect(bMin, bMax, false);
-    *pT += ((hovered ? 1.0f : 0.0f) - *pT) * std::min(1.0f, ImGui::GetIO().DeltaTime * 14.0f);
-    float t = *pT;
+    ImGui::SetCursorScreenPos(bMin);
+    std::string btnId = std::string("##railBtn_") + label;
+    bool clicked = ImGui::InvisibleButton(btnId.c_str(), { railW, btnH });
+    bool hovered = ImGui::IsItemHovered();
+    float t = hovered ? 1.0f : 0.0f;
 
     ImVec4 accentF = ImGui::ColorConvertU32ToFloat4(DS::AccentColor);
     if (active) {
@@ -45,10 +44,6 @@ bool RailButton(ImDrawList* dl, float railW, float btnH, const char* label, Draw
     float barA  = active ? 1.0f : t * 0.55f;
     dl->AddRectFilled({ bMin.x, barY0 }, { bMin.x + 3.0f, barY0 + barH },
         ImGui::ColorConvertFloat4ToU32(ImVec4(accentF.x, accentF.y, accentF.z, barA)), 2.0f);
-
-    ImGui::SetCursorScreenPos(bMin);
-    std::string btnId = std::string("##railBtn_") + label;
-    bool clicked = ImGui::InvisibleButton(btnId.c_str(), { railW, btnH });
 
     const float iconSz = 20.0f;
     ImVec2 lblSz = ImGui::CalcTextSize(label);

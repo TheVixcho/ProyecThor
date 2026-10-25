@@ -141,12 +141,12 @@ void StylesHubPanel::RenderTransitionRailButton()
     ImVec2 bMin   = cursor;
     ImVec2 bMax   = { cursor.x + size.x, cursor.y + size.y };
 
-    ImGuiStorage* storage = ImGui::GetStateStorage();
-    ImGuiID hovId = ImGui::GetID("##transRailBtn");
-    float*  pT    = storage->GetFloatRef(hovId ^ 0x7654ABCDu, 0.0f);
-    bool hovered  = ImGui::IsMouseHoveringRect(bMin, bMax, false);
-    *pT += ((hovered ? 1.0f : 0.0f) - *pT) * std::min(1.0f, ImGui::GetIO().DeltaTime * 14.0f);
-    float t = *pT;
+    ImGui::SetCursorScreenPos(bMin);
+    bool clicked = ImGui::InvisibleButton("##transRailBtn", size);
+    bool hovered = ImGui::IsItemHovered();
+    if (clicked) {
+        ImGui::OpenPopup("##transQuickPopup");
+    }
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     constexpr float rounding = 6.0f;
@@ -157,15 +157,10 @@ void StylesHubPanel::RenderTransitionRailButton()
         dl->AddRectFilled(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding);
         ac.w = 0.35f;
         dl->AddRect(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding, 0, 1.0f);
-    } else if (t > 0.01f) {
-        dl->AddRectFilled(bMin, bMax, IM_COL32(255, 255, 255, (int)(t * 20.0f)), rounding);
+    } else if (hovered) {
+        dl->AddRectFilled(bMin, bMax, IM_COL32(255, 255, 255, 20), rounding);
     } else {
         dl->AddRectFilled(bMin, bMax, IM_COL32(255, 255, 255, 8), rounding);
-    }
-
-    ImGui::SetCursorScreenPos(bMin);
-    if (ImGui::InvisibleButton("##transRailBtn", size)) {
-        ImGui::OpenPopup("##transQuickPopup");
     }
 
     ImVec2 center = { (bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f };

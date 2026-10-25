@@ -621,9 +621,6 @@ void SettingsPanel::RenderCategoryTheme() {
         if (ImGui::Checkbox("Plugins y Extensiones en barra inferior", &libSettings.showPlugins)) {
             ProyecThor::Settings::SettingsManager::Get().Save();
         }
-        if (ImGui::Checkbox("Botón Asistente IA en la barra superior", &general.showAIAssistantToolbar)) {
-            ProyecThor::Settings::SettingsManager::Get().Save();
-        }
     }
 
     if (SectionTitle("Forma", "Diseño")) {
