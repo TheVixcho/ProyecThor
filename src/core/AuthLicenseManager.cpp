@@ -48,6 +48,50 @@ static std::string UrlEncode(const std::string& value) {
     return escaped.str();
 }
 
+// Helper para parsear fechas ISO 8601 de Lemon Squeezy a timestamp Unix
+static int64_t ParseIsoDate(const std::string& str) {
+    if (str.empty()) return 0;
+    int year = 0, month = 0, day = 0, hour = 0, min = 0, sec = 0;
+    char sep1 = 0, sep2 = 0;
+    std::istringstream ss(str);
+    if (ss >> year >> sep1 >> month >> sep2 >> day) {
+        if (year >= 2020 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+            std::tm tm = {};
+            tm.tm_year = year - 1900;
+            tm.tm_mon  = month - 1;
+            tm.tm_mday = day;
+            char sepT = 0, sepColon1 = 0, sepColon2 = 0;
+            if (ss >> sepT >> hour >> sepColon1 >> min >> sepColon2 >> sec) {
+                tm.tm_hour = hour;
+                tm.tm_min  = min;
+                tm.tm_sec  = sec;
+            }
+#ifdef _WIN32
+            time_t t = _mkgmtime(&tm);
+            if (t != (time_t)-1) return (int64_t)t;
+#endif
+            time_t t2 = std::mktime(&tm);
+            if (t2 != (time_t)-1) return (int64_t)t2;
+        }
+    }
+    return 0;
+}
+
+// Helper para formatear timestamp Unix a cadena legible
+static std::string FormatDate(int64_t timestamp) {
+    if (timestamp <= 0) return "";
+    std::time_t t = (std::time_t)timestamp;
+    std::tm tmBuf = {};
+#ifdef _WIN32
+    localtime_s(&tmBuf, &t);
+#else
+    localtime_r(&t, &tmBuf);
+#endif
+    char buf[64] = {};
+    std::strftime(buf, sizeof(buf), "%d/%m/%Y %H:%M", &tmBuf);
+    return std::string(buf);
+}
+
 AuthLicenseManager& AuthLicenseManager::Get() {
     static AuthLicenseManager s_Instance;
     return s_Instance;
@@ -60,8 +104,32 @@ AuthLicenseManager::AuthLicenseManager() {
 
 void AuthLicenseManager::Initialize() {
     LoadState();
-    // Si había una licencia guardada, validar silenciosamente en segundo plano
-    if (m_License.isValid && !m_License.key.empty()) {
+
+    std::string keyToValidate;
+    {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        if (m_License.isValid && !m_License.key.empty()) {
+            int64_t now = (int64_t)std::time(nullptr);
+            // Si la licencia guardada no tenía fecha de expiración (versión previa),
+            // se le otorga 1 mes (30 días) a partir de la activación o fecha actual
+            if (m_License.expiresAt <= 0) {
+                int64_t baseTime = (m_License.activatedAt > 0) ? m_License.activatedAt : now;
+                m_License.expiresAt = baseTime + (30LL * 24 * 3600);
+                if (m_License.expiryDate.empty()) {
+                    m_License.expiryDate = FormatDate(m_License.expiresAt);
+                }
+            }
+
+            // La licencia permanece guardada y activa durante todo su mes.
+            // Únicamente cuando el mes se cumple (now >= expiresAt), se dispara la revalidación online
+            // para comprobar si el usuario renovó o pagó el siguiente mes en Lemon Squeezy.
+            if (now >= m_License.expiresAt) {
+                keyToValidate = m_License.key;
+            }
+        }
+    }
+
+    if (!keyToValidate.empty()) {
         ValidateLicense(nullptr);
     }
 }
@@ -118,7 +186,10 @@ void AuthLicenseManager::SaveState() {
         { "customer_name",  m_License.customerName },
         { "customer_email", m_License.customerEmail },
         { "product_name",   m_License.productName },
-        { "expiry_date",    m_License.expiryDate }
+        { "expiry_date",    m_License.expiryDate },
+        { "activated_at",   m_License.activatedAt },
+        { "expires_at",     m_License.expiresAt },
+        { "last_validated", m_License.lastValidatedAt }
     };
 
     std::string path = GetConfigFilePath();
@@ -164,6 +235,9 @@ void AuthLicenseManager::LoadState() {
             if (l.contains("customer_email") && l["customer_email"].is_string()) m_License.customerEmail = l["customer_email"];
             if (l.contains("product_name") && l["product_name"].is_string()) m_License.productName = l["product_name"];
             if (l.contains("expiry_date") && l["expiry_date"].is_string()) m_License.expiryDate = l["expiry_date"];
+            if (l.contains("activated_at") && l["activated_at"].is_number()) m_License.activatedAt = l["activated_at"].get<int64_t>();
+            if (l.contains("expires_at") && l["expires_at"].is_number()) m_License.expiresAt = l["expires_at"].get<int64_t>();
+            if (l.contains("last_validated") && l["last_validated"].is_number()) m_License.lastValidatedAt = l["last_validated"].get<int64_t>();
         }
     } catch (...) {}
 }
@@ -479,7 +553,34 @@ bool AuthLicenseManager::OpenCheckoutUrl(std::string& outError) {
 
 bool AuthLicenseManager::IsPro() const {
     std::lock_guard<std::mutex> lock(m_Mutex);
-    return m_License.isValid;
+    if (!m_License.isValid || m_License.key.empty()) {
+        return false;
+    }
+    // Si tiene fecha de vencimiento configurada y ya venció el mes:
+    if (m_License.expiresAt > 0) {
+        int64_t now = (int64_t)std::time(nullptr);
+        // Margen de gracia de 3 días para revalidar con internet tras cumplirse el mes
+        const int64_t gracePeriod = 3LL * 24 * 3600;
+        if (now > (m_License.expiresAt + gracePeriod)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool AuthLicenseManager::IsLicenseExpired() const {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    if (!m_License.isValid || m_License.expiresAt <= 0) return true;
+    int64_t now = (int64_t)std::time(nullptr);
+    return now >= m_License.expiresAt;
+}
+
+int64_t AuthLicenseManager::GetDaysRemaining() const {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    if (!m_License.isValid || m_License.expiresAt <= 0) return 0;
+    int64_t now = (int64_t)std::time(nullptr);
+    if (now >= m_License.expiresAt) return 0;
+    return (m_License.expiresAt - now) / (24 * 3600);
 }
 
 const LicenseInfo& AuthLicenseManager::GetLicenseInfo() const {
@@ -519,17 +620,36 @@ void AuthLicenseManager::ActivateLicense(const std::string& licenseKey, const st
                 json j = json::parse(res);
                 bool activated = j.value("activated", false);
                 if (activated) {
+                    int64_t now = (int64_t)std::time(nullptr);
                     std::lock_guard<std::mutex> lock(m_Mutex);
                     m_License.isValid      = true;
                     m_License.key          = licenseKey;
                     m_License.instanceName = finalInstName;
+                    m_License.activatedAt  = now;
+                    m_License.lastValidatedAt = now;
 
                     if (j.contains("instance") && j["instance"].is_object()) {
-                        m_License.instanceId = j["instance"].value("id", "");
+                        const auto& inst = j["instance"];
+                        if (inst.contains("id")) {
+                            if (inst["id"].is_string()) m_License.instanceId = inst["id"].get<std::string>();
+                            else if (inst["id"].is_number()) m_License.instanceId = std::to_string(inst["id"].get<int64_t>());
+                        }
                     }
                     if (j.contains("license_key") && j["license_key"].is_object()) {
-                        m_License.status     = j["license_key"].value("status", "active");
-                        m_License.expiryDate = j["license_key"].value("expires_at", "");
+                        m_License.status = j["license_key"].value("status", "active");
+                        std::string rawExp = j["license_key"].value("expires_at", "");
+                        int64_t parsedExp = ParseIsoDate(rawExp);
+                        if (parsedExp > now) {
+                            m_License.expiresAt = parsedExp;
+                        } else {
+                            // Por defecto: 1 mes de validez (30 días)
+                            m_License.expiresAt = now + (30LL * 24 * 3600);
+                        }
+                        m_License.expiryDate = FormatDate(m_License.expiresAt);
+                    } else {
+                        m_License.status    = "active";
+                        m_License.expiresAt = now + (30LL * 24 * 3600);
+                        m_License.expiryDate = FormatDate(m_License.expiresAt);
                     }
                     if (j.contains("meta") && j["meta"].is_object()) {
                         m_License.customerName  = j["meta"].value("user_name", "");
@@ -538,9 +658,55 @@ void AuthLicenseManager::ActivateLicense(const std::string& licenseKey, const st
                     }
                     m_LicenseError.clear();
                     success = true;
-                    finalMsg = "¡Licencia activada con éxito! ProyecThor for Professionals está listo.";
+                    finalMsg = "¡Licencia activada con éxito! ProyecThor for Professionals está activo por 1 mes.";
                 } else {
-                    finalMsg = j.value("error", "La clave de licencia no es válida o está agotada.");
+                    // Si activate falló pero porque ya estaba activada previamente en esta máquina o límite alcanzado:
+                    // Intentamos validar directamente la clave para ver si es una clave activa del usuario
+                    int vStatus = 0;
+                    std::string vErr;
+                    std::string vBody = "license_key=" + UrlEncode(licenseKey);
+                    std::string vRes = PerformHttpsPost(m_LemonHost, "/v1/licenses/validate", vBody, "application/x-www-form-urlencoded", vStatus, vErr);
+                    if (vStatus == 200) {
+                        try {
+                            json vj = json::parse(vRes);
+                            if (vj.value("valid", false)) {
+                                int64_t now = (int64_t)std::time(nullptr);
+                                std::lock_guard<std::mutex> lock(m_Mutex);
+                                m_License.isValid      = true;
+                                m_License.key          = licenseKey;
+                                m_License.instanceName = finalInstName;
+                                m_License.activatedAt  = now;
+                                m_License.lastValidatedAt = now;
+                                if (vj.contains("license_key") && vj["license_key"].is_object()) {
+                                    m_License.status = vj["license_key"].value("status", "active");
+                                    std::string rawExp = vj["license_key"].value("expires_at", "");
+                                    int64_t parsedExp = ParseIsoDate(rawExp);
+                                    if (parsedExp > now) {
+                                        m_License.expiresAt = parsedExp;
+                                    } else {
+                                        m_License.expiresAt = now + (30LL * 24 * 3600);
+                                    }
+                                    m_License.expiryDate = FormatDate(m_License.expiresAt);
+                                } else {
+                                    m_License.status    = "active";
+                                    m_License.expiresAt = now + (30LL * 24 * 3600);
+                                    m_License.expiryDate = FormatDate(m_License.expiresAt);
+                                }
+                                if (vj.contains("meta") && vj["meta"].is_object()) {
+                                    m_License.customerName  = vj["meta"].value("user_name", "");
+                                    m_License.customerEmail = vj["meta"].value("user_email", "");
+                                    m_License.productName   = vj["meta"].value("product_name", "ProyecThor for Professionals");
+                                }
+                                m_LicenseError.clear();
+                                success = true;
+                                finalMsg = "¡Licencia vinculada con éxito! ProyecThor for Professionals está listo.";
+                            }
+                        } catch (...) {}
+                    }
+                    if (!success) {
+                        std::string errMsg = j.value("error", "");
+                        finalMsg = !errMsg.empty() ? errMsg : "La clave de licencia no es válida o está agotada.";
+                    }
                 }
             } catch (...) {
                 finalMsg = "Respuesta de validación de Lemon Squeezy no válida.";
@@ -568,15 +734,22 @@ void AuthLicenseManager::ActivateLicense(const std::string& licenseKey, const st
 
 void AuthLicenseManager::ValidateLicense(std::function<void(bool success, const std::string& msg)> onComplete) {
     std::string key, instId;
+    int64_t curExpiresAt = 0;
+    bool wasValid = false;
     {
         std::lock_guard<std::mutex> lock(m_Mutex);
         key = m_License.key;
         instId = m_License.instanceId;
+        curExpiresAt = m_License.expiresAt;
+        wasValid = m_License.isValid;
     }
-    if (key.empty()) return;
+    if (key.empty()) {
+        if (onComplete) onComplete(false, "No hay ninguna clave de licencia registrada.");
+        return;
+    }
 
     m_LicenseBusy.store(true);
-    std::thread([this, key, instId, onComplete]() {
+    std::thread([this, key, instId, curExpiresAt, wasValid, onComplete]() {
         int statusCode = 0;
         std::string reqError;
         std::string body = "license_key=" + UrlEncode(key);
@@ -584,24 +757,104 @@ void AuthLicenseManager::ValidateLicense(std::function<void(bool success, const 
 
         std::string res = PerformHttpsPost(m_LemonHost, "/v1/licenses/validate", body, "application/x-www-form-urlencoded", statusCode, reqError);
 
+        // Si falló con instance_id, probamos directamente con license_key
+        if (statusCode == 200 && !instId.empty()) {
+            try {
+                json j = json::parse(res);
+                if (!j.value("valid", false)) {
+                    int sc2 = 0;
+                    std::string re2;
+                    std::string res2 = PerformHttpsPost(m_LemonHost, "/v1/licenses/validate", "license_key=" + UrlEncode(key),
+                                                        "application/x-www-form-urlencoded", sc2, re2);
+                    if (sc2 == 200) {
+                        json j2 = json::parse(res2);
+                        if (j2.value("valid", false)) {
+                            res = res2;
+                        }
+                    }
+                }
+            } catch (...) {}
+        }
+
         bool success = false;
         std::string finalMsg;
+        int64_t now = (int64_t)std::time(nullptr);
 
         if (statusCode == 200) {
             try {
                 json j = json::parse(res);
                 bool valid = j.value("valid", false);
                 std::lock_guard<std::mutex> lock(m_Mutex);
-                m_License.isValid = valid;
-                if (j.contains("license_key") && j["license_key"].is_object()) {
-                    m_License.status = j["license_key"].value("status", valid ? "active" : "inactive");
+                m_License.lastValidatedAt = now;
+
+                if (valid) {
+                    // La suscripción está activa y pagada
+                    m_License.isValid = true;
+                    m_License.status  = "active";
+                    if (j.contains("license_key") && j["license_key"].is_object()) {
+                        std::string rawExp = j["license_key"].value("expires_at", "");
+                        int64_t parsedExp = ParseIsoDate(rawExp);
+                        if (parsedExp > now) {
+                            m_License.expiresAt = parsedExp;
+                        } else {
+                            // Renovación extendida por 1 mes (30 días)
+                            m_License.expiresAt = now + (30LL * 24 * 3600);
+                        }
+                        m_License.expiryDate = FormatDate(m_License.expiresAt);
+                    } else if (m_License.expiresAt <= now) {
+                        m_License.expiresAt = now + (30LL * 24 * 3600);
+                        m_License.expiryDate = FormatDate(m_License.expiresAt);
+                    }
+                    m_LicenseError.clear();
+                    success = true;
+                    finalMsg = "Licencia válida y activa. Suscripción vigente hasta: " + m_License.expiryDate;
+                } else {
+                    // Lemon Squeezy respondió valid = false
+                    // Si ya se venció el mes (30 días), la suscripción se marca como vencida
+                    if (curExpiresAt > 0 && now >= curExpiresAt) {
+                        m_License.isValid = false;
+                        m_License.status  = "expired";
+                        m_LicenseError = "La suscripción mensual ha vencido. Por favor, renueva tu suscripción.";
+                        success = false;
+                        finalMsg = "La suscripción mensual ha vencido y no se ha renovado el pago.";
+                    } else if (wasValid && now < curExpiresAt) {
+                        // Aún está dentro de su mes de validez local: se preserva activa
+                        m_License.isValid = true;
+                        success = true;
+                        finalMsg = "Licencia activa localmente hasta: " + m_License.expiryDate;
+                    } else {
+                        m_License.isValid = false;
+                        m_License.status  = "inactive";
+                        success = false;
+                        finalMsg = "Licencia vencida o inactiva en Lemon Squeezy.";
+                    }
                 }
-                success = valid;
-                finalMsg = valid ? "Licencia válida." : "Licencia vencida o inactiva.";
-            } catch (...) {}
+            } catch (...) {
+                finalMsg = "Error al procesar la respuesta de Lemon Squeezy.";
+            }
+            SaveState();
+        } else {
+            // Error de conexión o servidor inalcanzable
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            if (wasValid) {
+                const int64_t gracePeriod = 3LL * 24 * 3600;
+                if (curExpiresAt <= 0 || now < (curExpiresAt + gracePeriod)) {
+                    m_License.isValid = true;
+                    success = true;
+                    finalMsg = "Sin conexión con el servidor. La suscripción sigue activa localmente.";
+                } else {
+                    m_License.isValid = false;
+                    m_License.status = "expired";
+                    m_LicenseError = "El mes de suscripción ha expirado y no se ha podido validar la renovación por falta de conexión.";
+                    success = false;
+                    finalMsg = m_LicenseError;
+                    SaveState();
+                }
+            } else {
+                finalMsg = "No se pudo contactar con el servidor de licencias.";
+            }
         }
 
-        SaveState();
         m_LicenseBusy.store(false);
         if (onComplete) onComplete(success, finalMsg);
     }).detach();

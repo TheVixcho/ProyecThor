@@ -322,7 +322,14 @@ void SettingsPanel::RenderCategoryAccount() {
             if (!license.expiryDate.empty()) {
                 ImGui::TextColored(ThemeCol(theme.textDim), "Vencimiento:");
                 ImGui::SameLine();
-                ImGui::TextColored(ThemeCol(theme.textPrimary), "%s", license.expiryDate.c_str());
+                int64_t daysLeft = authMgr.GetDaysRemaining();
+                if (daysLeft > 0) {
+                    ImGui::TextColored(ThemeCol(theme.textPrimary), "%s (%lld días restantes)",
+                                       license.expiryDate.c_str(), (long long)daysLeft);
+                } else {
+                    ImGui::TextColored(ThemeCol(theme.textPrimary), "%s (último día del período)",
+                                       license.expiryDate.c_str());
+                }
             }
 
             ImGui::SetCursorScreenPos(ImVec2(licCardP.x, licCardP.y + licCardH + 16.0f));

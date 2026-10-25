@@ -25,7 +25,10 @@ struct LicenseInfo {
     std::string customerName;
     std::string customerEmail;
     std::string productName;
-    std::string expiryDate;
+    std::string expiryDate;      // Human-readable date string (e.g., "25/11/2026 18:30")
+    int64_t     activatedAt      = 0; // Unix timestamp (seconds) when activated
+    int64_t     expiresAt        = 0; // Unix timestamp (seconds) when license expires (1 month)
+    int64_t     lastValidatedAt  = 0; // Unix timestamp (seconds) of last online check
 };
 
 class AuthLicenseManager {
@@ -58,6 +61,8 @@ public:
 
     // ── Licencia Lemon Squeezy (ProyecThor for Professionals) ──────────────────
     bool IsPro() const;
+    bool IsLicenseExpired() const;
+    int64_t GetDaysRemaining() const;
     const LicenseInfo& GetLicenseInfo() const;
     const std::string& GetLicenseError() const;
     bool IsLicenseBusy() const;
