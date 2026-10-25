@@ -567,7 +567,7 @@ export default function App() {
                     </div>
                     <div className="flex items-start gap-3">
                       <span className="text-cyan-400 font-mono text-sm leading-none font-bold">✓</span>
-                      <span>Streaming local RTMP e integración con consolas por OSC</span>
+                      <span>Streaming local mediante LAN</span>
                     </div>
                   </div>
                 </div>
