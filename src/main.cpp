@@ -1243,7 +1243,7 @@ int main(int argc, char** argv)
               uiManager.AddPanel(viewPanel);
 
               stylesHub = std::make_shared<ProyecThor::UI::StylesHubPanel>(&uiManager);
-              stylesHub->SetTransitionPanel(uiManager.GetTransitionPanelOwned().get());
+              stylesHub->SetTransitionPanel(uiManager.GetTransitionPanel());
               uiManager.SetStylesHubPanelRef(stylesHub.get());
               uiManager.AddPanel(stylesHub);
 

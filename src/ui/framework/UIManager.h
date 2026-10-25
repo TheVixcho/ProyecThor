@@ -68,6 +68,7 @@ public:
 // solo texto: el fondo/video tiene su propio crossfade independiente.
 uint64_t m_LastTransitionTrigger = 0;
     bool Initialize(GLFWwindow* window);
+    TransitionPanel* GetTransitionPanel() const { return m_TransitionPanel; }
     std::shared_ptr<TransitionPanel> GetTransitionPanelOwned() const { return m_TransitionPanelOwned; }
     void AddPanel(std::shared_ptr<ProyecThor::UI::IPanel> panel);
     void RenderAll();
