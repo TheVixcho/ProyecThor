@@ -172,8 +172,8 @@ export default function App() {
         <div className="absolute top-3/4 left-1/2 -translate-x-1/2 w-[700px] h-[300px] bg-cyan-900/10 blur-[170px] rounded-full" />
       </div>
 
-      {/* Navegación Superior */}
-      <header className="sticky top-0 z-50 backdrop-blur-md bg-neutral-950/85 border-b border-neutral-800/80 transition-all">
+      {/* Navegación Superior con Efecto Liquid Glass */}
+      <header className="sticky top-0 z-50 liquid-glass transition-all duration-300">
         <div className="max-w-6xl mx-auto px-6 h-16 flex justify-between items-center">
           <div className="flex items-center gap-3 group cursor-pointer">
             <img
@@ -182,28 +182,28 @@ export default function App() {
               className="w-8 h-8 object-contain transition-transform duration-300 group-hover:scale-110"
             />
             <div className="flex items-baseline gap-2">
-              <span className="text-base font-bold tracking-tight text-white uppercase group-hover:text-cyan-400 transition-colors">
+              <span className="text-base font-bold tracking-tight text-white group-hover:text-cyan-400 transition-colors">
                 ProyecThor
               </span>
-              <span className="hidden sm:inline-block text-[11px] text-neutral-500 font-medium tracking-wide">
+              <span className="hidden sm:inline-block text-[11px] text-neutral-400 font-medium tracking-wide">
                 Engine 1.1
               </span>
             </div>
           </div>
-          <nav className="hidden md:flex items-center gap-7 text-xs uppercase tracking-wider text-neutral-400 font-medium">
-            <a href="#inicio" className="hover:text-white transition-colors py-1">
+          <nav className="hidden md:flex items-center gap-2 text-xs text-neutral-300 font-medium">
+            <a href="#inicio" className="px-3 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-all duration-200">
               Inicio
             </a>
-            <a href="#gratuito" className="hover:text-cyan-400 transition-colors py-1">
+            <a href="#gratuito" className="px-3 py-1.5 rounded-lg hover:bg-white/10 hover:text-cyan-400 transition-all duration-200">
               Versión Gratuita
             </a>
-            <a href="#especificaciones" className="hover:text-white transition-colors py-1">
+            <a href="#especificaciones" className="px-3 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-all duration-200">
               Especificaciones
             </a>
-            <a href="#compatibilidad" className="hover:text-white transition-colors py-1">
+            <a href="#compatibilidad" className="px-3 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-all duration-200">
               Entornos
             </a>
-            <a href="#profesionales" className="hover:text-cyan-400 transition-colors py-1 font-semibold">
+            <a href="#profesionales" className="px-3 py-1.5 rounded-lg text-cyan-400 hover:bg-cyan-500/10 hover:text-cyan-300 transition-all duration-200 font-semibold">
               Edición Professionals
             </a>
           </nav>
@@ -212,7 +212,7 @@ export default function App() {
               href="https://github.com/TheVixcho/ProyecThor/releases"
               target="_blank"
               rel="noopener noreferrer"
-              className="px-4 py-2 text-xs font-semibold rounded-lg bg-white text-neutral-950 hover:bg-neutral-200 hover:shadow-lg hover:shadow-white/10 transition-all duration-200"
+              className="px-4 py-2 text-xs font-semibold rounded-lg bg-white/95 text-neutral-950 hover:bg-white hover:shadow-lg hover:shadow-white/10 transition-all duration-200"
             >
               Descargar Gratis
             </a>
