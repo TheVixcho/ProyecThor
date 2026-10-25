@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import logo from "./assets/logo.png";
 
 const caracteristicas = [
@@ -25,12 +25,12 @@ const caracteristicas = [
     ),
   },
   {
-    titulo: "Stage Display (Monitores de Confianza)",
+    titulo: "Stage Display (Monitores de Retorno)",
     descripcion:
-      "Salida de retorno ultra rápida para escenario: muestra letra actual, próxima estrofa, reloj en vivo y mensajes discretos de cabina.",
+      "Salida de retorno para músicos y púlpito con estrofa actual, próxima estrofa, reloj de cuenta regresiva y mensajes discretos desde la cabina.",
     badge: "Escenario",
     icon: (
-      <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <svg className="w-5 h-5 text-neutral-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 18h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
       </svg>
     ),
@@ -70,6 +70,39 @@ const caracteristicas = [
   },
 ];
 
+const pilaresGratuitos = [
+  {
+    titulo: "100% Funcional Offline",
+    desc: "No dependes de conexión a internet para proyectar en tus cultos o eventos. Todo el motor, la biblioteca y los medios funcionan de manera completamente local y autónoma.",
+    badge: "Sin Dependencias",
+    icon: (
+      <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824-2.178a9 9 0 016.364 2.64m-4.95 2.122a5 5 0 011.414 2.828M3 3l18 18" />
+      </svg>
+    ),
+  },
+  {
+    titulo: "Cero Marcas de Agua ni Límites",
+    desc: "Disfruta de una salida visual limpia para tu congregación. Sin logos forzados en la proyección, sin límites de versículos ni de canciones, y sin fechas de caducidad molestas.",
+    badge: "Sin Restricciones",
+    icon: (
+      <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+  },
+  {
+    titulo: "Rendimiento Nativo en C++17",
+    desc: "A diferencia de aplicaciones pesadas basadas en Electron o navegadores embebidos, ProyecThor se compila directamente para la GPU y el procesador, consumiendo mínimos recursos.",
+    badge: "Ultraligero",
+    icon: (
+      <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+      </svg>
+    ),
+  },
+];
+
 const proAdvantages = [
   {
     title: "Almacenamiento Cloud para 5,000+ Canciones",
@@ -82,12 +115,12 @@ const proAdvantages = [
     ),
   },
   {
-    title: "Stage Display y Monitores de Confianza",
-    desc: "Transmisión dedicada en tiempo real para músicos, directores y predicadores con vista de estrofa actual, próxima sección, reloj sincronizado y avisos de cabina.",
-    badge: "Retorno Escenario",
+    title: "Sincronización Multi-Sala y Multi-Sede",
+    desc: "Centralice los cambios editoriales: una modificación en el puesto de preparación se propaga de manera transparente a todas las cabinas de control.",
+    badge: "Distribución",
     icon: (
-      <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+      <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
       </svg>
     ),
   },
@@ -96,18 +129,8 @@ const proAdvantages = [
     desc: "Herramientas de lenguaje natural diseñadas para componer, corregir métrica poética, estructurar estrofas y dar formato inmediato a himnos y notas litúrgicas.",
     badge: "IA Avanzada",
     icon: (
-      <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-      </svg>
-    ),
-  },
-  {
-    title: "Sincronización Multi-Sala y Multi-Sede",
-    desc: "Centralice los cambios editoriales: una modificación en el puesto de preparación se propaga de manera transparente a todas las cabinas de control.",
-    badge: "Distribución",
-    icon: (
-      <svg className="w-5 h-5 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
       </svg>
     ),
   },
@@ -116,7 +139,7 @@ const proAdvantages = [
     desc: "Copias de seguridad automáticas en la nube para garantizar la continuidad operativa de presentaciones y configuraciones críticas ante contingencias de hardware.",
     badge: "Seguridad Cloud",
     icon: (
-      <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
       </svg>
     ),
@@ -126,8 +149,18 @@ const proAdvantages = [
     desc: "Canal prioritario de asistencia técnica para auditorios y acceso preferente a compilaciones preliminares y mejoras de rendimiento antes de su publicación general.",
     badge: "Prioritario",
     icon: (
-      <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
+      </svg>
+    ),
+  },
+  {
+    title: "Continuidad Institucional",
+    desc: "Infraestructura robusta pensada para organizaciones religiosas y técnicas que requieren estandarizar múltiples auditorios bajo una misma cuenta centralizada.",
+    badge: "Auditorios",
+    icon: (
+      <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
       </svg>
     ),
   },
@@ -145,33 +178,13 @@ const plataformas = [
 ];
 
 export default function App() {
-  const [stageLayout, setStageLayout] = useState("banda"); // "banda", "pulpito", "reloj"
-  const [clockTime, setClockTime] = useState("");
-
-  useEffect(() => {
-    const updateClock = () => {
-      const d = new Date();
-      setClockTime(
-        d.toLocaleTimeString("es-CL", {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: true,
-        })
-      );
-    };
-    updateClock();
-    const interval = setInterval(updateClock, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
   return (
     <div className="min-h-screen flex flex-col bg-neutral-950 text-neutral-300 font-sans antialiased selection:bg-neutral-800 selection:text-white relative overflow-x-hidden">
       {/* Iluminación de fondo ambiental animada */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         <div className="ambient-glow-1 absolute top-0 left-1/3 -translate-x-1/2 w-[650px] h-[360px] bg-cyan-600/15 blur-[160px] rounded-full" />
-        <div className="ambient-glow-2 absolute top-1/4 right-1/4 w-[550px] h-[340px] bg-emerald-600/10 blur-[150px] rounded-full" />
-        <div className="absolute top-2/3 left-1/2 -translate-x-1/2 w-[700px] h-[300px] bg-indigo-900/10 blur-[170px] rounded-full" />
+        <div className="ambient-glow-2 absolute top-1/3 right-1/4 w-[550px] h-[340px] bg-blue-600/10 blur-[150px] rounded-full" />
+        <div className="absolute top-3/4 left-1/2 -translate-x-1/2 w-[700px] h-[300px] bg-cyan-900/10 blur-[170px] rounded-full" />
       </div>
 
       {/* Navegación Superior */}
@@ -196,29 +209,27 @@ export default function App() {
             <a href="#inicio" className="hover:text-white transition-colors py-1">
               Inicio
             </a>
-            <a href="#profesionales" className="hover:text-cyan-400 transition-colors py-1">
-              Edición Professionals
+            <a href="#gratuito" className="hover:text-cyan-400 transition-colors py-1">
+              Versión Gratuita
             </a>
-            <a href="#stage" className="text-emerald-400 hover:text-emerald-300 transition-colors py-1 flex items-center gap-1.5 font-semibold">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Stage Display
-            </a>
-            <a href="#caracteristicas" className="hover:text-white transition-colors py-1">
+            <a href="#especificaciones" className="hover:text-white transition-colors py-1">
               Especificaciones
-            </a>
-            <a href="#planes" className="hover:text-white transition-colors py-1">
-              Planes
             </a>
             <a href="#compatibilidad" className="hover:text-white transition-colors py-1">
               Entornos
             </a>
+            <a href="#profesionales" className="hover:text-cyan-400 transition-colors py-1 font-semibold">
+              Edición Professionals
+            </a>
           </nav>
           <div className="flex items-center gap-3">
             <a
-              href="#planes"
+              href="https://github.com/TheVixcho/ProyecThor/releases"
+              target="_blank"
+              rel="noopener noreferrer"
               className="px-4 py-2 text-xs font-semibold rounded-lg bg-white text-neutral-950 hover:bg-neutral-200 hover:shadow-lg hover:shadow-white/10 transition-all duration-200"
             >
-              Adquirir Suscripción
+              Descargar Gratis
             </a>
           </div>
         </div>
@@ -226,25 +237,25 @@ export default function App() {
 
       {/* Contenido Principal */}
       <main className="relative z-10 flex-1">
-        {/* HERO SECTION */}
+        {/* HERO SECTION: ENFOQUE EN LA CALIDAD DE LA VERSIÓN BASE GRATUITA */}
         <section id="inicio" className="pt-24 pb-20 px-6 max-w-5xl mx-auto text-center space-y-8">
           <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full border border-cyan-500/30 bg-cyan-950/40 text-cyan-300 text-xs tracking-wide font-medium shadow-[0_0_20px_rgba(6,182,212,0.15)] transition-all hover:border-cyan-400/50">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
             </span>
-            <span>Suscripción Institucional y Técnica · ProyecThor for Professionals</span>
+            <span>Motor de Proyección Audiovisual Nativo · Gratuito y de Alto Rendimiento</span>
           </div>
 
           <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-tight">
-            Motor de proyección audiovisual de{" "}
+            Proyección profesional para tu auditorio,{" "}
             <span className="bg-gradient-to-r from-white via-neutral-200 to-cyan-400 bg-clip-text text-transparent">
-              alta precisión y baja latencia
+              completamente gratis
             </span>
           </h1>
 
           <p className="text-base sm:text-lg text-neutral-400 max-w-2xl mx-auto leading-relaxed font-normal">
-            Diseñado para salas de auditorio, templos y centros de eventos donde la estabilidad operativa es indispensable. Descarga la versión base gratuita o amplía las capacidades de tu equipo mediante la suscripción profesional.
+            Un motor nativo en C++17 acelerado por GPU, diseñado para cultos y eventos en vivo. Sin marcas de agua, sin límites de tiempo y con funcionamiento 100% offline. Toda la potencia que tu congregación necesita desde el primer día.
           </p>
 
           <div className="flex flex-wrap justify-center items-center gap-4 pt-2">
@@ -257,10 +268,10 @@ export default function App() {
               Descargar Versión Gratuita
             </a>
             <a
-              href="#stage"
+              href="#gratuito"
               className="px-7 py-3.5 rounded-lg text-xs font-semibold bg-neutral-900 border border-neutral-700 text-neutral-200 hover:border-cyan-500 hover:text-white transition-all duration-200 hover:scale-[1.02]"
             >
-              Ver Stage Display en Vivo
+              ¿Por qué Gratis es Excelente?
             </a>
           </div>
 
@@ -284,25 +295,200 @@ export default function App() {
             </div>
             <div className="text-left border-l-2 border-neutral-800 pl-4 transition-all hover:border-cyan-400 group">
               <span className="block text-2xl font-bold text-white tracking-tight group-hover:text-cyan-400 transition-colors">
-                5,000+
+                100%
               </span>
               <span className="text-xs text-neutral-500 uppercase tracking-wider">
-                Canciones en Cloud Pro
+                Offline sin Internet
               </span>
             </div>
-            <div className="text-left border-l-2 border-neutral-800 pl-4 transition-all hover:border-emerald-400 group">
-              <span className="block text-2xl font-bold text-emerald-400 tracking-tight transition-colors">
-                Stage Display
+            <div className="text-left border-l-2 border-neutral-800 pl-4 transition-all hover:border-cyan-400 group">
+              <span className="block text-2xl font-bold text-cyan-400 tracking-tight transition-colors">
+                Gratis
               </span>
               <span className="text-xs text-neutral-400 uppercase tracking-wider">
-                Retorno y Músicos en Vivo
+                Sin Marcas de Agua
               </span>
             </div>
           </div>
         </section>
 
-        {/* SECCIÓN PRO: PROYECTHOR FOR PROFESSIONALS */}
-        <section id="profesionales" className="py-20 px-6 max-w-6xl mx-auto">
+        {/* SECCIÓN: LO BUENO QUE ES EL PROGRAMA DE FORMA GRATUITA */}
+        <section id="gratuito" className="py-20 px-6 max-w-6xl mx-auto space-y-12">
+          <div className="text-center max-w-3xl mx-auto space-y-3">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-cyan-500/30 bg-cyan-950/40 text-cyan-300 text-xs font-semibold tracking-wider uppercase">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+              Software Completo y Robusto sin Costo
+            </div>
+            <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
+              La versión gratuita ya es todo lo que tu auditorio necesita
+            </h2>
+            <p className="text-neutral-400 text-sm leading-relaxed max-w-2xl mx-auto">
+              ProyecThor se diseñó con una premisa clara: las iglesias y auditorios merecen una herramienta de proyección moderna, rápida y fiable sin tener que pagar licencias prohibitivas ni tolerar marcas de agua molestas.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {pilaresGratuitos.map((p) => (
+              <div
+                key={p.titulo}
+                className="rounded-xl border border-neutral-800 bg-neutral-900/30 p-7 flex flex-col justify-between space-y-4 hover:border-neutral-700 hover:-translate-y-1 transition-all duration-300"
+              >
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="w-10 h-10 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-center">
+                      {p.icon}
+                    </div>
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-cyan-400 px-2 py-0.5 rounded bg-cyan-950/50 border border-cyan-800/40">
+                      {p.badge}
+                    </span>
+                  </div>
+                  <h3 className="text-base font-bold text-white tracking-tight">
+                    {p.titulo}
+                  </h3>
+                  <p className="text-xs text-neutral-400 leading-relaxed">
+                    {p.desc}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Resumen de capacidades incluidas gratis */}
+          <div className="rounded-2xl border border-neutral-800 bg-neutral-950 p-6 sm:p-8 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-neutral-800/80 pb-4">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-white">
+                  Incluido de serie en la versión gratuita
+                </span>
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  Todo listo para descargar, instalar y poner en marcha este mismo fin de semana.
+                </p>
+              </div>
+              <a
+                href="https://github.com/TheVixcho/ProyecThor/releases"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-neutral-900 border border-neutral-700 text-xs font-semibold text-white hover:border-cyan-400 transition-colors w-fit"
+              >
+                Obtener Instalador Gratuito
+                <svg className="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </a>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-3.5 gap-x-6 text-xs text-neutral-300">
+              <div className="flex items-center gap-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                <span>Salida limpia en doble pantalla sin bordes</span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                <span>Bibliotecas de canciones locales sin límite</span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                <span>Sagradas Escrituras en XML estructurado</span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                <span>Fondos de video y bucles acelerados por GPU</span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                <span>Stage Display para monitores de escenario</span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                <span>Transmisión RTMP y control por red OSC</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* CARACTERÍSTICAS TÉCNICAS Y ESPECIFICACIONES BASE */}
+        <section id="especificaciones" className="py-16 px-6 max-w-6xl mx-auto space-y-10">
+          <div className="border-b border-neutral-800 pb-4">
+            <h2 className="text-xs uppercase tracking-widest text-neutral-500 font-semibold">
+              Arquitectura Técnica
+            </h2>
+            <p className="text-2xl font-extrabold text-white mt-1">
+              Capacidades técnicas del motor de proyección
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {caracteristicas.map((c) => (
+              <div
+                key={c.titulo}
+                className="rounded-xl border border-neutral-800/80 bg-neutral-900/20 p-6 space-y-3 hover:border-neutral-700 hover:-translate-y-1 transition-all duration-300 group"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="p-2 rounded-lg bg-neutral-900 border border-neutral-800 group-hover:border-cyan-500/40 transition-colors">
+                    {c.icon}
+                  </div>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+                    {c.badge}
+                  </span>
+                </div>
+                <h3 className="text-sm font-semibold text-white group-hover:text-cyan-300 transition-colors">
+                  {c.titulo}
+                </h3>
+                <p className="text-xs text-neutral-400 leading-relaxed">
+                  {c.descripcion}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* PLATAFORMAS COMPATIBLES */}
+        <section id="compatibilidad" className="py-16 px-6 max-w-4xl mx-auto space-y-6">
+          <div className="border-b border-neutral-800 pb-3">
+            <h2 className="text-xs uppercase tracking-widest text-neutral-500 font-semibold">
+              Requerimientos de Sistema
+            </h2>
+            <p className="text-lg font-bold text-white mt-1">
+              Entornos de Ejecución Soportados
+            </p>
+          </div>
+
+          <div className="divide-y divide-neutral-800/80 border border-neutral-800 rounded-xl bg-neutral-950 overflow-hidden shadow-md">
+            {plataformas.map((plat) => (
+              <div
+                key={plat.sistema}
+                className="p-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 hover:bg-neutral-900/30 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-cyan-500" />
+                  <span className="text-sm font-medium text-white">{plat.sistema}</span>
+                </div>
+                <span className="text-xs text-neutral-400 sm:text-right">{plat.detalle}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* SECCIÓN FINAL DE LA LANDING: OPCIÓN PRO COMO ESCALÓN SUPERIOR */}
+        <section id="profesionales" className="py-20 px-6 max-w-6xl mx-auto space-y-12">
+          {/* Mensaje de transición: Gratis ya es bueno, Pro es el paso superior institucional */}
+          <div className="rounded-xl border border-neutral-800 bg-neutral-900/30 p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="space-y-1 text-center sm:text-left">
+              <span className="text-xs font-bold uppercase tracking-wider text-cyan-400">
+                ¿Necesitas infraestructura institucional?
+              </span>
+              <p className="text-xs text-neutral-400 leading-relaxed max-w-2xl">
+                La versión gratuita cubre con creces las necesidades del culto presencial tradicional. Para redes de auditorios, múltiples templos o respaldo masivo en la nube, presentamos la edición superior para profesionales.
+              </p>
+            </div>
+            <a
+              href="#planes"
+              className="px-5 py-2.5 rounded-lg text-xs font-semibold bg-neutral-800 text-white hover:bg-neutral-700 transition-colors whitespace-nowrap"
+            >
+              Ver Comparativa de Planes
+            </a>
+          </div>
+
           <div className="rounded-2xl border border-neutral-800 bg-gradient-to-b from-neutral-900/60 to-neutral-950/80 p-8 sm:p-12 space-y-10 shadow-2xl relative overflow-hidden backdrop-blur-sm">
             <div className="absolute top-0 right-0 w-80 h-80 bg-cyan-500/5 blur-[120px] rounded-full pointer-events-none" />
 
@@ -347,7 +533,7 @@ export default function App() {
 
             <div className="pt-6 border-t border-neutral-800/80 flex flex-col sm:flex-row items-center justify-between gap-4">
               <span className="text-xs text-neutral-400 text-center sm:text-left">
-                Activación y enlace inmediato mediante clave de licencia empresarial sin reinstalaciones.
+                Activación y enlace inmediato mediante clave de licencia empresarial sin necesidad de reinstalar.
               </span>
               <a
                 href="#planes"
@@ -357,390 +543,145 @@ export default function App() {
               </a>
             </div>
           </div>
-        </section>
 
-        {/* SECCIÓN DEDICADA: STAGE DISPLAY (MONITOR DE CONFIANZA EN VIVO) */}
-        <section id="stage" className="py-20 px-6 max-w-6xl mx-auto space-y-12">
-          <div className="text-center max-w-3xl mx-auto space-y-3">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-emerald-500/30 bg-emerald-950/40 text-emerald-300 text-xs font-semibold tracking-wider uppercase">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Retorno Dedicado para Músicos y Púlpito
+          {/* COMPARACIÓN DE EDICIONES Y SUSCRIPCIÓN */}
+          <div id="planes" className="pt-8 space-y-10">
+            <div className="text-center max-w-2xl mx-auto space-y-2">
+              <span className="text-xs uppercase tracking-widest text-neutral-400 font-semibold">
+                Estructura de Licenciamiento
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                Elige el modelo adecuado para tu congregación
+              </h2>
+              <p className="text-neutral-400 text-xs sm:text-sm leading-relaxed">
+                Tanto la versión gratuita como la profesional comparten el mismo motor de alta estabilidad. Elige la versión Pro cuando requieras sincronización en la nube y soporte prioritario.
+              </p>
             </div>
-            <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
-              Stage Display en Tiempo Real
-            </h2>
-            <p className="text-neutral-400 text-sm leading-relaxed max-w-2xl mx-auto">
-              Proporciona a tu banda de alabanza, coro y predicadores una referencia visual desacoplada de la proyección principal. Incluye la estrofa actual, vista previa de la próxima sección, reloj sincronizado y avisos privados de cabina.
-            </p>
-          </div>
 
-          {/* SIMULADOR INTERACTIVO DE STAGE DISPLAY */}
-          <div className="rounded-2xl border border-neutral-800 bg-neutral-950 p-4 sm:p-8 space-y-6 shadow-2xl relative">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-800/80 pb-4">
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-red-500/80" />
-                <span className="w-3 h-3 rounded-full bg-yellow-500/80" />
-                <span className="w-3 h-3 rounded-full bg-emerald-500/80" />
-                <span className="ml-2 text-xs font-mono text-neutral-400 uppercase tracking-widest">
-                  Simulador de Monitor de Escenario
-                </span>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch max-w-5xl mx-auto">
+              {/* PLAN CORE (GRATUITO) */}
+              <div className="rounded-2xl border border-neutral-800 bg-neutral-950 p-8 flex flex-col justify-between space-y-8 hover:border-neutral-700 transition-all duration-300">
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
+                      Edición de Escritorio
+                    </div>
+                    <div className="text-3xl font-bold text-white">
+                      ProyecThor Base
+                    </div>
+                    <div className="text-xs text-neutral-500">
+                      Licencia permanente, libre y sin límites para instalación local
+                    </div>
+                  </div>
 
-              {/* Selector de Layouts Interactivos */}
-              <div className="flex items-center gap-1.5 p-1 rounded-lg bg-neutral-900 border border-neutral-800 text-xs font-medium">
-                <button
-                  onClick={() => setStageLayout("banda")}
-                  className={`px-3 py-1 rounded transition-all ${
-                    stageLayout === "banda"
-                      ? "bg-emerald-500 text-neutral-950 font-semibold shadow-sm"
-                      : "text-neutral-400 hover:text-white"
-                  }`}
+                  <div className="border-t border-neutral-900 pt-6 space-y-3.5 text-xs text-neutral-300">
+                    <div className="flex items-start gap-3">
+                      <span className="text-cyan-400 font-mono text-sm leading-none font-bold">✓</span>
+                      <span>Ejecución nativa en C++ y aceleración por hardware de gráficos</span>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <span className="text-cyan-400 font-mono text-sm leading-none font-bold">✓</span>
+                      <span>Salida de doble pantalla independiente sin marcas de agua</span>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <span className="text-cyan-400 font-mono text-sm leading-none font-bold">✓</span>
+                      <span>100% Funcional sin conexión a internet (offline garantizado)</span>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <span className="text-cyan-400 font-mono text-sm leading-none font-bold">✓</span>
+                      <span>Bibliotecas locales de canciones, versiones bíblicas XML y multimedia</span>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <span className="text-cyan-400 font-mono text-sm leading-none font-bold">✓</span>
+                      <span>Stage Display local para monitores de retorno en escenario</span>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <span className="text-cyan-400 font-mono text-sm leading-none font-bold">✓</span>
+                      <span>Streaming local RTMP e integración con consolas por OSC</span>
+                    </div>
+                  </div>
+                </div>
+
+                <a
+                  href="https://github.com/TheVixcho/ProyecThor/releases"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-3.5 rounded-lg text-xs font-semibold text-center border border-neutral-700 bg-neutral-900 text-white hover:bg-neutral-800 transition-colors"
                 >
-                  Banda / Músicos
-                </button>
-                <button
-                  onClick={() => setStageLayout("pulpito")}
-                  className={`px-3 py-1 rounded transition-all ${
-                    stageLayout === "pulpito"
-                      ? "bg-emerald-500 text-neutral-950 font-semibold shadow-sm"
-                      : "text-neutral-400 hover:text-white"
-                  }`}
+                  Descargar Versión Gratuita
+                </a>
+              </div>
+
+              {/* PLAN PRO FOR PROFESSIONALS */}
+              <div className="pro-border-glow rounded-2xl border bg-gradient-to-b from-neutral-900/60 to-neutral-950 p-8 flex flex-col justify-between space-y-8 relative shadow-2xl transition-all duration-300">
+                <div className="absolute top-6 right-6">
+                  <span className="text-[10px] uppercase font-bold tracking-widest text-cyan-400 border border-cyan-500/40 bg-cyan-950/60 px-2.5 py-1 rounded-full">
+                    Infraestructura Cloud
+                  </span>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-cyan-400">
+                      Suscripción Profesional
+                    </div>
+                    <div className="text-3xl font-bold text-white">
+                      For Professionals
+                    </div>
+                    <div className="text-xs text-neutral-400">
+                      Diseñado para auditorios, recintos de culto y eventos de alta demanda
+                    </div>
+                  </div>
+
+                  <div className="border-t border-neutral-800 pt-6 space-y-3.5 text-xs text-neutral-200">
+                    <div className="flex items-start gap-3">
+                      <span className="text-cyan-400 font-mono text-sm leading-none font-bold">+</span>
+                      <div>
+                        <strong className="text-white block font-medium">Almacenamiento Cloud para 5,000+ canciones</strong>
+                        <span className="text-neutral-400">Sincronización continua de catálogo y secuencias entre equipos.</span>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <span className="text-cyan-400 font-mono text-sm leading-none font-bold">+</span>
+                      <div>
+                        <strong className="text-white block font-medium">Sincronización multi-sala y sedes distribuidas</strong>
+                        <span className="text-neutral-400">Edita en un equipo y propaga cambios a todas las salas del templo.</span>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <span className="text-cyan-400 font-mono text-sm leading-none font-bold">+</span>
+                      <div>
+                        <strong className="text-white block font-medium">Herramientas de redacción asistidas por IA</strong>
+                        <span className="text-neutral-400">Estructuración inteligente de estrofas y corrección métrica.</span>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <span className="text-cyan-400 font-mono text-sm leading-none font-bold">+</span>
+                      <div>
+                        <strong className="text-white block font-medium">Copias de seguridad automáticas y redundancia</strong>
+                        <span className="text-neutral-400">Protección integral en la nube ante incidentes de hardware.</span>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <span className="text-cyan-400 font-mono text-sm leading-none font-bold">+</span>
+                      <div>
+                        <strong className="text-white block font-medium">Soporte técnico preferente para eventos críticos</strong>
+                        <span className="text-neutral-400">Canal directo de contacto y asistencia en producción.</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <a
+                  href="https://vixcho.lemonsqueezy.com/checkout/buy/e609efc0-4393-46fc-b6ed-d535cb9dd2dc"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-3.5 rounded-lg text-xs font-semibold text-center bg-cyan-400 text-neutral-950 hover:bg-cyan-300 transition-all duration-200 shadow-md shadow-cyan-950/40 hover:scale-[1.01]"
                 >
-                  Púlpito / Predicador
-                </button>
-                <button
-                  onClick={() => setStageLayout("reloj")}
-                  className={`px-3 py-1 rounded transition-all ${
-                    stageLayout === "reloj"
-                      ? "bg-emerald-500 text-neutral-950 font-semibold shadow-sm"
-                      : "text-neutral-400 hover:text-white"
-                  }`}
-                >
-                  Reloj Gigante
-                </button>
+                  Suscribirse a ProyecThor for Professionals
+                </a>
               </div>
             </div>
-
-            {/* PANTALLA DEL STAGE DISPLAY EN VIVO */}
-            <div className="rounded-xl border-2 border-neutral-800 bg-black p-6 sm:p-10 font-mono text-white min-h-[340px] flex flex-col justify-between relative overflow-hidden shadow-inner">
-              {/* Barra superior de telemetría de escenario */}
-              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-neutral-800 pb-3 text-xs sm:text-sm">
-                <div className="flex items-center gap-4">
-                  <span className="flex items-center gap-2 text-emerald-400 font-bold tracking-wider">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-                    EN VIVO
-                  </span>
-                  <span className="text-neutral-400">
-                    HORA: <strong className="text-white">{clockTime || "11:45:20 AM"}</strong>
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-4">
-                  <span className="text-neutral-400">
-                    CONTEO: <strong className="text-cyan-400">18:42</strong>
-                  </span>
-                  <span className="px-2 py-0.5 rounded bg-neutral-900 border border-neutral-700 text-amber-300 font-semibold text-xs">
-                    {stageLayout === "banda" ? "TONO: G · 72 BPM" : "TEMA: MENSAJE"}
-                  </span>
-                </div>
-              </div>
-
-              {/* Alerta de cabina técnica opcional */}
-              <div className="mt-3 py-1 px-3 rounded bg-amber-950/40 border border-amber-500/40 text-amber-300 text-xs flex items-center justify-between">
-                <span>NOTIFICACIÓN DE CABINA TÉCNICA:</span>
-                <span className="font-sans font-semibold">Repetir Coro 2 antes de la ministración</span>
-              </div>
-
-              {/* Contenido según Layout Seleccionado */}
-              {stageLayout === "banda" && (
-                <div className="my-6 grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
-                  {/* Estrofa Actual (Grande) */}
-                  <div className="lg:col-span-2 space-y-2">
-                    <span className="text-xs uppercase font-bold tracking-widest text-emerald-400">
-                      [ ESTROFA ACTUAL · CORO ]
-                    </span>
-                    <p className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight font-sans">
-                      Cuán grande es Dios, cántale, <br />
-                      cuán grande es Dios, <br />
-                      y todos lo verán, cuán grande es Dios.
-                    </p>
-                  </div>
-
-                  {/* Próxima Estrofa */}
-                  <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4 space-y-2">
-                    <span className="text-[11px] uppercase font-bold tracking-widest text-neutral-400">
-                      PRÓXIMA SECCIÓN · PUENTE
-                    </span>
-                    <p className="text-sm text-neutral-300 font-sans leading-relaxed">
-                      Y tu nombre sobre todo es, <br />
-                      digno de alabar, <br />
-                      mi corazón dirá: Cuán grande es Dios.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {stageLayout === "pulpito" && (
-                <div className="my-8 text-center space-y-4 font-sans">
-                  <span className="text-xs uppercase font-bold tracking-widest text-cyan-400">
-                    REFERENCIA LITÚRGICA EN PANTALLA
-                  </span>
-                  <h3 className="text-2xl sm:text-4xl font-extrabold text-white max-w-2xl mx-auto">
-                    Salmos 23:1 — "El Señor es mi pastor; nada me faltará."
-                  </h3>
-                  <div className="pt-2 flex justify-center items-center gap-6 text-sm text-neutral-400 font-mono">
-                    <span>TIEMPO RESTANTE DE PREDICACIÓN: <strong className="text-amber-400 text-lg">15:00</strong></span>
-                  </div>
-                </div>
-              )}
-
-              {stageLayout === "reloj" && (
-                <div className="my-8 text-center space-y-3 font-mono">
-                  <span className="text-xs uppercase font-bold tracking-widest text-neutral-400">
-                    RELOJ DE ESCENARIO Y CUENTA REGRESIVA
-                  </span>
-                  <div className="text-5xl sm:text-7xl font-extrabold text-cyan-400 tracking-wider">
-                    {clockTime || "11:45:20 AM"}
-                  </div>
-                  <div className="text-sm text-neutral-400">
-                    INICIO DEL SERVICIO EN: <strong className="text-white text-base">08:30 MIN</strong>
-                  </div>
-                </div>
-              )}
-
-              {/* Pie de pantalla de stage */}
-              <div className="border-t border-neutral-900 pt-3 flex justify-between items-center text-[11px] text-neutral-500">
-                <span>CANAL 01: MONITOR DE PISO PRINCIPAL</span>
-                <span>RESOLUCIÓN: 1080p 60FPS · 0.4ms RED LOCAL</span>
-              </div>
-            </div>
-
-            {/* Ventajas técnicas del Stage Display */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-4">
-              <div className="p-4 rounded-xl border border-neutral-800 bg-neutral-900/40 space-y-1.5 hover:border-neutral-700 transition-colors">
-                <span className="text-xs font-bold text-white block">Cero Latencia en Red</span>
-                <p className="text-[11px] text-neutral-400 leading-relaxed">
-                  Transmisión instantánea mediante WebSockets y red local sin demoras audibles ni visuales.
-                </p>
-              </div>
-              <div className="p-4 rounded-xl border border-neutral-800 bg-neutral-900/40 space-y-1.5 hover:border-neutral-700 transition-colors">
-                <span className="text-xs font-bold text-white block">Desacople Total</span>
-                <p className="text-[11px] text-neutral-400 leading-relaxed">
-                  El escenario ve su estructura privada sin comprometer la proyección del público.
-                </p>
-              </div>
-              <div className="p-4 rounded-xl border border-neutral-800 bg-neutral-900/40 space-y-1.5 hover:border-neutral-700 transition-colors">
-                <span className="text-xs font-bold text-white block">Mensajes Flash de Cabina</span>
-                <p className="text-[11px] text-neutral-400 leading-relaxed">
-                  Envía avisos privados directos a los músicos o al predicador en tiempo real.
-                </p>
-              </div>
-              <div className="p-4 rounded-xl border border-neutral-800 bg-neutral-900/40 space-y-1.5 hover:border-neutral-700 transition-colors">
-                <span className="text-xs font-bold text-white block">Multi-Dispositivo</span>
-                <p className="text-[11px] text-neutral-400 leading-relaxed">
-                  Compatible con TVs HDMI, tablets iPad/Android, navegadores web o monitores de confianza.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* CARACTERÍSTICAS TÉCNICAS */}
-        <section id="caracteristicas" className="py-16 px-6 max-w-6xl mx-auto space-y-10">
-          <div className="border-b border-neutral-800 pb-4">
-            <h2 className="text-xs uppercase tracking-widest text-neutral-500 font-semibold">
-              Arquitectura Base
-            </h2>
-            <p className="text-2xl font-extrabold text-white mt-1">
-              Capacidades técnicas del motor local
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {caracteristicas.map((c) => (
-              <div
-                key={c.titulo}
-                className="rounded-xl border border-neutral-800/80 bg-neutral-900/20 p-6 space-y-3 hover:border-neutral-700 hover:-translate-y-1 transition-all duration-300 group"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="p-2 rounded-lg bg-neutral-900 border border-neutral-800 group-hover:border-cyan-500/40 transition-colors">
-                    {c.icon}
-                  </div>
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
-                    {c.badge}
-                  </span>
-                </div>
-                <h3 className="text-sm font-semibold text-white group-hover:text-cyan-300 transition-colors">
-                  {c.titulo}
-                </h3>
-                <p className="text-xs text-neutral-400 leading-relaxed">
-                  {c.descripcion}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* COMPARACIÓN DE EDICIONES Y SUSCRIPCIÓN */}
-        <section id="planes" className="py-20 px-6 max-w-5xl mx-auto space-y-12">
-          <div className="text-center max-w-2xl mx-auto space-y-2">
-            <span className="text-xs uppercase tracking-widest text-neutral-400 font-semibold">
-              Estructura de Licenciamiento
-            </span>
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-              Seleccione el modelo operativo de su organización
-            </h2>
-            <p className="text-neutral-400 text-xs sm:text-sm leading-relaxed">
-              La edición de escritorio es permanente y sin costo. La suscripción profesional incorpora capacidades en la nube, retorno de escenario Stage Display y asistencia por inteligencia artificial.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
-            {/* PLAN CORE (GRATUITO) */}
-            <div className="rounded-2xl border border-neutral-800 bg-neutral-950 p-8 flex flex-col justify-between space-y-8 hover:border-neutral-700 transition-all duration-300">
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <div className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
-                    Edición de Escritorio
-                  </div>
-                  <div className="text-3xl font-bold text-white">
-                    ProyecThor Base
-                  </div>
-                  <div className="text-xs text-neutral-500">
-                    Licencia de uso permanente para instalación local
-                  </div>
-                </div>
-
-                <div className="border-t border-neutral-900 pt-6 space-y-3.5 text-xs text-neutral-300">
-                  <div className="flex items-start gap-3">
-                    <span className="text-neutral-400 font-mono text-sm leading-none">—</span>
-                    <span>Ejecución nativa en C++ y aceleración por hardware de gráficos</span>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <span className="text-neutral-400 font-mono text-sm leading-none">—</span>
-                    <span>Salida de doble pantalla independiente sin bordes para proyector</span>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <span className="text-neutral-400 font-mono text-sm leading-none">—</span>
-                    <span>Capas simultáneas de video, fondo gráfico y texto dinámico</span>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <span className="text-neutral-400 font-mono text-sm leading-none">—</span>
-                    <span>Bibliotecas locales de canciones, versiones bíblicas XML y multimedia</span>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <span className="text-neutral-400 font-mono text-sm leading-none">—</span>
-                    <span>Streaming local RTMP y compatibilidad con plugins externos</span>
-                  </div>
-                </div>
-              </div>
-
-              <a
-                href="https://github.com/TheVixcho/ProyecThor/releases"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full py-3.5 rounded-lg text-xs font-semibold text-center border border-neutral-700 bg-neutral-900 text-white hover:bg-neutral-800 transition-colors"
-              >
-                Descargar Instalador Base
-              </a>
-            </div>
-
-            {/* PLAN PRO FOR PROFESSIONALS */}
-            <div className="pro-border-glow rounded-2xl border bg-gradient-to-b from-neutral-900/60 to-neutral-950 p-8 flex flex-col justify-between space-y-8 relative shadow-2xl transition-all duration-300">
-              <div className="absolute top-6 right-6">
-                <span className="text-[10px] uppercase font-bold tracking-widest text-cyan-400 border border-cyan-500/40 bg-cyan-950/60 px-2.5 py-1 rounded-full">
-                  Infraestructura Cloud
-                </span>
-              </div>
-
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <div className="text-xs font-semibold uppercase tracking-wider text-cyan-400">
-                    Suscripción Profesional
-                  </div>
-                  <div className="text-3xl font-bold text-white">
-                    For Professionals
-                  </div>
-                  <div className="text-xs text-neutral-400">
-                    Diseñado para auditorios, recintos de culto y eventos de alta demanda
-                  </div>
-                </div>
-
-                <div className="border-t border-neutral-800 pt-6 space-y-3.5 text-xs text-neutral-200">
-                  <div className="flex items-start gap-3">
-                    <span className="text-cyan-400 font-mono text-sm leading-none font-bold">+</span>
-                    <div>
-                      <strong className="text-white block font-medium">Almacenamiento Cloud para 5,000+ canciones</strong>
-                      <span className="text-neutral-400">Sincronización continua de catálogo y secuencias entre equipos.</span>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <span className="text-emerald-400 font-mono text-sm leading-none font-bold">+</span>
-                    <div>
-                      <strong className="text-white block font-medium">Stage Display y Monitores de Confianza en vivo</strong>
-                      <span className="text-neutral-400">Retorno de escenario dedicado con próxima estrofa, reloj y avisos técnicos.</span>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <span className="text-cyan-400 font-mono text-sm leading-none font-bold">+</span>
-                    <div>
-                      <strong className="text-white block font-medium">Herramientas de redacción asistidas por IA</strong>
-                      <span className="text-neutral-400">Estructuración inteligente de estrofas y corrección métrica.</span>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <span className="text-cyan-400 font-mono text-sm leading-none font-bold">+</span>
-                    <div>
-                      <strong className="text-white block font-medium">Copias de seguridad automáticas y redundancia</strong>
-                      <span className="text-neutral-400">Protección integral de datos y configuraciones ante incidentes.</span>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <span className="text-cyan-400 font-mono text-sm leading-none font-bold">+</span>
-                    <div>
-                      <strong className="text-white block font-medium">Soporte técnico preferente para eventos críticos</strong>
-                      <span className="text-neutral-400">Canal directo de contacto y asistencia en producción.</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <a
-                href="https://vixcho.lemonsqueezy.com/checkout/buy/e609efc0-4393-46fc-b6ed-d535cb9dd2dc"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full py-3.5 rounded-lg text-xs font-semibold text-center bg-cyan-400 text-neutral-950 hover:bg-cyan-300 transition-all duration-200 shadow-md shadow-cyan-950/40 hover:scale-[1.01]"
-              >
-                Suscribirse a ProyecThor for Professionals
-              </a>
-            </div>
-          </div>
-        </section>
-
-        {/* PLATAFORMAS COMPATIBLES */}
-        <section id="compatibilidad" className="py-16 px-6 max-w-4xl mx-auto space-y-6">
-          <div className="border-b border-neutral-800 pb-3">
-            <h2 className="text-xs uppercase tracking-widest text-neutral-500 font-semibold">
-              Requerimientos de Sistema
-            </h2>
-            <p className="text-lg font-bold text-white mt-1">
-              Entornos de Ejecución Soportados
-            </p>
-          </div>
-
-          <div className="divide-y divide-neutral-800/80 border border-neutral-800 rounded-xl bg-neutral-950 overflow-hidden shadow-md">
-            {plataformas.map((plat) => (
-              <div
-                key={plat.sistema}
-                className="p-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 hover:bg-neutral-900/30 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-cyan-500" />
-                  <span className="text-sm font-medium text-white">{plat.sistema}</span>
-                </div>
-                <span className="text-xs text-neutral-400 sm:text-right">{plat.detalle}</span>
-              </div>
-            ))}
           </div>
         </section>
       </main>
