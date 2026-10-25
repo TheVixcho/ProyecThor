@@ -521,7 +521,7 @@ export default function App() {
                 Estructura de Licenciamiento
               </span>
               <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                Elige el modelo adecuado para tu congregación
+                Elige el modelo adecuado para tu auditorio
               </h2>
               <p className="text-neutral-400 text-xs sm:text-sm leading-relaxed">
                 Tanto la versión gratuita como la profesional comparten el mismo motor de alta estabilidad. Elige la versión Pro cuando requieras sincronización en la nube y soporte prioritario.
