@@ -53,6 +53,7 @@ void ProImageGeneratorPanel::FreeThumbnails() {
 
 void ProImageGeneratorPanel::LoadPreviewTexture(const std::string& path) {
     FreePreviewTexture();
+    if (path.empty()) return;
 
     int w = 0, h = 0, ch = 0;
     unsigned char* pixels = stbi_load(path.c_str(), &w, &h, &ch, 4);
@@ -74,7 +75,8 @@ void ProImageGeneratorPanel::LoadPreviewTexture(const std::string& path) {
 }
 
 void ProImageGeneratorPanel::EnsureThumbnailLoaded(CreatedImageItem& item) {
-    if (item.thumbTexId != 0) return;
+    if (item.thumbTexId != 0 || item.loadAttempted) return;
+    item.loadAttempted = true;
 
     std::vector<uint8_t> pixels;
     unsigned w = 0, h = 0;
@@ -119,11 +121,12 @@ void ProImageGeneratorPanel::ScanCreatedImages() {
 
     for (const auto& entry : std::filesystem::directory_iterator(aiDir, ec)) {
         if (!entry.is_regular_file(ec)) continue;
+        uint64_t sz = entry.file_size(ec);
+        if (sz < 1024) continue; // Ignorar archivos basura o errores de red
         std::string ext = entry.path().extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
         if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".webp") {
             auto wt = entry.last_write_time(ec);
-            uint64_t sz = entry.file_size(ec);
             entries.push_back({ entry.path(), wt, sz });
         }
     }
@@ -141,20 +144,28 @@ void ProImageGeneratorPanel::ScanCreatedImages() {
         item.fullPath = e.path.string();
         item.fileSize = e.sz;
 
-        // Formato de fecha
-        auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
-            e.writeTime - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now()
-        );
-        std::time_t tt = std::chrono::system_clock::to_time_t(sctp);
-        std::tm tm;
+        // Formato de fecha seguro
+        std::string timeStr = "Reciente";
+        try {
+            auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+                e.writeTime - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now()
+            );
+            std::time_t tt = std::chrono::system_clock::to_time_t(sctp);
+            if (tt > 0) {
+                std::tm tm{};
 #ifdef _WIN32
-        localtime_s(&tm, &tt);
+                if (localtime_s(&tm, &tt) == 0) {
 #else
-        localtime_r(&tt, &tm);
+                if (localtime_r(&tt, &tm) != nullptr) {
 #endif
-        char timeBuf[64];
-        std::strftime(timeBuf, sizeof(timeBuf), "%d/%m/%Y %H:%M", &tm);
-        item.timeStr = timeBuf;
+                    char timeBuf[64];
+                    if (std::strftime(timeBuf, sizeof(timeBuf), "%d/%m/%Y %H:%M", &tm) > 0) {
+                        timeStr = timeBuf;
+                    }
+                }
+            }
+        } catch (...) {}
+        item.timeStr = timeStr;
 
         // Verificar si ya está en multimedia/fondos
         std::filesystem::path dest = std::filesystem::path(assetsImages) / item.filename;
@@ -222,6 +233,28 @@ void ProImageGeneratorPanel::SetAsLiveBackground(const std::string& fullPath) {
 
 void ProImageGeneratorPanel::Render(bool* pOpen, GlassRenderer& glass) {
     if (!pOpen || !*pOpen) return;
+
+    // Consumir resultado pendiente de generación IA de forma segura en el hilo principal (OpenGL context)
+    PendingGenResult pending;
+    {
+        std::lock_guard<std::mutex> lock(m_ResultMutex);
+        if (m_PendingResult.hasResult) {
+            pending = m_PendingResult;
+            m_PendingResult.hasResult = false;
+        }
+    }
+    if (pending.hasResult) {
+        if (pending.success) {
+            m_LastGeneratedPath = pending.path;
+            LoadPreviewTexture(pending.path);
+            ScanCreatedImages();
+            m_StatusFeedback = "Imagen generada con éxito!";
+            m_StatusIsSuccess = true;
+        } else {
+            m_StatusFeedback = "Error: " + pending.error;
+            m_StatusIsSuccess = false;
+        }
+    }
 
     auto& proMgr  = ProyecThor::Core::ProAIManager::Get();
     auto& authMgr = ProyecThor::Core::AuthLicenseManager::Get();
@@ -387,16 +420,11 @@ void ProImageGeneratorPanel::Render(bool* pOpen, GlassRenderer& glass) {
             }
 
             proMgr.GenerateImage(promptStr, [this](bool success, const std::string& path, const std::string& err) {
-                if (success) {
-                    m_LastGeneratedPath = path;
-                    LoadPreviewTexture(path);
-                    m_NeedScanImages = true; // Actualiza el cuadro de imágenes de la derecha
-                    m_StatusFeedback = "Imagen generada con éxito!";
-                    m_StatusIsSuccess = true;
-                } else {
-                    m_StatusFeedback = "Error: " + err;
-                    m_StatusIsSuccess = false;
-                }
+                std::lock_guard<std::mutex> lock(m_ResultMutex);
+                m_PendingResult.hasResult = true;
+                m_PendingResult.success = success;
+                m_PendingResult.path = path;
+                m_PendingResult.error = err;
             });
         }
 

@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <mutex>
 
 namespace ProyecThor::UI {
 
@@ -16,6 +17,7 @@ struct CreatedImageItem {
     int thumbW = 0;
     int thumbH = 0;
     bool isImported = false;
+    bool loadAttempted = false;
 };
 
 class ProImageGeneratorPanel {
@@ -34,6 +36,16 @@ private:
 
     std::string m_StatusFeedback;
     bool m_StatusIsSuccess = true;
+
+    // Sincronización hilo de generación -> hilo principal UI/OpenGL
+    struct PendingGenResult {
+        bool hasResult = false;
+        bool success = false;
+        std::string path;
+        std::string error;
+    };
+    std::mutex m_ResultMutex;
+    PendingGenResult m_PendingResult;
 
     // Imagen de referencia adjunta
     std::string m_AttachedImagePath;

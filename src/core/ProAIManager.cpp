@@ -488,6 +488,9 @@ bool ProAIManager::DownloadFileHttps(const std::string& urlStr, const std::strin
         return false;
     }
 
+    // Configurar timeouts razonables (10s conexión, 60s recepción para permitir renderizado de IA)
+    WinHttpSetTimeouts(hSession, 10000, 10000, 15000, 60000);
+
     HINTERNET hConnect = WinHttpConnect(hSession, uc.lpszHostName, uc.nPort, 0);
     if (!hConnect) {
         WinHttpCloseHandle(hSession);
@@ -506,6 +509,10 @@ bool ProAIManager::DownloadFileHttps(const std::string& urlStr, const std::strin
         return false;
     }
 
+    // Seguir redirecciones automáticamente
+    DWORD redirectPolicy = WINHTTP_OPTION_REDIRECT_POLICY_ALWAYS;
+    WinHttpSetOption(hRequest, WINHTTP_OPTION_REDIRECT_POLICY, &redirectPolicy, sizeof(redirectPolicy));
+
     if (!WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
         !WinHttpReceiveResponse(hRequest, NULL)) {
         WinHttpCloseHandle(hRequest);
@@ -515,7 +522,29 @@ bool ProAIManager::DownloadFileHttps(const std::string& urlStr, const std::strin
         return false;
     }
 
-    std::ofstream outFile(localDestPath, std::ios::binary);
+    DWORD statusCode = 0;
+    DWORD statusSize = sizeof(statusCode);
+    if (WinHttpQueryHeaders(hRequest,
+                            WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                            WINHTTP_HEADER_NAME_BY_INDEX,
+                            &statusCode, &statusSize, WINHTTP_NO_HEADER_INDEX)) {
+        if (statusCode != 200) {
+            WinHttpCloseHandle(hRequest);
+            WinHttpCloseHandle(hConnect);
+            WinHttpCloseHandle(hSession);
+            if (statusCode == 503) {
+                outError = "El servidor de imágenes está temporalmente saturado (HTTP 503). Reintentando...";
+            } else if (statusCode == 429) {
+                outError = "Demasiadas peticiones al generador de imágenes (HTTP 429).";
+            } else {
+                outError = "Error del servidor de imágenes (HTTP " + std::to_string(statusCode) + ").";
+            }
+            return false;
+        }
+    }
+
+    std::string tempPath = localDestPath + ".part";
+    std::ofstream outFile(tempPath, std::ios::binary);
     if (!outFile.is_open()) {
         WinHttpCloseHandle(hRequest);
         WinHttpCloseHandle(hConnect);
@@ -537,6 +566,38 @@ bool ProAIManager::DownloadFileHttps(const std::string& urlStr, const std::strin
     WinHttpCloseHandle(hRequest);
     WinHttpCloseHandle(hConnect);
     WinHttpCloseHandle(hSession);
+
+    // Validar cabecera mágica para asegurar que es una imagen real y no un error HTML/JSON
+    std::ifstream checkFile(tempPath, std::ios::binary);
+    if (!checkFile.is_open()) {
+        std::error_code ec;
+        std::filesystem::remove(tempPath, ec);
+        outError = "No se pudo verificar el archivo descargado.";
+        return false;
+    }
+
+    char magic[8] = {};
+    checkFile.read(magic, sizeof(magic));
+    std::streamsize bytesRead = checkFile.gcount();
+    checkFile.close();
+
+    bool isJpeg = (bytesRead >= 3 && (unsigned char)magic[0] == 0xFF && (unsigned char)magic[1] == 0xD8 && (unsigned char)magic[2] == 0xFF);
+    bool isPng  = (bytesRead >= 4 && (unsigned char)magic[0] == 0x89 && magic[1] == 'P' && magic[2] == 'N' && magic[3] == 'G');
+    bool isWebp = (bytesRead >= 8 && magic[0] == 'R' && magic[1] == 'I' && magic[2] == 'F' && magic[3] == 'F');
+
+    if (!isJpeg && !isPng && !isWebp) {
+        std::error_code ec;
+        std::filesystem::remove(tempPath, ec);
+        outError = "El servidor no devolvió una imagen válida.";
+        return false;
+    }
+
+    std::error_code renEc;
+    std::filesystem::rename(tempPath, localDestPath, renEc);
+    if (renEc) {
+        std::filesystem::copy_file(tempPath, localDestPath, std::filesystem::copy_options::overwrite_existing, renEc);
+        std::filesystem::remove(tempPath, renEc);
+    }
     return true;
 #else
     outError = "Descarga nativa no disponible.";
@@ -858,16 +919,27 @@ void ProAIManager::GenerateImage(const std::string& prompt,
         std::uniform_int_distribution<uint32_t> dis(100000, 999999);
         uint32_t seed = dis(gen);
 
-        // Generación de imagen 16:9 optimizada para proyectores y pantallas (1920x1080)
+        // Generación de imagen 16:9 widescreen HD (1280x720) optimizada para proyectores y pantallas
         std::string encodedPrompt = UrlEncode(prompt);
-        std::string url = "https://image.pollinations.ai/prompt/" + encodedPrompt +
-                          "?width=1920&height=1080&nologo=true&seed=" + std::to_string(seed);
-
         std::string filename = "fondo_ia_" + std::to_string(std::time(nullptr)) + "_" + std::to_string(seed) + ".jpg";
         std::filesystem::path dest = std::filesystem::path(GetAIImagesDir()) / filename;
 
+        // Intentar con URLs en cascada para máxima fiabilidad y resiliencia (flux -> turbo -> 1024x576)
+        std::vector<std::string> candidateUrls = {
+            "https://image.pollinations.ai/prompt/" + encodedPrompt + "?model=flux&width=1280&height=720&nologo=true&seed=" + std::to_string(seed),
+            "https://image.pollinations.ai/prompt/" + encodedPrompt + "?model=turbo&width=1280&height=720&nologo=true&seed=" + std::to_string(seed),
+            "https://image.pollinations.ai/prompt/" + encodedPrompt + "?width=1024&height=576&nologo=true&seed=" + std::to_string(seed)
+        };
+
         std::string downloadErr;
-        bool ok = DownloadFileHttps(url, dest.string(), downloadErr);
+        bool ok = false;
+        for (size_t i = 0; i < candidateUrls.size(); ++i) {
+            ok = DownloadFileHttps(candidateUrls[i], dest.string(), downloadErr);
+            if (ok) break;
+            if (i + 1 < candidateUrls.size()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+            }
+        }
 
         if (ok) {
             std::lock_guard<std::mutex> lock(m_Mutex);
