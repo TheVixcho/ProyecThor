@@ -26,6 +26,20 @@ static bool        s_LicenseFeedbackIsSuccess = false;
 
 static bool s_ShowDeactivateConfirmModal = false;
 
+static std::string FormatTimestamp(int64_t timestamp) {
+    if (timestamp <= 0) return "";
+    std::time_t t = (std::time_t)timestamp;
+    std::tm tmBuf = {};
+#ifdef _WIN32
+    localtime_s(&tmBuf, &t);
+#else
+    localtime_r(&t, &tmBuf);
+#endif
+    char buf[64] = {};
+    std::strftime(buf, sizeof(buf), "%d/%m/%Y %H:%M", &tmBuf);
+    return std::string(buf);
+}
+
 void SettingsPanel::RenderCategoryAccount() {
     auto& authMgr = ProyecThor::Core::AuthLicenseManager::Get();
     auto& mgr     = ProyecThor::Settings::SettingsManager::Get();
@@ -221,8 +235,42 @@ void SettingsPanel::RenderCategoryAccount() {
 
         ImGui::SetCursorScreenPos(ImVec2(subP.x, subP.y + subH + 20.0f));
 
-        // Requisito: el usuario DEBE estar logueado para comprar la suscripción
-        if (!isLoggedIn) {
+        // Estado de suscripción o botón de compra
+        if (isPro) {
+            int64_t daysLeft = authMgr.GetDaysRemaining();
+            std::string expDate = license.expiryDate;
+            if (expDate.empty() && license.expiresAt > 0) {
+                expDate = FormatTimestamp(license.expiresAt);
+            }
+            if (expDate.empty()) expDate = "Período activo";
+
+            ImVec2 proStatusP = ImGui::GetCursorScreenPos();
+            float proStatusH = 76.0f;
+            dl->AddRectFilled(proStatusP, ImVec2(proStatusP.x + contentW, proStatusP.y + proStatusH),
+                              IM_COL32(25, 60, 38, 180), theme.frameRounding);
+            dl->AddRect(proStatusP, ImVec2(proStatusP.x + contentW, proStatusP.y + proStatusH),
+                        IM_COL32(60, 200, 100, 200), theme.frameRounding, 0, 1.2f);
+
+            ImGui::SetCursorScreenPos(ImVec2(proStatusP.x + 18.0f, proStatusP.y + 12.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.40f, 0.95f, 0.60f, 1.0f));
+            ImGui::SetWindowFontScale(1.18f);
+            if (daysLeft > 1) {
+                ImGui::Text("%lld DÍAS RESTANTES DE PRO", (long long)daysLeft);
+            } else if (daysLeft == 1) {
+                ImGui::TextUnformatted("1 DÍA RESTANTE DE PRO (VENCE HOY)");
+            } else {
+                ImGui::TextUnformatted("ÚLTIMO DÍA DE TU PERÍODO PRO");
+            }
+            ImGui::SetWindowFontScale(1.0f);
+            ImGui::PopStyleColor();
+
+            ImGui::SetCursorScreenPos(ImVec2(proStatusP.x + 18.0f, proStatusP.y + 44.0f));
+            ImGui::TextColored(ThemeCol(theme.textDim), "Tu suscripción para %s está activa hasta: ", user.email.c_str());
+            ImGui::SameLine(0, 4.0f);
+            ImGui::TextColored(ThemeCol(theme.textPrimary), "%s", expDate.c_str());
+
+            ImGui::SetCursorScreenPos(ImVec2(proStatusP.x, proStatusP.y + proStatusH + 16.0f));
+        } else if (!isLoggedIn) {
             ImVec2 warnP = ImGui::GetCursorScreenPos();
             float warnH  = 44.0f;
             dl->AddRectFilled(warnP, ImVec2(warnP.x + contentW, warnP.y + warnH), IM_COL32(80, 55, 20, 120), 6.0f);
@@ -272,93 +320,153 @@ void SettingsPanel::RenderCategoryAccount() {
     // ─────────────────────────────────────────────────────────────────────────
     //  SECCIÓN 3: ACTIVACIÓN DE LICENCIA (Lemon Squeezy License API)
     // ─────────────────────────────────────────────────────────────────────────
-    if (SectionTitle("Activar Licencia", "Licencia")) {
+    if (SectionTitle(isPro ? "Estado de Licencia" : "Activar Licencia", "Licencia")) {
         const bool isLicenseBusy = authMgr.IsLicenseBusy();
 
         if (isPro) {
-            // Licencia actualmente activa
-            ImVec2 licCardP = ImGui::GetCursorScreenPos();
-            float licCardH  = 200.0f;
-            dl->AddRectFilled(licCardP, ImVec2(licCardP.x + contentW, licCardP.y + licCardH),
-                              IM_COL32(35, 45, 30, 180), theme.frameRounding);
-            dl->AddRect(licCardP, ImVec2(licCardP.x + contentW, licCardP.y + licCardH),
-                        IM_COL32(80, 200, 120, 200), theme.frameRounding, 0, 1.4f);
-
-            ImGui::SetCursorScreenPos(ImVec2(licCardP.x + 20.0f, licCardP.y + 16.0f));
-
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.40f, 0.90f, 0.60f, 1.0f));
-            ImGui::SetWindowFontScale(1.15f);
-            ImGui::TextUnformatted("Licencia Pro Activada Correctamente");
-            ImGui::SetWindowFontScale(1.0f);
-            ImGui::PopStyleColor();
-
-            ImGui::Dummy(ImVec2(0.0f, 8.0f));
-
-            ImGui::TextColored(ThemeCol(theme.textDim), "Clave de licencia:");
-            ImGui::SameLine();
-            ImGui::TextColored(ThemeCol(theme.textPrimary), "%s", license.key.c_str());
-
-            ImGui::TextColored(ThemeCol(theme.textDim), "Estado:");
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.45f, 0.85f, 0.55f, 1.0f), "%s", license.status.c_str());
-
-            if (!license.customerName.empty() || !license.customerEmail.empty()) {
-                ImGui::TextColored(ThemeCol(theme.textDim), "Titular:");
-                ImGui::SameLine();
-                ImGui::TextColored(ThemeCol(theme.textPrimary), "%s (%s)", license.customerName.c_str(), license.customerEmail.c_str());
+            // Licencia actualmente activa: tarjeta moderna con contador destacado de días restantes
+            int64_t daysLeft = authMgr.GetDaysRemaining();
+            std::string expDate = license.expiryDate;
+            if (expDate.empty() && license.expiresAt > 0) {
+                expDate = FormatTimestamp(license.expiresAt);
+            }
+            if (expDate.empty()) {
+                expDate = "30 días a partir de la activación";
             }
 
-            if (!license.instanceName.empty()) {
-                ImGui::TextColored(ThemeCol(theme.textDim), "Equipo asignado:");
-                ImGui::SameLine();
-                ImGui::TextColored(ThemeCol(theme.textPrimary), "%s", license.instanceName.c_str());
-            }
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ThemeCol(theme.surface0, 0.70f));
+            ImGui::PushStyleColor(ImGuiCol_Border,  IM_COL32(60, 190, 100, 180));
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.frameRounding);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(22.0f, 20.0f));
 
-            if (!license.expiryDate.empty()) {
-                ImGui::TextColored(ThemeCol(theme.textDim), "Vencimiento:");
-                ImGui::SameLine();
-                int64_t daysLeft = authMgr.GetDaysRemaining();
-                if (daysLeft > 0) {
-                    ImGui::TextColored(ThemeCol(theme.textPrimary), "%s (%lld días restantes)",
-                                       license.expiryDate.c_str(), (long long)daysLeft);
+            if (ImGui::BeginChild("##lic_active_card", ImVec2(contentW, 0.0f), ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY)) {
+                // Badge [ PRO ACTIVO ] y Título
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.35f, 0.90f, 0.55f, 1.0f));
+                ImGui::SetWindowFontScale(1.15f);
+                ImGui::TextUnformatted("[ PRO ACTIVO ]");
+                ImGui::PopStyleColor();
+                ImGui::SameLine(0, 10.0f);
+                ImGui::TextUnformatted("Suscripción ProyecThor for Professionals");
+                ImGui::SetWindowFontScale(1.0f);
+
+                ImGui::Dummy(ImVec2(0.0f, 10.0f));
+
+                // ── HERO BANNER: DÍAS RESTANTES ──
+                ImVec2 heroP = ImGui::GetCursorScreenPos();
+                float heroW = contentW - 44.0f;
+                float heroH = 74.0f;
+
+                dl->AddRectFilled(heroP, ImVec2(heroP.x + heroW, heroP.y + heroH),
+                                  IM_COL32(20, 50, 32, 200), 8.0f);
+                dl->AddRect(heroP, ImVec2(heroP.x + heroW, heroP.y + heroH),
+                            IM_COL32(50, 190, 95, 230), 8.0f, 0, 1.4f);
+
+                ImGui::SetCursorScreenPos(ImVec2(heroP.x + 18.0f, heroP.y + 12.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.40f, 0.98f, 0.60f, 1.0f));
+                ImGui::SetWindowFontScale(1.30f);
+                if (daysLeft > 1) {
+                    ImGui::Text("%lld DÍAS RESTANTES DE PRO", (long long)daysLeft);
+                } else if (daysLeft == 1) {
+                    ImGui::TextUnformatted("1 DÍA RESTANTE (VENCE HOY)");
                 } else {
-                    ImGui::TextColored(ThemeCol(theme.textPrimary), "%s (último día del período)",
-                                       license.expiryDate.c_str());
+                    ImGui::TextUnformatted("ÚLTIMO DÍA DEL PERÍODO DE SUSCRIPCIÓN");
                 }
-            }
+                ImGui::SetWindowFontScale(1.0f);
+                ImGui::PopStyleColor();
 
-            ImGui::SetCursorScreenPos(ImVec2(licCardP.x, licCardP.y + licCardH + 16.0f));
+                ImGui::SetCursorScreenPos(ImVec2(heroP.x + 18.0f, heroP.y + 44.0f));
+                ImGui::TextColored(ThemeCol(theme.textDim), "Vigencia de tu período mensual hasta el: ");
+                ImGui::SameLine(0, 4.0f);
+                ImGui::TextColored(ThemeCol(theme.textPrimary), "%s", expDate.c_str());
 
-            if (isLicenseBusy) ImGui::BeginDisabled();
+                ImGui::SetCursorScreenPos(ImVec2(heroP.x, heroP.y + heroH + 16.0f));
 
-            // Botón Validar Licencia
-            ImGui::PushStyleColor(ImGuiCol_Button,        ThemeCol(theme.surface2, 0.85f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ThemeCol(theme.surface2, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ThemeCol(theme.surface1, 1.0f));
-            if (ImGui::Button("Verificar validez", ImVec2(160.0f, 32.0f))) {
-                authMgr.ValidateLicense([](bool success, const std::string& msg) {
-                    s_LicenseFeedbackMsg = msg;
-                    s_LicenseFeedbackIsSuccess = success;
-                });
-            }
-            ImGui::PopStyleColor(3);
+                // Barra de progreso visual del mes
+                float progress = std::clamp((float)daysLeft / 30.0f, 0.0f, 1.0f);
+                ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.20f, 0.75f, 0.40f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_FrameBg,       ThemeCol(theme.surface2, 0.70f));
+                char progOverlay[64];
+                snprintf(progOverlay, sizeof(progOverlay), "%lld de 30 días restantes en este ciclo", (long long)daysLeft);
+                ImGui::ProgressBar(progress, ImVec2(heroW, 18.0f), progOverlay);
+                ImGui::PopStyleColor(2);
 
-            ImGui::SameLine(0, 12.0f);
+                ImGui::Dummy(ImVec2(0.0f, 14.0f));
+                ImGui::Separator();
+                ImGui::Dummy(ImVec2(0.0f, 10.0f));
 
-            // Botón Desactivar
-            ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.40f, 0.15f, 0.15f, 0.8f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.55f, 0.20f, 0.20f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.30f, 0.10f, 0.10f, 1.0f));
-            if (ImGui::Button("Desactivar en este equipo", ImVec2(210.0f, 32.0f))) {
-                s_ShowDeactivateConfirmModal = true;
-            }
-            ImGui::PopStyleColor(3);
+                // ── TABLA DE DETALLES DE LA LICENCIA ──
+                ImGui::TextColored(ThemeCol(theme.textDim), "Clave de licencia:");
+                ImGui::SameLine();
+                ImGui::TextColored(ThemeCol(theme.textPrimary), "%s", license.key.c_str());
+                ImGui::SameLine(0, 10.0f);
+                if (ImGui::Button("Copiar clave", ImVec2(100.0f, 22.0f))) {
+                    ImGui::SetClipboardText(license.key.c_str());
+                }
 
-            if (isLicenseBusy) {
-                ImGui::EndDisabled();
+                ImGui::TextColored(ThemeCol(theme.textDim), "Estado:");
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.40f, 0.90f, 0.55f, 1.0f), "Activa y Validada (%s)", license.status.c_str());
+
+                if (!license.customerName.empty() || !license.customerEmail.empty()) {
+                    ImGui::TextColored(ThemeCol(theme.textDim), "Titular:");
+                    ImGui::SameLine();
+                    ImGui::TextColored(ThemeCol(theme.textPrimary), "%s (%s)", license.customerName.c_str(), license.customerEmail.c_str());
+                }
+
+                if (!license.instanceName.empty()) {
+                    ImGui::TextColored(ThemeCol(theme.textDim), "Equipo asignado:");
+                    ImGui::SameLine();
+                    ImGui::TextColored(ThemeCol(theme.textPrimary), "%s", license.instanceName.c_str());
+                }
+
+                ImGui::Dummy(ImVec2(0.0f, 16.0f));
+
+                // ── BOTONES DE ACCIÓN ──
+                if (isLicenseBusy) ImGui::BeginDisabled();
+
+                // Botón Validar Licencia
+                ImGui::PushStyleColor(ImGuiCol_Button,        ThemeCol(theme.surface2, 0.90f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ThemeCol(theme.surface2, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ThemeCol(theme.surface1, 1.0f));
+                if (ImGui::Button("Consultar estado en servidor", ImVec2(220.0f, 34.0f))) {
+                    authMgr.ValidateLicense([](bool success, const std::string& msg) {
+                        s_LicenseFeedbackMsg = msg;
+                        s_LicenseFeedbackIsSuccess = success;
+                    });
+                }
+                ImGui::PopStyleColor(3);
+
                 ImGui::SameLine(0, 12.0f);
-                SpinnerWidget(8.0f, 2.0f, ThemeCol(theme.accent));
+
+                // Botón Desactivar
+                ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.40f, 0.15f, 0.15f, 0.85f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.55f, 0.20f, 0.20f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.30f, 0.10f, 0.10f, 1.0f));
+                if (ImGui::Button("Desactivar en este equipo", ImVec2(210.0f, 34.0f))) {
+                    s_ShowDeactivateConfirmModal = true;
+                }
+                ImGui::PopStyleColor(3);
+
+                if (isLicenseBusy) {
+                    ImGui::EndDisabled();
+                    ImGui::SameLine(0, 14.0f);
+                    SpinnerWidget(9.0f, 2.2f, ThemeCol(theme.accent));
+                    ImGui::SameLine(0, 8.0f);
+                    ImGui::TextColored(ThemeCol(theme.textDim), "Consultando con Lemon Squeezy...");
+                }
+
+                ImGui::Dummy(ImVec2(0.0f, 10.0f));
+                ImGui::Separator();
+                ImGui::Dummy(ImVec2(0.0f, 6.0f));
+
+                ImGui::TextColored(ThemeCol(theme.textFaint),
+                    "Nota: Al finalizar el ciclo de 30 días, ProyecThor consultará automáticamente la renovación en los servidores.");
+
+                ImGui::Dummy(ImVec2(0.0f, 4.0f));
+                ImGui::EndChild();
             }
+            ImGui::PopStyleVar(2);
+            ImGui::PopStyleColor(2);
 
             // Modal de confirmación para desactivar licencia
             if (s_ShowDeactivateConfirmModal) {

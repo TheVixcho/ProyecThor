@@ -598,10 +598,13 @@ bool AuthLicenseManager::IsLicenseExpired() const {
 
 int64_t AuthLicenseManager::GetDaysRemaining() const {
     std::lock_guard<std::recursive_mutex> lock(m_Mutex);
-    if (!m_License.isValid || m_License.expiresAt <= 0) return 0;
+    if (!m_License.isValid) return 0;
     int64_t now = (int64_t)std::time(nullptr);
+    if (m_License.expiresAt <= 0) return 30;
     if (now >= m_License.expiresAt) return 0;
-    return (m_License.expiresAt - now) / (24 * 3600);
+    int64_t diffSeconds = m_License.expiresAt - now;
+    // Redondeo hacia arriba: si quedan 29 días y 12 horas, son 30 días restantes de acceso
+    return (diffSeconds + 86399) / 86400;
 }
 
 const LicenseInfo& AuthLicenseManager::GetLicenseInfo() const {
