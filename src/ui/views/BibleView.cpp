@@ -1556,8 +1556,8 @@ void BibleView::RenderBookGrid() {
     float availX = ImGui::GetContentRegionAvail().x;
     const float spacing = 5.0f;
     const float cellH   = 30.0f;
-    int cols = std::max(2, (int)((availX + spacing) / (54.0f + spacing)));
-    float cellW = std::floor((availX - spacing * (cols - 1)) / (float)cols);
+    int cols = std::max(1, (int)((availX + spacing) / (54.0f + spacing)));
+    float cellW = std::max(40.0f, std::floor((availX - spacing * (cols - 1)) / (float)cols));
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(spacing, spacing));
 
@@ -1678,8 +1678,8 @@ void BibleView::RenderChapterGrid() {
     float availX = ImGui::GetContentRegionAvail().x;
     const float spacing = 5.0f;
     const float cellH   = 28.0f;
-    int cols = std::max(3, (int)((availX + spacing) / (34.0f + spacing)));
-    float cellW = std::floor((availX - spacing * (cols - 1)) / (float)cols);
+    int cols = std::max(1, (int)((availX + spacing) / (34.0f + spacing)));
+    float cellW = std::max(28.0f, std::floor((availX - spacing * (cols - 1)) / (float)cols));
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(spacing, spacing));
 
@@ -2604,9 +2604,37 @@ void BibleView::Render() {
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
     if (ImGui::BeginTable("##BibleLayout", 3, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV)) {
-        ImGui::TableSetupColumn("Books",    ImGuiTableColumnFlags_WidthFixed, 225.0f);
-        ImGui::TableSetupColumn("Chapters", ImGuiTableColumnFlags_WidthFixed, 140.0f);
-        ImGui::TableSetupColumn("Verses",   ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("Books",    ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, 225.0f);
+        ImGui::TableSetupColumn("Chapters", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, 140.0f);
+        ImGui::TableSetupColumn("Verses",   ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHide);
+
+        // Garantizar tamaños mínimos en columnas fijas para evitar que se colapsen por resize o persistencia en .ini
+        ImGuiTable* table = GImGui->CurrentTable;
+        if (table && table->ColumnsCount >= 3) {
+            constexpr float kMinBooksW    = 180.0f;
+            constexpr float kMinChaptersW = 125.0f;
+
+            if (table->Columns[0].WidthRequest < 60.0f) {
+                table->Columns[0].WidthRequest = 225.0f;
+                table->Columns[0].WidthGiven   = 225.0f;
+                table->IsSettingsDirty = true;
+            } else if (table->Columns[0].WidthRequest < kMinBooksW) {
+                table->Columns[0].WidthRequest = kMinBooksW;
+                table->Columns[0].WidthGiven   = kMinBooksW;
+                table->IsSettingsDirty = true;
+            }
+
+            if (table->Columns[1].WidthRequest < 40.0f) {
+                table->Columns[1].WidthRequest = 140.0f;
+                table->Columns[1].WidthGiven   = 140.0f;
+                table->IsSettingsDirty = true;
+            } else if (table->Columns[1].WidthRequest < kMinChaptersW) {
+                table->Columns[1].WidthRequest = kMinChaptersW;
+                table->Columns[1].WidthGiven   = kMinChaptersW;
+                table->IsSettingsDirty = true;
+            }
+        }
+
         ImGui::TableNextRow();
 
         ImGui::PushStyleColor(ImGuiCol_Border, ToVec4(DS::GlassBorder));
