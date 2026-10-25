@@ -1916,9 +1916,14 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
 {
     auto& core = Core::PresentationCore::Get();
     auto& sd   = ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay;
+    auto& authMgr = ProyecThor::Core::AuthLicenseManager::Get();
+    const bool isPro = authMgr.IsPro();
 
     const bool  audienceOn = core.IsProjecting();
-    const bool  stageOn    = sd.useLAN ? core.IsStreamingNet() : core.IsStaging();
+    const bool  stageOn    = isPro ? (sd.useLAN ? core.IsStreamingNet() : core.IsStaging()) : false;
+    if (!isPro && core.IsStaging()) {
+        core.SetStaging(false);
+    }
     const float rowH       = 28.0f;
     const float islandH    = 36.0f;
 
@@ -1931,8 +1936,9 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
     float       clearGroupW  = clearIconSz + clearIconGap + clearTxtSz.x;
     float       clearBtnW    = clearGroupW + 20.0f;
 
+    const char* stageLabel = isPro ? "Stage" : "Stage [PRO]";
     ImVec2 dotSzAudience = ImVec2(5.0f * 2.0f + 6.0f + ImGui::CalcTextSize("Público").x + 14.0f, rowH);
-    ImVec2 dotSzStage    = ImVec2(5.0f * 2.0f + 6.0f + ImGui::CalcTextSize("Stage").x    + 14.0f, rowH);
+    ImVec2 dotSzStage    = ImVec2(5.0f * 2.0f + 6.0f + ImGui::CalcTextSize(stageLabel).x    + 14.0f, rowH);
 
     const float gap   = 8.0f;
     float       totalW = dotSzAudience.x + gap + dotSzStage.x + gap + clearBtnW;
@@ -1960,8 +1966,15 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
 
     ImGui::SameLine(0.0f, gap);
 
-    if (StatusDotToggle(dl, "##modeTbDotStage", "Stage", stageOn, MT::k_PrevAccent, rowH))
-        ToggleStageQuick(!stageOn);
+    if (StatusDotToggle(dl, "##modeTbDotStage", stageLabel, stageOn, isPro ? MT::k_PrevAccent : ImVec4(0.85f, 0.65f, 0.15f, 1.0f), rowH)) {
+        if (!isPro) {
+            ShowProFeatureModal(
+                "Monitor de Escenario (Stage Display)",
+                "La salida de Monitor de Escenario (Stage Display) para predicadores y músicos es una función exclusiva de ProyecThor for Professionals.\n\nEn la versión estándar puedes proyectar a 1 pantalla secundaria estándar. Activa tu suscripción Pro para habilitar el monitor de escenario.");
+        } else {
+            ToggleStageQuick(!stageOn);
+        }
+    }
 
     ImGui::SameLine(0.0f, gap);
 
@@ -2039,9 +2052,10 @@ void UIManager::ToggleAudience(bool active)
 void UIManager::ToggleStageQuick(bool active)
 {
     auto& authMgr = ProyecThor::Core::AuthLicenseManager::Get();
-    if (active && !authMgr.IsPro()) {
+    if (!authMgr.IsPro()) {
         ShowProFeatureModal("Monitor de Escenario (Stage Display)",
                             "La salida de Monitor de Escenario (Stage Display) para predicadores y músicos es una función exclusiva de ProyecThor for Professionals.\n\nEn la versión estándar puedes proyectar a 1 pantalla secundaria estándar. Activa tu suscripción Pro para habilitar el monitor de escenario.");
+        Core::PresentationCore::Get().SetStaging(false);
         return;
     }
 

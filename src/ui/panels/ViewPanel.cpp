@@ -3,6 +3,7 @@
 #include "DesignSystem.h"
 #include "ui/framework/bin/StyleGeneralApp.h"
 #include "core/PresentationCore.h"
+#include "core/AuthLicenseManager.h"
 #include "core/settings/SettingsManager.h"
 #include "ui/views/Announcements.h"
 #include "ui/views/OClock.h"
@@ -791,10 +792,18 @@ void ViewPanel::RenderQuickActionsConfig(float stripH)
         ImVec4      tint;
     };
 
+    const bool isPro = ProyecThor::Core::AuthLicenseManager::Get().IsPro();
+    if (!isPro && m_PreviewSource == PreviewSource::Stage) {
+        m_PreviewSource = PreviewSource::Publico;
+    }
+
     const bool previewingAlt = (m_PreviewSource != PreviewSource::Publico);
     const char* previewSourceLabel[4] = { "Público", "Stage", "Transmisión", "Inalámbrica" };
     int previewSourceIdx = static_cast<int>(m_PreviewSource);
     int nextPreviewSourceIdx = (previewSourceIdx + 1) % 4;
+    if (!isPro && nextPreviewSourceIdx == static_cast<int>(PreviewSource::Stage)) {
+        nextPreviewSourceIdx = (nextPreviewSourceIdx + 1) % 4; // Saltar Stage para usuarios sin suscripción Pro
+    }
     char previewSourceTooltip[96];
     snprintf(previewSourceTooltip, sizeof(previewSourceTooltip), "Viendo: %s (click para ver %s)",
              previewSourceLabel[previewSourceIdx], previewSourceLabel[nextPreviewSourceIdx]);
@@ -849,7 +858,23 @@ void ViewPanel::RenderQuickActionsConfig(float stripH)
         {
             if (i == 0)      core.SetStretchToFill(!stretchOn);
             else if (i == 1) m_ActiveTool = tilesOn    ? InlineTool::None : InlineTool::Tiles;
-            else if (i == 2) m_PreviewSource = static_cast<PreviewSource>(nextPreviewSourceIdx);
+            else if (i == 2)
+            {
+                if (nextPreviewSourceIdx == static_cast<int>(PreviewSource::Stage) && !isPro)
+                {
+                    if (m_UIManager)
+                    {
+                        m_UIManager->ShowProFeatureModal(
+                            "Monitor de Escenario (Stage Display)",
+                            "La vista y salida de Monitor de Escenario (Stage Display) es una función exclusiva de ProyecThor for Professionals.\n\nEn la versión estándar puedes proyectar a 1 pantalla secundaria estándar. Activa tu suscripción Pro para habilitar el monitor de escenario.");
+                    }
+                    m_PreviewSource = PreviewSource::Transmision;
+                }
+                else
+                {
+                    m_PreviewSource = static_cast<PreviewSource>(nextPreviewSourceIdx);
+                }
+            }
             else if (i == 3) m_ActiveTool = overlaysOn ? InlineTool::None : InlineTool::Overlays;
             else if (i == 4) m_ActiveTool = chatOn     ? InlineTool::None : InlineTool::Chat;
             else if (i == 5) m_ActiveTool = padsOn     ? InlineTool::None : InlineTool::Pads;
@@ -1659,7 +1684,16 @@ void ViewPanel::RenderContent(float panelW, float panelH)
     }
     else if (m_PreviewSource == PreviewSource::Stage)
     {
-        UI::DrawStageContent(dl, p0, p1);
+        const bool isPro = ProyecThor::Core::AuthLicenseManager::Get().IsPro();
+        if (!isPro)
+        {
+            m_PreviewSource = PreviewSource::Publico;
+            UI::DrawPublicContent(dl, p0, p1, drawW, drawH, m_IsEditingLiveLyrics, true);
+        }
+        else
+        {
+            UI::DrawStageContent(dl, p0, p1);
+        }
     }
     else if (m_PreviewSource == PreviewSource::Lan)
     {

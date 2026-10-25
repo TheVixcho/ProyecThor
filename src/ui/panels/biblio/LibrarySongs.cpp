@@ -6,6 +6,7 @@
 #include "LibraryHelpers.h"
 #include "ui/framework/DesignSystem.h"
 #include "ui/views/biblia/BibleNameUtils.h"
+#include "ui/views/biblia/BibleTextUtils.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -552,41 +553,88 @@ struct SongMatchDetail {
     std::string   matchParam;
 };
 
+static inline std::string NormalizeForSearch(const std::string& s)
+{
+    return ProyecThor::UI::TextUtils::StripAccents(ProyecThor::UI::TextUtils::ToLowerUTF8(s));
+}
+
 // Encuentra qué parte de la canción coincide específicamente con la búsqueda
-static SongMatchDetail AnalyzeSongMatch(const std::string& filename, const std::string& queryLower, LibraryContext& ctx)
+static SongMatchDetail AnalyzeSongMatch(const std::string& filename, const std::string& rawQuery, LibraryContext& ctx)
 {
     SongMatchDetail detail;
-    if (queryLower.empty()) return detail;
+    if (rawQuery.empty()) return detail;
 
-    // 1. Título
+    std::string qNorm = NormalizeForSearch(rawQuery);
+    if (qNorm.empty()) return detail;
+
+    // Palabras separadas para soporte de búsqueda flexible multi-palabra
+    std::vector<std::string> words;
+    {
+        std::stringstream ss(qNorm);
+        std::string w;
+        while (ss >> w) {
+            if (!w.empty()) words.push_back(w);
+        }
+    }
+
+    // 1. Título y nombre de archivo (con y sin extensión)
     std::string title = GetSongDisplayName(filename);
-    std::string titleLo = title;
-    std::transform(titleLo.begin(), titleLo.end(), titleLo.begin(), [](unsigned char c){ return (char)::tolower(c); });
-    if (titleLo.find(queryLower) != std::string::npos) {
+    std::string titleNorm = NormalizeForSearch(title);
+    std::string fileStem = StripExtension(filename);
+    std::string fileNorm = NormalizeForSearch(fileStem);
+
+    if (titleNorm.find(qNorm) != std::string::npos || fileNorm.find(qNorm) != std::string::npos) {
         detail.kind = SongMatchKind::Title;
         detail.snippet = title;
         return detail;
+    }
+    if (words.size() > 1) {
+        bool allWordsMatch = true;
+        for (const auto& w : words) {
+            if (titleNorm.find(w) == std::string::npos && fileNorm.find(w) == std::string::npos) {
+                allWordsMatch = false;
+                break;
+            }
+        }
+        if (allWordsMatch) {
+            detail.kind = SongMatchKind::Title;
+            detail.snippet = title;
+            return detail;
+        }
     }
 
     // 2. Autor
     std::string author = GetSongAuthor(filename);
     if (!author.empty()) {
-        std::string authorLo = author;
-        std::transform(authorLo.begin(), authorLo.end(), authorLo.begin(), [](unsigned char c){ return (char)::tolower(c); });
-        if (authorLo.find(queryLower) != std::string::npos) {
+        std::string authorNorm = NormalizeForSearch(author);
+        if (authorNorm.find(qNorm) != std::string::npos) {
             detail.kind = SongMatchKind::Author;
             detail.matchParam = author;
             detail.snippet = author;
             return detail;
+        }
+        if (words.size() > 1) {
+            bool allWordsInAuthor = true;
+            for (const auto& w : words) {
+                if (authorNorm.find(w) == std::string::npos) {
+                    allWordsInAuthor = false;
+                    break;
+                }
+            }
+            if (allWordsInAuthor) {
+                detail.kind = SongMatchKind::Author;
+                detail.matchParam = author;
+                detail.snippet = author;
+                return detail;
+            }
         }
     }
 
     // 3. Etiquetas (Tags)
     auto tags = ctx.getSongTags(filename);
     for (const auto& tag : tags) {
-        std::string tagLo = tag;
-        std::transform(tagLo.begin(), tagLo.end(), tagLo.begin(), [](unsigned char c){ return (char)::tolower(c); });
-        if (tagLo.find(queryLower) != std::string::npos) {
+        std::string tagNorm = NormalizeForSearch(tag);
+        if (tagNorm.find(qNorm) != std::string::npos) {
             detail.kind = SongMatchKind::Tag;
             detail.matchParam = tag;
             detail.snippet = tag;
@@ -598,9 +646,20 @@ static SongMatchDetail AnalyzeSongMatch(const std::string& filename, const std::
     auto verses = ctx.loadSongVerses(filename);
     for (size_t vi = 0; vi < verses.size(); ++vi) {
         const std::string& stanza = verses[vi];
-        std::string stanzaLo = stanza;
-        std::transform(stanzaLo.begin(), stanzaLo.end(), stanzaLo.begin(), [](unsigned char c){ return (char)::tolower(c); });
-        if (stanzaLo.find(queryLower) != std::string::npos) {
+        std::string stanzaNorm = NormalizeForSearch(stanza);
+        bool stanzaMatches = (stanzaNorm.find(qNorm) != std::string::npos);
+        if (!stanzaMatches && words.size() > 1) {
+            bool allWordsInStanza = true;
+            for (const auto& w : words) {
+                if (stanzaNorm.find(w) == std::string::npos) {
+                    allWordsInStanza = false;
+                    break;
+                }
+            }
+            if (allWordsInStanza) stanzaMatches = true;
+        }
+
+        if (stanzaMatches) {
             detail.kind = SongMatchKind::Verse;
             detail.stanzaIndex = (int)vi;
 
@@ -609,9 +668,12 @@ static SongMatchDetail AnalyzeSongMatch(const std::string& filename, const std::
             int li = 0;
             while (std::getline(ss, line)) {
                 if (!line.empty() && line.back() == '\r') line.pop_back();
-                std::string lineLo = line;
-                std::transform(lineLo.begin(), lineLo.end(), lineLo.begin(), [](unsigned char c){ return (char)::tolower(c); });
-                if (lineLo.find(queryLower) != std::string::npos) {
+                std::string lineNorm = NormalizeForSearch(line);
+                bool lineMatches = (lineNorm.find(qNorm) != std::string::npos);
+                if (!lineMatches && !words.empty()) {
+                    lineMatches = (lineNorm.find(words[0]) != std::string::npos);
+                }
+                if (lineMatches) {
                     detail.lineIndex = li;
                     size_t start = line.find_first_not_of(" \t");
                     if (start != std::string::npos) line = line.substr(start);
@@ -640,20 +702,37 @@ static void DrawHighlightedText(ImDrawList* dl, ImFont* font, float fontSize,
         return;
     }
 
+    std::string textNorm  = NormalizeForSearch(text);
+    std::string queryNorm = NormalizeForSearch(query);
+
+    size_t matchPos = textNorm.find(queryNorm);
+    if (matchPos == std::string::npos && !queryNorm.empty()) {
+        std::stringstream ss(queryNorm);
+        std::string firstWord;
+        if (ss >> firstWord) {
+            matchPos = textNorm.find(firstWord);
+            if (matchPos != std::string::npos) {
+                queryNorm = firstWord;
+            }
+        }
+    }
+
     std::string textLo = text;
     std::string qLo    = query;
     std::transform(textLo.begin(), textLo.end(), textLo.begin(), [](unsigned char c){ return (char)::tolower(c); });
     std::transform(qLo.begin(),    qLo.end(),    qLo.begin(),    [](unsigned char c){ return (char)::tolower(c); });
+    size_t rawMatchPos = textLo.find(qLo);
 
-    size_t matchPos = textLo.find(qLo);
-    if (matchPos == std::string::npos) {
+    size_t finalPos = (rawMatchPos != std::string::npos) ? rawMatchPos : matchPos;
+    if (finalPos == std::string::npos || finalPos >= text.size()) {
         dl->AddText(font, fontSize, pos, normalCol, text.c_str());
         return;
     }
 
-    std::string before  = text.substr(0, matchPos);
-    std::string matched = text.substr(matchPos, query.size());
-    std::string after   = text.substr(matchPos + query.size());
+    size_t matchLen = std::min(query.size(), text.size() - finalPos);
+    std::string before  = text.substr(0, finalPos);
+    std::string matched = text.substr(finalPos, matchLen);
+    std::string after   = text.substr(finalPos + matchLen);
 
     float curX = pos.x;
     if (!before.empty()) {
@@ -1416,6 +1495,8 @@ static void RenderItemsListPane(LibraryContext& ctx)
     static std::vector<std::string> filteredItems;
     static std::unordered_map<std::string, SongMatchDetail> s_SongMatchMap;
     static std::string lastSearch;
+    static int lastCategory = -1;
+    static size_t lastItemsCount = 0;
 
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.f, 0.f, 0.f, 0.f));
     ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(1.f, 1.f, 1.f, 0.06f));
@@ -1431,9 +1512,10 @@ static void RenderItemsListPane(LibraryContext& ctx)
         auto tagGroups = LoadSongTagGroups();
 
         std::string cur(ctx.searchBuffer);
-        std::transform(cur.begin(), cur.end(), cur.begin(), [](unsigned char c){ return (char)::tolower(c); });
-
-        const bool shouldRebuild = (cur != lastSearch) || ForceListUpdate();
+        const bool shouldRebuild = (cur != lastSearch) ||
+                                   (ctx.currentCategoryInt != lastCategory) ||
+                                   (ctx.items.size() != lastItemsCount) ||
+                                   ForceListUpdate();
         if (shouldRebuild) {
             filteredItems.clear();
             s_SongMatchMap.clear();
@@ -1441,6 +1523,8 @@ static void RenderItemsListPane(LibraryContext& ctx)
             if (ctx.currentCategoryInt == kCat_Songs) {
                 Core::PresentationCore::Get().SetSongSearchQuery(cur);
             }
+
+            std::string curNorm = NormalizeForSearch(cur);
 
             for (const auto& item : ctx.items) {
                 bool match = true;
@@ -1454,19 +1538,20 @@ static void RenderItemsListPane(LibraryContext& ctx)
                             match = false;
                         }
                     } else {
-                        std::string lo = item;
+                        std::string lo = NormalizeForSearch(item);
                         if (ctx.currentCategoryInt == kCat_Bibles) {
                             auto bInfo = ProyecThor::UI::BibleNames::ParseBibleName(item);
-                            lo += " " + bInfo.shortCode + " " + bInfo.fullTitle + " " + bInfo.langCode;
+                            lo += " " + NormalizeForSearch(bInfo.shortCode) + " " + NormalizeForSearch(bInfo.fullTitle) + " " + NormalizeForSearch(bInfo.langCode);
                         }
-                        std::transform(lo.begin(), lo.end(), lo.begin(), [](unsigned char c){ return (char)::tolower(c); });
-                        match = lo.find(cur) != std::string::npos;
+                        match = lo.find(curNorm) != std::string::npos;
                     }
                 }
 
                 if (match) filteredItems.push_back(item);
             }
             lastSearch = cur;
+            lastCategory = ctx.currentCategoryInt;
+            lastItemsCount = ctx.items.size();
             ForceListUpdate() = false;
         }
 

@@ -6,6 +6,7 @@
 #include "ui/panels/biblio/LibraryIcons.h"
 #include "core/settings/SettingsManager.h"
 #include "core/PresentationCore.h"
+#include "ui/views/biblia/BibleTextUtils.h"
 
 #include <algorithm>
 #include <cctype>
@@ -223,11 +224,11 @@ void PanelPickerFullscreen::Close()
 bool PanelPickerFullscreen::MatchesSearch(const PickerItem& item, const std::string& query) const
 {
     if (query.empty()) return true;
-    std::string q = ToLower(query);
-    if (ToLower(item.title).find(q) != std::string::npos) return true;
-    if (ToLower(item.subtitle).find(q) != std::string::npos) return true;
-    if (ToLower(item.categoryLabel).find(q) != std::string::npos) return true;
-    if (ToLower(item.keywords).find(q) != std::string::npos) return true;
+    std::string q = ProyecThor::UI::TextUtils::StripAccents(ProyecThor::UI::TextUtils::ToLowerUTF8(query));
+    if (ProyecThor::UI::TextUtils::StripAccents(ProyecThor::UI::TextUtils::ToLowerUTF8(item.title)).find(q) != std::string::npos) return true;
+    if (ProyecThor::UI::TextUtils::StripAccents(ProyecThor::UI::TextUtils::ToLowerUTF8(item.subtitle)).find(q) != std::string::npos) return true;
+    if (ProyecThor::UI::TextUtils::StripAccents(ProyecThor::UI::TextUtils::ToLowerUTF8(item.categoryLabel)).find(q) != std::string::npos) return true;
+    if (ProyecThor::UI::TextUtils::StripAccents(ProyecThor::UI::TextUtils::ToLowerUTF8(item.keywords)).find(q) != std::string::npos) return true;
     return false;
 }
 

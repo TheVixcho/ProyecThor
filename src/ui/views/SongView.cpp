@@ -4,6 +4,7 @@
 #include "LibrarySongs.h"
 #include "LibrarySongMeta.h"
 #include "SongBackgroundPicker.h"
+#include "ui/views/biblia/BibleTextUtils.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <algorithm>
@@ -458,8 +459,7 @@ void SongView::RenderBrowseGrid()
         }
 
         std::string searchQuery = core.GetSongSearchQuery();
-        std::string searchLo    = searchQuery;
-        std::transform(searchLo.begin(), searchLo.end(), searchLo.begin(), [](unsigned char c){ return (char)::tolower(c); });
+        std::string searchNorm  = ProyecThor::UI::TextUtils::StripAccents(ProyecThor::UI::TextUtils::ToLowerUTF8(searchQuery));
 
         for (size_t i = 0; i < selection.contentData.size(); ++i)
         {
@@ -469,10 +469,9 @@ void SongView::RenderBrowseGrid()
             bool               isSelected = (m_ActiveStanzaIndex == static_cast<int>(i));
 
             bool stanzaMatchesSearch = false;
-            if (!searchLo.empty()) {
-                std::string stanzaLo = stanza;
-                std::transform(stanzaLo.begin(), stanzaLo.end(), stanzaLo.begin(), [](unsigned char c){ return (char)::tolower(c); });
-                stanzaMatchesSearch = (stanzaLo.find(searchLo) != std::string::npos);
+            if (!searchNorm.empty()) {
+                std::string stanzaNorm = ProyecThor::UI::TextUtils::StripAccents(ProyecThor::UI::TextUtils::ToLowerUTF8(stanza));
+                stanzaMatchesSearch = (stanzaNorm.find(searchNorm) != std::string::npos);
             }
 
             ImGui::PushID((int)i);
@@ -555,10 +554,9 @@ for (const auto& line : lines)
         float localX = std::max(padL, (cardSize.x - lineSz.x) * 0.5f);
 
         bool lineMatches = false;
-        if (!searchLo.empty()) {
-            std::string lineLo = line;
-            std::transform(lineLo.begin(), lineLo.end(), lineLo.begin(), [](unsigned char c){ return (char)::tolower(c); });
-            lineMatches = (lineLo.find(searchLo) != std::string::npos);
+        if (!searchNorm.empty()) {
+            std::string lineNorm = ProyecThor::UI::TextUtils::StripAccents(ProyecThor::UI::TextUtils::ToLowerUTF8(line));
+            lineMatches = (lineNorm.find(searchNorm) != std::string::npos);
         }
 
         if (lineMatches) {

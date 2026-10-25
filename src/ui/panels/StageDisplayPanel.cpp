@@ -361,8 +361,9 @@ void StageDisplayPanel::CycleStageMonitor(int direction) {
 
 void StageDisplayPanel::ToggleStageDisplay(bool active) {
     auto& authMgr = ProyecThor::Core::AuthLicenseManager::Get();
-    if (active && !authMgr.IsPro()) {
+    if (!authMgr.IsPro()) {
         std::cerr << "[StageDisplayPanel] El monitor de escenario requiere ProyecThor for Professionals.\n";
+        Core::PresentationCore::Get().SetStaging(false);
         return;
     }
 

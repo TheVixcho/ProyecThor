@@ -2990,6 +2990,12 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
 
     void PresentationCore::ToggleNetworkStream(bool enable, int port)
     {
+        if (enable && !AuthLicenseManager::Get().IsPro())
+        {
+            std::cerr << "[NetworkStream] Transmisión LAN de Stage requiere ProyecThor for Professionals.\n";
+            return;
+        }
+
         if (enable)
         {
             if (m_NetworkServer && m_NetworkServer->IsRunning())
