@@ -1,1 +1,41 @@
 @import "tailwindcss";
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@keyframes floatAmbient {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.35;
+  }
+  50% {
+    transform: translate(30px, -20px) scale(1.08);
+    opacity: 0.55;
+  }
+}
+
+@keyframes pulseBorder {
+  0%, 100% {
+    border-color: rgba(6, 182, 212, 0.3);
+    box-shadow: 0 0 20px rgba(6, 182, 212, 0.1);
+  }
+  50% {
+    border-color: rgba(6, 182, 212, 0.65);
+    box-shadow: 0 0 30px rgba(6, 182, 212, 0.25);
+  }
+}
+
+.ambient-glow-1 {
+  animation: floatAmbient 14s ease-in-out infinite;
+}
+
+.ambient-glow-2 {
+  animation: floatAmbient 18s ease-in-out infinite reverse;
+}
+
+.pro-border-glow {
+  animation: pulseBorder 4s ease-in-out infinite;
+}
