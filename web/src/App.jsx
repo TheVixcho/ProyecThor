@@ -232,7 +232,7 @@ export default function App() {
           <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-tight">
             Proyección profesional para tu auditorio,{" "}
             <span className="bg-gradient-to-r from-white via-neutral-200 to-cyan-400 bg-clip-text text-transparent">
-              completamente gratis
+              a la velocidad del rayo
             </span>
           </h1>
 
