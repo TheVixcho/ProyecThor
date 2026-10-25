@@ -1498,7 +1498,7 @@ void SettingsManager::LoadSettings() {
             m_Settings.general.defaultBiblesFolder  = jg.value("defaultBiblesFolder", "");
             m_Settings.general.defaultMediaFolder   = jg.value("defaultMediaFolder",  "");
             m_Settings.general.duplicateMediaFiles  = jg.value("duplicateMediaFiles", false);
-            m_Settings.general.showRailLabels       = jg.value("showRailLabels",      false);
+            m_Settings.general.showRailLabels       = jg.value("showRailLabels",      true);
             m_Settings.general.showPerfPanel        = jg.value("showPerfPanel",       false);
             m_Settings.general.showViewQuickActions   = jg.value("showViewQuickActions",   true);
             m_Settings.general.openHubOnStartup       = jg.value("openHubOnStartup",       false);

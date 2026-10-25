@@ -104,6 +104,38 @@ inline void DrawIcon_Monitor(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
     dl->AddLine(IcPt(o, sz, 0.30f, 0.86f), IcPt(o, sz, 0.70f, 0.86f), col, thick);
 }
 
+// Proyector / Público — Proyector de video emitiendo haz de luz
+inline void DrawIcon_Projector(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = sz * 0.07f;
+    // Cuerpo del proyector
+    dl->AddRect(IcPt(o, sz, 0.12f, 0.34f), IcPt(o, sz, 0.68f, 0.68f),
+                col, sz * 0.07f, ImDrawFlags_RoundCornersAll, thick);
+    // Lente circular frontal
+    dl->AddCircle(IcPt(o, sz, 0.32f, 0.51f), sz * 0.10f, col, 16, thick);
+    // Haz de proyección de luz hacia la derecha
+    dl->AddLine(IcPt(o, sz, 0.68f, 0.44f), IcPt(o, sz, 0.88f, 0.30f), col, thick * 0.9f);
+    dl->AddLine(IcPt(o, sz, 0.68f, 0.58f), IcPt(o, sz, 0.88f, 0.72f), col, thick * 0.9f);
+    // Patas de apoyo
+    dl->AddLine(IcPt(o, sz, 0.22f, 0.68f), IcPt(o, sz, 0.22f, 0.78f), col, thick * 1.1f);
+    dl->AddLine(IcPt(o, sz, 0.58f, 0.68f), IcPt(o, sz, 0.58f, 0.78f), col, thick * 1.1f);
+}
+
+// Borrar Todo — Escoba / Limpieza de capas
+inline void DrawIcon_Broom(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = sz * 0.075f;
+    // Mango de la escoba inclinado
+    dl->AddLine(IcPt(o, sz, 0.74f, 0.16f), IcPt(o, sz, 0.46f, 0.52f), col, thick * 1.1f);
+    // Base/casquillo del cepillo
+    dl->AddLine(IcPt(o, sz, 0.38f, 0.46f), IcPt(o, sz, 0.54f, 0.58f), col, thick * 1.2f);
+    // Cerdas del cepillo (abanico triangular)
+    dl->AddTriangleFilled(IcPt(o, sz, 0.46f, 0.52f), IcPt(o, sz, 0.18f, 0.76f), IcPt(o, sz, 0.34f, 0.88f), col);
+    // Chispas / destellos de limpieza
+    dl->AddLine(IcPt(o, sz, 0.20f, 0.24f), IcPt(o, sz, 0.20f, 0.36f), col, thick * 0.85f);
+    dl->AddLine(IcPt(o, sz, 0.14f, 0.30f), IcPt(o, sz, 0.26f, 0.30f), col, thick * 0.85f);
+}
+
 // Fondos — capas apiladas
 inline void DrawIcon_Layers(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 {

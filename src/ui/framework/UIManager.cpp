@@ -1761,18 +1761,27 @@ void UIManager::RenderModeToolbar()
         };
 
         // ── Medir ancho de la isla de estado en vivo (Público / Stage / Borrar Todo) ──
-        const float statusRowH   = 28.0f;
-        const float clearIconSz  = 14.0f;
-        const float clearIconGap = 8.0f;
-        float clearGroupW  = clearIconSz + clearIconGap + ImGui::CalcTextSize("Borrar Todo").x;
-        float clearBtnW    = clearGroupW + 20.0f;
-        float dotAudienceW = 5.0f * 2.0f + 6.0f + ImGui::CalcTextSize("Público").x + 14.0f;
-        float dotStageW    = isProActive ? (5.0f * 2.0f + 6.0f + ImGui::CalcTextSize("Stage").x + 14.0f) : 0.0f;
-        float statusTotalW = dotAudienceW + (isProActive ? (8.0f + dotStageW) : 0.0f) + 8.0f + clearBtnW;
-        float statusIslandW = statusTotalW + 12.0f;
+        const int statusCount = isProActive ? 3 : 2;
+        float statusPairHalfSum = 0.0f;
+        if (showLbl) {
+            float wAud = measureLabelW("Público");
+            float wStg = isProActive ? measureLabelW("Stage") : 0.0f;
+            float wClr = measureLabelW("Borrar Todo");
+            if (isProActive) {
+                statusPairHalfSum = std::max((wAud + wStg) * 0.5f, (wStg + wClr) * 0.5f);
+            } else {
+                statusPairHalfSum = (wAud + wClr) * 0.5f;
+            }
+        }
+        float statusBtnStep = showLbl ? std::max(48.0f, statusPairHalfSum + 12.0f) : (islandH + 4.0f);
+        float statusIslandW = islandRounding * 2.0f + (float)(statusCount - 1) * statusBtnStep;
 
-        // Isla de estados: extremo derecho
-        float statusScreenX = winPos.x + winW - statusIslandW - 14.0f;
+        const float kToolbarSideMargin = 26.0f;
+        const float kIslandGap         = 24.0f;
+        const float kProIslandGap      = 42.0f;
+
+        // Isla de estados: extremo derecho con margen lateral para no chocar con el borde
+        float statusScreenX = winPos.x + winW - statusIslandW - kToolbarSideMargin;
         statusPosScreenX = statusScreenX;
 
         // ── Isla Pro: Nube Pro - Chat IA - Imágenes IA (Exclusiva para ProyecThor for Professionals) ──
@@ -1815,20 +1824,13 @@ void UIManager::RenderModeToolbar()
             };
         }
 
-        // 1. Primera isla: full izquierda
+        // 1. Primera isla: izquierda con margen lateral de la barra
         float island1W = CalcIslandW(island1);
-        float island1X = winPos.x + 14.0f;
+        float island1X = winPos.x + kToolbarSideMargin;
         RenderIsland("island1", island1, island1X);
 
-        // 2. Segunda isla: al medio exacto
-        float island2W = CalcIslandW(island2);
-        float island2X = winPos.x + (winW - island2W) * 0.5f;
-        if (island2X < island1X + island1W + 14.0f) {
-            island2X = island1X + island1W + 14.0f;
-        }
-
         // 3. Tercera isla (Configuración / Ayuda) y Cuarta isla (Isla Pro):
-        float rightEdge = statusScreenX - 12.0f;
+        float rightEdge = statusScreenX - kIslandGap;
         float island3W = CalcIslandW(island3);
         float island3X = rightEdge - island3W;
 
@@ -1836,14 +1838,23 @@ void UIManager::RenderModeToolbar()
         float islandProX = 0.0f;
         if (isProActive && !islandPro.empty()) {
             islandProW = CalcIslandW(islandPro);
-            islandProX = island3X - 12.0f - islandProW;
-            if (island2X + island2W + 14.0f > islandProX) {
-                island2X = islandProX - island2W - 14.0f;
-            }
-        } else {
-            if (island2X + island2W + 14.0f > island3X) {
-                island2X = island3X - island2W - 14.0f;
-            }
+            // Margen generoso entre funciones premium (islandPro) e island3 para que ningún texto se solape
+            islandProX = island3X - kProIslandGap - islandProW;
+        }
+
+        // 2. Segunda isla: centrada pero respetando los márgenes con island1 e islandPro/island3
+        float island2W = CalcIslandW(island2);
+        float island2X = winPos.x + (winW - island2W) * 0.5f;
+        if (island2X < island1X + island1W + kIslandGap) {
+            island2X = island1X + island1W + kIslandGap;
+        }
+
+        float maxIsland2Right = (isProActive && !islandPro.empty())
+            ? (islandProX - kProIslandGap)
+            : (island3X - kIslandGap);
+
+        if (island2X + island2W > maxIsland2Right) {
+            island2X = maxIsland2Right - island2W;
         }
 
         RenderIsland("island2", island2, island2X);
@@ -1931,100 +1942,165 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
     auto& authMgr = ProyecThor::Core::AuthLicenseManager::Get();
     const bool isPro = authMgr.IsPro();
 
-    const bool  audienceOn = core.IsProjecting();
-    const bool  stageOn    = isPro ? (sd.useLAN ? core.IsStreamingNet() : core.IsStaging()) : false;
+    const bool audienceOn = core.IsProjecting();
+    const bool stageOn    = isPro ? (sd.useLAN ? core.IsStreamingNet() : core.IsStaging()) : false;
     if (!isPro && core.IsStaging()) {
         core.SetStaging(false);
     }
-    const float rowH       = 28.0f;
-    const float islandH    = 36.0f;
+
+    const bool  showLbl        = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.showRailLabels;
+    const float islandH        = 36.0f;
+    const float islandRounding = islandH * 0.5f;
+    const float targetRadius   = 16.0f;
+    const float iconSz         = 18.0f;
+    float islandOffsetY        = showLbl ? 5.0f : ((railH - islandH) * 0.5f);
+    ImVec2 winPos              = ImGui::GetWindowPos();
+    float islandTopY           = winPos.y + islandOffsetY;
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    const char* clearLabel = "Borrar Todo";
-    ImVec2      clearTxtSz = ImGui::CalcTextSize(clearLabel);
-    const float clearIconSz  = 14.0f;
-    const float clearIconGap = 8.0f;
-    float       clearGroupW  = clearIconSz + clearIconGap + clearTxtSz.x;
-    float       clearBtnW    = clearGroupW + 20.0f;
-
-    ImVec2      dotSzAudience = ImVec2(5.0f * 2.0f + 6.0f + ImGui::CalcTextSize("Público").x + 14.0f, rowH);
-    ImVec2      dotSzStage    = isPro ? ImVec2(5.0f * 2.0f + 6.0f + ImGui::CalcTextSize("Stage").x + 14.0f, rowH) : ImVec2(0.0f, 0.0f);
-
-    const float gap   = 8.0f;
-    float       totalW = dotSzAudience.x + (isPro ? (gap + dotSzStage.x) : 0.0f) + gap + clearBtnW;
-
-    float islandW = totalW + 12.0f;
-    float islandY = (railH - islandH) * 0.5f;
-
-    ImVec2 winPos = ImGui::GetWindowPos();
-    ImVec2 islandMin = { screenX, winPos.y + islandY };
-    ImVec2 islandMax = { screenX + islandW, winPos.y + islandY + islandH };
-
-    // ── Fondo de la cápsula de estados en vivo (centrada verticalmente en la barra) ──
-    dl->AddRectFilled({ islandMin.x, islandMin.y + 1.5f }, { islandMax.x, islandMax.y + 1.5f },
-                      IM_COL32(0, 0, 0, 45), islandH * 0.5f);
-    dl->AddRectFilled(islandMin, islandMax,
-                      IM_COL32(20, 22, 28, 235), islandH * 0.5f);
-    dl->AddRect(islandMin, islandMax,
-                IM_COL32(255, 255, 255, 24), islandH * 0.5f, 0, 1.0f);
-
-    float startX = (screenX - winPos.x) + 6.0f;
-    ImGui::SetCursorPos(ImVec2(startX, (railH - rowH) * 0.5f));
-
-    if (StatusDotToggle(dl, "##modeTbDotAudience", "Público", audienceOn, MT::k_LiveAccent, rowH))
-        ToggleAudience(!audienceOn);
-
-    if (isPro) {
-        ImGui::SameLine(0.0f, gap);
-        if (StatusDotToggle(dl, "##modeTbDotStage", "Stage", stageOn, MT::k_PrevAccent, rowH)) {
-            ToggleStageQuick(!stageOn);
+    const int count = isPro ? 3 : 2;
+    float maxPairHalfSum = 0.0f;
+    if (showLbl) {
+        float wAud = ImGui::CalcTextSize("Público").x;
+        float wStg = isPro ? ImGui::CalcTextSize("Stage").x : 0.0f;
+        float wClr = ImGui::CalcTextSize("Borrar Todo").x;
+        if (isPro) {
+            maxPairHalfSum = std::max((wAud + wStg) * 0.5f, (wStg + wClr) * 0.5f);
+        } else {
+            maxPairHalfSum = (wAud + wClr) * 0.5f;
         }
     }
+    float btnStep = showLbl ? std::max(48.0f, maxPairHalfSum + 12.0f) : (islandH + 4.0f);
+    float islandW = islandRounding * 2.0f + (float)(count - 1) * btnStep;
 
-    ImGui::SameLine(0.0f, gap);
+    ImVec2 islandMin = { screenX, islandTopY };
+    ImVec2 islandMax = { screenX + islandW, islandTopY + islandH };
 
-    {
-        auto toVec4 = [](ImU32 c, float alpha) {
-            ImVec4 v = ImGui::ColorConvertU32ToFloat4(c);
-            v.w = alpha;
-            return v;
-        };
-        ImGui::PushStyleColor(ImGuiCol_Button,        toVec4(DS::DangerColor, 40.0f  / 255.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, toVec4(DS::DangerColor, 90.0f  / 255.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  toVec4(DS::DangerColor, 140.0f / 255.0f));
-        ImGui::PushStyleColor(ImGuiCol_Border,        toVec4(DS::DangerColor, 100.0f / 255.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+    // ── Fondo de la cápsula flotante (idéntico al resto de islas de la toolbar) ──
+    dl->AddRectFilled({ islandMin.x, islandMin.y + 1.5f }, { islandMax.x, islandMax.y + 1.5f },
+                      IM_COL32(0, 0, 0, 45), islandRounding);
+    dl->AddRectFilled(islandMin, islandMax, IM_COL32(20, 22, 28, 235), islandRounding);
+    dl->AddRect(islandMin, islandMax, IM_COL32(255, 255, 255, 24), islandRounding, 0, 1.0f);
 
-        bool clicked = ImGui::Button("##modeTbBorrarTodo", ImVec2(clearBtnW, rowH));
+    const bool isWindowFocused = m_Window ? (glfwGetWindowAttrib(m_Window, GLFW_FOCUSED) != 0) : true;
 
-        ImVec2 bMin = ImGui::GetItemRectMin();
-        ImVec2 bMax = ImGui::GetItemRectMax();
-        float  cStartX = bMin.x + ((bMax.x - bMin.x) - clearGroupW) * 0.5f;
-        float  cCenterY = (bMin.y + bMax.y) * 0.5f;
-        ImU32  dangerCol = DS::DangerColor;
+    const ImU32 liveAccentU32 = ImGui::ColorConvertFloat4ToU32(MT::k_LiveAccent);
+    const ImU32 prevAccentU32 = ImGui::ColorConvertFloat4ToU32(MT::k_PrevAccent);
 
-        auto it = StyleGeneralApp::Icons.find("cleaning_services");
-        if (it != StyleGeneralApp::Icons.end() && it->second.textureID)
-        {
-            dl->AddImage((ImTextureID)(intptr_t)it->second.textureID,
-                { cStartX, cCenterY - clearIconSz * 0.5f }, { cStartX + clearIconSz, cCenterY + clearIconSz * 0.5f },
-                ImVec2(0, 0), ImVec2(1, 1), dangerCol);
+    for (int itemIdx = 0; itemIdx < count; ++itemIdx) {
+        float btnCenterX = islandMin.x + islandRounding + (float)itemIdx * btnStep;
+        float btnCenterY = islandMin.y + islandH * 0.5f;
+        ImVec2 iconCenter = { btnCenterX, btnCenterY };
+
+        float hitLeft  = (itemIdx == 0) ? islandMin.x : (btnCenterX - btnStep * 0.5f);
+        float hitRight = (itemIdx == count - 1) ? islandMax.x : (btnCenterX + btnStep * 0.5f);
+        float hitH     = showLbl ? (islandH + ImGui::GetTextLineHeight() + 8.0f) : islandH;
+        ImVec2 bMin = { hitLeft, islandMin.y };
+        ImVec2 bMax = { hitRight, islandMin.y + hitH };
+
+        if (itemIdx == 0) {
+            // ── Botón 1: Público ──
+            ImGui::SetCursorScreenPos(bMin);
+            bool clicked = ImGui::InvisibleButton("##statusBtn_Publico", { bMax.x - bMin.x, bMax.y - bMin.y });
+            bool hovered = isWindowFocused && ImGui::IsItemHovered();
+            if (clicked) ToggleAudience(!audienceOn);
+
+            dl->AddCircleFilled(iconCenter, targetRadius, IM_COL32(255, 255, 255, 8), 24);
+            dl->AddCircle(iconCenter, targetRadius, IM_COL32(255, 255, 255, 14), 24, 1.0f);
+
+            if (audienceOn) {
+                dl->AddCircleFilled(iconCenter, targetRadius, IM_COL32(34, 197, 94, 60), 24);
+                dl->AddCircle(iconCenter, targetRadius, liveAccentU32, 24, 1.4f);
+            } else if (hovered) {
+                dl->AddCircleFilled(iconCenter, targetRadius, IM_COL32(34, 197, 94, 35), 24);
+                dl->AddCircle(iconCenter, targetRadius, IM_COL32(34, 197, 94, 120), 24, 1.0f);
+            }
+
+            ImU32 iconCol = audienceOn ? liveAccentU32 : (hovered ? IM_COL32(255, 255, 255, 255) : DS::TextSecondary);
+            AppIcons::DrawIcon_Projector(dl, { btnCenterX - iconSz * 0.5f, btnCenterY - iconSz * 0.5f }, iconSz, iconCol);
+
+            if (showLbl) {
+                float lblW = ImGui::CalcTextSize("Público").x;
+                float lblX = btnCenterX - lblW * 0.5f;
+                float lblY = islandMax.y + 4.0f;
+                dl->AddText({ lblX, lblY }, iconCol, "Público");
+            }
+
+            if (hovered && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+                ImGui::SetTooltip(audienceOn ? "Público en Vivo (Clic para detener)" : "Proyectar a Pantalla de Público");
+            }
         }
-        dl->AddText({ cStartX + clearIconSz + clearIconGap, cCenterY - clearTxtSz.y * 0.5f }, dangerCol, clearLabel);
+        else if (isPro && itemIdx == 1) {
+            // ── Botón 2: Stage (Monitor de Escenario) ──
+            ImGui::SetCursorScreenPos(bMin);
+            bool clicked = ImGui::InvisibleButton("##statusBtn_Stage", { bMax.x - bMin.x, bMax.y - bMin.y });
+            bool hovered = isWindowFocused && ImGui::IsItemHovered();
+            if (clicked) ToggleStageQuick(!stageOn);
 
-        if (clicked)
-        {
-            core.ClearLayer2();
-            core.StopBackgroundMedia();
-            if (auto* a   = core.GetAnnouncementsRef())  a->SetLive(false);
-            if (auto* clk = core.GetOClockRef())          clk->StopTransmitting();
-            if (auto* cap = core.GetCapturePanelRef())    cap->Stop();
+            dl->AddCircleFilled(iconCenter, targetRadius, IM_COL32(255, 255, 255, 8), 24);
+            dl->AddCircle(iconCenter, targetRadius, IM_COL32(255, 255, 255, 14), 24, 1.0f);
+
+            if (stageOn) {
+                dl->AddCircleFilled(iconCenter, targetRadius, IM_COL32(245, 166, 35, 60), 24);
+                dl->AddCircle(iconCenter, targetRadius, prevAccentU32, 24, 1.4f);
+            } else if (hovered) {
+                dl->AddCircleFilled(iconCenter, targetRadius, IM_COL32(245, 166, 35, 35), 24);
+                dl->AddCircle(iconCenter, targetRadius, IM_COL32(245, 166, 35, 120), 24, 1.0f);
+            }
+
+            ImU32 iconCol = stageOn ? prevAccentU32 : (hovered ? IM_COL32(255, 255, 255, 255) : DS::TextSecondary);
+            AppIcons::DrawIcon_Monitor(dl, { btnCenterX - iconSz * 0.5f, btnCenterY - iconSz * 0.5f }, iconSz, iconCol);
+
+            if (showLbl) {
+                float lblW = ImGui::CalcTextSize("Stage").x;
+                float lblX = btnCenterX - lblW * 0.5f;
+                float lblY = islandMax.y + 4.0f;
+                dl->AddText({ lblX, lblY }, iconCol, "Stage");
+            }
+
+            if (hovered && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+                ImGui::SetTooltip(stageOn ? "Monitor de Escenario Activo (Clic para detener)" : "Transmitir a Monitor de Escenario (Stage Display)");
+            }
         }
+        else {
+            // ── Botón 3: Borrar Todo ──
+            ImGui::SetCursorScreenPos(bMin);
+            bool clicked = ImGui::InvisibleButton("##statusBtn_BorrarTodo", { bMax.x - bMin.x, bMax.y - bMin.y });
+            bool hovered = isWindowFocused && ImGui::IsItemHovered();
+            if (clicked) {
+                core.ClearLayer2();
+                core.StopBackgroundMedia();
+                if (auto* a   = core.GetAnnouncementsRef())  a->SetLive(false);
+                if (auto* clk = core.GetOClockRef())         clk->StopTransmitting();
+                if (auto* cap = core.GetCapturePanelRef())   cap->Stop();
+            }
 
-        ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor(4);
+            dl->AddCircleFilled(iconCenter, targetRadius, IM_COL32(239, 68, 68, hovered ? 55 : 20), 24);
+            dl->AddCircle(iconCenter, targetRadius, IM_COL32(239, 68, 68, hovered ? 180 : 80), 24, 1.2f);
+
+            ImU32 dangerCol = hovered ? IM_COL32(255, 110, 110, 255) : DS::DangerColor;
+            auto it = StyleGeneralApp::Icons.find("cleaning_services");
+            if (it != StyleGeneralApp::Icons.end() && it->second.textureID) {
+                dl->AddImage((ImTextureID)(intptr_t)it->second.textureID,
+                    { btnCenterX - iconSz * 0.5f, btnCenterY - iconSz * 0.5f },
+                    { btnCenterX + iconSz * 0.5f, btnCenterY + iconSz * 0.5f },
+                    ImVec2(0, 0), ImVec2(1, 1), dangerCol);
+            } else {
+                AppIcons::DrawIcon_Broom(dl, { btnCenterX - iconSz * 0.5f, btnCenterY - iconSz * 0.5f }, iconSz, dangerCol);
+            }
+
+            if (showLbl) {
+                float lblW = ImGui::CalcTextSize("Borrar Todo").x;
+                float lblX = btnCenterX - lblW * 0.5f;
+                float lblY = islandMax.y + 4.0f;
+                dl->AddText({ lblX, lblY }, dangerCol, "Borrar Todo");
+            }
+
+            if (hovered && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+                ImGui::SetTooltip("Borrar Todo (Limpiar proyecciones en vivo)");
+            }
+        }
     }
 }
 

@@ -229,9 +229,8 @@ namespace ProyecThor::Settings {
         bool        duplicateMediaFiles = false;
         Language    language            = Language::Spanish;
         std::string dismissedChangelog  = "";
-        // Titulos bajo los iconos de los 4 rails (Biblioteca/Home/Control/Diseño).
-        // Apagarlo los deja solo-icono para ocupar menos espacio en pantalla.
-        bool        showRailLabels      = false;
+        // Titulos bajo los iconos de los rails y la toolbar. Activo por defecto.
+        bool        showRailLabels      = true;
         // Panel opcional de diagnostico (CPU/RAM/FPS/GPU), activable desde
         // el menu Vista. Apagado por default: es una herramienta puntual,
         // no algo que se quiera ver todo el tiempo.
