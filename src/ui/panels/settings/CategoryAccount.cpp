@@ -17,7 +17,6 @@ static inline ImVec4 ThemeCol(const float* a, float alphaMul = 1.0f) {
 static char s_EmailBuf[128]    = "";
 static char s_PasswordBuf[128] = "";
 static char s_LicenseKeyBuf[128] = "";
-static char s_InstanceNameBuf[64] = "";
 static bool s_BuffersInitialized = false;
 
 static std::string s_AuthFeedbackMsg = "";
@@ -34,13 +33,9 @@ void SettingsPanel::RenderCategoryAccount() {
 
     if (!s_BuffersInitialized) {
         s_BuffersInitialized = true;
-        std::string defInst = "PC-Principal";
         const auto& lic = authMgr.GetLicenseInfo();
         if (!lic.key.empty()) {
             strncpy(s_LicenseKeyBuf, lic.key.c_str(), sizeof(s_LicenseKeyBuf) - 1);
-        }
-        if (!lic.instanceName.empty()) {
-            strncpy(s_InstanceNameBuf, lic.instanceName.c_str(), sizeof(s_InstanceNameBuf) - 1);
         }
     }
 
@@ -396,66 +391,148 @@ void SettingsPanel::RenderCategoryAccount() {
                 ImGui::EndPopup();
             }
         } else {
-            // Sin licencia activa: formulario de activación
-            ImGui::TextColored(ThemeCol(theme.textDim),
-                "Si ya adquiriste ProyecThor for Professionals o recibiste una clave de licencia, ingrésala a continuación:");
+            // Sin licencia activa: formulario de activación moderno y estilizado
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ThemeCol(theme.surface0, 0.70f));
+            ImGui::PushStyleColor(ImGuiCol_Border,  ThemeCol(theme.border, 0.55f));
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, theme.frameRounding);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(22.0f, 20.0f));
 
-            ImGui::Dummy(ImVec2(0.0f, 10.0f));
-            ImGui::TextColored(ThemeCol(theme.textDim), "Clave de licencia (License Key)");
-            ImGui::SetNextItemWidth(contentW * 0.70f);
-            ImGui::InputTextWithHint("##lic_key_input", "Ej: XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
-                                     s_LicenseKeyBuf, sizeof(s_LicenseKeyBuf));
+            if (ImGui::BeginChild("##lic_activation_card", ImVec2(contentW, 0.0f), ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY)) {
+                // Badge [ PRO ] y Título
+                ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.accent));
+                ImGui::SetWindowFontScale(1.15f);
+                ImGui::TextUnformatted("[ PRO ]");
+                ImGui::PopStyleColor();
+                ImGui::SameLine(0, 10.0f);
+                ImGui::TextUnformatted("Activar ProyecThor for Professionals");
+                ImGui::SetWindowFontScale(1.0f);
 
-            ImGui::Dummy(ImVec2(0.0f, 6.0f));
-            ImGui::TextColored(ThemeCol(theme.textDim), "Nombre descriptivo de este equipo (opcional)");
-            ImGui::SetNextItemWidth(contentW * 0.50f);
-            ImGui::InputTextWithHint("##lic_inst_input", "Ej: Auditorio-Principal",
-                                     s_InstanceNameBuf, sizeof(s_InstanceNameBuf));
+                ImGui::Dummy(ImVec2(0.0f, 6.0f));
+                ImGui::PushTextWrapPos(contentW - 44.0f);
+                ImGui::TextColored(ThemeCol(theme.textDim),
+                    "Ingresa tu clave de licencia para desbloquear todas las herramientas avanzadas en esta computadora: "
+                    "Stage Display, Asistente de IA en canciones, reloj y futuras características Pro.");
+                ImGui::PopTextWrapPos();
 
-            ImGui::Dummy(ImVec2(0.0f, 14.0f));
+                ImGui::Dummy(ImVec2(0.0f, 14.0f));
+                ImGui::TextColored(ThemeCol(theme.textPrimary), "Clave de Licencia (License Key):");
 
-            if (isLicenseBusy) ImGui::BeginDisabled();
+                // Input para la clave de licencia
+                float inputW = std::min(contentW * 0.72f, 440.0f);
+                ImGui::SetNextItemWidth(inputW);
+                ImGui::InputTextWithHint("##lic_key_input", "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+                                         s_LicenseKeyBuf, sizeof(s_LicenseKeyBuf));
 
-            ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.25f, 0.60f, 0.40f, 0.90f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.32f, 0.72f, 0.48f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.20f, 0.50f, 0.32f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-
-            if (ImGui::Button("Activar Licencia Pro", ImVec2(200.0f, 36.0f))) {
-                s_LicenseFeedbackMsg.clear();
-                std::string key = s_LicenseKeyBuf;
-                std::string inst = s_InstanceNameBuf;
-                authMgr.ActivateLicense(key, inst, [](bool success, const std::string& msg) {
-                    s_LicenseFeedbackMsg = msg;
-                    s_LicenseFeedbackIsSuccess = success;
-                });
-            }
-            ImGui::PopStyleColor(4);
-
-            if (isLicenseBusy) {
-                ImGui::EndDisabled();
-                ImGui::SameLine(0, 14.0f);
-                SpinnerWidget(8.0f, 2.0f, ThemeCol(theme.accent));
                 ImGui::SameLine(0, 8.0f);
-                ImGui::TextColored(ThemeCol(theme.textDim), "Validando con Lemon Squeezy API...");
+                if (ImGui::Button("Pegar", ImVec2(75.0f, 0.0f))) {
+                    const char* clip = ImGui::GetClipboardText();
+                    if (clip && strlen(clip) > 0) {
+                        std::string s = clip;
+                        while (!s.empty() && (s.back() == ' ' || s.back() == '\r' || s.back() == '\n' || s.back() == '\t')) s.pop_back();
+                        while (!s.empty() && (s.front() == ' ' || s.front() == '\r' || s.front() == '\n' || s.front() == '\t')) s.erase(s.begin());
+                        strncpy(s_LicenseKeyBuf, s.c_str(), sizeof(s_LicenseKeyBuf) - 1);
+                        s_LicenseKeyBuf[sizeof(s_LicenseKeyBuf) - 1] = '\0';
+                    }
+                }
+                HelpTooltip("Pega la clave copiada desde tu correo de compra.");
+
+                if (strlen(s_LicenseKeyBuf) > 0) {
+                    ImGui::SameLine(0, 6.0f);
+                    if (ImGui::Button("Limpiar", ImVec2(75.0f, 0.0f))) {
+                        s_LicenseKeyBuf[0] = '\0';
+                        s_LicenseFeedbackMsg.clear();
+                    }
+                }
+
+                ImGui::Dummy(ImVec2(0.0f, 16.0f));
+
+                if (isLicenseBusy) ImGui::BeginDisabled();
+
+                ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.18f, 0.62f, 0.36f, 0.95f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.24f, 0.72f, 0.44f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.14f, 0.50f, 0.28f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+
+                if (ImGui::Button("Activar Licencia Pro", ImVec2(220.0f, 38.0f))) {
+                    s_LicenseFeedbackMsg.clear();
+                    std::string key = s_LicenseKeyBuf;
+                    while (!key.empty() && (key.back() == ' ' || key.back() == '\r' || key.back() == '\n' || key.back() == '\t')) key.pop_back();
+                    while (!key.empty() && (key.front() == ' ' || key.front() == '\r' || key.front() == '\n' || key.front() == '\t')) key.erase(key.begin());
+
+                    if (key.empty()) {
+                        s_LicenseFeedbackMsg = "Por favor ingresa una clave de licencia válida.";
+                        s_LicenseFeedbackIsSuccess = false;
+                    } else {
+                        strncpy(s_LicenseKeyBuf, key.c_str(), sizeof(s_LicenseKeyBuf) - 1);
+                        authMgr.ActivateLicense(key, "", [](bool success, const std::string& msg) {
+                            s_LicenseFeedbackMsg = msg;
+                            s_LicenseFeedbackIsSuccess = success;
+                        });
+                    }
+                }
+                ImGui::PopStyleColor(4);
+
+                if (isLicenseBusy) {
+                    ImGui::EndDisabled();
+                    ImGui::SameLine(0, 14.0f);
+                    SpinnerWidget(9.0f, 2.2f, ThemeCol(theme.accent));
+                    ImGui::SameLine(0, 8.0f);
+                    ImGui::TextColored(ThemeCol(theme.textDim), "Validando con los servidores de Lemon Squeezy...");
+                }
+
+                // Banner de estado / error / éxito
+                const std::string& licErr = authMgr.GetLicenseError();
+                const bool hasError = !licErr.empty() || (!s_LicenseFeedbackMsg.empty() && !s_LicenseFeedbackIsSuccess);
+                const bool hasSuccess = s_LicenseFeedbackIsSuccess && !s_LicenseFeedbackMsg.empty();
+                const std::string activeMsg = !licErr.empty() ? licErr : s_LicenseFeedbackMsg;
+
+                if (hasError || hasSuccess) {
+                    ImGui::Dummy(ImVec2(0.0f, 14.0f));
+                    ImVec4 alertCol = hasSuccess ? ImVec4(0.40f, 0.90f, 0.55f, 1.0f) : ImVec4(0.98f, 0.40f, 0.40f, 1.0f);
+                    ImGui::PushStyleColor(ImGuiCol_Text, alertCol);
+                    ImGui::PushTextWrapPos(contentW - 44.0f);
+                    ImGui::TextWrapped("%s %s", hasSuccess ? "[OK]" : "[!]", activeMsg.c_str());
+                    ImGui::PopTextWrapPos();
+                    ImGui::PopStyleColor();
+                }
+
+                ImGui::Dummy(ImVec2(0.0f, 14.0f));
+                ImGui::Separator();
+                ImGui::Dummy(ImVec2(0.0f, 8.0f));
+
+                // Notas y detalles sobre la suscripción
+                ImGui::TextColored(ThemeCol(theme.textDim), "Detalles de la suscripción:");
+                ImGui::PushTextWrapPos(contentW - 44.0f);
+                ImGui::TextColored(ThemeCol(theme.textFaint),
+                    "• Cada suscripción cubre 1 mes completo de uso sin interrupciones.\n"
+                    "• La licencia se asocia de forma automática a este equipo sin requerir nombres manuales.\n"
+                    "• Al concluir el mes, la aplicación contactará el servidor al iniciar para validar la renovación activa.");
+                ImGui::PopTextWrapPos();
+
+                ImGui::Dummy(ImVec2(0.0f, 4.0f));
+                ImGui::EndChild();
             }
+            ImGui::PopStyleVar(2);
+            ImGui::PopStyleColor(2);
         }
 
-        // Mensaje de estado / error de licencia
-        const std::string& licErr = authMgr.GetLicenseError();
-        if (!licErr.empty()) {
-            ImGui::Dummy(ImVec2(0.0f, 12.0f));
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.40f, 0.40f, 1.0f));
-            ImGui::TextWrapped("%s", licErr.c_str());
-            ImGui::PopStyleColor();
-        } else if (!s_LicenseFeedbackMsg.empty()) {
-            ImGui::Dummy(ImVec2(0.0f, 12.0f));
-            ImVec4 col = s_LicenseFeedbackIsSuccess
-                ? ImVec4(0.40f, 0.85f, 0.55f, 1.0f)
-                : ImVec4(0.95f, 0.40f, 0.40f, 1.0f);
-            ImGui::PushStyleColor(ImGuiCol_Text, col);
-            ImGui::TextWrapped("%s", s_LicenseFeedbackMsg.c_str());
-            ImGui::PopStyleColor();
+        // Mensaje de estado cuando isPro es true (para verificar o desactivar)
+        if (isPro) {
+            const std::string& licErr = authMgr.GetLicenseError();
+            if (!licErr.empty()) {
+                ImGui::Dummy(ImVec2(0.0f, 12.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.40f, 0.40f, 1.0f));
+                ImGui::TextWrapped("%s", licErr.c_str());
+                ImGui::PopStyleColor();
+            } else if (!s_LicenseFeedbackMsg.empty()) {
+                ImGui::Dummy(ImVec2(0.0f, 12.0f));
+                ImVec4 col = s_LicenseFeedbackIsSuccess
+                    ? ImVec4(0.40f, 0.85f, 0.55f, 1.0f)
+                    : ImVec4(0.95f, 0.40f, 0.40f, 1.0f);
+                ImGui::PushStyleColor(ImGuiCol_Text, col);
+                ImGui::TextWrapped("%s", s_LicenseFeedbackMsg.c_str());
+                ImGui::PopStyleColor();
+            }
         }
 
         ImGui::Dummy(ImVec2(0.0f, 20.0f));
