@@ -593,6 +593,127 @@ void ProAIManager::SendChatMessage(const std::vector<ProChatMessage>& history,
     }).detach();
 }
 
+// ── Corrección y Edición de Letras con IA (Gemini) ───────────────────────────
+void ProAIManager::EditLyricsWithAI(const std::string& currentLyrics,
+                                    const std::string& userPrompt,
+                                    std::function<void(bool success, const std::string& modifiedLyrics, uint32_t tokensUsed, const std::string& error)> callback) {
+    CheckMonthlyReset();
+
+    if (!CanSendMessage()) {
+        if (callback) {
+            callback(false, "", 0,
+                     "Has alcanzado el límite mensual de tokens de tu plan Pro. Tu cuota se renovará al finalizar el mes.");
+        }
+        return;
+    }
+
+    if (m_ChatBusy.exchange(true)) {
+        if (callback) callback(false, "", 0, "Hay una solicitud en proceso.");
+        return;
+    }
+
+    std::string apiKey = GetDecryptedApiKey();
+
+    std::thread([this, currentLyrics, userPrompt, apiKey, callback]() {
+        bool success = false;
+        std::string replyText;
+        uint32_t tokensUsed = 0;
+        std::string finalErr;
+        int statusCode = 0;
+        std::string reqError;
+
+        const std::string sysPrompt =
+            "Eres un editor y corrector experto de letras de canciones cristianas y de adoración para ProyecThor.\n"
+            "Tu tarea es tomar la letra de una canción en formato TXT y aplicar con máxima fidelidad las instrucciones del usuario.\n"
+            "Por ejemplo: borrar puntos suspensivos (...), corregir ortografía y acentos, corregir errores de tipeo, o estructurar estrofas y coro.\n"
+            "REGLAS ESTRICTAS E INQUEBRANTABLES:\n"
+            "1. Devuelve ÚNICAMENTE la letra completa de la canción corregida en texto plano.\n"
+            "2. NO agregues introducciones, explicaciones, notas ni saludos (NUNCA pongas cosas como 'Aquí está la letra' o 'Espero que te sirva').\n"
+            "3. NO uses bloques de código markdown (prohibido usar ``` o ```txt). Devuelve directamente el texto plano limpio.\n"
+            "4. Mantén la letra estructurada con una línea en blanco entre cada estrofa o coro para que las diapositivas de proyección se formen correctamente.";
+
+        std::string userMessage = "Instrucciones de corrección: " + userPrompt + "\n\n"
+                                  "Letra actual de la canción en TXT:\n" + currentLyrics;
+
+        json jContents = json::array();
+        jContents.push_back({
+            { "role", "user" },
+            { "parts", json::array({ { { "text", userMessage } } }) }
+        });
+
+        json reqBody;
+        reqBody["system_instruction"] = {
+            { "parts", json::array({ { { "text", sysPrompt } } }) }
+        };
+        reqBody["contents"] = jContents;
+        reqBody["generationConfig"] = {
+            { "temperature", 0.3 },
+            { "maxOutputTokens", 4096 }
+        };
+
+        std::string path = "/v1beta/models/gemini-flash-lite-latest:generateContent?key=" + apiKey;
+        std::string res = PerformHttpsPost("generativelanguage.googleapis.com", path, reqBody.dump(), "", statusCode, reqError);
+
+        if (statusCode == 200) {
+            try {
+                json jRes = json::parse(res);
+                if (jRes.contains("candidates") && jRes["candidates"].is_array() && !jRes["candidates"].empty()) {
+                    const auto& cand = jRes["candidates"][0];
+                    if (cand.contains("content") && cand["content"].contains("parts") && !cand["content"]["parts"].empty()) {
+                        replyText = cand["content"]["parts"][0].value("text", "");
+                        success = true;
+                    }
+                }
+                if (jRes.contains("usageMetadata") && jRes["usageMetadata"].is_object()) {
+                    tokensUsed = jRes["usageMetadata"].value("totalTokenCount", 0);
+                }
+            } catch (...) {
+                finalErr = "Error al procesar respuesta de Gemini.";
+            }
+        } else {
+            try {
+                json jErr = json::parse(res);
+                if (jErr.contains("error") && jErr["error"].is_object()) {
+                    finalErr = jErr["error"].value("message", "Error en servidor Gemini.");
+                } else {
+                    finalErr = "Error Gemini (HTTP " + std::to_string(statusCode) + ")";
+                }
+            } catch (...) {
+                finalErr = reqError.empty() ? ("Error HTTP " + std::to_string(statusCode)) : reqError;
+            }
+        }
+
+        // Limpiar posibles bloques de código markdown
+        if (success && !replyText.empty()) {
+            size_t start = replyText.find_first_not_of(" \t\r\n");
+            if (start != std::string::npos) replyText = replyText.substr(start);
+            size_t end = replyText.find_last_not_of(" \t\r\n");
+            if (end != std::string::npos) replyText = replyText.substr(0, end + 1);
+
+            if (replyText.rfind("```", 0) == 0) {
+                size_t nl = replyText.find('\n');
+                if (nl != std::string::npos) replyText = replyText.substr(nl + 1);
+            }
+            if (replyText.size() >= 3 && replyText.substr(replyText.size() - 3) == "```") {
+                replyText = replyText.substr(0, replyText.size() - 3);
+            }
+            start = replyText.find_first_not_of(" \t\r\n");
+            if (start != std::string::npos) replyText = replyText.substr(start);
+            end = replyText.find_last_not_of(" \t\r\n");
+            if (end != std::string::npos) replyText = replyText.substr(0, end + 1);
+        }
+
+        if (success) {
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            m_TokensUsedThisMonth += tokensUsed;
+            SaveQuota();
+        }
+
+        m_ChatBusy.store(false);
+        if (callback) callback(success, replyText, tokensUsed, finalErr);
+    }).detach();
+}
+
 // ── Generador de Imágenes IA ─────────────────────────────────────────────────
 void ProAIManager::GenerateImage(const std::string& prompt,
                                  std::function<void(bool success, const std::string& savedPath, const std::string& error)> callback) {

@@ -59,10 +59,15 @@ public:
     int      GetMaxMonthlyImages() const;
     int      GetUsedImages() const;
 
-    // ── Servicio de Chat IA (DeepSeek) ───────────────────────────────────────
+    // ── Servicio de Chat IA (DeepSeek / Gemini) ──────────────────────────────
     bool IsChatBusy() const;
     void SendChatMessage(const std::vector<ProChatMessage>& history,
                          std::function<void(bool success, const std::string& reply, uint32_t tokensUsed, const std::string& error)> callback);
+
+    // ── Corrección y Edición de Letras con IA ─────────────────────────────
+    void EditLyricsWithAI(const std::string& currentLyrics,
+                          const std::string& userPrompt,
+                          std::function<void(bool success, const std::string& modifiedLyrics, uint32_t tokensUsed, const std::string& error)> callback);
 
     // ── Servicio de Generación de Imágenes ───────────────────────────────────
     bool IsImageBusy() const;
