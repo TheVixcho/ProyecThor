@@ -224,7 +224,7 @@ export default function App() {
       <main className="relative z-10 flex-1">
         {/* HERO SECTION: ENFOQUE EN LA CALIDAD DE LA VERSIÓN BASE GRATUITA */}
         <section id="inicio" className="pt-24 pb-20 px-6 max-w-5xl mx-auto text-center space-y-8">
-          <h1 className="text-2xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-snug sm:leading-tight">
+          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-tight">
             <span className="block">Proyección profesional para tu auditorio,</span>
             <span className="block bg-gradient-to-r from-white via-neutral-200 to-cyan-400 bg-clip-text text-transparent">
               a la velocidad del rayo
@@ -295,7 +295,7 @@ export default function App() {
         {/* SECCIÓN: LO BUENO QUE ES EL PROGRAMA DE FORMA GRATUITA */}
         <section id="gratuito" className="py-20 px-6 max-w-6xl mx-auto space-y-12">
           <div className="max-w-3xl mx-auto space-y-3">
-            <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
+            <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
               La versión gratuita ya es todo lo que tu auditorio necesita
             </h2>
             <p className="text-neutral-400 text-sm leading-relaxed max-w-2xl text-justify">
@@ -380,7 +380,7 @@ export default function App() {
         {/* CARACTERÍSTICAS TÉCNICAS Y ESPECIFICACIONES BASE */}
         <section id="especificaciones" className="py-16 px-6 max-w-6xl mx-auto space-y-10">
           <div className="border-b border-neutral-800 pb-4">
-            <h2 className="text-2xl font-extrabold text-white">
+            <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
               Capacidades técnicas del motor de proyección
             </h2>
           </div>
@@ -408,7 +408,7 @@ export default function App() {
         {/* PLATAFORMAS COMPATIBLES */}
         <section id="compatibilidad" className="py-16 px-6 max-w-4xl mx-auto space-y-6">
           <div className="border-b border-neutral-800 pb-3">
-            <h2 className="text-lg font-bold text-white">
+            <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
               Entornos de Ejecución Soportados
             </h2>
           </div>
@@ -457,7 +457,7 @@ export default function App() {
                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
                 Suscripción Institucional y Técnica
               </div>
-              <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+              <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
                 ProyecThor for Professionals
               </h2>
               <p className="text-neutral-400 text-sm leading-relaxed text-justify">
@@ -502,7 +502,7 @@ export default function App() {
           {/* COMPARACIÓN DE EDICIONES Y SUSCRIPCIÓN */}
           <div id="planes" className="pt-8 space-y-10">
             <div className="text-center max-w-2xl mx-auto space-y-2">
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
                 Elige el modelo adecuado para tu auditorio
               </h2>
               <p className="text-neutral-400 text-xs sm:text-sm leading-relaxed">
