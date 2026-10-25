@@ -87,6 +87,7 @@ namespace ProyecThor::UI::Settings {
         void RenderCategoryShortcuts();
         void RenderCategorySongs();
         void RenderCategoryData();
+        void RenderCategoryAccount();
 
         ProyecThor::UI::OSCPanel*       m_OSCPanelRef       = nullptr;
         ProyecThor::UI::BroadcastPanel* m_BroadcastPanelRef = nullptr;

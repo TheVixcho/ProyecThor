@@ -23,6 +23,9 @@
 #include "panels/OSCPanel.h"
 #include "panels/AIAssistantPanel.h"
 #include "panels/VoiceAssistantPanel.h"
+#include "panels/ProCloudSongsPanel.h"
+#include "panels/ProAIChatPanel.h"
+#include "panels/ProImageGeneratorPanel.h"
 #include "ui/views/QuickNotes.h"
 #include "core/SubtitleImporter.h"
 #include "core/PresentationCore.h"
@@ -69,7 +72,7 @@ uint64_t m_LastTransitionTrigger = 0;
     void AddPanel(std::shared_ptr<ProyecThor::UI::IPanel> panel);
     void RenderAll();
     void Shutdown();
-    void RequestSettings();
+    void RequestSettings(int initialCategory = -1);
 
     GlassRenderer& GetGlassRenderer() { return m_GlassRenderer; }
 
@@ -243,6 +246,15 @@ private:
     void                RenderVoiceAssistantWindow();
     bool                m_ShowVoiceAssistant = false;
     VoiceAssistantPanel m_VoiceAssistantPanel;
+
+    // ── Ventanas Flotantes Pro (ProyecThor for Professionals) ────────────────
+    void                   RenderProWindows();
+    bool                   m_ShowProCloudSongs = false;
+    bool                   m_ShowProAIChat     = false;
+    bool                   m_ShowProImageGen   = false;
+    ProCloudSongsPanel     m_ProCloudSongsPanel;
+    ProAIChatPanel         m_ProAIChatPanel;
+    ProImageGeneratorPanel m_ProImageGenPanel;
 
     void        RenderUrlImportModal();
     bool        m_ShowUrlImport        = false;

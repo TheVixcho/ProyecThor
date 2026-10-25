@@ -55,6 +55,8 @@
 #include "core/ThumbnailWorker.h"
 #include "core/AppPaths.h"
 #include "core/plugins/PluginManager.h"
+#include "core/AuthLicenseManager.h"
+#include "core/ProAIManager.h"
 #include "SplashScreen.h"
 
 #ifdef _WIN32
@@ -1214,6 +1216,8 @@ int main(int argc, char** argv)
 
               report(0.28f, "Complementos y salidas de proyección");
               ProyecThor::Core::PluginManager::Get().Initialize();
+              ProyecThor::Core::AuthLicenseManager::Get().Initialize();
+              ProyecThor::Core::ProAIManager::Get().Initialize();
               ProyecThor::Settings::SettingsManager::Get().ApplyProjection();
 
               report(0.45f, "Biblioteca, Canciones, Biblias y Modelos 3D");

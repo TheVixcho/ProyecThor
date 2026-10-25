@@ -339,4 +339,96 @@ inline void DrawIcon_Help(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
     dl->AddCircleFilled(IcPt(o, sz, 0.50f, 0.73f), sz * 0.045f, col, 8);
 }
 
+inline void DrawIcon_Account(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = std::max(1.2f, sz * 0.075f);
+    // Cabeza
+    ImVec2 headC = IcPt(o, sz, 0.50f, 0.32f);
+    dl->AddCircleFilled(headC, sz * 0.16f, col, 16);
+    // Torso curvado
+    dl->PathClear();
+    dl->PathArcTo(IcPt(o, sz, 0.50f, 0.88f), sz * 0.34f, -3.14159f * 0.88f, -3.14159f * 0.12f, 16);
+    dl->PathStroke(col, ImDrawFlags_None, thick * 1.4f);
+}
+
+// Nube (Cloud Storage / Firebase)
+inline void DrawIcon_Cloud(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = std::max(1.2f, sz * 0.075f);
+    // Base plana
+    dl->AddLine(IcPt(o, sz, 0.24f, 0.74f), IcPt(o, sz, 0.76f, 0.74f), col, thick);
+    // Círculos de nubes (rellenos con alpha o contorno sutil)
+    dl->AddCircle(IcPt(o, sz, 0.34f, 0.60f), sz * 0.14f, col, 16, thick);
+    dl->AddCircle(IcPt(o, sz, 0.52f, 0.44f), sz * 0.20f, col, 18, thick);
+    dl->AddCircle(IcPt(o, sz, 0.70f, 0.56f), sz * 0.15f, col, 16, thick);
+    // Relleno interno suave
+    dl->AddCircleFilled(IcPt(o, sz, 0.34f, 0.60f), sz * 0.12f, col & 0x00FFFFFF | 0x30000000, 16);
+    dl->AddCircleFilled(IcPt(o, sz, 0.52f, 0.44f), sz * 0.18f, col & 0x00FFFFFF | 0x30000000, 18);
+    dl->AddCircleFilled(IcPt(o, sz, 0.70f, 0.56f), sz * 0.13f, col & 0x00FFFFFF | 0x30000000, 16);
+}
+
+// Destello / Sparkle IA (DeepSeek / Chat IA)
+inline void DrawIcon_Sparkle(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    ImVec2 c = IcPt(o, sz, 0.48f, 0.52f);
+    const float rOut = sz * 0.34f;
+    const float rIn  = sz * 0.08f;
+
+    ImVec2 pts[8] = {
+        { c.x,        c.y - rOut },
+        { c.x + rIn,  c.y - rIn  },
+        { c.x + rOut, c.y        },
+        { c.x + rIn,  c.y + rIn  },
+        { c.x,        c.y + rOut },
+        { c.x - rIn,  c.y + rIn  },
+        { c.x - rOut, c.y        },
+        { c.x - rIn,  c.y - rIn  }
+    };
+    dl->AddConvexPolyFilled(pts, 8, col);
+
+    // Pequeño destello secundario en la esquina superior derecha
+    ImVec2 c2 = IcPt(o, sz, 0.78f, 0.26f);
+    const float rOut2 = sz * 0.14f;
+    const float rIn2  = sz * 0.04f;
+    ImVec2 pts2[8] = {
+        { c2.x,         c2.y - rOut2 },
+        { c2.x + rIn2,  c2.y - rIn2  },
+        { c2.x + rOut2, c2.y         },
+        { c2.x + rIn2,  c2.y + rIn2  },
+        { c2.x,         c2.y + rOut2 },
+        { c2.x - rIn2,  c2.y + rIn2  },
+        { c2.x - rOut2, c2.y         },
+        { c2.x - rIn2,  c2.y - rIn2  }
+    };
+    dl->AddConvexPolyFilled(pts2, 8, col);
+}
+
+// Imagen / Paisaje (Creador de Imágenes IA)
+inline void DrawIcon_Image(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = std::max(1.2f, sz * 0.07f);
+    // Marco exterior
+    ImVec2 p0 = IcPt(o, sz, 0.16f, 0.20f);
+    ImVec2 p1 = IcPt(o, sz, 0.84f, 0.80f);
+    dl->AddRect(p0, p1, col, sz * 0.06f, ImDrawFlags_RoundCornersAll, thick);
+
+    // Sol / Luna
+    dl->AddCircleFilled(IcPt(o, sz, 0.35f, 0.38f), sz * 0.08f, col, 12);
+
+    // Montañas (triángulos)
+    ImVec2 m1[3] = {
+        IcPt(o, sz, 0.22f, 0.74f),
+        IcPt(o, sz, 0.46f, 0.48f),
+        IcPt(o, sz, 0.68f, 0.74f)
+    };
+    dl->AddPolyline(m1, 3, col, ImDrawFlags_None, thick);
+
+    ImVec2 m2[3] = {
+        IcPt(o, sz, 0.54f, 0.74f),
+        IcPt(o, sz, 0.70f, 0.56f),
+        IcPt(o, sz, 0.80f, 0.74f)
+    };
+    dl->AddPolyline(m2, 3, col, ImDrawFlags_None, thick);
+}
+
 } // namespace ProyecThor::UI::AppIcons

@@ -454,7 +454,7 @@ export default function App() {
               </div>
 
               <a
-                href="https://whatsapp.com/channel/0029Vb7e9tj3WHTdNivIxR19"
+                href="https://vixcho.lemonsqueezy.com/checkout/buy/e609efc0-4393-46fc-b6ed-d535cb9dd2dc"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-full py-3 rounded text-xs font-semibold text-center bg-cyan-400 text-neutral-950 hover:bg-cyan-300 transition-colors shadow-sm"

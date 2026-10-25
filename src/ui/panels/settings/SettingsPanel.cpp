@@ -22,7 +22,7 @@ namespace ProyecThor::UI::Settings {
 
 // Icono mínimo por categoría, dibujado a mano con primitivas de ImDrawList
 // (sin depender de ningún PNG/asset externo) -- ver DrawCategoryIcon.
-enum class CatIcon { Palette, Sliders, Monitor, Cast, Speaker, MusicNote, Keyboard, Globe, Download, Storage };
+enum class CatIcon { Palette, Sliders, Monitor, Cast, Speaker, MusicNote, Keyboard, Globe, Download, Storage, Account };
 
 struct Category {
     const char* tag;
@@ -43,8 +43,9 @@ static const Category k_Categories[] = {
     { "LNG", "Idioma",          "Idioma de la interfaz",                   CatIcon::Globe,     IM_COL32(100, 205, 110, 255) }, // 7
     { "UPD", "Actualizaciones", "Versión instalada y canales",             CatIcon::Download,  IM_COL32(230, 100,  95, 255) }, // 8
     { "DAT", "Datos",           "Ubicación de archivos y carpetas vinculadas", CatIcon::Storage, IM_COL32(245, 185,  65, 255) }, // 9
+    { "ACC", "Cuenta y Suscripción", "Inicio de sesión, suscripción Pro y licencias", CatIcon::Account, IM_COL32(245, 180,  50, 255) }, // 10
 };
-static constexpr int k_CategoryCount = 10;
+static constexpr int k_CategoryCount = 11;
 
 // Dibuja un glifo simple y reconocible para 'icon', centrado en 'c', con
 // radio aproximado 'r' -- pensado para verse bien a ~8-9px de radio (18px
@@ -149,20 +150,28 @@ static void DrawCategoryIcon(ImDrawList* dl, CatIcon icon, ImVec2 c, float r, Im
             }
             break;
         }
+        case CatIcon::Account: {
+            dl->AddCircleFilled(ImVec2(c.x, c.y - r * 0.30f), r * 0.32f, color);
+            dl->PathClear();
+            dl->PathArcTo(ImVec2(c.x, c.y + r * 0.80f), r * 0.65f, -IM_PI * 0.85f, -IM_PI * 0.15f, 12);
+            dl->PathStroke(color, false, 1.4f);
+            break;
+        }
     }
 }
 
 // Orden y agrupación visual del sidebar (por índice real de k_Categories).
 // Reagrupa temas relacionados (p.ej. Stage/Canciones junto a Proyección)
 // sin tocar los índices reales, así ningún QuickBtn/m_ActiveTab se rompe.
-struct NavGroup { const char* label; const int items[4]; int count; };
+struct NavGroup { const char* label; const int items[5]; int count; };
 static const NavGroup k_NavGroups[] = {
+    { "CUENTA",          { 10          }, 1 },
     { "APARIENCIA",      { 0,          }, 1 },
     { "PANTALLAS",       { 1, 2, 3     }, 3 }, // Proyección + Conexiones + Pantallas (Stage)
     { "AUDIO",           { 4, 5        }, 2 },
     { "SISTEMA Y DATOS", { 6, 7, 8, 9  }, 4 }, // Teclas + Idioma + Actualizaciones + Datos
 };
-static constexpr int k_NavGroupCount = 4;
+static constexpr int k_NavGroupCount = 5;
 
 // Pequeño helper local: convierte un token de color del tema (float[4]) en
 // ImVec4, con un multiplicador opcional de alpha.
@@ -709,6 +718,7 @@ void SettingsPanel::RenderContent() {
         case 7: RenderCategoryLanguage();    break;
         case 8: RenderCategoryUpdates();     break;
         case 9: RenderCategoryData();        break;
+        case 10: RenderCategoryAccount();    break;
         default: ImGui::TextDisabled("Categoría no implementada."); break;
     }
 

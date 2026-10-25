@@ -40,6 +40,7 @@
 #include "PatchNotesRenderer.h"
 #include "MediaImportModal.h"
 #include "core/MediaImportManager.h"
+#include "core/AuthLicenseManager.h"
 #include <ctime>
 
 namespace ProyecThor::UI {
@@ -209,8 +210,10 @@ void UIManager::EnterLibraryWorkspaceMode()
     m_Mode = WorkspaceMode::Projector;
 }
 
-void UIManager::RequestSettings()
+void UIManager::RequestSettings(int initialCategory)
 {
+    if (initialCategory >= 0)
+        m_SettingsPanel.SetInitialCategory(initialCategory);
     m_ShowConfig = true;
 }
 
@@ -1022,6 +1025,7 @@ void UIManager::RenderAll()
     Core::VoiceAssistant::Get().Update();
     RenderVoiceAssistantWindow();
     m_VoiceAssistantPanel.RenderAssistedPromptBanner();
+    RenderProWindows();
 
     // Ventana flotante "Centro de Conexiones" (Red LAN, App Móvil, Transmisión, OSC, Chat)
     if (m_ShowConnectionsWindow)
@@ -1692,8 +1696,25 @@ void UIManager::RenderModeToolbar()
             });
         }
 
-        // ── Isla 3: Configuración - Ayuda (exactamente 256px) ────────────
+        // ── Isla 3: Cuenta/Pro - Configuración - Ayuda ────────────
+        auto& authMgr = ProyecThor::Core::AuthLicenseManager::Get();
+        const bool isProActive = authMgr.IsPro();
+        const char* accountLabel = isProActive ? "Pro" : (authMgr.IsLoggedIn() ? "Cuenta" : "Cuenta");
+        ImU32 accountCol = isProActive
+            ? IM_COL32(245, 180, 50, 255)  // Dorado Pro
+            : IM_COL32(70, 195, 220, 255);  // Cyan
+
         std::vector<IslandItem> island3 = {
+            {
+                accountLabel,
+                AppIcons::DrawIcon_Account,
+                [this]() { return m_ShowConfig; },
+                [this]() {
+                    CloseAllToolWindows();
+                    RequestSettings(10);
+                },
+                accountCol
+            },
             {
                 "Configuración",
                 AppIcons::DrawIcon_Settings,
@@ -1732,6 +1753,46 @@ void UIManager::RenderModeToolbar()
         float statusScreenX = winPos.x + winW - statusIslandW - 14.0f;
         statusPosScreenX = statusScreenX;
 
+        // ── Isla Pro: Nube Pro - Chat IA - Imágenes IA (Exclusiva para ProyecThor for Professionals) ──
+        std::vector<IslandItem> islandPro;
+        if (isProActive) {
+            islandPro = {
+                {
+                    "Nube Pro",
+                    AppIcons::DrawIcon_Cloud,
+                    [this]() { return m_ShowProCloudSongs; },
+                    [this]() {
+                        bool wasOpen = m_ShowProCloudSongs;
+                        CloseAllToolWindows();
+                        m_ShowProCloudSongs = !wasOpen;
+                    },
+                    IM_COL32(56, 189, 248, 255) // Azul cielo / Nube
+                },
+                {
+                    "Chat IA",
+                    AppIcons::DrawIcon_Sparkle,
+                    [this]() { return m_ShowProAIChat; },
+                    [this]() {
+                        bool wasOpen = m_ShowProAIChat;
+                        CloseAllToolWindows();
+                        m_ShowProAIChat = !wasOpen;
+                    },
+                    IM_COL32(192, 132, 252, 255) // Lavanda / IA
+                },
+                {
+                    "Imágenes IA",
+                    AppIcons::DrawIcon_Image,
+                    [this]() { return m_ShowProImageGen; },
+                    [this]() {
+                        bool wasOpen = m_ShowProImageGen;
+                        CloseAllToolWindows();
+                        m_ShowProImageGen = !wasOpen;
+                    },
+                    IM_COL32(251, 191, 36, 255) // Dorado / Fondos
+                }
+            };
+        }
+
         // 1. Primera isla: full izquierda
         float island1W = CalcIslandW(island1);
         float island1X = winPos.x + 14.0f;
@@ -1744,14 +1805,29 @@ void UIManager::RenderModeToolbar()
             island2X = island1X + island1W + 14.0f;
         }
 
-        // 3. Tercera isla (Configuración / Ayuda): a la derecha, al lado de público/stage/borrar todo
+        // 3. Tercera isla (Configuración / Ayuda) y Cuarta isla (Isla Pro):
+        float rightEdge = statusScreenX - 12.0f;
         float island3W = CalcIslandW(island3);
-        float island3X = statusScreenX - 12.0f - island3W;
-        if (island2X + island2W + 14.0f > island3X) {
-            island2X = island3X - island2W - 14.0f;
+        float island3X = rightEdge - island3W;
+
+        float islandProW = 0.0f;
+        float islandProX = 0.0f;
+        if (isProActive && !islandPro.empty()) {
+            islandProW = CalcIslandW(islandPro);
+            islandProX = island3X - 12.0f - islandProW;
+            if (island2X + island2W + 14.0f > islandProX) {
+                island2X = islandProX - island2W - 14.0f;
+            }
+        } else {
+            if (island2X + island2W + 14.0f > island3X) {
+                island2X = island3X - island2W - 14.0f;
+            }
         }
 
         RenderIsland("island2", island2, island2X);
+        if (isProActive && !islandPro.empty()) {
+            RenderIsland("islandPro", islandPro, islandProX);
+        }
         RenderIsland("island3", island3, island3X);
 
         RenderStylesPopup();
@@ -1988,7 +2064,8 @@ void UIManager::ToggleStageQuick(bool active)
 
 bool UIManager::IsAnyToolWindowOpen() const
 {
-    return m_ShowNotes || m_ShowConnectionsWindow || m_ShowConfig || m_ShowVoiceAssistant || m_ShowAIAssistant;
+    return m_ShowNotes || m_ShowConnectionsWindow || m_ShowConfig || m_ShowVoiceAssistant || m_ShowAIAssistant ||
+           m_ShowProCloudSongs || m_ShowProAIChat || m_ShowProImageGen;
 }
 
 void UIManager::CloseAllToolWindows()
@@ -2000,6 +2077,9 @@ void UIManager::CloseAllToolWindows()
     m_ShowConfig            = false;
     m_ShowVoiceAssistant    = false;
     m_ShowAIAssistant       = false;
+    m_ShowProCloudSongs     = false;
+    m_ShowProAIChat         = false;
+    m_ShowProImageGen       = false;
 }
 
 void UIManager::ToggleNotesWindow()
@@ -2054,6 +2134,13 @@ void UIManager::RenderAIAssistantWindow()
 void UIManager::RenderVoiceAssistantWindow()
 {
     m_VoiceAssistantPanel.Render(&m_ShowVoiceAssistant, m_GlassRenderer);
+}
+
+void UIManager::RenderProWindows()
+{
+    m_ProCloudSongsPanel.Render(&m_ShowProCloudSongs, m_GlassRenderer);
+    m_ProAIChatPanel.Render(&m_ShowProAIChat, m_GlassRenderer);
+    m_ProImageGenPanel.Render(&m_ShowProImageGen, m_GlassRenderer);
 }
 
 void UIManager::RenderConnectionsWindow()
