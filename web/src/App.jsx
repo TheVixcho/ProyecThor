@@ -6,7 +6,6 @@ const caracteristicas = [
     titulo: "Arquitectura Multi-Capa",
     descripcion:
       "Gestión independiente y acelerada por GPU para fondos de video, bucles gráficos y capas de texto dinámicas sin interferencia entre elementos.",
-    badge: "Motor Gráfico",
     icon: (
       <svg className="w-5 h-5 text-neutral-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -17,7 +16,6 @@ const caracteristicas = [
     titulo: "Despliegue en Doble Pantalla",
     descripcion:
       "Consola de control dedicada para el operador con monitorización en tiempo real, desacoplada de la salida limpia sin bordes para el proyector.",
-    badge: "Producción",
     icon: (
       <svg className="w-5 h-5 text-neutral-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -28,7 +26,6 @@ const caracteristicas = [
     titulo: "Stage Display (Monitores de Retorno)",
     descripcion:
       "Salida de retorno para músicos y púlpito con estrofa actual, próxima estrofa, reloj de cuenta regresiva y mensajes discretos desde la cabina.",
-    badge: "Escenario",
     icon: (
       <svg className="w-5 h-5 text-neutral-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 18h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -39,7 +36,6 @@ const caracteristicas = [
     titulo: "Biblioteca Centralizada",
     descripcion:
       "Repertorio de canciones, versiones integradas de las Sagradas Escrituras en formato XML estructurado, subtítulos y archivos de audio.",
-    badge: "Gestión",
     icon: (
       <svg className="w-5 h-5 text-neutral-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
@@ -50,7 +46,6 @@ const caracteristicas = [
     titulo: "Streaming RTMP e Integración OSC",
     descripcion:
       "Emisión directa a servidores de retransmisión, distribución en red local y control sincronizado bidireccional mediante el protocolo OSC.",
-    badge: "Transmisión",
     icon: (
       <svg className="w-5 h-5 text-neutral-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -61,7 +56,6 @@ const caracteristicas = [
     titulo: "Shaders y Post-Procesado en GPU",
     descripcion:
       "Efectos visuales procesados en tiempo real: simulación de emulsión analógica, grano cinematográfico, viñeta y desenfoque dinámico.",
-    badge: "Efectos GPU",
     icon: (
       <svg className="w-5 h-5 text-neutral-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
@@ -74,7 +68,6 @@ const pilaresGratuitos = [
   {
     titulo: "100% Funcional Offline",
     desc: "No dependes de conexión a internet para proyectar en tus cultos o eventos. Todo el motor, la biblioteca y los medios funcionan de manera completamente local y autónoma.",
-    badge: "Sin Dependencias",
     icon: (
       <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824-2.178a9 9 0 016.364 2.64m-4.95 2.122a5 5 0 011.414 2.828M3 3l18 18" />
@@ -84,7 +77,6 @@ const pilaresGratuitos = [
   {
     titulo: "Cero Marcas de Agua ni Límites",
     desc: "Disfruta de una salida visual limpia para tu congregación. Sin logos forzados en la proyección, sin límites de versículos ni de canciones, y sin fechas de caducidad molestas.",
-    badge: "Sin Restricciones",
     icon: (
       <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -94,7 +86,6 @@ const pilaresGratuitos = [
   {
     titulo: "Rendimiento Nativo en C++17",
     desc: "A diferencia de aplicaciones pesadas basadas en Electron o navegadores embebidos, ProyecThor se compila directamente para la GPU y el procesador, consumiendo mínimos recursos.",
-    badge: "Ultraligero",
     icon: (
       <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -107,7 +98,6 @@ const proAdvantages = [
   {
     title: "Almacenamiento Cloud para 5,000+ Canciones",
     desc: "Capacidad extendida en la nube para sincronizar y respaldar catálogos completos de repertorio con acceso instantáneo desde cualquier estación de trabajo.",
-    badge: "Cloud Repertorio",
     icon: (
       <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 00-9.78 2.096A4.001 4.001 0 003 15z" />
@@ -117,7 +107,6 @@ const proAdvantages = [
   {
     title: "Sincronización Multi-Sala y Multi-Sede",
     desc: "Centralice los cambios editoriales: una modificación en el puesto de preparación se propaga de manera transparente a todas las cabinas de control.",
-    badge: "Distribución",
     icon: (
       <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -125,9 +114,8 @@ const proAdvantages = [
     ),
   },
   {
-    title: "Motor de Redacción Asistido por IA",
-    desc: "Herramientas de lenguaje natural diseñadas para componer, corregir métrica poética, estructurar estrofas y dar formato inmediato a himnos y notas litúrgicas.",
-    badge: "IA Avanzada",
+    title: "Edición y Estructuración Litúrgica",
+    desc: "Herramientas avanzadas para estructurar estrofas, dar formato instantáneo y verificar la concordancia métrica de himnos y cantos.",
     icon: (
       <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -137,7 +125,6 @@ const proAdvantages = [
   {
     title: "Respaldos Automáticos con Redundancia",
     desc: "Copias de seguridad automáticas en la nube para garantizar la continuidad operativa de presentaciones y configuraciones críticas ante contingencias de hardware.",
-    badge: "Seguridad Cloud",
     icon: (
       <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
@@ -147,7 +134,6 @@ const proAdvantages = [
   {
     title: "Soporte Técnico y Despliegues Dedicados",
     desc: "Canal prioritario de asistencia técnica para auditorios y acceso preferente a compilaciones preliminares y mejoras de rendimiento antes de su publicación general.",
-    badge: "Prioritario",
     icon: (
       <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -157,7 +143,6 @@ const proAdvantages = [
   {
     title: "Continuidad Institucional",
     desc: "Infraestructura robusta pensada para organizaciones religiosas y técnicas que requieren estandarizar múltiples auditorios bajo una misma cuenta centralizada.",
-    badge: "Auditorios",
     icon: (
       <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
@@ -239,12 +224,9 @@ export default function App() {
       <main className="relative z-10 flex-1">
         {/* HERO SECTION: ENFOQUE EN LA CALIDAD DE LA VERSIÓN BASE GRATUITA */}
         <section id="inicio" className="pt-24 pb-20 px-6 max-w-5xl mx-auto text-center space-y-8">
-          <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full border border-cyan-500/30 bg-cyan-950/40 text-cyan-300 text-xs tracking-wide font-medium shadow-[0_0_20px_rgba(6,182,212,0.15)] transition-all hover:border-cyan-400/50">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
-            </span>
-            <span>Motor de Proyección Audiovisual Nativo · Gratuito y de Alto Rendimiento</span>
+          <div className="inline-flex items-center gap-2 text-xs uppercase tracking-widest text-cyan-400 font-semibold">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+            Motor de Proyección Audiovisual Nativo · Gratuito y de Alto Rendimiento
           </div>
 
           <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-tight">
@@ -315,7 +297,7 @@ export default function App() {
         {/* SECCIÓN: LO BUENO QUE ES EL PROGRAMA DE FORMA GRATUITA */}
         <section id="gratuito" className="py-20 px-6 max-w-6xl mx-auto space-y-12">
           <div className="text-center max-w-3xl mx-auto space-y-3">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-cyan-500/30 bg-cyan-950/40 text-cyan-300 text-xs font-semibold tracking-wider uppercase">
+            <div className="inline-flex items-center gap-2 text-xs uppercase tracking-widest text-cyan-400 font-semibold">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
               Software Completo y Robusto sin Costo
             </div>
@@ -334,13 +316,8 @@ export default function App() {
                 className="rounded-xl border border-neutral-800 bg-neutral-900/30 p-7 flex flex-col justify-between space-y-4 hover:border-neutral-700 hover:-translate-y-1 transition-all duration-300"
               >
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="w-10 h-10 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-center">
-                      {p.icon}
-                    </div>
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-cyan-400 px-2 py-0.5 rounded bg-cyan-950/50 border border-cyan-800/40">
-                      {p.badge}
-                    </span>
+                  <div className="w-10 h-10 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-center">
+                    {p.icon}
                   </div>
                   <h3 className="text-base font-bold text-white tracking-tight">
                     {p.titulo}
@@ -423,13 +400,8 @@ export default function App() {
                 key={c.titulo}
                 className="rounded-xl border border-neutral-800/80 bg-neutral-900/20 p-6 space-y-3 hover:border-neutral-700 hover:-translate-y-1 transition-all duration-300 group"
               >
-                <div className="flex items-center justify-between">
-                  <div className="p-2 rounded-lg bg-neutral-900 border border-neutral-800 group-hover:border-cyan-500/40 transition-colors">
-                    {c.icon}
-                  </div>
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
-                    {c.badge}
-                  </span>
+                <div className="w-9 h-9 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-center group-hover:border-cyan-500/40 transition-colors">
+                  {c.icon}
                 </div>
                 <h3 className="text-sm font-semibold text-white group-hover:text-cyan-300 transition-colors">
                   {c.titulo}
@@ -512,13 +484,8 @@ export default function App() {
                   className="rounded-xl border border-neutral-800/80 bg-neutral-950/70 p-6 flex flex-col justify-between hover:border-neutral-700 hover:-translate-y-1 transition-all duration-300 hover:shadow-xl hover:shadow-black/50 group"
                 >
                   <div className="space-y-3.5">
-                    <div className="flex items-center justify-between">
-                      <div className="w-10 h-10 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-center group-hover:border-cyan-500/40 transition-colors">
-                        {adv.icon}
-                      </div>
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 px-2 py-0.5 rounded bg-neutral-900 border border-neutral-800/60">
-                        {adv.badge}
-                      </span>
+                    <div className="w-10 h-10 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-center group-hover:border-cyan-500/40 transition-colors">
+                      {adv.icon}
                     </div>
                     <h3 className="text-sm font-semibold text-white tracking-tight group-hover:text-cyan-300 transition-colors">
                       {adv.title}
@@ -614,12 +581,6 @@ export default function App() {
 
               {/* PLAN PRO FOR PROFESSIONALS */}
               <div className="pro-border-glow rounded-2xl border bg-gradient-to-b from-neutral-900/60 to-neutral-950 p-8 flex flex-col justify-between space-y-8 relative shadow-2xl transition-all duration-300">
-                <div className="absolute top-6 right-6">
-                  <span className="text-[10px] uppercase font-bold tracking-widest text-cyan-400 border border-cyan-500/40 bg-cyan-950/60 px-2.5 py-1 rounded-full">
-                    Infraestructura Cloud
-                  </span>
-                </div>
-
                 <div className="space-y-6">
                   <div className="space-y-2">
                     <div className="text-xs font-semibold uppercase tracking-wider text-cyan-400">
@@ -651,8 +612,8 @@ export default function App() {
                     <div className="flex items-start gap-3">
                       <span className="text-cyan-400 font-mono text-sm leading-none font-bold">+</span>
                       <div>
-                        <strong className="text-white block font-medium">Herramientas de redacción asistidas por IA</strong>
-                        <span className="text-neutral-400">Estructuración inteligente de estrofas y corrección métrica.</span>
+                        <strong className="text-white block font-medium">Herramientas avanzadas de redacción litúrgica</strong>
+                        <span className="text-neutral-400">Estructuración rápida de estrofas y verificación métrica.</span>
                       </div>
                     </div>
                     <div className="flex items-start gap-3">
