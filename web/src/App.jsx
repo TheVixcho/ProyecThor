@@ -229,9 +229,9 @@ export default function App() {
             Motor de Proyección Audiovisual Nativo · Gratuito y de Alto Rendimiento
           </div>
 
-          <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-tight">
-            Proyección profesional para tu auditorio,{" "}
-            <span className="bg-gradient-to-r from-white via-neutral-200 to-cyan-400 bg-clip-text text-transparent">
+          <h1 className="text-2xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-snug sm:leading-tight">
+            <span className="block">Proyección profesional para tu auditorio,</span>
+            <span className="block bg-gradient-to-r from-white via-neutral-200 to-cyan-400 bg-clip-text text-transparent">
               a la velocidad del rayo
             </span>
           </h1>
