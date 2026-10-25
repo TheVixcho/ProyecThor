@@ -455,6 +455,36 @@ void LibraryPanel::RefreshList()
                 }
             }
         }
+
+        // Si no se encontraron canciones en base/songs, buscar en rutas relativas por si es version portable
+        if (m_Items.empty() && m_CurrentCategory == LibraryCategory::Songs) {
+            static const std::vector<std::string> kSongFallbacks = {
+                "bin/assets/songs",
+                "assets/songs",
+                "build-win/bin/assets/songs"
+            };
+            for (const auto& fb : kSongFallbacks) {
+                fs::path fbPath = U8Path(fb);
+                std::error_code fbEc;
+                if (fs::exists(fbPath, fbEc) && fs::is_directory(fbPath, fbEc)) {
+                    for (const auto& entry : fs::directory_iterator(fbPath, fbEc)) {
+                        if (fbEc) break;
+                        if (!entry.is_regular_file()) continue;
+#ifdef _WIN32
+                        std::string name = WideToUtf8(entry.path().filename().wstring());
+#else
+                        std::string name = entry.path().filename().string();
+#endif
+                        std::string nameKey = Core::MediaImportManager::NormalizeFilenameKey(name);
+                        if (nameKey.empty() || seenNames.count(nameKey) > 0) continue;
+                        seenNames.insert(nameKey);
+                        m_Items.push_back(name);
+                    }
+                    if (!m_Items.empty()) break;
+                }
+            }
+        }
+
         std::sort(m_Items.begin(), m_Items.end(), [](const std::string& a, const std::string& b) {
             std::string ka = Core::MediaImportManager::NormalizeFilenameKey(a);
             std::string kb = Core::MediaImportManager::NormalizeFilenameKey(b);

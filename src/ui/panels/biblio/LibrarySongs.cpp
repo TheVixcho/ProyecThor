@@ -1286,7 +1286,8 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
         matches.reserve(ctx.items.size());
         for (const auto& item : ctx.items)
         {
-            if (!q.empty())
+            std::string qNorm = NormalizeForSearch(q);
+            if (!qNorm.empty())
             {
                 SongMatchDetail match = AnalyzeSongMatch(item, q, ctx);
                 if (match.kind == SongMatchKind::None) continue;
@@ -1528,7 +1529,7 @@ static void RenderItemsListPane(LibraryContext& ctx)
 
             for (const auto& item : ctx.items) {
                 bool match = true;
-                if (!cur.empty()) {
+                if (!curNorm.empty()) {
                     if (ctx.currentCategoryInt == kCat_Songs) {
                         SongMatchDetail detail = AnalyzeSongMatch(item, cur, ctx);
                         if (detail.kind != SongMatchKind::None) {
@@ -1553,6 +1554,15 @@ static void RenderItemsListPane(LibraryContext& ctx)
             lastCategory = ctx.currentCategoryInt;
             lastItemsCount = ctx.items.size();
             ForceListUpdate() = false;
+        }
+
+        // Failsafe: si la búsqueda está vacía o es solo espacios y filteredItems quedó vacío teniendo canciones en ctx.items
+        std::string checkCurNorm = NormalizeForSearch(cur);
+        if (checkCurNorm.empty() && filteredItems.empty() && !ctx.items.empty()) {
+            filteredItems = ctx.items;
+            s_SongMatchMap.clear();
+            lastItemsCount = ctx.items.size();
+            lastCategory = ctx.currentCategoryInt;
         }
 
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.f, 4.f));
@@ -1634,7 +1644,7 @@ static void RenderItemsListPane(LibraryContext& ctx)
             }
 
             const SongMatchDetail* matchPtr = nullptr;
-            if (ctx.currentCategoryInt == kCat_Songs && !cur.empty()) {
+            if (ctx.currentCategoryInt == kCat_Songs && !checkCurNorm.empty()) {
                 auto mIt = s_SongMatchMap.find(filteredItems[n]);
                 if (mIt != s_SongMatchMap.end()) matchPtr = &mIt->second;
             }

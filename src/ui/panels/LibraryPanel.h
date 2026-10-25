@@ -142,8 +142,8 @@ private:
     // RenderConverterSection() ahora es publico, ver mas arriba.
     void RefreshConvertibleItems();
 
-    LibraryCategory          m_CurrentCategory     = LibraryCategory::Multimedia;
-    LibraryCategory          m_PrevCategory        = LibraryCategory::Multimedia;
+    LibraryCategory          m_CurrentCategory     = LibraryCategory::Songs;
+    LibraryCategory          m_PrevCategory        = LibraryCategory::Songs;
     bool                     m_MediaOnlyMode       = false;
     bool                     m_RenderOnlyMode      = false;
     Library::MultimediaFilter m_MultimediaFilter   = Library::MultimediaFilter::All;

@@ -1231,6 +1231,7 @@ int main(int argc, char** argv)
               homePanel->m_UIManagerRef = &uiManager;
               libraryPanel->SetUIManager(&uiManager);
               uiManager.SetLibraryPanelRef(libraryPanel.get());
+              libraryPanel->SelectCategory(ProyecThor::UI::LibraryCategory::Songs);
 
               uiManager.AddPanel(libraryPanel);
               uiManager.AddPanel(homePanel);
