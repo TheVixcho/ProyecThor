@@ -15,6 +15,17 @@
 
 namespace ProyecThor::UI {
 
+// Helper para formatear números con separador de miles
+static std::string FormatNumberWithCommas(uint64_t value) {
+    std::string s = std::to_string(value);
+    int n = (int)s.length() - 3;
+    while (n > 0) {
+        s.insert(n, ",");
+        n -= 3;
+    }
+    return s;
+}
+
 // Helper para detectar si un texto parece contener la letra de una canción estructurada
 static bool LooksLikeSongLyrics(const std::string& text) {
     if (text.size() < 60) return false;
@@ -72,34 +83,25 @@ void ProAIChatPanel::Render(bool* pOpen, GlassRenderer& glass) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         float availW = ImGui::GetContentRegionAvail().x;
 
-        // ── Cabecera: Monitoreo de Tokens Disponibles ─────────────────────────
+        // ── Cabecera: Monitoreo de Tokens Totales ────────────────────────────
         ImVec2 topP = ImGui::GetCursorScreenPos();
-        float topH  = 48.0f;
+        float topH  = 40.0f;
         dl->AddRectFilled(topP, ImVec2(topP.x + availW, topP.y + topH), IM_COL32(20, 28, 45, 230), DS::RadiusMedium);
         dl->AddRect(topP, ImVec2(topP.x + availW, topP.y + topH), IM_COL32(56, 189, 248, 140), DS::RadiusMedium);
 
-        ImGui::SetCursorScreenPos(ImVec2(topP.x + 16.0f, topP.y + 10.0f));
+        ImGui::SetCursorScreenPos(ImVec2(topP.x + 16.0f, topP.y + 11.0f));
 
         uint64_t availTokens = proMgr.GetAvailableTokens();
-        uint64_t maxTokens   = proMgr.GetMaxMonthlyTokens();
-        float fraction = (maxTokens > 0) ? (float)availTokens / (float)maxTokens : 0.0f;
+        std::string tokensStr = FormatNumberWithCommas(availTokens);
 
-        // Mostrar únicamente tokens disponibles de forma limpia
+        // Mostrar únicamente tokens totales
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.70f, 0.90f, 1.0f, 1.0f));
-        ImGui::Text("Tokens disponibles este mes: %llu / %llu",
-                    (unsigned long long)availTokens, (unsigned long long)maxTokens);
+        ImGui::Text("Tokens totales: %s", tokensStr.c_str());
         ImGui::PopStyleColor();
 
-        // Barra de progreso de tokens
-        ImGui::SetCursorScreenPos(ImVec2(topP.x + 16.0f, topP.y + 30.0f));
-        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.20f, 0.65f, 1.0f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_FrameBg,       ImVec4(0.12f, 0.16f, 0.25f, 1.0f));
-        ImGui::ProgressBar(fraction, ImVec2(availW - 160.0f, 8.0f), "");
-        ImGui::PopStyleColor(2);
-
         // Botón Limpiar Chat
-        ImGui::SetCursorScreenPos(ImVec2(topP.x + availW - 125.0f, topP.y + 10.0f));
-        if (DS::GlassButton("Limpiar chat", ImVec2(110.0f, 28.0f))) {
+        ImGui::SetCursorScreenPos(ImVec2(topP.x + availW - 125.0f, topP.y + 7.0f));
+        if (DS::GlassButton("Limpiar chat", ImVec2(110.0f, 26.0f))) {
             m_Messages.clear();
             m_StatusFeedback.clear();
             m_AttachedSongName.clear();
