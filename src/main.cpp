@@ -788,7 +788,8 @@ void InstallViewportRenderHook()
 
     platform_io.Platform_CreateWindow = [](ImGuiViewport* viewport)
     {
-        s_OrigCreateWindow(viewport);
+        if (s_OrigCreateWindow)
+            s_OrigCreateWindow(viewport);
         GLFWwindow* w = static_cast<GLFWwindow*>(viewport->PlatformHandle);
         if (w)
         {
@@ -1167,6 +1168,7 @@ int main(int argc, char** argv)
               ImGuiIO& io = ImGui::GetIO();
               io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
               io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+              io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
               io.IniFilename  = "proyecthor_ui.ini";
 
               report(0.20f, "Tipografías base y símbolos Unicode");
