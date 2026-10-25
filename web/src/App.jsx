@@ -164,7 +164,7 @@ const plataformas = [
 
 export default function App() {
   return (
-    <div className="min-h-screen flex flex-col bg-neutral-950 text-neutral-300 font-['Arial',sans-serif] antialiased selection:bg-neutral-800 selection:text-white relative overflow-x-hidden">
+    <div className="min-h-screen flex flex-col bg-neutral-950 text-neutral-300 font-['Arial',sans-serif] antialiased selection:bg-neutral-800 selection:text-white relative overflow-x-clip">
       {/* Iluminación de fondo ambiental animada */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         <div className="ambient-glow-1 absolute top-0 left-1/3 -translate-x-1/2 w-[650px] h-[360px] bg-cyan-600/15 blur-[160px] rounded-full" />
@@ -172,8 +172,8 @@ export default function App() {
         <div className="absolute top-3/4 left-1/2 -translate-x-1/2 w-[700px] h-[300px] bg-cyan-900/10 blur-[170px] rounded-full" />
       </div>
 
-      {/* Navegación Superior con Efecto Liquid Glass */}
-      <header className="sticky top-0 z-50 liquid-glass transition-all duration-300">
+      {/* Navegación Superior con Efecto Liquid Glass (Fija Siempre Arriba) */}
+      <header className="fixed top-0 left-0 right-0 z-50 liquid-glass transition-all duration-300">
         <div className="max-w-6xl mx-auto px-6 h-16 flex justify-between items-center">
           <div className="flex items-center gap-3 group cursor-pointer">
             <img
@@ -221,7 +221,7 @@ export default function App() {
       </header>
 
       {/* Contenido Principal */}
-      <main className="relative z-10 flex-1">
+      <main className="relative z-10 flex-1 pt-16">
         {/* HERO SECTION: ENFOQUE EN LA CALIDAD DE LA VERSIÓN BASE GRATUITA */}
         <section id="inicio" className="pt-24 pb-20 px-6 max-w-5xl mx-auto text-center space-y-8">
           <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-tight">
