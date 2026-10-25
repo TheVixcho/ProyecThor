@@ -1450,6 +1450,9 @@ int main(int argc, char** argv)
     ImGui::SetCurrentContext(mainContext);
     glfwFocusWindow(mainWindow);
 
+    // Lo último una vez cargada la app: consultar la licencia en servidores
+    ProyecThor::Core::AuthLicenseManager::Get().ValidateOnAppLoaded();
+
     std::cerr << "[DIAG] Entrando al loop principal\n";
     RunMainLoop(mainWindow, uiManager, theme);
 

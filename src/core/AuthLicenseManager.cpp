@@ -105,32 +105,18 @@ AuthLicenseManager::AuthLicenseManager() {
 void AuthLicenseManager::Initialize() {
     LoadState();
 
-    std::string keyToValidate;
-    {
-        std::lock_guard<std::mutex> lock(m_Mutex);
-        if (m_License.isValid && !m_License.key.empty()) {
-            int64_t now = (int64_t)std::time(nullptr);
-            // Si la licencia guardada no tenía fecha de expiración (versión previa),
-            // se le otorga 1 mes (30 días) a partir de la activación o fecha actual
-            if (m_License.expiresAt <= 0) {
-                int64_t baseTime = (m_License.activatedAt > 0) ? m_License.activatedAt : now;
-                m_License.expiresAt = baseTime + (30LL * 24 * 3600);
-                if (m_License.expiryDate.empty()) {
-                    m_License.expiryDate = FormatDate(m_License.expiresAt);
-                }
-            }
-
-            // La licencia permanece guardada y activa durante todo su mes.
-            // Únicamente cuando el mes se cumple (now >= expiresAt), se dispara la revalidación online
-            // para comprobar si el usuario renovó o pagó el siguiente mes en Lemon Squeezy.
-            if (now >= m_License.expiresAt) {
-                keyToValidate = m_License.key;
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    if (m_License.isValid && !m_License.key.empty()) {
+        int64_t now = (int64_t)std::time(nullptr);
+        // Si la licencia guardada no tenía fecha de expiración (versión previa),
+        // se le otorga 1 mes (30 días) a partir de la activación o fecha actual
+        if (m_License.expiresAt <= 0) {
+            int64_t baseTime = (m_License.activatedAt > 0) ? m_License.activatedAt : now;
+            m_License.expiresAt = baseTime + (30LL * 24 * 3600);
+            if (m_License.expiryDate.empty()) {
+                m_License.expiryDate = FormatDate(m_License.expiresAt);
             }
         }
-    }
-
-    if (!keyToValidate.empty()) {
-        ValidateLicense(nullptr);
     }
 }
 
@@ -556,14 +542,14 @@ bool AuthLicenseManager::IsPro() const {
     if (!m_License.isValid || m_License.key.empty()) {
         return false;
     }
-    // Si tiene fecha de vencimiento configurada y ya venció el mes:
-    if (m_License.expiresAt > 0) {
-        int64_t now = (int64_t)std::time(nullptr);
-        // Margen de gracia de 3 días para revalidar con internet tras cumplirse el mes
-        const int64_t gracePeriod = 3LL * 24 * 3600;
-        if (now > (m_License.expiresAt + gracePeriod)) {
-            return false;
-        }
+    int64_t now = (int64_t)std::time(nullptr);
+    // Anti-trampa: si el reloj del sistema fue alterado hacia atrás
+    if (m_License.lastValidatedAt > 0 && now < (m_License.lastValidatedAt - 3600)) {
+        return false;
+    }
+    // Si ya venció el mes: estricto, sin margen de gracia, requiere wifi para pagar y revalidar
+    if (m_License.expiresAt > 0 && now >= m_License.expiresAt) {
+        return false;
     }
     return true;
 }
@@ -809,25 +795,12 @@ void AuthLicenseManager::ValidateLicense(std::function<void(bool success, const 
                     success = true;
                     finalMsg = "Licencia válida y activa. Suscripción vigente hasta: " + m_License.expiryDate;
                 } else {
-                    // Lemon Squeezy respondió valid = false
-                    // Si ya se venció el mes (30 días), la suscripción se marca como vencida
-                    if (curExpiresAt > 0 && now >= curExpiresAt) {
-                        m_License.isValid = false;
-                        m_License.status  = "expired";
-                        m_LicenseError = "La suscripción mensual ha vencido. Por favor, renueva tu suscripción.";
-                        success = false;
-                        finalMsg = "La suscripción mensual ha vencido y no se ha renovado el pago.";
-                    } else if (wasValid && now < curExpiresAt) {
-                        // Aún está dentro de su mes de validez local: se preserva activa
-                        m_License.isValid = true;
-                        success = true;
-                        finalMsg = "Licencia activa localmente hasta: " + m_License.expiryDate;
-                    } else {
-                        m_License.isValid = false;
-                        m_License.status  = "inactive";
-                        success = false;
-                        finalMsg = "Licencia vencida o inactiva en Lemon Squeezy.";
-                    }
+                    // Lemon Squeezy respondió valid = false (cancelada, reembolsada, suspendida o expirada)
+                    m_License.isValid = false;
+                    m_License.status  = (curExpiresAt > 0 && now >= curExpiresAt) ? "expired" : "inactive";
+                    m_LicenseError    = "La suscripción no está activa en los servidores de Lemon Squeezy.";
+                    success = false;
+                    finalMsg = "Licencia inactiva o revocada en los servidores.";
                 }
             } catch (...) {
                 finalMsg = "Error al procesar la respuesta de Lemon Squeezy.";
@@ -837,18 +810,19 @@ void AuthLicenseManager::ValidateLicense(std::function<void(bool success, const 
             // Error de conexión o servidor inalcanzable
             std::lock_guard<std::mutex> lock(m_Mutex);
             if (wasValid) {
-                const int64_t gracePeriod = 3LL * 24 * 3600;
-                if (curExpiresAt <= 0 || now < (curExpiresAt + gracePeriod)) {
-                    m_License.isValid = true;
-                    success = true;
-                    finalMsg = "Sin conexión con el servidor. La suscripción sigue activa localmente.";
-                } else {
+                // Sin margen de gracia: si ya se cumplió el mes (now >= expiresAt), requiere wifi para pagar y renovar
+                if (curExpiresAt > 0 && now >= curExpiresAt) {
                     m_License.isValid = false;
-                    m_License.status = "expired";
-                    m_LicenseError = "El mes de suscripción ha expirado y no se ha podido validar la renovación por falta de conexión.";
+                    m_License.status  = "expired";
+                    m_LicenseError    = "El período de suscripción ha finalizado. Conéctate a internet para validar el pago.";
                     success = false;
                     finalMsg = m_LicenseError;
                     SaveState();
+                } else {
+                    // Aún está dentro de su mes pagado: se mantiene activo localmente
+                    m_License.isValid = true;
+                    success = true;
+                    finalMsg = "Sin conexión con el servidor. La suscripción sigue activa localmente.";
                 }
             } else {
                 finalMsg = "No se pudo contactar con el servidor de licencias.";
@@ -858,6 +832,22 @@ void AuthLicenseManager::ValidateLicense(std::function<void(bool success, const 
         m_LicenseBusy.store(false);
         if (onComplete) onComplete(success, finalMsg);
     }).detach();
+}
+
+void AuthLicenseManager::ValidateOnAppLoaded() {
+    std::string key;
+    {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        if (!m_License.isValid || m_License.key.empty()) {
+            return;
+        }
+        key = m_License.key;
+    }
+
+    // Consulta la licencia en el servidor como último paso tras cargar toda la app
+    ValidateLicense([](bool /*success*/, const std::string& /*msg*/) {
+        // Validación silenciosa en segundo plano
+    });
 }
 
 void AuthLicenseManager::DeactivateLicense(std::function<void(bool success, const std::string& msg)> onComplete) {
