@@ -71,6 +71,7 @@ public:
                          std::function<void(bool success, const std::string& msg)> onComplete = nullptr);
 
     void ValidateLicense(std::function<void(bool success, const std::string& msg)> onComplete = nullptr);
+    void ValidateOnAppLoaded();
 
     void DeactivateLicense(std::function<void(bool success, const std::string& msg)> onComplete = nullptr);
 
