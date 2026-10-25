@@ -58,7 +58,7 @@ void ProAIChatPanel::Render(bool* pOpen, GlassRenderer& glass) {
     floatingClass.DockingAllowUnclassed = false;
     ImGui::SetNextWindowClass(&floatingClass);
 
-    bool open = DS::BeginGlassPanel("Asistente y Chat IA Pro (DeepSeek)", glass, pOpen,
+    bool open = DS::BeginGlassPanel("Asistente y Chat IA Pro (Gemini / DeepSeek)", glass, pOpen,
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking,
         ImVec2(18.0f, 16.0f));
 
@@ -91,9 +91,34 @@ void ProAIChatPanel::Render(bool* pOpen, GlassRenderer& glass) {
         ImGui::ProgressBar(fraction, ImVec2(availW - 170.0f, 8.0f), "");
         ImGui::PopStyleColor(2);
 
-        // Botón Limpiar Chat
-        ImGui::SetCursorScreenPos(ImVec2(topP.x + availW - 130.0f, topP.y + 10.0f));
-        if (DS::GlassButton("Limpiar chat", ImVec2(115.0f, 28.0f))) {
+        // Selector de Proveedor IA (Gemini / DeepSeek)
+        auto curProvider = proMgr.GetCurrentProvider();
+        bool isGemini = (curProvider == ProyecThor::Core::AIProvider::Gemini);
+
+        ImGui::SetCursorScreenPos(ImVec2(topP.x + availW - 390.0f, topP.y + 10.0f));
+        if (isGemini) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.55f, 0.90f, 0.9f));
+        } else {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.20f, 0.28f, 0.7f));
+        }
+        if (ImGui::Button("Gemini Flash (Gratis)##btnGem", ImVec2(150.0f, 28.0f))) {
+            proMgr.SetCurrentProvider(ProyecThor::Core::AIProvider::Gemini);
+        }
+        ImGui::PopStyleColor();
+
+        ImGui::SameLine(0, 6.0f);
+        if (!isGemini) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.55f, 0.25f, 0.85f, 0.9f));
+        } else {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.20f, 0.28f, 0.7f));
+        }
+        if (ImGui::Button("DeepSeek V3##btnDeep", ImVec2(110.0f, 28.0f))) {
+            proMgr.SetCurrentProvider(ProyecThor::Core::AIProvider::DeepSeek);
+        }
+        ImGui::PopStyleColor();
+
+        ImGui::SameLine(0, 6.0f);
+        if (DS::GlassButton("Limpiar##btnClean", ImVec2(100.0f, 28.0f))) {
             m_Messages.clear();
             m_StatusFeedback.clear();
         }
@@ -172,8 +197,9 @@ void ProAIChatPanel::Render(bool* pOpen, GlassRenderer& glass) {
                                       ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_Borders);
 
                     // Etiqueta del modelo
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.75f, 0.50f, 1.0f, 1.0f));
-                    ImGui::TextUnformatted("DeepSeek AI");
+                    bool isGem = (proMgr.GetCurrentProvider() == ProyecThor::Core::AIProvider::Gemini);
+                    ImGui::PushStyleColor(ImGuiCol_Text, isGem ? ImVec4(0.40f, 0.75f, 1.0f, 1.0f) : ImVec4(0.75f, 0.50f, 1.0f, 1.0f));
+                    ImGui::TextUnformatted(isGem ? "Google Gemini AI (Gratis)" : "DeepSeek AI");
                     ImGui::PopStyleColor();
                     ImGui::Separator();
                     ImGui::Dummy(ImVec2(0.0f, 4.0f));

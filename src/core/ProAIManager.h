@@ -21,6 +21,11 @@ struct CloudSong {
     std::string updatedAt;
 };
 
+enum class AIProvider {
+    Gemini = 0,
+    DeepSeek = 1
+};
+
 class ProAIManager {
 public:
     static ProAIManager& Get();
@@ -29,9 +34,15 @@ public:
     void SaveQuota();
     void LoadQuota();
 
+    // ── Proveedor Activo (Gemini por defecto / DeepSeek) ─────────────────────
+    AIProvider GetCurrentProvider() const;
+    void SetCurrentProvider(AIProvider p);
+
     // ── Seguridad de API Key ─────────────────────────────────────────────────
-    // Retorna la clave de DeepSeek descifrada en memoria únicamente al invocar la API
-    std::string GetDecryptedApiKey() const;
+    // Retorna las claves descifradas en memoria únicamente al invocar la API
+    std::string GetDecryptedGeminiKey() const;
+    std::string GetDecryptedDeepSeekKey() const;
+    std::string GetDecryptedApiKey() const; // Retorna la del proveedor activo
     void SetRemoteApiKey(const std::string& key);
 
     // ── Control de Cuotas y Tokens (Límites Pro) ──────────────────────────────
@@ -87,6 +98,8 @@ private:
     static bool DownloadFileHttps(const std::string& urlStr, const std::string& localDestPath, std::string& outError);
 
     mutable std::mutex m_Mutex;
+
+    AIProvider m_CurrentProvider = AIProvider::Gemini;
 
     // Tokens y cuotas mensuales
     // ~$5.00 USD en DeepSeek V3 equivalen a ~15,000,000 de tokens

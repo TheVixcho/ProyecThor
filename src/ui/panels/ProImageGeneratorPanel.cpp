@@ -140,7 +140,7 @@ void ProImageGeneratorPanel::Render(bool* pOpen, GlassRenderer& glass) {
         if (isBusy || !canGen) ImGui::EndDisabled();
 
         if (genClicked && m_PromptBuf[0] != '\0' && !isBusy && canGen) {
-            m_StatusFeedback = "Generando imagen con IA en alta resolución...";
+            m_StatusFeedback = "Generando imagen con IA (16:9) optimizada para proyección...";
             m_StatusIsSuccess = true;
 
             std::string promptStr = m_PromptBuf;

@@ -159,29 +159,60 @@ void ProAIManager::LoadQuota() {
     } catch (...) {}
 }
 
+AIProvider ProAIManager::GetCurrentProvider() const {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    return m_CurrentProvider;
+}
+
+void ProAIManager::SetCurrentProvider(AIProvider p) {
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    m_CurrentProvider = p;
+}
+
+std::string ProAIManager::GetDecryptedGeminiKey() const {
+    // Clave de Google Gemini descifrada dinámicamente en memoria
+    static const unsigned char s_GeminiEncrypted[] = {
+        27, 244, 18, 130, 125, 70, 196, 39, 108, 236, 113, 170, 42, 21, 222, 26,
+        53, 227, 110, 150, 116, 25, 206, 2, 3, 234, 74, 128, 124, 50, 213, 39,
+        23, 195, 125, 162, 113, 9, 238, 42, 99, 193, 4, 151, 82, 24, 187, 81,
+        59, 233, 100, 169, 78
+    };
+    static const unsigned char s_Mask[] = { 0x5A, 0xA5, 0x3C, 0xC3, 0x1F, 0x7E, 0x96, 0x69 };
+    const size_t len = sizeof(s_GeminiEncrypted);
+
+    std::string key;
+    key.reserve(len);
+    for (size_t i = 0; i < len; ++i) {
+        key.push_back((char)(s_GeminiEncrypted[i] ^ s_Mask[i % sizeof(s_Mask)]));
+    }
+    return key;
+}
+
+std::string ProAIManager::GetDecryptedDeepSeekKey() const {
+    // Clave de DeepSeek descifrada dinámicamente en memoria
+    static const unsigned char s_DeepSeekEncrypted[] = {
+        41, 206, 17, 162, 40, 31, 247, 12, 110, 145, 8, 161, 44, 72, 166, 93,
+        60, 199, 90, 250, 124, 76, 161, 80, 109, 192, 5, 243, 47, 77, 174, 89,
+        109, 195, 9
+    };
+    static const unsigned char s_Mask[] = { 0x5A, 0xA5, 0x3C, 0xC3, 0x1F, 0x7E, 0x96, 0x69 };
+    const size_t len = sizeof(s_DeepSeekEncrypted);
+
+    std::string key;
+    key.reserve(len);
+    for (size_t i = 0; i < len; ++i) {
+        key.push_back((char)(s_DeepSeekEncrypted[i] ^ s_Mask[i % sizeof(s_Mask)]));
+    }
+    return key;
+}
+
 // ── Descifrado seguro de API Key en memoria ──────────────────────────────────
 std::string ProAIManager::GetDecryptedApiKey() const {
     std::lock_guard<std::mutex> lock(m_Mutex);
     if (!m_RemoteApiKeyOverride.empty()) {
         return m_RemoteApiKeyOverride;
     }
-
-    // Bytes ofuscados mediante máscara rotativa de 64 bits para evitar
-    // extracción de texto plano mediante 'strings' o análisis estático del binario
-    static const unsigned char s_Encrypted[] = {
-        41, 206, 17, 162, 40, 31, 247, 12, 110, 145, 8, 161, 44, 72, 166, 93,
-        60, 199, 90, 250, 124, 76, 161, 80, 109, 192, 5, 243, 47, 77, 174, 89,
-        109, 195, 9
-    };
-    static const unsigned char s_Mask[] = { 0x5A, 0xA5, 0x3C, 0xC3, 0x1F, 0x7E, 0x96, 0x69 };
-    const size_t len = sizeof(s_Encrypted);
-
-    std::string key;
-    key.reserve(len);
-    for (size_t i = 0; i < len; ++i) {
-        key.push_back((char)(s_Encrypted[i] ^ s_Mask[i % sizeof(s_Mask)]));
-    }
-    return key;
+    return (m_CurrentProvider == AIProvider::Gemini) ? GetDecryptedGeminiKey() : GetDecryptedDeepSeekKey();
 }
 
 void ProAIManager::SetRemoteApiKey(const std::string& key) {
@@ -414,7 +445,7 @@ bool ProAIManager::DownloadFileHttps(const std::string& urlStr, const std::strin
 #endif
 }
 
-// ── Chat IA (DeepSeek) ───────────────────────────────────────────────────────
+// ── Chat IA (Gemini / DeepSeek) ──────────────────────────────────────────────
 void ProAIManager::SendChatMessage(const std::vector<ProChatMessage>& history,
                                    std::function<void(bool success, const std::string& reply, uint32_t tokensUsed, const std::string& error)> callback) {
     CheckMonthlyReset();
@@ -432,68 +463,122 @@ void ProAIManager::SendChatMessage(const std::vector<ProChatMessage>& history,
         return;
     }
 
-    std::string apiKey = GetDecryptedApiKey();
+    AIProvider provider = GetCurrentProvider();
+    std::string apiKey   = GetDecryptedApiKey();
 
-    std::thread([this, history, apiKey, callback]() {
-        json jMessages = json::array();
-
-        // Prompt de sistema estructurado para ProyecThor
-        jMessages.push_back({
-            { "role", "system" },
-            { "content",
-              "Eres el Asistente Inteligente de ProyecThor for Professionals. Eres experto en música litúrgica, alabanza, "
-              "canciones eclesiásticas y dirección técnica audiovisual. "
-              "Cuando el usuario te pida escribir, adaptar o crear una canción, entrega la letra estructurada "
-              "en estrofas, coro y puente, separando cada estrofa con UNA LÍNEA EN BLANCO para que ProyecThor "
-              "pueda importarla directamente y convertirla en diapositivas de proyección legibles. Sé profesional y conciso." }
-        });
-
-        for (const auto& msg : history) {
-            jMessages.push_back({
-                { "role", msg.role },
-                { "content", msg.content }
-            });
-        }
-
-        json reqBody;
-        reqBody["model"] = "deepseek-chat";
-        reqBody["messages"] = jMessages;
-        reqBody["temperature"] = 0.7;
-        reqBody["max_tokens"] = 2048;
-
-        std::string postData = reqBody.dump();
-        int statusCode = 0;
-        std::string reqError;
-        std::string res = PerformHttpsPost("api.deepseek.com", "/chat/completions", postData, apiKey, statusCode, reqError);
-
+    std::thread([this, history, provider, apiKey, callback]() {
         bool success = false;
         std::string replyText;
         uint32_t tokensUsed = 0;
         std::string finalErr;
+        int statusCode = 0;
+        std::string reqError;
 
-        if (statusCode == 200) {
-            try {
-                json jRes = json::parse(res);
-                if (jRes.contains("choices") && jRes["choices"].is_array() && !jRes["choices"].empty()) {
-                    replyText = jRes["choices"][0]["message"].value("content", "");
-                    success = true;
+        const std::string sysPrompt =
+            "Eres el Asistente Inteligente de ProyecThor for Professionals. Eres experto en música litúrgica, alabanza, "
+            "canciones eclesiásticas y dirección técnica audiovisual. "
+            "Cuando el usuario te pida escribir, adaptar o crear una canción, entrega la letra estructurada "
+            "en estrofas, coro y puente, separando cada estrofa con UNA LÍNEA EN BLANCO para que ProyecThor "
+            "pueda importarla directamente y convertirla en diapositivas de proyección legibles. Sé profesional y conciso.";
+
+        if (provider == AIProvider::Gemini) {
+            // Petición a Google Gemini API (gemini-flash-lite-latest)
+            json jContents = json::array();
+            for (const auto& msg : history) {
+                jContents.push_back({
+                    { "role", (msg.role == "user" ? "user" : "model") },
+                    { "parts", json::array({ { { "text", msg.content } } }) }
+                });
+            }
+
+            json reqBody;
+            reqBody["system_instruction"] = {
+                { "parts", json::array({ { { "text", sysPrompt } } }) }
+            };
+            reqBody["contents"] = jContents;
+            reqBody["generationConfig"] = {
+                { "temperature", 0.7 },
+                { "maxOutputTokens", 2048 }
+            };
+
+            std::string path = "/v1beta/models/gemini-flash-lite-latest:generateContent?key=" + apiKey;
+            std::string res = PerformHttpsPost("generativelanguage.googleapis.com", path, reqBody.dump(), "", statusCode, reqError);
+
+            if (statusCode == 200) {
+                try {
+                    json jRes = json::parse(res);
+                    if (jRes.contains("candidates") && jRes["candidates"].is_array() && !jRes["candidates"].empty()) {
+                        const auto& cand = jRes["candidates"][0];
+                        if (cand.contains("content") && cand["content"].contains("parts") && !cand["content"]["parts"].empty()) {
+                            replyText = cand["content"]["parts"][0].value("text", "");
+                            success = true;
+                        }
+                    }
+                    if (jRes.contains("usageMetadata") && jRes["usageMetadata"].is_object()) {
+                        tokensUsed = jRes["usageMetadata"].value("totalTokenCount", 0);
+                    }
+                } catch (...) {
+                    finalErr = "Error al procesar respuesta de Gemini.";
                 }
-                if (jRes.contains("usage") && jRes["usage"].is_object()) {
-                    tokensUsed = jRes["usage"].value("total_tokens", 0);
+            } else {
+                try {
+                    json jErr = json::parse(res);
+                    if (jErr.contains("error") && jErr["error"].is_object()) {
+                        finalErr = jErr["error"].value("message", "Error en servidor Gemini.");
+                    } else {
+                        finalErr = "Error Gemini (HTTP " + std::to_string(statusCode) + ")";
+                    }
+                } catch (...) {
+                    finalErr = reqError.empty() ? ("Error HTTP " + std::to_string(statusCode)) : reqError;
                 }
-            } catch (...) {
-                finalErr = "Respuesta JSON no válida de DeepSeek.";
             }
         } else {
-            try {
-                json jErr = json::parse(res);
-                if (jErr.contains("error") && jErr["error"].is_object()) {
-                    finalErr = jErr["error"].value("message", "Error en servidor DeepSeek.");
-                } else {
-                    finalErr = "Error DeepSeek (HTTP " + std::to_string(statusCode) + ")";
+            // Petición a DeepSeek API (deepseek-chat)
+            json jMessages = json::array();
+            jMessages.push_back({
+                { "role", "system" },
+                { "content", sysPrompt }
+            });
+
+            for (const auto& msg : history) {
+                jMessages.push_back({
+                    { "role", msg.role },
+                    { "content", msg.content }
+                });
+            }
+
+            json reqBody;
+            reqBody["model"] = "deepseek-chat";
+            reqBody["messages"] = jMessages;
+            reqBody["temperature"] = 0.7;
+            reqBody["max_tokens"] = 2048;
+
+            std::string res = PerformHttpsPost("api.deepseek.com", "/chat/completions", reqBody.dump(), apiKey, statusCode, reqError);
+
+            if (statusCode == 200) {
+                try {
+                    json jRes = json::parse(res);
+                    if (jRes.contains("choices") && jRes["choices"].is_array() && !jRes["choices"].empty()) {
+                        replyText = jRes["choices"][0]["message"].value("content", "");
+                        success = true;
+                    }
+                    if (jRes.contains("usage") && jRes["usage"].is_object()) {
+                        tokensUsed = jRes["usage"].value("total_tokens", 0);
+                    }
+                } catch (...) {
+                    finalErr = "Respuesta JSON no válida de DeepSeek.";
                 }
-            } catch (...) {
-                finalErr = reqError.empty() ? ("Error HTTP " + std::to_string(statusCode)) : reqError;
+            } else {
+                try {
+                    json jErr = json::parse(res);
+                    if (jErr.contains("error") && jErr["error"].is_object()) {
+                        finalErr = jErr["error"].value("message", "Error en servidor DeepSeek.");
+                    } else {
+                        finalErr = "Error DeepSeek (HTTP " + std::to_string(statusCode) + ")";
+                    }
+                } catch (...) {
+                    finalErr = reqError.empty() ? ("Error HTTP " + std::to_string(statusCode)) : reqError;
+                }
             }
         }
 
