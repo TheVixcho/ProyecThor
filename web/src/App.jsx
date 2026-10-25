@@ -524,7 +524,7 @@ export default function App() {
                 Elige el modelo adecuado para tu auditorio
               </h2>
               <p className="text-neutral-400 text-xs sm:text-sm leading-relaxed">
-                Tanto la versión gratuita como la profesional comparten el mismo motor de alta estabilidad. Elige la versión Pro cuando requieras sincronización en la nube y soporte prioritario.
+                Tanto la versión gratuita como la profesional comparten el mismo motor de alta estabilidad. Elige la versión Pro cuando requieras las mayores capacidades de última generación y especificaciones más puntuales.
               </p>
             </div>
 
