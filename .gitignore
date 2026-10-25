@@ -1,0 +1,81 @@
+# ── Carpetas de build (CMake, Ninja, makepkg, MSVC) ──────────────────────────
+build/
+build*/
+pkg/
+CMakeFiles/
+_deps/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+generated/
+compile_commands.json
+.ninja_log
+.ninja_deps
+
+# ── Contador de builds local (uno por maquina/CI, ver CMakeLists.txt) ────────
+build_count.txt
+
+# ── Instaladores / paquetes generados ────────────────────────────────────────
+iss/installer_output/
+*.exe
+*.obj
+*.o
+*.pdb
+*.ilk
+*.exp
+*.pkg.tar.zst
+*.pkg.tar.xz
+*.deb
+*.rpm
+*.log
+*.msi
+*.wixpdb
+*.wixobj
+*.flatpak
+*.AppImage
+*.zsync
+
+# ── Carpetas de distribución alternativa (si no van en el repo principal) ───
+# web/ ahora SI va al repo (rama beta, pedido explicito) -- su propio
+# .gitignore (web/.gitignore) ya excluye node_modules/dist/logs/etc.
+lite/
+/shaders/
+
+# ── Recursos pesados que se distribuyen aparte, no en git ────────────────────
+extrabuild/
+
+# ── Notas personales ──────────────────────────────────────────────────────────
+src/notes.txt
+text.txt
+
+# ── IDEs / editores ───────────────────────────────────────────────────────────
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
+.idea/
+.claude/
+*.user
+
+# ── Herramientas externas (cache local, nunca va a git) ──────────────────────
+.firebase/
+.cache/
+
+# ── Archivos del sistema operativo ───────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Configuracion local del usuario (puede contener API keys, ej. Pexels) ────
+settings.json
+imgui.ini
+/bin/
+brace_out.txt
+# Build de Linux extraido a mano para probar (binario + .so vendorizados +
+# plugins de VLC) -- son artifacts de build, no fuente; ya se generan solos
+# via CI (build-linux) o compilando local, no hace falta trackearlos.
+packaging/Linux/
+
+
+packaging/windows/dist/
+packaging/windows/Output/

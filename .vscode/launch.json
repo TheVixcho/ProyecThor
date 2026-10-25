@@ -1,0 +1,90 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "ProyecThor - Windows Nativo (MSVC)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-win/ProyecThor.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build-win",
+            "environment": [],
+            "console": "integratedTerminal",
+            "preLaunchTask": "Compilar Windows"
+        },
+        {
+            "name": "ProyecThor - Linux Nativo (Debug GDB)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-linux/ProyecThor",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build-linux",
+            "environment": [
+                { "name": "LD_LIBRARY_PATH", "value": "${workspaceFolder}/build-linux" },
+                { "name": "VLC_PLUGIN_PATH", "value": "${workspaceFolder}/build-linux/plugins" }
+            ],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Habilitar pretty-printing para gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Desensamblado Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "Compilar Linux"
+        },
+        {
+            "name": "ProyecThor - Windows con Wine (Linux)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/bin/bash",
+            "args": [
+                "-c",
+                "wine ProyecThor.exe"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build-win",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "preLaunchTask": "Compilar Windows"
+        },
+        {
+            "name": "ProyecThor - Windows Nativo (MinGW / GDB)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-win/ProyecThor.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build-win",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "gdb.exe",
+            "setupCommands": [
+                {
+                    "description": "Habilitar pretty-printing para gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "Compilar Windows"
+        },
+        {
+            "name": "ProyecThor - Iniciar Web",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:5174",
+            "webRoot": "${workspaceFolder}/web",
+            "preLaunchTask": "Iniciar Web"
+        }
+    ]
+}

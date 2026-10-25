@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.thevixcho.ProyecThor</id>
+  <name>ProyecThor</name>
+  <summary>Professional projection software for lyrics, media, and presentations</summary>
+  <summary xml:lang="es">Software profesional de proyección para letras, multimedia y presentaciones</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Proprietary</project_license>
+
+  <developer id="io.github.thevixcho">
+    <name>TheVixcho</name>
+  </developer>
+
+  <description>
+    <p>
+      ProyecThor is a high-performance presentation and media projection engine built for live production environments such as churches, theaters, and conferences. Designed for seamless multi-screen control, it separates operator controls from a clean, borderless audience output.
+    </p>
+    <p xml:lang="es">
+      ProyecThor es un motor de proyección y presentación multimedia de alto rendimiento diseñado para entornos de producción en vivo como iglesias, teatros y conferencias. Permite un control fluido multipantalla separando la interfaz de operador de la salida limpia para el público.
+    </p>
+    <p>
+      Share, broadcast, and create: project lyrics, scriptures, videos, and live multimedia with maximum performance and professional control.
+    </p>
+    <p xml:lang="es">
+      Comparte, transmite y crea: proyecta letras, biblias, videos y multimedia en vivo con máxima fluidez y control profesional.
+    </p>
+    <p>Key features include:</p>
+    <p xml:lang="es">Características principales:</p>
+    <ul>
+      <li>Multi-layer projection: video backgrounds, images, solid colors, transparent PNG overlays, and stylized text</li>
+      <li xml:lang="es">Proyección multicapa: fondos de video, imágenes, colores sólidos, overlays transparentes y texto estilizado</li>
+      <li>Live lyric and scripture projection with instant hot-editing</li>
+      <li xml:lang="es">Proyección de letras y escrituras bíblicas con edición en caliente instantánea</li>
+      <li>Stage display confidence monitor with digital clocks and customized alerts</li>
+      <li xml:lang="es">Monitor de escenario (Stage Display) con relojes digitales y avisos personalizados</li>
+      <li>Integrated media playback supporting VLC hardware-accelerated video and audio</li>
+      <li xml:lang="es">Reproducción multimedia integrada con aceleración por hardware vía VLC</li>
+      <li>Real-time visual post-processing effects including CRT, film grain, bloom, and blur</li>
+      <li xml:lang="es">Efectos visuales de post-procesamiento en tiempo real (CRT, grano de película, bloom, desenfoque)</li>
+      <li>Network control, web remote access, and OSC protocol support</li>
+      <li xml:lang="es">Control por red, acceso remoto web y soporte para protocolo OSC</li>
+      <li>Share, broadcast, and create: live local streaming and mobile remote control</li>
+      <li xml:lang="es">Comparte, transmite y crea: transmisión en vivo por red local y control remoto móvil</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">io.github.thevixcho.ProyecThor.desktop</launchable>
+
+  <provides>
+    <mediatype>audio/mpeg</mediatype>
+    <mediatype>audio/flac</mediatype>
+    <mediatype>audio/x-wav</mediatype>
+    <mediatype>audio/ogg</mediatype>
+    <mediatype>audio/aac</mediatype>
+    <mediatype>audio/mp4</mediatype>
+    <mediatype>audio/x-ms-wma</mediatype>
+    <mediatype>audio/opus</mediatype>
+    <mediatype>audio/x-aiff</mediatype>
+    <mediatype>video/mp4</mediatype>
+    <mediatype>video/x-matroska</mediatype>
+    <mediatype>video/x-msvideo</mediatype>
+    <mediatype>video/quicktime</mediatype>
+    <mediatype>video/webm</mediatype>
+  </provides>
+
+  <categories>
+    <category>Office</category>
+    <category>Presentation</category>
+    <category>AudioVideo</category>
+  </categories>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Main operator workspace with live projection preview, lyrics slides, and media dock</caption>
+      <caption xml:lang="es">Espacio de trabajo principal con vista previa en vivo, diapositivas y dock multimedia</caption>
+      <image type="source">https://raw.githubusercontent.com/TheVixcho/ProyecThor/main/docs/screenshots/sc1.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Multi-version Bible browser and instant scripture search</caption>
+      <caption xml:lang="es">Proyector bíblico multiversión con explorador y buscador rápido de pasajes</caption>
+      <image type="source">https://raw.githubusercontent.com/TheVixcho/ProyecThor/main/docs/screenshots/sc2.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Visual lyrics styling, layout positioning, and text formatting editor</caption>
+      <caption xml:lang="es">Editor visual de diseño y estilos para letras, tipografías y efectos gráficos</caption>
+      <image type="source">https://raw.githubusercontent.com/TheVixcho/ProyecThor/main/docs/screenshots/sc3.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Network LAN connections, streaming settings, and stage confidence clock</caption>
+      <caption xml:lang="es">Conexiones de red, transmisión en vivo y reloj/cronómetro de escenario</caption>
+      <image type="source">https://raw.githubusercontent.com/TheVixcho/ProyecThor/main/docs/screenshots/sc4.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Live desktop window capture with quick scenes and projector overlay</caption>
+      <caption xml:lang="es">Captura de pantalla y ventanas en tiempo real con escenas rápidas para proyección</caption>
+      <image type="source">https://raw.githubusercontent.com/TheVixcho/ProyecThor/main/docs/screenshots/sc5.png</image>
+    </screenshot>
+  </screenshots>
+
+  <branding>
+    <color type="primary" scheme_preference="dark">#1e2029</color>
+  </branding>
+
+  <url type="homepage">https://github.com/TheVixcho/ProyecThor</url>
+  <url type="bugtracker">https://github.com/TheVixcho/ProyecThor/issues</url>
+  <url type="vcs-browser">https://github.com/TheVixcho/ProyecThor</url>
+  <url type="donation">https://ko-fi.com/thevixcho</url>
+
+  <content_rating type="oars-1.1" />
+
+  <releases>
+    <release version="1.0.3" date="2026-10-01">
+      <description>
+        <p>ProyecThor 1.0.3 release:</p>
+        <ul>
+          <li>Default multilingual Welcome song bundled and auto-seeded</li>
+          <li>Removed broken test song references from library</li>
+          <li>FileChooser portal fixes for Linux and Flatpak environments</li>
+        </ul>
+      </description>
+    </release>
+    <release version="1.0.2" date="2026-09-30">
+      <description>
+        <p>ProyecThor 1.0.2 release:</p>
+        <ul>
+          <li>Better compatibility with Linux</li>
+          <li>Fix improvements in video stability</li>
+          <li>Minor bug fixes</li>
+        </ul>
+      </description>
+    </release>
+    <release version="1.0.1" date="2026-09-26">
+      <description>
+        <p>ProyecThor 1.0.1 release:</p>
+        <ul>
+          <li>Detachable live preview window (ViewPanel) for multi-monitor setups</li>
+          <li>Real-time inline lyrics editing with direct file persistence</li>
+          <li>Linux secondary window rendering fixes for lyrics, video, and image backgrounds</li>
+          <li>Improved single-instance handling and cross-platform stability</li>
+        </ul>
+      </description>
+    </release>
+    <release version="1.0.0" date="2026-09-25">
+      <description>
+        <p>First stable general release of ProyecThor.</p>
+      </description>
+    </release>
+  </releases>
+</component>

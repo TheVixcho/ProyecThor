@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ProyecThor — instalador de Windows (MSI, WiX Toolset v5).
+  Reemplaza el .iss/Inno Setup manual — ver .github/workflows/build.yml
+  (job "package-msi") para como se compila esto en CI.
+
+  UpgradeCode: NUNCA cambiar entre versiones. Es lo que le permite a
+  Windows Installer reconocer "es la misma app, version nueva" y
+  desinstalar sola la version MSI anterior (ver MajorUpgrade abajo).
+  Generado una unica vez para este proyecto:
+      66A0344F-F850-49CB-9F63-488AB7B3DBCD
+
+  Variables de preprocesador que pasa el workflow con -d:
+    BuildDir       -> carpeta con el build de Windows ya compilado
+                       (build-win/, bajado como artifact de CI)
+    ProductVersion -> version en formato Major.Minor.Build.Revision,
+                       mantenida a mano en sync con CMakeLists.txt
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <Package Name="ProyecThor"
+           Manufacturer="vixcho"
+           Version="$(var.ProductVersion)"
+           UpgradeCode="66A0344F-F850-49CB-9F63-488AB7B3DBCD"
+           Scope="perUser"
+           Compressed="yes">
+
+    <SummaryInformation Description="Instalador de ProyecThor" Manufacturer="vixcho" />
+
+    <!-- Instala sin pedir admin (equivalente a PrivilegesRequired=lowest de Inno).
+         Lo da Scope="perUser" en el Package de arriba; ALLUSERS="" explicito
+         ya no es valido en WiX v5 estable (WIX0006, valor vacio no permitido). -->
+
+    <!--
+      Al instalar una version nueva con el MISMO UpgradeCode, MSI desinstala
+      la version MSI vieja antes de meter la nueva. Cubre "versiones viejas
+      compiladas" a partir de ahora que se distribuye como MSI.
+    -->
+    <MajorUpgrade
+      DowngradeErrorMessage="Ya hay instalada una version mas nueva de ProyecThor. Desinstalala primero si queres bajar de version."
+      Schedule="afterInstallInitialize" />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <!--
+      Detecta una instalacion VIEJA hecha con el .iss de Inno Setup (formato
+      distinto — MSI no la reconoce como "la misma app" por si solo). Inno,
+      sin AppId= explicito en el .iss, registra el desinstalador bajo la
+      clave "<AppName>_is1". Si existe, se corre su desinstalador silencioso
+      despues de que la instalacion nueva ya termino (para no dejar la
+      maquina sin la app si este paso llegara a fallar).
+    -->
+    <Property Id="OLDINNOUNINSTALLSTRING">
+      <RegistrySearch Id="FindOldInnoUninstall"
+                       Root="HKCU"
+                       Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\ProyecThor_is1"
+                       Name="UninstallString"
+                       Type="raw" />
+    </Property>
+
+    <CustomAction Id="BuildOldInnoUninstallCmd"
+                  Property="OLDINNOUNINSTALLCMD"
+                  Value="[OLDINNOUNINSTALLSTRING] /VERYSILENT /SUPPRESSMSGBOXES /NORESTART" />
+
+    <CustomAction Id="RemoveOldInnoInstall"
+                  Property="OLDINNOUNINSTALLCMD"
+                  ExeCommand=""
+                  Execute="immediate"
+                  Return="ignore" />
+
+    <InstallExecuteSequence>
+      <Custom Action="BuildOldInnoUninstallCmd" Before="RemoveOldInnoInstall" Condition="OLDINNOUNINSTALLSTRING" />
+      <Custom Action="RemoveOldInnoInstall" After="InstallFinalize" Condition="OLDINNOUNINSTALLSTRING" />
+    </InstallExecuteSequence>
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="ProyecThor">
+
+          <!-- Ejecutable principal: componente propio (no via glob) porque
+               los accesos directos de abajo necesitan referenciarlo. -->
+          <Component Id="MainExecutable" Guid="*">
+            <File Id="ProyecThorExe"
+                  Source="$(var.BuildDir)\ProyecThor.exe"
+                  KeyPath="yes">
+              <Shortcut Id="StartMenuShortcut"
+                        Directory="ProgramMenuFolder"
+                        Name="ProyecThor"
+                        WorkingDirectory="INSTALLFOLDER"
+                        Icon="ProyecThorIcon"
+                        Advertise="yes" />
+              <Shortcut Id="DesktopShortcut"
+                        Directory="DesktopFolder"
+                        Name="ProyecThor"
+                        WorkingDirectory="INSTALLFOLDER"
+                        Icon="ProyecThorIcon"
+                        Advertise="yes" />
+            </File>
+          </Component>
+
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder" />
+    <StandardDirectory Id="DesktopFolder" />
+
+    <!-- Resto de archivos (DLLs de VLC/PDFium, yt-dlp.exe, iconos,
+         proyecthor_ui.ini, y las carpetas bin/, lua/, plugins/, shaders/
+         completas) — mismo criterio que el [Files] del .iss viejo, pero sin
+         tener que enumerar a mano decenas de DLLs de plugins de VLC (glob
+         harvesting de WiX v5, un Component por archivo generado solo). -->
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(var.BuildDir)\**">
+        <Exclude Files="$(var.BuildDir)\ProyecThor.exe" />
+      </Files>
+    </ComponentGroup>
+
+    <Icon Id="ProyecThorIcon" SourceFile="$(var.BuildDir)\proyecthor.ico" />
+    <Property Id="ARPPRODUCTICON" Value="ProyecThorIcon" />
+
+    <Feature Id="Main" Title="ProyecThor" Level="1">
+      <ComponentRef Id="MainExecutable" />
+      <ComponentGroupRef Id="AppFiles" />
+    </Feature>
+
+    <!-- WixUI_Minimal muestra un Lorem Ipsum de ejemplo si no se le pasa un
+         RTF propio: este es el texto real de la licencia MIT. -->
+    <WixVariable Id="WixUILicenseRtf" Value="$(sys.SOURCEFILEDIR)LICENSE.rtf" />
+    <ui:WixUI Id="WixUI_Minimal" />
+
+  </Package>
+</Wix>

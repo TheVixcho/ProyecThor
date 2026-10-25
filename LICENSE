@@ -1,0 +1,55 @@
+PROPRIETARY SOFTWARE LICENSE AGREEMENT (EULA)
+
+ProyecThor — Professional Projection Engine
+Copyright (c) 2026 ProyecThor Project / TheVixcho. All rights reserved.
+
+IMPORTANT: PLEASE READ THIS SOFTWARE LICENSE AGREEMENT CAREFULLY BEFORE USING
+THE SOFTWARE. BY INSTALLING, COPYING, OR OTHERWISE USING PROYECTHOR, YOU AGREE
+TO BE BOUND BY THE TERMS OF THIS AGREEMENT.
+
+1. PROPRIETARY SOFTWARE AND GRANT OF LICENSE
+ProyecThor is proprietary software of closed source. Subject to the terms of this
+Agreement, you are granted a non-exclusive, non-transferable license to install
+and use ProyecThor for personal, organizational, educational, or commercial
+projection and media management purposes.
+
+2. RESTRICTIONS
+You may NOT:
+a) Decompile, reverse engineer, disassemble, or attempt to derive the source code
+   of the ProyecThor proprietary binaries, except and only to the extent permitted
+   by applicable mandatory law.
+b) Modify, adapt, translate, or create derivative works of the ProyecThor core
+   application without express written authorization from the copyright holder.
+c) Sublicense, rent, lease, or resell the proprietary software binaries without
+   prior written consent.
+d) Remove, obscure, or alter any copyright notices, trademarks, or proprietary
+   legends affixed to or contained within the software.
+
+3. PLUGINS AND COMMUNITY EXTENSIONS
+Notwithstanding Section 2, ProyecThor provides an extensible plugin system. You
+are permitted and encouraged to create, distribute, and monetize external plugins,
+scripts, and modules designed for ProyecThor in accordance with the official
+ProyecThor Plugin SDK and documentation.
+
+4. THIRD-PARTY COMPONENTS AND LICENSES
+ProyecThor bundles, links with, and utilizes certain third-party libraries and SDKs
+(such as LibVLC, FFmpeg, PDFium, Dear ImGui, GLFW, among others). Each third-party
+component is governed by its respective license terms (including LGPL 2.1, GPL 3.0,
+Apache 2.0, MIT, and zlib). Nothing in this Agreement limits, restricts, or supersedes
+your rights under, or grants you rights that supersede, the terms of any applicable
+third-party open source license. Complete attributions, license texts, and source
+code access offers are documented in THIRD-PARTY-NOTICES.md.
+
+5. DISCLAIMER OF WARRANTY
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM,
+OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+6. GOVERNING TERMS
+A Spanish translation of this agreement is provided in LICENCIA.md for reference.
+In the event of any conflict or ambiguity between the English version and any
+translation, the English version shall govern.

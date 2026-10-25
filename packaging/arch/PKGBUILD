@@ -1,0 +1,68 @@
+# Maintainer: Vixcho <162904481+TheVixcho@users.noreply.github.com>
+#
+# Paquete "-git" (compila desde la rama beta en cada build) -- es lo mas
+# apropiado mientras el proyecto no tiene tags de release estables. Una vez
+# haya versiones etiquetadas se puede agregar un "proyecthor" normal que
+# fije pkgver/source a un tag concreto en vez de la rama.
+#
+# build()/package() reusan tal cual la logica de instalacion que ya vive en
+# CMakeLists.txt (RPATH relativo, wrapper que hace cd al directorio real
+# antes de ejecutar, .desktop + icono, VLC/PDFium vendorizados) -- no hace
+# falta duplicar nada de eso aca, "cmake --install" alcanza.
+pkgname=proyecthor-git
+pkgver=0.6.0.r0.g0000000
+pkgrel=1
+pkgdesc="Motor de proyeccion profesional para iglesias, teatros y eventos en vivo (VLC + OpenGL + ImGui) -- build desde la rama beta"
+arch=('x86_64')
+url="https://proyecthor.web.app"
+license=('MIT')
+depends=(
+  'mesa'
+  'libx11'
+  'libxcomposite'
+  'libxrandr'
+  'libxinerama'
+  'libxcursor'
+  'libxi'
+  'libxext'
+  'opencv'
+  'pipewire'
+  'dbus'
+  'wayland'
+  'libxkbcommon'
+  'ffmpeg'
+)
+makedepends=(
+  'cmake'
+  'ninja'
+  'git'
+  'wayland-protocols'
+  'extra-cmake-modules'
+)
+optdepends=(
+  'zenity: dialogos nativos para elegir/guardar archivos'
+  'yt-dlp: reproducir/descargar desde URLs de streaming'
+)
+provides=('proyecthor')
+conflicts=('proyecthor')
+source=("$pkgname::git+https://github.com/TheVixcho/ProyecThor.git#branch=beta")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$srcdir/$pkgname"
+  git describe --long --tags 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' \
+    || printf "0.6.0.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cd "$srcdir/$pkgname"
+  cmake -B build-linux -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build build-linux
+}
+
+package() {
+  cd "$srcdir/$pkgname"
+  DESTDIR="$pkgdir" cmake --install build-linux
+}
