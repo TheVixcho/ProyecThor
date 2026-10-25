@@ -151,17 +151,6 @@ const proAdvantages = [
   },
 ];
 
-const plataformas = [
-  {
-    sistema: "Microsoft Windows 10 / 11 (64-bit)",
-    detalle: "Instalador NSIS nativo optimizado · Intel Core i5 / 8 GB RAM recomendado (GPU dedicada para 4K)",
-  },
-  {
-    sistema: "GNU/Linux (Arch Linux / CachyOS / Debian / Ubuntu)",
-    detalle: "Compilación nativa de alto rendimiento · Eficiencia sobresaliente en consumo de memoria y CPU",
-  },
-];
-
 export default function App() {
   return (
     <div className="min-h-screen flex flex-col bg-neutral-950 text-neutral-300 font-['Arial',sans-serif] antialiased selection:bg-neutral-800 selection:text-white relative overflow-x-clip">
@@ -406,26 +395,153 @@ export default function App() {
         </section>
 
         {/* PLATAFORMAS COMPATIBLES */}
-        <section id="compatibilidad" className="py-16 px-6 max-w-4xl mx-auto space-y-6">
-          <div className="border-b border-neutral-800 pb-3 text-center">
+        <section id="compatibilidad" className="py-20 px-6 max-w-5xl mx-auto space-y-8">
+          <div className="border-b border-neutral-800 pb-4 text-center">
             <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight text-center">
               Entornos de Ejecución Soportados
             </h2>
           </div>
 
-          <div className="divide-y divide-neutral-800/80 border border-neutral-800 rounded-xl bg-neutral-950 overflow-hidden shadow-md">
-            {plataformas.map((plat) => (
-              <div
-                key={plat.sistema}
-                className="p-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 hover:bg-neutral-900/30 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-cyan-500" />
-                  <span className="text-sm font-medium text-white">{plat.sistema}</span>
+          {/* Tabla de Especificaciones para Escritorio / Pantallas Medianas */}
+          <div className="hidden md:block rounded-2xl border border-neutral-800 bg-neutral-950/80 shadow-2xl overflow-hidden backdrop-blur-sm">
+            <table className="w-full text-left text-xs text-neutral-300 border-collapse">
+              <thead>
+                <tr className="bg-neutral-900/70 border-b border-neutral-800 text-[11px] uppercase tracking-wider text-neutral-400 font-semibold">
+                  <th scope="col" className="py-4 px-6">Plataforma</th>
+                  <th scope="col" className="py-4 px-6">Distribuciones Verificadas</th>
+                  <th scope="col" className="py-4 px-6">Empaquetado</th>
+                  <th scope="col" className="py-4 px-6">Requisitos de Hardware</th>
+                  <th scope="col" className="py-4 px-6">Aceleración GPU</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-800/70">
+                <tr className="hover:bg-neutral-900/40 transition-colors">
+                  <td className="py-5 px-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-cyan-950/50 border border-cyan-500/30 flex items-center justify-center shrink-0">
+                        <svg className="w-5 h-5 text-cyan-400" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.949-1.8" />
+                        </svg>
+                      </div>
+                      <div>
+                        <span className="block font-bold text-white text-sm">Microsoft Windows</span>
+                        <span className="text-[11px] text-neutral-400">64-bit nativo (x86_64)</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="py-5 px-6 text-neutral-200">
+                    Windows 10 / 11
+                  </td>
+                  <td className="py-5 px-6 text-neutral-200">
+                    Instalador NSIS optimizado
+                  </td>
+                  <td className="py-5 px-6 text-neutral-200">
+                    Intel Core i5 / 8 GB RAM <br />
+                    <span className="text-[11px] text-neutral-400">(GPU dedicada para 4K)</span>
+                  </td>
+                  <td className="py-5 px-6 text-cyan-400 font-mono text-[11px]">
+                    DirectX 11 / OpenGL
+                  </td>
+                </tr>
+                <tr className="hover:bg-neutral-900/40 transition-colors">
+                  <td className="py-5 px-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-amber-950/50 border border-amber-500/30 flex items-center justify-center shrink-0">
+                        <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <span className="block font-bold text-white text-sm">GNU/Linux</span>
+                        <span className="text-[11px] text-neutral-400">C++17 compilado</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="py-5 px-6 text-neutral-200">
+                    Arch Linux, CachyOS, Debian, Ubuntu
+                  </td>
+                  <td className="py-5 px-6 text-neutral-200">
+                    Compilación nativa de alto rendimiento
+                  </td>
+                  <td className="py-5 px-6 text-neutral-200">
+                    Eficiencia sobresaliente <br />
+                    <span className="text-[11px] text-neutral-400">Mínimo consumo de RAM y CPU</span>
+                  </td>
+                  <td className="py-5 px-6 text-amber-400 font-mono text-[11px]">
+                    OpenGL 4.3 / Vulkan
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Tarjetas de Especificaciones para Móvil */}
+          <div className="grid grid-cols-1 gap-5 md:hidden">
+            {/* Windows Card */}
+            <div className="rounded-2xl border border-neutral-800 bg-neutral-950/80 p-5 space-y-4 shadow-xl">
+              <div className="flex items-center gap-3 border-b border-neutral-800 pb-3">
+                <div className="w-9 h-9 rounded-lg bg-cyan-950/50 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
+                  <svg className="w-5 h-5 text-cyan-400" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.949-1.8" />
+                  </svg>
                 </div>
-                <span className="text-xs text-neutral-400 sm:text-right">{plat.detalle}</span>
+                <div>
+                  <h3 className="text-base font-bold text-white">Microsoft Windows</h3>
+                  <span className="text-xs text-neutral-400">Windows 10 / 11 (64-bit)</span>
+                </div>
               </div>
-            ))}
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between py-1 border-b border-neutral-900">
+                  <span className="text-neutral-500">Instalador</span>
+                  <span className="text-white font-medium text-right">NSIS nativo optimizado</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-neutral-900">
+                  <span className="text-neutral-500">Hardware</span>
+                  <span className="text-white font-medium text-right">Intel Core i5 / 8 GB RAM</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-neutral-900">
+                  <span className="text-neutral-500">Video</span>
+                  <span className="text-white font-medium text-right">GPU dedicada para 4K</span>
+                </div>
+                <div className="flex justify-between py-1">
+                  <span className="text-neutral-500">Gráficos</span>
+                  <span className="text-cyan-400 font-mono text-right">DirectX 11 / OpenGL</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Linux Card */}
+            <div className="rounded-2xl border border-neutral-800 bg-neutral-950/80 p-5 space-y-4 shadow-xl">
+              <div className="flex items-center gap-3 border-b border-neutral-800 pb-3">
+                <div className="w-9 h-9 rounded-lg bg-amber-950/50 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                  <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">GNU / Linux</h3>
+                  <span className="text-xs text-neutral-400">Arch, CachyOS, Debian, Ubuntu</span>
+                </div>
+              </div>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between py-1 border-b border-neutral-900">
+                  <span className="text-neutral-500">Compilación</span>
+                  <span className="text-white font-medium text-right">Nativa C++17 alto rendimiento</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-neutral-900">
+                  <span className="text-neutral-500">Eficiencia</span>
+                  <span className="text-white font-medium text-right">Mínimo consumo RAM y CPU</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-neutral-900">
+                  <span className="text-neutral-500">Compatibilidad</span>
+                  <span className="text-white font-medium text-right">X11 / Wayland verificado</span>
+                </div>
+                <div className="flex justify-between py-1">
+                  <span className="text-neutral-500">Gráficos</span>
+                  <span className="text-amber-400 font-mono text-right">OpenGL 4.3 / Vulkan</span>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
