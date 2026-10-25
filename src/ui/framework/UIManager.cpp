@@ -305,24 +305,25 @@ if (m_TransitionPanel && state.textTransitionTrigger != m_LastTransitionTrigger)
                     }
                 }
 
-                // Monitores de salida publica ADICIONALES (opcional) --
-                // todos muestran exactamente lo mismo que el primario de
-                // arriba (ver PresentationState::extraTargetMonitors,
-                // poblado en PresentationCore::SetTargetMonitor).
-                for (int extraIdx : state.extraTargetMonitors)
+                // Monitores de salida publica ADICIONALES (Multi-salida) --
+                // Exclusivo de ProyecThor for Professionals.
+                if (ProyecThor::Core::AuthLicenseManager::Get().IsPro())
                 {
-                    if (extraIdx == state.targetMonitorIndex) continue;
-                    if (extraIdx < 0 || extraIdx >= monitorCount) continue;
+                    for (int extraIdx : state.extraTargetMonitors)
+                    {
+                        if (extraIdx == state.targetMonitorIndex) continue;
+                        if (extraIdx < 0 || extraIdx >= monitorCount) continue;
 
-                    const GLFWvidmode* exMode = glfwGetVideoMode(monitors[extraIdx]);
-                    if (!exMode || exMode->width <= 0 || exMode->height <= 0) continue;
+                        const GLFWvidmode* exMode = glfwGetVideoMode(monitors[extraIdx]);
+                        if (!exMode || exMode->width <= 0 || exMode->height <= 0) continue;
 
-                    int exX, exY;
-                    glfwGetMonitorPos(monitors[extraIdx], &exX, &exY);
+                        int exX, exY;
+                        glfwGetMonitorPos(monitors[extraIdx], &exX, &exY);
 
-                    std::string exName = "ProjectorLive_" + std::to_string(extraIdx);
-                    RenderProjectorOutput(exName.c_str(), exX, exY, exMode, state,
-                                           /*isPrimary=*/false, &activeExtraProjectorIds);
+                        std::string exName = "ProjectorLive_" + std::to_string(extraIdx);
+                        RenderProjectorOutput(exName.c_str(), exX, exY, exMode, state,
+                                               /*isPrimary=*/false, &activeExtraProjectorIds);
+                    }
                 }
             }
         }
@@ -334,46 +335,53 @@ if (m_TransitionPanel && state.textTransitionTrigger != m_LastTransitionTrigger)
 
     if (state.isStaging)
     {
-        int stageMonitorIdx = state.stageMonitorIndex;
-        int stageMonitorCount = 0;
-        GLFWmonitor** stageMonitors = glfwGetMonitors(&stageMonitorCount);
-
-        if (stageMonitors && stageMonitorIdx >= 0 && stageMonitorIdx < stageMonitorCount)
+        // Monitor de Escenario (Stage Display) -- Exclusivo de ProyecThor for Professionals
+        if (!ProyecThor::Core::AuthLicenseManager::Get().IsPro())
         {
-            const GLFWvidmode* stageMode = glfwGetVideoMode(stageMonitors[stageMonitorIdx]);
+            Core::PresentationCore::Get().SetStaging(false);
+        }
+        else
+        {
+            int stageMonitorIdx = state.stageMonitorIndex;
+            int stageMonitorCount = 0;
+            GLFWmonitor** stageMonitors = glfwGetMonitors(&stageMonitorCount);
 
-            if (stageMode && stageMode->width > 0 && stageMode->height > 0)
+            if (stageMonitors && stageMonitorIdx >= 0 && stageMonitorIdx < stageMonitorCount)
             {
-                int smx = 0, smy = 0;
-                glfwGetMonitorPos(stageMonitors[stageMonitorIdx], &smx, &smy);
+                const GLFWvidmode* stageMode = glfwGetVideoMode(stageMonitors[stageMonitorIdx]);
 
-                if (!Core::PresentationCore::Get().IsStageWindowActive())
+                if (stageMode && stageMode->width > 0 && stageMode->height > 0)
                 {
-                    if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+                    int smx = 0, smy = 0;
+                    glfwGetMonitorPos(stageMonitors[stageMonitorIdx], &smx, &smy);
+
+                    if (!Core::PresentationCore::Get().IsStageWindowActive())
                     {
-                        RenderStageOutput("StageLive", smx, smy, stageMode);
+                        if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+                        {
+                            RenderStageOutput("StageLive", smx, smy, stageMode);
+                        }
+                        else
+                        {
+                            Core::PresentationCore::Get().SetStaging(false);
+                        }
                     }
-                    else
+
+                    // Monitores de Stage ADICIONALES (opcional) -- solo Pro
+                    for (int extraIdx : state.extraStageMonitors)
                     {
-                        Core::PresentationCore::Get().SetStaging(false);
+                        if (extraIdx == stageMonitorIdx) continue;
+                        if (extraIdx < 0 || extraIdx >= stageMonitorCount) continue;
+
+                        const GLFWvidmode* exMode = glfwGetVideoMode(stageMonitors[extraIdx]);
+                        if (!exMode || exMode->width <= 0 || exMode->height <= 0) continue;
+
+                        int exX, exY;
+                        glfwGetMonitorPos(stageMonitors[extraIdx], &exX, &exY);
+
+                        std::string exName = "StageLive_" + std::to_string(extraIdx);
+                        RenderStageOutput(exName.c_str(), exX, exY, exMode);
                     }
-                }
-
-                // Monitores de Stage ADICIONALES (opcional) -- mismo
-                // criterio que el bloque de Proyector de arriba.
-                for (int extraIdx : state.extraStageMonitors)
-                {
-                    if (extraIdx == stageMonitorIdx) continue;
-                    if (extraIdx < 0 || extraIdx >= stageMonitorCount) continue;
-
-                    const GLFWvidmode* exMode = glfwGetVideoMode(stageMonitors[extraIdx]);
-                    if (!exMode || exMode->width <= 0 || exMode->height <= 0) continue;
-
-                    int exX, exY;
-                    glfwGetMonitorPos(stageMonitors[extraIdx], &exX, &exY);
-
-                    std::string exName = "StageLive_" + std::to_string(extraIdx);
-                    RenderStageOutput(exName.c_str(), exX, exY, exMode);
                 }
             }
         }
@@ -1034,6 +1042,8 @@ void UIManager::RenderAll()
     // Notas de Versión / PatchNotes modal (solo con Ctrl+Alt+N, nunca tecla simple N)
     if (m_ShowPatchNotesModal)
         RenderPatchNotesModal();
+    if (m_ShowProFeatureModal)
+        RenderProFeatureModal();
     {
         ImGuiIO& io = ImGui::GetIO();
         if (!io.WantTextInput && io.KeyCtrl && io.KeyAlt && !io.KeyShift &&
@@ -2028,6 +2038,13 @@ void UIManager::ToggleAudience(bool active)
 
 void UIManager::ToggleStageQuick(bool active)
 {
+    auto& authMgr = ProyecThor::Core::AuthLicenseManager::Get();
+    if (active && !authMgr.IsPro()) {
+        ShowProFeatureModal("Monitor de Escenario (Stage Display)",
+                            "La salida de Monitor de Escenario (Stage Display) para predicadores y músicos es una función exclusiva de ProyecThor for Professionals.\n\nEn la versión estándar puedes proyectar a 1 pantalla secundaria estándar. Activa tu suscripción Pro para habilitar el monitor de escenario.");
+        return;
+    }
+
     auto& core = Core::PresentationCore::Get();
     auto& sd   = ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay;
 
@@ -2928,6 +2945,76 @@ void UIManager::RenderPatchNotesModal()
         ImGui::Dummy(ImVec2(0.0f, 6.0f));
         if (ImGui::Button("Cerrar", ImVec2(100.0f, 28.0f))) {
             m_ShowPatchNotesModal = false;
+        }
+    }
+    ImGui::End();
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(2);
+}
+
+void UIManager::ShowProFeatureModal(const std::string& title, const std::string& description)
+{
+    m_ProFeatureModalTitle = title;
+    m_ProFeatureModalDesc  = description;
+    m_ShowProFeatureModal  = true;
+}
+
+void UIManager::RenderProFeatureModal()
+{
+    if (!m_ShowProFeatureModal) return;
+
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float modalW = 500.0f;
+    const float modalH = 260.0f;
+
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(modalW, modalH), ImGuiCond_Always);
+
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.10f, 0.11f, 0.15f, 0.98f));
+    ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(0.95f, 0.75f, 0.20f, 0.90f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.5f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20.0f, 18.0f));
+
+    if (ImGui::Begin("Función ProyecThor for Professionals##Modal", &m_ShowProFeatureModal,
+                     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize))
+    {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+            m_ShowProFeatureModal = false;
+        }
+
+        // Título con badge dorado PRO
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.75f, 0.20f, 1.0f));
+        ImGui::TextUnformatted(m_ProFeatureModalTitle.c_str());
+        ImGui::PopStyleColor();
+
+        ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
+        ImGui::TextUnformatted("— Exclusivo Pro");
+        ImGui::PopStyleColor();
+
+        ImGui::Separator();
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.88f, 0.94f, 1.0f));
+        ImGui::TextWrapped("%s", m_ProFeatureModalDesc.c_str());
+        ImGui::PopStyleColor();
+
+        ImGui::Dummy(ImVec2(0.0f, 16.0f));
+
+        // Botones inferiores: Ir a Cuenta (Pro) / Cerrar
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.65f, 0.15f, 0.90f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.95f, 0.75f, 0.22f, 1.0f));
+        if (ImGui::Button("Ver Planes Pro en Cuenta", ImVec2(210.0f, 32.0f))) {
+            m_ShowProFeatureModal = false;
+            CloseAllToolWindows();
+            RequestSettings(10); // Categoría Cuenta / Pro
+        }
+        ImGui::PopStyleColor(2);
+
+        ImGui::SameLine(0.0f, 12.0f);
+        if (DS::GlassButton("Cerrar", ImVec2(100.0f, 32.0f))) {
+            m_ShowProFeatureModal = false;
         }
     }
     ImGui::End();

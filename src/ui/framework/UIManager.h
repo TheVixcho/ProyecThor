@@ -90,6 +90,7 @@ uint64_t m_LastTransitionTrigger = 0;
     void OpenHub();
     void OpenPatchNotes();
     bool IsPatchNotesOpen() const { return m_ShowPatchNotesModal; }
+    void ShowProFeatureModal(const std::string& title, const std::string& description);
 
     // "Biblioteca" (Settings::WorkspaceLayoutPreset::Library) es un preset
     // MAS de Entorno de trabajo (ver BuildWorkspaceLayoutLibrary), igual que
@@ -305,6 +306,10 @@ private:
 
     bool          m_ShowPatchNotesModal = false;
     void          RenderPatchNotesModal();
+    bool          m_ShowProFeatureModal = false;
+    std::string   m_ProFeatureModalTitle;
+    std::string   m_ProFeatureModalDesc;
+    void          RenderProFeatureModal();
     WorkspaceMode m_Mode = WorkspaceMode::Projector;
 
     // Ver LibraryPanel::SetMediaOnlyMode -- se sincroniza cada frame en

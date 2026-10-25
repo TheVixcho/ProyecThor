@@ -1,6 +1,7 @@
 #include "PresentationCore.h"
 #include "BackgroundLayer.h"
 #include "graphics/shaders/CompositePostChain.h"
+#include "AuthLicenseManager.h"
 #include "stb_image.h"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -2158,8 +2159,12 @@ void PresentationCore::SetPrevContent(const std::string& text, const std::string
         {
             std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             m_State.targetMonitorIndex = index;
-            m_State.extraTargetMonitors =
-                ProyecThor::Settings::SettingsManager::Get().GetSettings().projection.extraMonitors;
+            if (AuthLicenseManager::Get().IsPro()) {
+                m_State.extraTargetMonitors =
+                    ProyecThor::Settings::SettingsManager::Get().GetSettings().projection.extraMonitors;
+            } else {
+                m_State.extraTargetMonitors.clear();
+            }
             projecting = m_State.isProjecting;
         }
         if (m_Impl) {
@@ -2169,12 +2174,22 @@ void PresentationCore::SetPrevContent(const std::string& text, const std::string
 
     void PresentationCore::SetStaging(bool active, int monitorIndex) {
         std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        if (active && !AuthLicenseManager::Get().IsPro()) {
+            m_State.isStaging = false;
+            m_State.extraStageMonitors.clear();
+            return;
+        }
         m_State.isStaging = active;
         if (monitorIndex >= 0)
             m_State.stageMonitorIndex = monitorIndex;
-        if (active)
-            m_State.extraStageMonitors =
-                ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay.extraMonitors;
+        if (active) {
+            if (AuthLicenseManager::Get().IsPro()) {
+                m_State.extraStageMonitors =
+                    ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay.extraMonitors;
+            } else {
+                m_State.extraStageMonitors.clear();
+            }
+        }
         ++m_StreamVersion;
     }
 

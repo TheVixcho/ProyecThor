@@ -3,6 +3,7 @@
 #include "ProjectionQualityPresets.h"
 #include "core/PresentationCore.h"
 #include "core/AppPaths.h"
+#include "core/AuthLicenseManager.h"
 #include "ui/framework/FilePicker.h"
 #include <imgui.h>
 #include <filesystem>
@@ -143,13 +144,24 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
                 HelpTooltip("Pantalla Completa (Recomendado): Cubre por completo el monitor seleccionado sin bordes ni barra de título.\n\n"
                             "Modo Ventana: Abre la proyección en una ventana flotante redimensionable con barra de título, ideal para probar en un solo monitor o capturar la ventana en OBS.");
 
-                // Monitores ADICIONALES (opcional) -- todos muestran
-                // exactamente lo mismo que el monitor principal de arriba.
-                // Pensado para quien maneja varias pantallas de salida al
-                // publico a la vez (ver PresentationState::extraTargetMonitors).
+                // Monitores ADICIONALES (Multi-salida) --
+                // Exclusivo de ProyecThor for Professionals.
                 if (monitorCount > 1) {
                     ImGui::Spacing();
-                    ImGui::TextDisabled("Enviar tambien a estas pantallas (opcional):");
+                    auto& authMgr = ProyecThor::Core::AuthLicenseManager::Get();
+                    const bool isPro = authMgr.IsPro();
+
+                    ImGui::TextDisabled("Multi-salida — Proyectar a varias pantallas a la vez:");
+                    ImGui::SameLine();
+                    if (!isPro) {
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.75f, 0.20f, 1.0f));
+                        ImGui::TextUnformatted("[PRO]");
+                        ImGui::PopStyleColor();
+                        if (ImGui::IsItemHovered()) {
+                            ImGui::SetTooltip("Multi-salida es exclusivo de ProyecThor for Professionals");
+                        }
+                    }
+
                     static const float accent[4] = { 0.35f, 0.55f, 0.95f, 1.0f };
                     static const float track[4]  = { 1.0f, 1.0f, 1.0f, 0.10f };
 
@@ -160,21 +172,38 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
                                        != p.extraMonitors.end();
                         bool wasExtra = isExtra;
 
-                        ModernToggle(("##extramon" + std::to_string(i)).c_str(), &isExtra, accent, track);
-                        if (isExtra != wasExtra) {
-                            if (isExtra) {
-                                p.extraMonitors.push_back(i);
-                            } else {
-                                p.extraMonitors.erase(
-                                    std::remove(p.extraMonitors.begin(), p.extraMonitors.end(), i),
-                                    p.extraMonitors.end());
+                        if (!isPro) {
+                            ImGui::BeginDisabled();
+                            bool dummyFalse = false;
+                            ModernToggle(("##extramon" + std::to_string(i)).c_str(), &dummyFalse, accent, track);
+                            ImGui::EndDisabled();
+                            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                                ImGui::SetTooltip("La Multi-salida simultánea requiere ProyecThor for Professionals.");
                             }
-                            changed = true;
+                        } else {
+                            ModernToggle(("##extramon" + std::to_string(i)).c_str(), &isExtra, accent, track);
+                            if (isExtra != wasExtra) {
+                                if (isExtra) {
+                                    p.extraMonitors.push_back(i);
+                                } else {
+                                    p.extraMonitors.erase(
+                                        std::remove(p.extraMonitors.begin(), p.extraMonitors.end(), i),
+                                        p.extraMonitors.end());
+                                }
+                                changed = true;
+                            }
                         }
 
                         ImGui::SameLine();
                         ImGui::AlignTextToFramePadding();
                         ImGui::Text("%s", names[i]);
+                    }
+
+                    if (!isPro) {
+                        ImGui::Spacing();
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.75f, 0.25f, 1.0f));
+                        ImGui::TextWrapped("La Multi-salida simultánea a varias pantallas es exclusiva de ProyecThor for Professionals. En la versión estándar puedes proyectar a 1 pantalla secundaria estándar.");
+                        ImGui::PopStyleColor();
                     }
                 }
             } else {
