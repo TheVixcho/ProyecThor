@@ -224,11 +224,6 @@ export default function App() {
       <main className="relative z-10 flex-1">
         {/* HERO SECTION: ENFOQUE EN LA CALIDAD DE LA VERSIÓN BASE GRATUITA */}
         <section id="inicio" className="pt-24 pb-20 px-6 max-w-5xl mx-auto text-center space-y-8">
-          <div className="inline-flex items-center gap-2 text-xs uppercase tracking-widest text-cyan-400 font-semibold">
-            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-            Motor de Proyección Audiovisual Nativo · Gratuito y de Alto Rendimiento
-          </div>
-
           <h1 className="text-2xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-snug sm:leading-tight">
             <span className="block">Proyección profesional para tu auditorio,</span>
             <span className="block bg-gradient-to-r from-white via-neutral-200 to-cyan-400 bg-clip-text text-transparent">
@@ -300,10 +295,6 @@ export default function App() {
         {/* SECCIÓN: LO BUENO QUE ES EL PROGRAMA DE FORMA GRATUITA */}
         <section id="gratuito" className="py-20 px-6 max-w-6xl mx-auto space-y-12">
           <div className="max-w-3xl mx-auto space-y-3">
-            <div className="inline-flex items-center gap-2 text-xs uppercase tracking-widest text-cyan-400 font-semibold">
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-              Software Completo y Robusto sin Costo
-            </div>
             <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
               La versión gratuita ya es todo lo que tu auditorio necesita
             </h2>
@@ -389,12 +380,9 @@ export default function App() {
         {/* CARACTERÍSTICAS TÉCNICAS Y ESPECIFICACIONES BASE */}
         <section id="especificaciones" className="py-16 px-6 max-w-6xl mx-auto space-y-10">
           <div className="border-b border-neutral-800 pb-4">
-            <h2 className="text-xs uppercase tracking-widest text-neutral-500 font-semibold">
-              Arquitectura Técnica
-            </h2>
-            <p className="text-2xl font-extrabold text-white mt-1">
+            <h2 className="text-2xl font-extrabold text-white">
               Capacidades técnicas del motor de proyección
-            </p>
+            </h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -420,12 +408,9 @@ export default function App() {
         {/* PLATAFORMAS COMPATIBLES */}
         <section id="compatibilidad" className="py-16 px-6 max-w-4xl mx-auto space-y-6">
           <div className="border-b border-neutral-800 pb-3">
-            <h2 className="text-xs uppercase tracking-widest text-neutral-500 font-semibold">
-              Requerimientos de Sistema
-            </h2>
-            <p className="text-lg font-bold text-white mt-1">
+            <h2 className="text-lg font-bold text-white">
               Entornos de Ejecución Soportados
-            </p>
+            </h2>
           </div>
 
           <div className="divide-y divide-neutral-800/80 border border-neutral-800 rounded-xl bg-neutral-950 overflow-hidden shadow-md">
@@ -517,9 +502,6 @@ export default function App() {
           {/* COMPARACIÓN DE EDICIONES Y SUSCRIPCIÓN */}
           <div id="planes" className="pt-8 space-y-10">
             <div className="text-center max-w-2xl mx-auto space-y-2">
-              <span className="text-xs uppercase tracking-widest text-neutral-400 font-semibold">
-                Estructura de Licenciamiento
-              </span>
               <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
                 Elige el modelo adecuado para tu auditorio
               </h2>
