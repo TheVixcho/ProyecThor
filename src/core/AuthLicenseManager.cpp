@@ -22,6 +22,42 @@ namespace ProyecThor::Core {
 
 using json = nlohmann::json;
 
+// Helpers defensivos para nlohmann::json: nunca lanzan excepciones si el campo es JSON null
+static inline std::string JsonSafeString(const json& j, const std::string& key, const std::string& defaultVal = "") {
+    if (j.is_object() && j.contains(key)) {
+        const auto& it = j.find(key);
+        if (it != j.end() && !it->is_null() && it->is_string()) {
+            return it->get<std::string>();
+        }
+    }
+    return defaultVal;
+}
+
+static inline bool JsonSafeBool(const json& j, const std::string& key, bool defaultVal = false) {
+    if (j.is_object() && j.contains(key)) {
+        const auto& it = j.find(key);
+        if (it != j.end() && !it->is_null() && it->is_boolean()) {
+            return it->get<bool>();
+        }
+    }
+    return defaultVal;
+}
+
+static inline int64_t JsonSafeInt64(const json& j, const std::string& key, int64_t defaultVal = 0) {
+    if (j.is_object() && j.contains(key)) {
+        const auto& it = j.find(key);
+        if (it != j.end() && !it->is_null()) {
+            if (it->is_number()) return it->get<int64_t>();
+            if (it->is_string()) {
+                try {
+                    return std::stoll(it->get<std::string>());
+                } catch (...) {}
+            }
+        }
+    }
+    return defaultVal;
+}
+
 // Helper para convertir std::string a std::wstring (UTF-8 a Wide en Windows)
 #ifdef _WIN32
 static std::wstring Utf8ToWide(const std::string& str) {
@@ -105,7 +141,7 @@ AuthLicenseManager::AuthLicenseManager() {
 void AuthLicenseManager::Initialize() {
     LoadState();
 
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     if (m_License.isValid && !m_License.key.empty()) {
         int64_t now = (int64_t)std::time(nullptr);
         // Si la licencia guardada no tenía fecha de expiración (versión previa),
@@ -152,7 +188,7 @@ std::string AuthLicenseManager::GetDefaultInstanceName() const {
 }
 
 void AuthLicenseManager::SaveState() {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     json j;
     j["firebase_api_key"] = m_FirebaseApiKey;
     j["is_logged_in"]     = m_IsLoggedIn;
@@ -182,11 +218,13 @@ void AuthLicenseManager::SaveState() {
     std::ofstream f(path);
     if (f.is_open()) {
         f << j.dump(2);
+        f.flush();
+        f.close();
     }
 }
 
 void AuthLicenseManager::LoadState() {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     std::string path = GetConfigFilePath();
     if (!std::filesystem::exists(path)) return;
 
@@ -195,35 +233,32 @@ void AuthLicenseManager::LoadState() {
 
     try {
         json j = json::parse(f);
-        if (j.contains("firebase_api_key") && j["firebase_api_key"].is_string()) {
-            std::string k = j["firebase_api_key"];
-            if (!k.empty()) m_FirebaseApiKey = k;
-        }
-        if (j.contains("is_logged_in")) m_IsLoggedIn = j["is_logged_in"].get<bool>();
+        m_FirebaseApiKey = JsonSafeString(j, "firebase_api_key", m_FirebaseApiKey);
+        m_IsLoggedIn = JsonSafeBool(j, "is_logged_in", false);
 
         if (j.contains("user") && j["user"].is_object()) {
             const auto& u = j["user"];
-            if (u.contains("local_id") && u["local_id"].is_string()) m_User.localId = u["local_id"];
-            if (u.contains("email") && u["email"].is_string()) m_User.email = u["email"];
-            if (u.contains("display_name") && u["display_name"].is_string()) m_User.displayName = u["display_name"];
-            if (u.contains("id_token") && u["id_token"].is_string()) m_User.idToken = u["id_token"];
-            if (u.contains("refresh_token") && u["refresh_token"].is_string()) m_User.refreshToken = u["refresh_token"];
+            m_User.localId = JsonSafeString(u, "local_id", "");
+            m_User.email = JsonSafeString(u, "email", "");
+            m_User.displayName = JsonSafeString(u, "display_name", "");
+            m_User.idToken = JsonSafeString(u, "id_token", "");
+            m_User.refreshToken = JsonSafeString(u, "refresh_token", "");
         }
 
         if (j.contains("license") && j["license"].is_object()) {
             const auto& l = j["license"];
-            if (l.contains("is_valid")) m_License.isValid = l["is_valid"].get<bool>();
-            if (l.contains("key") && l["key"].is_string()) m_License.key = l["key"];
-            if (l.contains("status") && l["status"].is_string()) m_License.status = l["status"];
-            if (l.contains("instance_id") && l["instance_id"].is_string()) m_License.instanceId = l["instance_id"];
-            if (l.contains("instance_name") && l["instance_name"].is_string()) m_License.instanceName = l["instance_name"];
-            if (l.contains("customer_name") && l["customer_name"].is_string()) m_License.customerName = l["customer_name"];
-            if (l.contains("customer_email") && l["customer_email"].is_string()) m_License.customerEmail = l["customer_email"];
-            if (l.contains("product_name") && l["product_name"].is_string()) m_License.productName = l["product_name"];
-            if (l.contains("expiry_date") && l["expiry_date"].is_string()) m_License.expiryDate = l["expiry_date"];
-            if (l.contains("activated_at") && l["activated_at"].is_number()) m_License.activatedAt = l["activated_at"].get<int64_t>();
-            if (l.contains("expires_at") && l["expires_at"].is_number()) m_License.expiresAt = l["expires_at"].get<int64_t>();
-            if (l.contains("last_validated") && l["last_validated"].is_number()) m_License.lastValidatedAt = l["last_validated"].get<int64_t>();
+            m_License.isValid = JsonSafeBool(l, "is_valid", false);
+            m_License.key = JsonSafeString(l, "key", "");
+            m_License.status = JsonSafeString(l, "status", "");
+            m_License.instanceId = JsonSafeString(l, "instance_id", "");
+            m_License.instanceName = JsonSafeString(l, "instance_name", "");
+            m_License.customerName = JsonSafeString(l, "customer_name", "");
+            m_License.customerEmail = JsonSafeString(l, "customer_email", "");
+            m_License.productName = JsonSafeString(l, "product_name", "");
+            m_License.expiryDate = JsonSafeString(l, "expiry_date", "");
+            m_License.activatedAt = JsonSafeInt64(l, "activated_at", 0);
+            m_License.expiresAt = JsonSafeInt64(l, "expires_at", 0);
+            m_License.lastValidatedAt = JsonSafeInt64(l, "last_validated", 0);
         }
     } catch (...) {}
 }
@@ -319,17 +354,17 @@ std::string AuthLicenseManager::PerformHttpsPost(const std::string& host, const 
 // ── Métodos de Firebase Auth ─────────────────────────────────────────────────
 
 bool AuthLicenseManager::IsLoggedIn() const {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     return m_IsLoggedIn;
 }
 
 const UserProfile& AuthLicenseManager::GetUser() const {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     return m_User;
 }
 
 const std::string& AuthLicenseManager::GetAuthError() const {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     return m_AuthError;
 }
 
@@ -338,12 +373,12 @@ bool AuthLicenseManager::IsAuthBusy() const {
 }
 
 void AuthLicenseManager::SetFirebaseApiKey(const std::string& key) {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     m_FirebaseApiKey = key;
 }
 
 std::string AuthLicenseManager::GetFirebaseApiKey() const {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     return m_FirebaseApiKey;
 }
 
@@ -352,7 +387,7 @@ void AuthLicenseManager::LoginWithFirebase(const std::string& email, const std::
     if (m_AuthBusy.exchange(true)) return;
 
     {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_AuthError.clear();
     }
 
@@ -377,13 +412,13 @@ void AuthLicenseManager::LoginWithFirebase(const std::string& email, const std::
         } else if (statusCode == 200) {
             try {
                 json j = json::parse(res);
-                std::lock_guard<std::mutex> lock(m_Mutex);
+                std::lock_guard<std::recursive_mutex> lock(m_Mutex);
                 m_IsLoggedIn = true;
-                m_User.localId      = j.value("localId", "");
-                m_User.email        = j.value("email", email);
-                m_User.displayName  = j.value("displayName", "");
-                m_User.idToken      = j.value("idToken", "");
-                m_User.refreshToken = j.value("refreshToken", "");
+                m_User.localId      = JsonSafeString(j, "localId", "");
+                m_User.email        = JsonSafeString(j, "email", email);
+                m_User.displayName  = JsonSafeString(j, "displayName", "");
+                m_User.idToken      = JsonSafeString(j, "idToken", "");
+                m_User.refreshToken = JsonSafeString(j, "refreshToken", "");
                 m_AuthError.clear();
                 success = true;
                 finalMsg = "Sesión iniciada correctamente.";
@@ -409,7 +444,7 @@ void AuthLicenseManager::LoginWithFirebase(const std::string& email, const std::
         }
 
         {
-            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             if (!success) m_AuthError = finalMsg;
         }
 
@@ -443,13 +478,13 @@ void AuthLicenseManager::SignUpWithFirebase(const std::string& email, const std:
         if (statusCode == 200) {
             try {
                 json j = json::parse(res);
-                std::lock_guard<std::mutex> lock(m_Mutex);
+                std::lock_guard<std::recursive_mutex> lock(m_Mutex);
                 m_IsLoggedIn = true;
-                m_User.localId      = j.value("localId", "");
-                m_User.email        = j.value("email", email);
-                m_User.displayName  = j.value("displayName", "");
-                m_User.idToken      = j.value("idToken", "");
-                m_User.refreshToken = j.value("refreshToken", "");
+                m_User.localId      = JsonSafeString(j, "localId", "");
+                m_User.email        = JsonSafeString(j, "email", email);
+                m_User.displayName  = JsonSafeString(j, "displayName", "");
+                m_User.idToken      = JsonSafeString(j, "idToken", "");
+                m_User.refreshToken = JsonSafeString(j, "refreshToken", "");
                 m_AuthError.clear();
                 success = true;
                 finalMsg = "Cuenta creada e iniciada con éxito.";
@@ -473,7 +508,7 @@ void AuthLicenseManager::SignUpWithFirebase(const std::string& email, const std:
         }
 
         {
-            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             if (!success) m_AuthError = finalMsg;
         }
 
@@ -486,7 +521,7 @@ void AuthLicenseManager::SignUpWithFirebase(const std::string& email, const std:
 
 void AuthLicenseManager::Logout() {
     {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_IsLoggedIn = false;
         m_User = UserProfile();
         m_AuthError.clear();
@@ -497,14 +532,14 @@ void AuthLicenseManager::Logout() {
 // ── Lemon Squeezy: Compra y Checkout ─────────────────────────────────────────
 
 bool AuthLicenseManager::CanBuySubscription() const {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     return m_IsLoggedIn;
 }
 
 bool AuthLicenseManager::OpenCheckoutUrl(std::string& outError) {
     std::string email;
     {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         if (!m_IsLoggedIn) {
             outError = "Debes iniciar sesión con tu correo y contraseña antes de comprar la suscripción.";
             return false;
@@ -538,13 +573,13 @@ bool AuthLicenseManager::OpenCheckoutUrl(std::string& outError) {
 // ── Lemon Squeezy: Licenciamiento ────────────────────────────────────────────
 
 bool AuthLicenseManager::IsPro() const {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     if (!m_License.isValid || m_License.key.empty()) {
         return false;
     }
     int64_t now = (int64_t)std::time(nullptr);
-    // Anti-trampa: si el reloj del sistema fue alterado hacia atrás
-    if (m_License.lastValidatedAt > 0 && now < (m_License.lastValidatedAt - 3600)) {
+    // Anti-trampa: si el reloj del sistema fue alterado hacia atrás más de 24 horas
+    if (m_License.lastValidatedAt > 0 && now < (m_License.lastValidatedAt - 86400)) {
         return false;
     }
     // Si ya venció el mes: estricto, sin margen de gracia, requiere wifi para pagar y revalidar
@@ -555,14 +590,14 @@ bool AuthLicenseManager::IsPro() const {
 }
 
 bool AuthLicenseManager::IsLicenseExpired() const {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     if (!m_License.isValid || m_License.expiresAt <= 0) return true;
     int64_t now = (int64_t)std::time(nullptr);
     return now >= m_License.expiresAt;
 }
 
 int64_t AuthLicenseManager::GetDaysRemaining() const {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     if (!m_License.isValid || m_License.expiresAt <= 0) return 0;
     int64_t now = (int64_t)std::time(nullptr);
     if (now >= m_License.expiresAt) return 0;
@@ -570,12 +605,12 @@ int64_t AuthLicenseManager::GetDaysRemaining() const {
 }
 
 const LicenseInfo& AuthLicenseManager::GetLicenseInfo() const {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     return m_License;
 }
 
 const std::string& AuthLicenseManager::GetLicenseError() const {
-    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     return m_LicenseError;
 }
 
@@ -612,10 +647,10 @@ void AuthLicenseManager::ActivateLicense(const std::string& licenseKey, const st
             if (statusCode == 200) {
                 try {
                     json j = json::parse(res);
-                    bool activated = j.value("activated", false);
+                    bool activated = JsonSafeBool(j, "activated", false);
                     if (activated) {
                         int64_t now = (int64_t)std::time(nullptr);
-                        std::lock_guard<std::mutex> lock(m_Mutex);
+                        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
                         m_License.isValid      = true;
                         m_License.key          = cleanKey;
                         m_License.instanceName = finalInstName;
@@ -630,8 +665,9 @@ void AuthLicenseManager::ActivateLicense(const std::string& licenseKey, const st
                             }
                         }
                         if (j.contains("license_key") && j["license_key"].is_object()) {
-                            m_License.status = j["license_key"].value("status", "active");
-                            std::string rawExp = j["license_key"].value("expires_at", "");
+                            const auto& lk = j["license_key"];
+                            m_License.status = JsonSafeString(lk, "status", "active");
+                            std::string rawExp = JsonSafeString(lk, "expires_at", "");
                             int64_t parsedExp = ParseIsoDate(rawExp);
                             if (parsedExp > now) {
                                 m_License.expiresAt = parsedExp;
@@ -646,15 +682,16 @@ void AuthLicenseManager::ActivateLicense(const std::string& licenseKey, const st
                             m_License.expiryDate = FormatDate(m_License.expiresAt);
                         }
                         if (j.contains("meta") && j["meta"].is_object()) {
-                            m_License.customerName  = j["meta"].value("user_name", "");
-                            m_License.customerEmail = j["meta"].value("user_email", "");
-                            m_License.productName   = j["meta"].value("product_name", "ProyecThor for Professionals");
+                            const auto& meta = j["meta"];
+                            m_License.customerName  = JsonSafeString(meta, "customer_name", JsonSafeString(meta, "user_name", ""));
+                            m_License.customerEmail = JsonSafeString(meta, "customer_email", JsonSafeString(meta, "user_email", ""));
+                            m_License.productName   = JsonSafeString(meta, "product_name", "ProyecThor for Professionals");
                         }
                         m_LicenseError.clear();
                         success = true;
                         finalMsg = "¡Licencia activada con éxito! ProyecThor for Professionals está activo por 1 mes.";
                     } else {
-                        activateErrMsg = j.value("error", "");
+                        activateErrMsg = JsonSafeString(j, "error", "");
                     }
                 } catch (...) {
                     activateErrMsg = "Respuesta de Lemon Squeezy no válida.";
@@ -662,14 +699,13 @@ void AuthLicenseManager::ActivateLicense(const std::string& licenseKey, const st
             } else {
                 try {
                     json j = json::parse(res);
-                    activateErrMsg = j.value("error", "");
+                    activateErrMsg = JsonSafeString(j, "error", "");
                 } catch (...) {
                     activateErrMsg = "Error HTTP " + std::to_string(statusCode) + " al activar la licencia.";
                 }
             }
 
-            // Si activate falló (por ejemplo: error "This license key has reached the activation limit."
-            // debido a que ya se había activado este equipo u otro anteriormente en Lemon Squeezy):
+            // Si activate falló (por ejemplo: límite de activación alcanzado en Lemon Squeezy):
             // Consultamos directamente /v1/licenses/validate. Si la clave es válida y está activa en los servidores,
             // la vinculamos y permitimos al usuario utilizar su suscripción legítima.
             if (!success) {
@@ -680,16 +716,16 @@ void AuthLicenseManager::ActivateLicense(const std::string& licenseKey, const st
                 if (vStatus == 200) {
                     try {
                         json vj = json::parse(vRes);
-                        bool isValid = vj.value("valid", false);
+                        bool isValid = JsonSafeBool(vj, "valid", false);
                         std::string licStatus = "";
                         if (vj.contains("license_key") && vj["license_key"].is_object()) {
-                            licStatus = vj["license_key"].value("status", "");
+                            licStatus = JsonSafeString(vj["license_key"], "status", "");
                         }
 
                         // Considerar válida si valid es true y el estado no es revoked/expired/disabled
                         if (isValid && (licStatus == "active" || licStatus.empty())) {
                             int64_t now = (int64_t)std::time(nullptr);
-                            std::lock_guard<std::mutex> lock(m_Mutex);
+                            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
                             m_License.isValid      = true;
                             m_License.key          = cleanKey;
                             m_License.instanceName = finalInstName;
@@ -704,8 +740,9 @@ void AuthLicenseManager::ActivateLicense(const std::string& licenseKey, const st
                                 }
                             }
                             if (vj.contains("license_key") && vj["license_key"].is_object()) {
+                                const auto& lk = vj["license_key"];
                                 m_License.status = licStatus.empty() ? "active" : licStatus;
-                                std::string rawExp = vj["license_key"].value("expires_at", "");
+                                std::string rawExp = JsonSafeString(lk, "expires_at", "");
                                 int64_t parsedExp = ParseIsoDate(rawExp);
                                 if (parsedExp > now) {
                                     m_License.expiresAt = parsedExp;
@@ -719,15 +756,16 @@ void AuthLicenseManager::ActivateLicense(const std::string& licenseKey, const st
                                 m_License.expiryDate = FormatDate(m_License.expiresAt);
                             }
                             if (vj.contains("meta") && vj["meta"].is_object()) {
-                                m_License.customerName  = vj["meta"].value("user_name", "");
-                                m_License.customerEmail = vj["meta"].value("user_email", "");
-                                m_License.productName   = vj["meta"].value("product_name", "ProyecThor for Professionals");
+                                const auto& meta = vj["meta"];
+                                m_License.customerName  = JsonSafeString(meta, "customer_name", JsonSafeString(meta, "user_name", ""));
+                                m_License.customerEmail = JsonSafeString(meta, "customer_email", JsonSafeString(meta, "user_email", ""));
+                                m_License.productName   = JsonSafeString(meta, "product_name", "ProyecThor for Professionals");
                             }
                             m_LicenseError.clear();
                             success = true;
                             finalMsg = "¡Licencia vinculada con éxito! ProyecThor for Professionals está activo por 1 mes.";
                         } else {
-                            std::string vErrMsg = vj.value("error", "");
+                            std::string vErrMsg = JsonSafeString(vj, "error", "");
                             finalMsg = !vErrMsg.empty() ? vErrMsg : (!activateErrMsg.empty() ? activateErrMsg : "La clave de licencia no es válida o ha caducado.");
                         }
                     } catch (...) {
@@ -740,7 +778,7 @@ void AuthLicenseManager::ActivateLicense(const std::string& licenseKey, const st
         }
 
         {
-            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             if (!success) m_LicenseError = finalMsg;
             else m_LicenseError.clear();
         }
@@ -757,7 +795,7 @@ void AuthLicenseManager::ValidateLicense(std::function<void(bool success, const 
     int64_t curExpiresAt = 0;
     bool wasValid = false;
     {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         key = m_License.key;
         instId = m_License.instanceId;
         curExpiresAt = m_License.expiresAt;
@@ -781,14 +819,14 @@ void AuthLicenseManager::ValidateLicense(std::function<void(bool success, const 
         if (statusCode == 200 && !instId.empty()) {
             try {
                 json j = json::parse(res);
-                if (!j.value("valid", false)) {
+                if (!JsonSafeBool(j, "valid", false)) {
                     int sc2 = 0;
                     std::string re2;
                     std::string res2 = PerformHttpsPost(m_LemonHost, "/v1/licenses/validate", "license_key=" + UrlEncode(key),
                                                         "application/x-www-form-urlencoded", sc2, re2);
                     if (sc2 == 200) {
                         json j2 = json::parse(res2);
-                        if (j2.value("valid", false)) {
+                        if (JsonSafeBool(j2, "valid", false)) {
                             res = res2;
                         }
                     }
@@ -803,8 +841,8 @@ void AuthLicenseManager::ValidateLicense(std::function<void(bool success, const 
         if (statusCode == 200) {
             try {
                 json j = json::parse(res);
-                bool valid = j.value("valid", false);
-                std::lock_guard<std::mutex> lock(m_Mutex);
+                bool valid = JsonSafeBool(j, "valid", false);
+                std::lock_guard<std::recursive_mutex> lock(m_Mutex);
                 m_License.lastValidatedAt = now;
 
                 if (valid) {
@@ -812,7 +850,9 @@ void AuthLicenseManager::ValidateLicense(std::function<void(bool success, const 
                     m_License.isValid = true;
                     m_License.status  = "active";
                     if (j.contains("license_key") && j["license_key"].is_object()) {
-                        std::string rawExp = j["license_key"].value("expires_at", "");
+                        const auto& lk = j["license_key"];
+                        m_License.status = JsonSafeString(lk, "status", "active");
+                        std::string rawExp = JsonSafeString(lk, "expires_at", "");
                         int64_t parsedExp = ParseIsoDate(rawExp);
                         if (parsedExp > now) {
                             m_License.expiresAt = parsedExp;
@@ -824,6 +864,13 @@ void AuthLicenseManager::ValidateLicense(std::function<void(bool success, const 
                     } else if (m_License.expiresAt <= now) {
                         m_License.expiresAt = now + (30LL * 24 * 3600);
                         m_License.expiryDate = FormatDate(m_License.expiresAt);
+                    }
+                    if (j.contains("meta") && j["meta"].is_object()) {
+                        const auto& meta = j["meta"];
+                        std::string cname = JsonSafeString(meta, "customer_name", JsonSafeString(meta, "user_name", ""));
+                        std::string cemail = JsonSafeString(meta, "customer_email", JsonSafeString(meta, "user_email", ""));
+                        if (!cname.empty()) m_License.customerName = cname;
+                        if (!cemail.empty()) m_License.customerEmail = cemail;
                     }
                     m_LicenseError.clear();
                     success = true;
@@ -842,7 +889,7 @@ void AuthLicenseManager::ValidateLicense(std::function<void(bool success, const 
             SaveState();
         } else {
             // Error de conexión o servidor inalcanzable
-            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             if (wasValid) {
                 // Sin margen de gracia: si ya se cumplió el mes (now >= expiresAt), requiere wifi para pagar y renovar
                 if (curExpiresAt > 0 && now >= curExpiresAt) {
@@ -871,7 +918,7 @@ void AuthLicenseManager::ValidateLicense(std::function<void(bool success, const 
 void AuthLicenseManager::ValidateOnAppLoaded() {
     std::string key;
     {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         if (!m_License.isValid || m_License.key.empty()) {
             return;
         }
@@ -887,12 +934,12 @@ void AuthLicenseManager::ValidateOnAppLoaded() {
 void AuthLicenseManager::DeactivateLicense(std::function<void(bool success, const std::string& msg)> onComplete) {
     std::string key, instId;
     {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         key = m_License.key;
         instId = m_License.instanceId;
     }
     if (key.empty() || instId.empty()) {
-        std::lock_guard<std::mutex> lock(m_Mutex);
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_License = LicenseInfo();
         SaveState();
         if (onComplete) onComplete(true, "Licencia desvinculada localmente.");
@@ -908,7 +955,7 @@ void AuthLicenseManager::DeactivateLicense(std::function<void(bool success, cons
         PerformHttpsPost(m_LemonHost, "/v1/licenses/deactivate", body, "application/x-www-form-urlencoded", statusCode, reqError);
 
         {
-            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             m_License = LicenseInfo();
             m_LicenseError.clear();
         }

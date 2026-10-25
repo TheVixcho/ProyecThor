@@ -93,7 +93,7 @@ private:
                                         const std::string& postData, const std::string& contentType,
                                         int& outStatusCode, std::string& outError);
 
-    mutable std::mutex m_Mutex;
+    mutable std::recursive_mutex m_Mutex;
 
     // Estado de Firebase
     std::string m_FirebaseApiKey;
