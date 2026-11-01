@@ -26,6 +26,9 @@
 #include "panels/ProCloudSongsPanel.h"
 #include "panels/ProAIChatPanel.h"
 #include "panels/ProImageGeneratorPanel.h"
+#include "panels/CanvaPanel.h"
+#include "panels/MuninCloudPanel.h"
+#include "panels/HuginStatsPanel.h"
 #include "ui/views/QuickNotes.h"
 #include "core/SubtitleImporter.h"
 #include "core/PresentationCore.h"
@@ -93,6 +96,9 @@ uint64_t m_LastTransitionTrigger = 0;
     bool IsPatchNotesOpen() const { return m_ShowPatchNotesModal; }
     void ShowProFeatureModal(const std::string& title, const std::string& description);
 
+    void SetShowMediaPreviewWindow(bool show) { m_ShowMediaPreviewWindow = show; }
+    bool IsMediaPreviewWindowOpen() const { return m_ShowMediaPreviewWindow; }
+
     // "Biblioteca" (Settings::WorkspaceLayoutPreset::Library) es un preset
     // MAS de Entorno de trabajo (ver BuildWorkspaceLayoutLibrary), igual que
     // Clasico/Simple/Transmision -- se elige desde Ajustes > Apariencia o el
@@ -108,7 +114,7 @@ uint64_t m_LastTransitionTrigger = 0;
     ViewPanel* GetViewPanelRef() const { return m_ViewPanelRef; }
 
     void SetStylesHubPanelRef(StylesHubPanel* p) { m_StylesHubRef = p; }
-    StylesHubPanel* GetStylesHubPanelRef() const { return m_StylesHubRef; }
+    StylesHubPanel* GetStylesHubPanelRef() const;
 
     bool IsInBibleView() const;
     bool IsBibleSearchActive() const;
@@ -167,6 +173,7 @@ uint64_t m_LastTransitionTrigger = 0;
     void ToggleAIAssistant() { m_ShowAIAssistant = !m_ShowAIAssistant; }
     void ToggleVoiceAssistant() { m_ShowVoiceAssistant = !m_ShowVoiceAssistant; }
     void ToggleConnectionsWindow() { m_ShowConnectionsWindow = !m_ShowConnectionsWindow; }
+    void OpenConnectionsTab(int tab) { m_ConnectionsActiveTab = tab; m_ShowConnectionsWindow = true; }
     void ToggleStageQuick(bool active);
 
     bool IsAnyToolWindowOpen() const;
@@ -186,6 +193,8 @@ private:
     // reconstruccion de BeginDockspace (dockspace_id ya reseteado/limpio).
     void BuildWorkspaceLayoutClassic(ImGuiID dockspace_id);
     void BuildWorkspaceLayoutSimple(ImGuiID dockspace_id);
+    void RenderMediaPreviewFloatingWindow();
+
     void BuildWorkspaceLayoutBroadcast(ImGuiID dockspace_id);
     void BuildWorkspaceLayoutLibrary(ImGuiID dockspace_id);
     void BuildWorkspaceLayoutVideo(ImGuiID dockspace_id);
@@ -254,9 +263,16 @@ private:
     bool                   m_ShowProCloudSongs = false;
     bool                   m_ShowProAIChat     = false;
     bool                   m_ShowProImageGen   = false;
+    bool                   m_ShowCanvaWindow   = false;
+    bool                   m_ShowMuninCloud    = false;
+    bool                   m_ShowHuginStats    = false;
     ProCloudSongsPanel     m_ProCloudSongsPanel;
     ProAIChatPanel         m_ProAIChatPanel;
     ProImageGeneratorPanel m_ProImageGenPanel;
+    std::unique_ptr<MuninCloudPanel> m_MuninCloudPanel;
+    std::unique_ptr<HuginStatsPanel> m_HuginStatsPanel;
+
+    void ToggleCanvaWindow() { m_ShowCanvaWindow = !m_ShowCanvaWindow; }
 
     void        RenderUrlImportModal();
     bool        m_ShowUrlImport        = false;
@@ -267,11 +283,35 @@ private:
     std::mutex  m_UrlImportMutex;
     std::optional<ProyecThor::Core::SubtitleFetchResult> m_UrlImportResult;
 
+    // ── Ventanas Flotantes de Diseño y Herramientas ─────────────────────────
+    void RenderStylesWindow();
+    bool m_ShowStylesWindow = false;
+
+    void RenderShadersWindow();
+    bool m_ShowShadersWindow = false;
+
+    void RenderTransitionsWindow();
+    bool m_ShowTransitionsWindow = false;
+
+    void RenderAnnouncementsWindow();
+    bool m_ShowAnnouncementsWindow = false;
+
+    void RenderPadsWindow();
+    bool m_ShowPadsWindow = false;
+
+    void RenderTilesWindow();
+    bool m_ShowTilesWindow = false;
+
+    void RenderChatWindow();
+    bool m_ShowChatWindow = false;
+
     void RenderStylesPopup();
 
     void RenderConnectionsWindow();
     bool m_ShowConnectionsWindow = false;
     int  m_ConnectionsActiveTab   = 0;
+
+    bool m_ShowMediaPreviewWindow = false;
 
     // Ver comentario de los getters (GetRedPanel/GetChatPanel/GetBroadcastPanel/GetOSCPanel).
     StreamingPanel m_Red;

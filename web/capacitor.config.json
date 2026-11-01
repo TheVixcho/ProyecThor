@@ -1,0 +1,6 @@
+{
+  "appId": "com.thevixcho.proyecthor",
+  "appName": "ProyecThor",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

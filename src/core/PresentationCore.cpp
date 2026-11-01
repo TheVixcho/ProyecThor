@@ -1260,7 +1260,9 @@ void PresentationCore::SetBgTypeLocked(PresentationState::BackgroundType newType
         newType != PresentationState::BackgroundType::Audio &&
         m_AudioPanelRef)
     {
-        m_AudioPanelRef->SetLiveBackground(false);
+        // El fondo en vivo deja de ser audio: la musica se detiene tambien
+        // (si no, seguiria sonando sin disco y sin forma de controlarla).
+        m_AudioPanelRef->StopMusicOnly();
     }
     m_State.bgType = newType;
 }
@@ -2988,23 +2990,16 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
         });
     }
 
-    void PresentationCore::ToggleNetworkStream(bool enable, int port)
+    bool PresentationCore::ToggleNetworkStream(bool enable, int port)
     {
-        if (enable && !AuthLicenseManager::Get().IsPro())
-        {
-            std::cerr << "[NetworkStream] Transmisión LAN de Stage requiere ProyecThor for Professionals.\n";
-            return;
-        }
-
         if (enable)
         {
             if (m_NetworkServer && m_NetworkServer->IsRunning())
             {
-
                 std::lock_guard<std::recursive_mutex> lk(m_Mutex);
                 m_State.isStreamingNet = true;
                 m_State.networkURL     = m_NetworkServer->GetBaseURL();
-                return;
+                return true;
             }
 
             m_NetworkServer = std::make_unique<NetworkStreamServer>();
@@ -3015,12 +3010,13 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
             {
                 m_NetworkServer.reset();
                 std::cerr << "[NetworkStream] No se pudo iniciar en puerto " << port << ".\n";
-                return;
+                return false;
             }
 
             std::lock_guard<std::recursive_mutex> lk(m_Mutex);
             m_State.isStreamingNet = true;
             m_State.networkURL     = m_NetworkServer->GetBaseURL();
+            return true;
         }
         else
         {
@@ -3041,6 +3037,7 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
                 m_NetworkServer->Stop();
                 m_NetworkServer.reset();
             }
+            return true;
         }
     }
 
@@ -3183,8 +3180,8 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
 
         glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
         glViewport(0, 0, w, h);
-outRGB.resize(static_cast<size_t>(w) * h * 3);
-    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        outRGB.resize(static_cast<size_t>(w) * h * 3);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
         {
             std::lock_guard<std::recursive_mutex> lk(m_Mutex);
             glClearColor(m_State.bgColor[0], m_State.bgColor[1], m_State.bgColor[2], 1.0f);
@@ -3193,7 +3190,6 @@ outRGB.resize(static_cast<size_t>(w) * h * 3);
 
         if (GetLanContentMode() == OutputContentMode::Live)
         {
-
             if (ShouldShowLoadingScreen()) {
                 m_Impl->background.RenderLogo(
                     static_cast<unsigned int>(reinterpret_cast<uintptr_t>(GetLoadingLogoTexture())),
@@ -3203,29 +3199,25 @@ outRGB.resize(static_cast<size_t>(w) * h * 3);
             }
         }
 
-        outRGB.resize(static_cast<size_t>(w) * h * 3);
-        glPixelStorei(GL_PACK_ALIGNMENT, 1);
-
         int nextIndex = (m_PBOIndex + 1) % 2;
 
         glBindBuffer(GL_PIXEL_PACK_BUFFER, m_PBO[m_PBOIndex]);
         glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, 0);
 
         glBindBuffer(GL_PIXEL_PACK_BUFFER, m_PBO[nextIndex]);
-GLubyte* ptr = static_cast<GLubyte*>(
-    glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
-if (ptr)
-{
-
-    const size_t rowBytes = static_cast<size_t>(w) * 3;
-    for (int row = 0; row < h; ++row)
-    {
-        const GLubyte* srcRow = ptr + static_cast<size_t>(row) * rowBytes;
-        uint8_t* dstRow = outRGB.data() + static_cast<size_t>(h - 1 - row) * rowBytes;
-        std::memcpy(dstRow, srcRow, rowBytes);
-    }
-    glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
-}
+        GLubyte* ptr = static_cast<GLubyte*>(
+            glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
+        if (ptr)
+        {
+            // El quad de BackgroundLayer ya proyecta la textura con fila 0 = arriba
+            // en la base del FBO (NDC Y = -1), por lo que glReadPixels lee la fila 0
+            // del buffer directamente como la parte superior de la imagen (orden estándar
+            // top-to-bottom y left-to-right de JPEG/stbi). Copiar directamente evita
+            // invertir verticalmente la imagen al transmitir por LAN.
+            const size_t totalBytes = static_cast<size_t>(w) * h * 3;
+            std::memcpy(outRGB.data(), ptr, totalBytes);
+            glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+        }
 
         m_PBOIndex = nextIndex;
 

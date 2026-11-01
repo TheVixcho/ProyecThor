@@ -482,7 +482,7 @@ void VoiceAssistantPanel::RenderErrorBlock(Core::VoiceAssistant& va, const std::
     ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(36, 20, 22, 255));
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, DS::RadiusSmall);
     ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
-    ImGui::BeginChild("##voiceErrorCard", ImVec2(availW, 0.0f), true, ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::BeginChild("##voiceErrorCard", ImVec2(availW, 0.0f), ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
 
     ImGui::PushStyleColor(ImGuiCol_Text, Col(color));
     if (info) ImGui::TextWrapped("%s", info->message);

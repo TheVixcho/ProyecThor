@@ -10,7 +10,14 @@ BackgroundsPanel::BackgroundsPanel()
 BackgroundsPanel::~BackgroundsPanel() = default;
 
 void BackgroundsPanel::RenderContent() {
-    m_BgTab->Render();
+    if (m_BgTab) {
+        m_BgTab->Render();
+    }
+}
+
+void BackgroundsPanel::SetOnCollapseCallback(std::function<void()> cb) {
+    if (m_BgTab)
+        m_BgTab->SetOnCollapseCallback(std::move(cb));
 }
 
 void BackgroundsPanel::PreloadThumbnails(

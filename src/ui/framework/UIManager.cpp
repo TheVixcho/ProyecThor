@@ -40,6 +40,7 @@
 #include "PatchNotesRenderer.h"
 #include "MediaImportModal.h"
 #include "core/MediaImportManager.h"
+#include "core/MediaCollections.h"
 #include "core/AuthLicenseManager.h"
 #include <ctime>
 
@@ -70,8 +71,26 @@ static bool StatusDotToggle(ImDrawList* dl, const char* id, const char* label, b
     return clicked;
 }
 
-UIManager::UIManager() : m_Window(nullptr), m_ShowConfig(false) {}
+// Escala actual de la barra superior (1.0 = tamano completo; menor si no caben las islas)
+static float s_ToolbarScale = 1.0f;
+
+UIManager::UIManager()
+    : m_Window(nullptr)
+    , m_ShowConfig(false)
+    , m_MuninCloudPanel(std::make_unique<MuninCloudPanel>())
+    , m_HuginStatsPanel(std::make_unique<HuginStatsPanel>())
+{}
 UIManager::~UIManager() { Shutdown(); }
+
+StylesHubPanel* UIManager::GetStylesHubPanelRef() const
+{
+    if (m_StylesHubRef) return m_StylesHubRef;
+    for (const auto& p : m_Panels) {
+        if (p && p->GetName() == "Diseño")
+            return dynamic_cast<StylesHubPanel*>(p.get());
+    }
+    return nullptr;
+}
 
 bool UIManager::Initialize(GLFWwindow* window)
 {
@@ -91,6 +110,7 @@ bool UIManager::Initialize(GLFWwindow* window)
     m_SettingsPanel.SetOSCPanelRef(&m_OSC);
     m_SettingsPanel.SetBroadcastPanelRef(&m_Broadcast);
     m_SettingsPanel.SetStreamingPanelRef(&m_Red);
+    m_Red.SetUIManager(this);
     m_SettingsPanel.SetSyncPanelRef(&m_Sync);
     m_SettingsPanel.SetUIManagerRef(this);
 
@@ -165,6 +185,8 @@ void UIManager::AddPanel(std::shared_ptr<IPanel> panel)
     if (!panel) return;
     if (panel->GetName() == "Home")
         m_HomePanelRef = dynamic_cast<HomePanel*>(panel.get());
+    if (panel->GetName() == "Diseño")
+        m_StylesHubRef = dynamic_cast<StylesHubPanel*>(panel.get());
     m_Panels.push_back(std::move(panel));
 }
 
@@ -988,7 +1010,15 @@ void UIManager::RenderAll()
         {
             for (int i = 0; i < kCollapsiblePanelCount; ++i)
                 if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(ImGuiKey_1 + i), false))
-                    TogglePanelCollapse(i);
+                {
+                    if (i == 1) {
+                        if (m_StylesHubRef) {
+                            m_StylesHubRef->SetDesignMode(!m_StylesHubRef->IsInDesignMode());
+                        }
+                    } else {
+                        TogglePanelCollapse(i);
+                    }
+                }
 
             if (ImGui::IsKeyPressed(ImGuiKey_0, false))
                 ResetPanelCollapse();
@@ -1023,10 +1053,35 @@ void UIManager::RenderAll()
     // abajo, para que "Archivo > Importar > Importar desde URL" funcione.
     RenderUrlImportModal();
     Core::MediaImportManager::Get().Update();
+    Core::MediaCollectionManager::Get().Update(ImGui::GetIO().DeltaTime);
+    if (auto* ap = UI::AudioPanel::GetActiveInstance()) {
+        ap->Update();
+    }
     RenderMediaImportModal();
 
     if (m_ShowNotes)
         RenderNotesWindow();
+
+    if (m_ShowStylesWindow)
+        RenderStylesWindow();
+
+    if (m_ShowShadersWindow)
+        RenderShadersWindow();
+
+    if (m_ShowTransitionsWindow)
+        RenderTransitionsWindow();
+
+    if (m_ShowAnnouncementsWindow)
+        RenderAnnouncementsWindow();
+
+    if (m_ShowPadsWindow)
+        RenderPadsWindow();
+
+    if (m_ShowTilesWindow)
+        RenderTilesWindow();
+
+    if (m_ShowChatWindow)
+        RenderChatWindow();
 
     // Se somete siempre: el WebView2 embebido necesita que se le avise UpdateBounds(..., visible=false)
     RenderAIAssistantWindow();
@@ -1038,6 +1093,10 @@ void UIManager::RenderAll()
     // Ventana flotante "Centro de Conexiones" (Red LAN, App Móvil, Transmisión, OSC, Chat)
     if (m_ShowConnectionsWindow)
         RenderConnectionsWindow();
+
+    // Ventana flotante de Vista Previa de Multimedia (Preview button)
+    if (m_ShowMediaPreviewWindow)
+        RenderMediaPreviewFloatingWindow();
 
     // Notas de Versión / PatchNotes modal (solo con Ctrl+Alt+N, nunca tecla simple N)
     if (m_ShowPatchNotesModal)
@@ -1299,8 +1358,8 @@ void UIManager::RenderModeToolbar()
     const auto& str = ProyecThor::UI::GetUIStrings();
 
     ImGuiViewport* vp     = ImGui::GetMainViewport();
-    bool           showLbl = general.showRailLabels;
-    float          railH  = std::max(showLbl ? 66.0f : 44.0f, IconRailThickness(false));
+    const bool     showLbl = false; // Barra superior en modo compacto solo iconos (sin titulos debajo)
+    float          railH  = 50.0f; // Tamaño un poco más amplio y cómodo
 
     ImGui::SetNextWindowPos(vp->WorkPos);
     ImGui::SetNextWindowSize(ImVec2(vp->WorkSize.x, railH));
@@ -1321,14 +1380,15 @@ void UIManager::RenderModeToolbar()
 
     {
         ImDrawList*   dl      = ImGui::GetWindowDrawList();
-        const float   islandH = 36.0f;
-        const float   islandRounding = islandH * 0.5f;
+        float         uiS     = 1.0f;   // factor de escala (se reduce si las islas no caben)
+        float         islandH = 40.0f;
+        float         islandRounding = islandH * 0.5f;
         const float   islandGap      = 16.0f;
 
         ImFont* font          = ImGui::GetFont();
         const float labelSz   = ImGui::GetFontSize();
-        const float iconSz    = 18.0f;
-        const float targetRadius = 15.5f;
+        float iconSz          = 21.0f;
+        float targetRadius    = 17.5f;
 
         ImGuiStorage* storage = ImGui::GetStateStorage();
 
@@ -1369,7 +1429,7 @@ void UIManager::RenderModeToolbar()
                     maxPairHalfSum = std::max(maxPairHalfSum, (w1 + w2) * 0.5f);
                 }
             }
-            float btnStep = showLbl ? std::max(44.0f, maxPairHalfSum + 10.0f) : (islandH + 4.0f);
+            float btnStep = showLbl ? std::max(44.0f, maxPairHalfSum + 10.0f) : (islandH + 6.0f * uiS);
             return islandRounding * 2.0f + (float)(count - 1) * btnStep;
         };
 
@@ -1387,7 +1447,7 @@ void UIManager::RenderModeToolbar()
                     maxPairHalfSum = std::max(maxPairHalfSum, (w1 + w2) * 0.5f);
                 }
             }
-            float btnStep = showLbl ? std::max(44.0f, maxPairHalfSum + 10.0f) : (islandH + 4.0f);
+            float btnStep = showLbl ? std::max(44.0f, maxPairHalfSum + 10.0f) : (islandH + 6.0f * uiS);
             float islandW = islandRounding * 2.0f + (float)(count - 1) * btnStep;
 
             ImVec2 islandMin = { islandScreenX, islandTopY };
@@ -1518,6 +1578,10 @@ void UIManager::RenderModeToolbar()
                     item.onClick();
                 }
 
+                if (hovered && !showLbl && item.label) {
+                    ImGui::SetTooltip("%s", item.label);
+                }
+
                 ImVec4 baseCol = ImGui::ColorConvertU32ToFloat4(DS::TextSecondary);
                 ImVec4 actCol  = ImGui::ColorConvertU32ToFloat4(item.themeColor);
 
@@ -1560,24 +1624,24 @@ void UIManager::RenderModeToolbar()
             }
         };
 
-        // ── Isla 1: Contenido (Canciones, Playlists, Biblia, Documentos) ───
+        // ── Isla 1: Contenido (Librería, Overlays, Biblia, Canva, Reloj) ───
         std::vector<IslandItem> island1 = {
             {
-                "Canciones",
-                Library::DrawIcon_Music,
+                "Librería",
+                AppIcons::DrawIcon_Layers,
                 [this]() {
                     return !IsPanelCollapsed(0) && !IsAnyToolWindowOpen() &&
                            (m_LibraryPanelRef &&
-                            m_LibraryPanelRef->GetCategory() == LibraryCategory::Songs &&
-                            !m_LibraryPanelRef->IsShowingPlaylists() &&
-                            m_LibraryPanelRef->GetSideMode() == LibrarySideMode::Categories);
+                            m_LibraryPanelRef->GetSideMode() == LibrarySideMode::Categories &&
+                            m_LibraryPanelRef->GetCategory() != LibraryCategory::Bibles);
                 },
                 [this]() {
                     CloseAllToolWindows();
                     if (m_LibraryPanelRef) {
                         m_LibraryPanelRef->SelectSideMode(LibrarySideMode::Categories);
-                        m_LibraryPanelRef->SelectCategory(LibraryCategory::Songs);
-                        m_LibraryPanelRef->SetShowPlaylists(false);
+                        if (m_LibraryPanelRef->GetCategory() == LibraryCategory::Bibles) {
+                            m_LibraryPanelRef->SelectCategory(LibraryCategory::Songs);
+                        }
                     }
                     SetActiveLeftPanel(ActiveLeftPanel::Library);
                     SetPanelCollapsed(0, false);
@@ -1586,27 +1650,23 @@ void UIManager::RenderModeToolbar()
                 IM_COL32(56, 189, 248, 255) // Cyan celeste
             },
             {
-                "Playlists",
-                Library::DrawIcon_Playlist,
+                "Overlays",
+                AppIcons::DrawIcon_Overlay,
                 [this]() {
-                    return !IsPanelCollapsed(0) && !IsAnyToolWindowOpen() &&
+                    return !IsAnyToolWindowOpen() &&
                            (m_LibraryPanelRef &&
-                            m_LibraryPanelRef->GetCategory() == LibraryCategory::Songs &&
-                            m_LibraryPanelRef->IsShowingPlaylists() &&
-                            m_LibraryPanelRef->GetSideMode() == LibrarySideMode::Categories);
+                            m_LibraryPanelRef->GetSideMode() == LibrarySideMode::Overlay);
                 },
                 [this]() {
                     CloseAllToolWindows();
                     if (m_LibraryPanelRef) {
-                        m_LibraryPanelRef->SelectSideMode(LibrarySideMode::Categories);
-                        m_LibraryPanelRef->SelectCategory(LibraryCategory::Songs);
-                        m_LibraryPanelRef->SetShowPlaylists(true);
+                        m_LibraryPanelRef->SelectSideMode(LibrarySideMode::Overlay);
                     }
                     SetActiveLeftPanel(ActiveLeftPanel::Library);
                     SetPanelCollapsed(0, false);
                     SetPanelCollapsed(1, true);
                 },
-                IM_COL32(168, 85, 247, 255) // Púrpura amatista
+                IM_COL32(249, 115, 22, 255) // Naranja brillante
             },
             {
                 "Biblia",
@@ -1628,50 +1688,100 @@ void UIManager::RenderModeToolbar()
                     SetPanelCollapsed(1, true);
                 },
                 IM_COL32(251, 191, 36, 255) // Ámbar dorado
-            },
-            {
-                "Documentos",
-                Library::DrawIcon_Document,
-                [this]() {
-                    return !IsPanelCollapsed(0) && !IsAnyToolWindowOpen() &&
-                           (m_LibraryPanelRef &&
-                            m_LibraryPanelRef->GetCategory() == LibraryCategory::Documents &&
-                            m_LibraryPanelRef->GetSideMode() == LibrarySideMode::Categories);
-                },
-                [this]() {
-                    CloseAllToolWindows();
-                    if (m_LibraryPanelRef) {
-                        m_LibraryPanelRef->SelectSideMode(LibrarySideMode::Categories);
-                        m_LibraryPanelRef->SelectCategory(LibraryCategory::Documents);
-                    }
-                    SetActiveLeftPanel(ActiveLeftPanel::Library);
-                    SetPanelCollapsed(0, false);
-                    SetPanelCollapsed(1, true);
-                },
-                IM_COL32(52, 211, 153, 255) // Verde esmeralda
-            },
-            {
-                "Reloj",
-                HomeIcons::DrawIcon_Clock,
-                [this]() {
-                    return !IsAnyToolWindowOpen() &&
-                           (m_LibraryPanelRef &&
-                            m_LibraryPanelRef->GetSideMode() == LibrarySideMode::Clock);
-                },
-                [this]() {
-                    CloseAllToolWindows();
-                    if (m_LibraryPanelRef) {
-                        m_LibraryPanelRef->SelectSideMode(LibrarySideMode::Clock);
-                    }
-                    SetActiveLeftPanel(ActiveLeftPanel::Library);
-                    SetPanelCollapsed(0, false);
-                    SetPanelCollapsed(1, true);
-                },
-                IM_COL32(245, 158, 11, 255) // Ámbar reloj
             }
         };
 
-        // ── Isla 2: Notas - Voz - Estilos - Conexiones (exactamente 256px) ──
+        if (Core::AuthLicenseManager::Get().IsPro()) {
+            island1.push_back({
+                "Canva",
+                AppIcons::DrawIcon_Canva,
+                [this]() {
+                    return !IsPanelCollapsed(0) && !IsAnyToolWindowOpen() &&
+                           (m_LibraryPanelRef &&
+                            m_LibraryPanelRef->GetSideMode() == LibrarySideMode::Canva);
+                },
+                [this]() {
+                    CloseAllToolWindows();
+                    if (m_LibraryPanelRef) {
+                        m_LibraryPanelRef->SelectSideMode(LibrarySideMode::Canva);
+                    }
+                    SetActiveLeftPanel(ActiveLeftPanel::Library);
+                    SetPanelCollapsed(0, false);
+                    SetPanelCollapsed(1, true);
+                },
+                IM_COL32(0, 196, 204, 255) // Cyan turquesa Canva (#00C4CC)
+            });
+        }
+
+        island1.push_back({
+            "Captura",
+            HomeIcons::DrawIcon_Camera,
+            [this]() {
+                return !IsAnyToolWindowOpen() &&
+                       (m_LibraryPanelRef &&
+                        m_LibraryPanelRef->GetSideMode() == LibrarySideMode::Capture);
+            },
+            [this]() {
+                CloseAllToolWindows();
+                if (m_LibraryPanelRef) {
+                    m_LibraryPanelRef->SelectSideMode(LibrarySideMode::Capture);
+                }
+                SetActiveLeftPanel(ActiveLeftPanel::Library);
+                SetPanelCollapsed(0, false);
+                SetPanelCollapsed(1, true);
+            },
+            IM_COL32(236, 72, 153, 255) // Rosa / Magenta cámara
+        });
+
+        // ── Isla Diseño: Estilos, Shaders, Transiciones, Pads, Tiles ───
+        std::vector<IslandItem> islandDesign = {
+            {
+                "Estilos",
+                AppIcons::DrawIcon_TextAa,
+                [this]() { return m_ShowStylesWindow; },
+                [this]() {
+                    bool wasOpen = m_ShowStylesWindow;
+                    CloseAllToolWindows();
+                    m_ShowStylesWindow = !wasOpen;
+                },
+                IM_COL32(168, 85, 247, 255) // Púrpura vibrante
+            },
+            {
+                "Shaders",
+                AppIcons::DrawIcon_Shader,
+                [this]() { return m_ShowShadersWindow; },
+                [this]() {
+                    bool wasOpen = m_ShowShadersWindow;
+                    CloseAllToolWindows();
+                    m_ShowShadersWindow = !wasOpen;
+                },
+                IM_COL32(56, 189, 248, 255) // Cyan celeste
+            },
+            {
+                "Transiciones",
+                AppIcons::DrawIcon_Swap,
+                [this]() { return m_ShowTransitionsWindow; },
+                [this]() {
+                    bool wasOpen = m_ShowTransitionsWindow;
+                    CloseAllToolWindows();
+                    m_ShowTransitionsWindow = !wasOpen;
+                },
+                IM_COL32(244, 63, 94, 255) // Rojo coral
+            },
+            {
+                "Tiles",
+                AppIcons::DrawIcon_Tiles,
+                [this]() { return m_ShowTilesWindow; },
+                [this]() {
+                    bool wasOpen = m_ShowTilesWindow;
+                    CloseAllToolWindows();
+                    m_ShowTilesWindow = !wasOpen;
+                },
+                IM_COL32(59, 130, 246, 255) // Azul eléctrico Tiles
+            }
+        };
+
+        // ── Isla 2: Utilidades (Notas, Voz, Chat, Anuncios) ──
         std::vector<IslandItem> island2 = {
             {
                 "Notas",
@@ -1696,25 +1806,26 @@ void UIManager::RenderModeToolbar()
                 IM_COL32(244, 63, 94, 255) // Rojo coral
             },
             {
-                "Estilos",
-                AppIcons::DrawIcon_Layers,
-                []() { return ImGui::IsPopupOpen("##modeTbStylesPopup"); },
+                "Chat",
+                HomeIcons::DrawIcon_Chat,
+                [this]() { return m_ShowChatWindow; },
                 [this]() {
+                    bool wasOpen = m_ShowChatWindow;
                     CloseAllToolWindows();
-                    ImGui::OpenPopup("##modeTbStylesPopup");
+                    m_ShowChatWindow = !wasOpen;
                 },
-                IM_COL32(236, 72, 153, 255) // Rosa fucsia
+                IM_COL32(16, 185, 129, 255) // Verde esmeralda Chat
             },
             {
-                "Conexiones",
-                HomeIcons::DrawIcon_Broadcast,
-                [this]() { return m_ShowConnectionsWindow; },
+                "Anuncios",
+                HomeIcons::DrawIcon_Megaphone,
+                [this]() { return m_ShowAnnouncementsWindow; },
                 [this]() {
-                    bool wasOpen = m_ShowConnectionsWindow;
+                    bool wasOpen = m_ShowAnnouncementsWindow;
                     CloseAllToolWindows();
-                    m_ShowConnectionsWindow = !wasOpen;
+                    m_ShowAnnouncementsWindow = !wasOpen;
                 },
-                IM_COL32(14, 165, 233, 255) // Azul cielo
+                IM_COL32(234, 179, 8, 255) // Ámbar megáfono
             }
         };
 
@@ -1760,110 +1871,172 @@ void UIManager::RenderModeToolbar()
             }
         };
 
-        // ── Medir ancho de la isla de estado en vivo (Público / Stage / Borrar Todo) ──
-        const int statusCount = isProActive ? 3 : 2;
+        // ── Medir ancho de la isla de estado en vivo (Preview / Conexiones / Público / Stage / Borrar Todo) ──
+        const int statusCount = isProActive ? 5 : 4;
         float statusPairHalfSum = 0.0f;
         if (showLbl) {
+            float wPrv = measureLabelW("Preview");
+            float wCnx = measureLabelW("Conexiones");
             float wAud = measureLabelW("Público");
             float wStg = isProActive ? measureLabelW("Stage") : 0.0f;
             float wClr = measureLabelW("Borrar Todo");
             if (isProActive) {
-                statusPairHalfSum = std::max((wAud + wStg) * 0.5f, (wStg + wClr) * 0.5f);
+                statusPairHalfSum = std::max({(wPrv + wCnx) * 0.5f, (wCnx + wAud) * 0.5f, (wAud + wStg) * 0.5f, (wStg + wClr) * 0.5f});
             } else {
-                statusPairHalfSum = (wAud + wClr) * 0.5f;
+                statusPairHalfSum = std::max({(wPrv + wCnx) * 0.5f, (wCnx + wAud) * 0.5f, (wAud + wClr) * 0.5f});
             }
         }
-        float statusBtnStep = showLbl ? std::max(48.0f, statusPairHalfSum + 12.0f) : (islandH + 4.0f);
-        float statusIslandW = islandRounding * 2.0f + (float)(statusCount - 1) * statusBtnStep;
+        float statusBtnStep = 0.0f;
+        float statusIslandW = 0.0f;
+        float kToolbarSideMargin = 26.0f;
+        float kIslandGap         = 24.0f;
+        float statusScreenX      = 0.0f;
 
-        const float kToolbarSideMargin = 26.0f;
-        const float kIslandGap         = 24.0f;
-        const float kProIslandGap      = 42.0f;
-
-        // Isla de estados: extremo derecho con margen lateral para no chocar con el borde
-        float statusScreenX = winPos.x + winW - statusIslandW - kToolbarSideMargin;
-        statusPosScreenX = statusScreenX;
-
-        // ── Isla Pro: Nube Pro - Chat IA - Imágenes IA (Exclusiva para ProyecThor for Professionals) ──
-        std::vector<IslandItem> islandPro;
-        if (isProActive) {
-            islandPro = {
-                {
-                    "Nube Pro",
-                    AppIcons::DrawIcon_Cloud,
-                    [this]() { return m_ShowProCloudSongs; },
-                    [this]() {
-                        bool wasOpen = m_ShowProCloudSongs;
-                        CloseAllToolWindows();
-                        m_ShowProCloudSongs = !wasOpen;
-                    },
-                    IM_COL32(56, 189, 248, 255) // Azul cielo / Nube
+        // ── Isla Pro: Nube de Recursos (Munin), Estadísticas (Hugin), Cancionero Nube (Firebase) y Chat IA ──
+        std::vector<IslandItem> islandPro = {
+            {
+                "Munin",
+                AppIcons::DrawIcon_Cloud,
+                [this]() { return m_ShowMuninCloud; },
+                [this, isProActive]() {
+                    if (!isProActive) {
+                        ShowProFeatureModal(
+                            "MuninCloud — Nube de Recursos Cloudflare R2",
+                            "MuninCloud es la tienda y catálogo en la nube oficial de ProyecThor for Professionals.\n\n"
+                            "• Descarga con 1 clic fondos de video en bucle (motion loops en alta definición).\n"
+                            "• Fondos de imagen exclusivos optimizados para proyección de texto legible.\n"
+                            "• Paquetes completos de biblias y cancioneros listos para proyectar.\n"
+                            "• Almacenamiento de alta velocidad impulsado por Cloudflare R2 sin límites de transferencia."
+                        );
+                        return;
+                    }
+                    bool wasOpen = m_ShowMuninCloud;
+                    CloseAllToolWindows();
+                    m_ShowMuninCloud = !wasOpen;
                 },
-                {
-                    "Chat IA",
-                    AppIcons::DrawIcon_Sparkle,
-                    [this]() { return m_ShowProAIChat; },
-                    [this]() {
-                        bool wasOpen = m_ShowProAIChat;
-                        CloseAllToolWindows();
-                        m_ShowProAIChat = !wasOpen;
-                    },
-                    IM_COL32(192, 132, 252, 255) // Lavanda / IA
+                IM_COL32(56, 189, 248, 255) // Azul celestial / Munin
+            },
+            {
+                "Hugin",
+                AppIcons::DrawIcon_Stats,
+                [this]() { return m_ShowHuginStats; },
+                [this, isProActive]() {
+                    if (!isProActive) {
+                        ShowProFeatureModal(
+                            "Hugin — Estadísticas y Telemetría del Auditorio",
+                            "Hugin es el centro de analítica y telemetría de ProyecThor for Professionals.\n\n"
+                            "• Monitoreo en tiempo real de FPS promedio y estabilidad gráfica ante proyección secundaria.\n"
+                            "• Ranking de las canciones más cantadas y proyectadas en tus reuniones y cultos.\n"
+                            "• Métricas de rendimiento, tiempos de sesión y estabilidad del motor gráfico."
+                        );
+                        return;
+                    }
+                    bool wasOpen = m_ShowHuginStats;
+                    CloseAllToolWindows();
+                    m_ShowHuginStats = !wasOpen;
                 },
-                {
-                    "Imágenes IA",
-                    AppIcons::DrawIcon_Image,
-                    [this]() { return m_ShowProImageGen; },
-                    [this]() {
-                        bool wasOpen = m_ShowProImageGen;
-                        CloseAllToolWindows();
-                        m_ShowProImageGen = !wasOpen;
-                    },
-                    IM_COL32(251, 191, 36, 255) // Dorado / Fondos
-                }
+                IM_COL32(245, 158, 11, 255) // Dorado / Estadísticas
+            },
+            {
+                "Cancionero Nube",
+                AppIcons::DrawIcon_CloudDocument,
+                [this]() { return m_ShowProCloudSongs; },
+                [this, isProActive]() {
+                    if (!isProActive) {
+                        ShowProFeatureModal(
+                            "Cancionero en Nube — Cancionero en Firebase",
+                            "Sincroniza y respalda tus cancioneros, listas de reproducción y repertorio directamente en la nube de Firebase de ProyecThor para acceder desde cualquier dispositivo."
+                        );
+                        return;
+                    }
+                    bool wasOpen = m_ShowProCloudSongs;
+                    CloseAllToolWindows();
+                    m_ShowProCloudSongs = !wasOpen;
+                },
+                IM_COL32(56, 189, 248, 255) // Azul cielo / Cancionero Nube
+            },
+            {
+                "Chat IA",
+                AppIcons::DrawIcon_Sparkle,
+                [this]() { return m_ShowProAIChat; },
+                [this, isProActive]() {
+                    if (!isProActive) {
+                        ShowProFeatureModal(
+                            "Chat IA con Google Gemini & DeepSeek",
+                            "La asistencia con Inteligencia Artificial te permite estructurar versos, corregir métrica de canciones, buscar referencias bíblicas complejas y generar oraciones en tiempo real."
+                        );
+                        return;
+                    }
+                    bool wasOpen = m_ShowProAIChat;
+                    CloseAllToolWindows();
+                    m_ShowProAIChat = !wasOpen;
+                },
+                IM_COL32(192, 132, 252, 255) // Lavanda / IA
+            }
+        };
+
+        // ── Auto-ajuste: si las islas no caben en el ancho disponible, se reducen todas
+        //    proporcionalmente (iconos, círculos, separaciones) para que nunca se solapen.
+        {
+            const float baseH = 40.0f;
+            auto widthOf = [&](int n, float stepExtra) -> float {
+                return n <= 0 ? 0.0f : baseH + (float)(n - 1) * (baseH + stepExtra);
             };
+            const float baseNeeded =
+                widthOf((int)island1.size(), 6.0f) + widthOf((int)islandDesign.size(), 6.0f) +
+                widthOf((int)island2.size(), 6.0f) +
+                widthOf((int)islandPro.size(), 6.0f) + widthOf((int)island3.size(), 6.0f) +
+                widthOf(statusCount, 6.0f) +
+                26.0f * 2.0f + 24.0f * 4.0f;
+            uiS = std::clamp(winW / std::max(1.0f, baseNeeded), 0.5f, 1.0f);
+            islandH        = baseH * uiS;
+            islandRounding = islandH * 0.5f;
+            iconSz         = 21.0f * uiS;
+            targetRadius   = 17.5f * uiS;
+            kToolbarSideMargin *= uiS;
+            kIslandGap         *= uiS;
+            islandOffsetY  = showLbl ? 5.0f : ((railH - islandH) * 0.5f);
+            islandTopY     = winPos.y + islandOffsetY;
+            s_ToolbarScale = uiS;
+
+            statusBtnStep = islandH + 6.0f * uiS;
+            statusIslandW = islandRounding * 2.0f + (float)(statusCount - 1) * statusBtnStep;
+            statusScreenX = winPos.x + winW - statusIslandW - kToolbarSideMargin;
+            statusPosScreenX = statusScreenX;
         }
 
-        // 1. Primera isla: izquierda con margen lateral de la barra
+        // 1. Primera isla (Librería, Overlays, Biblia, Canva, Captura): izquierda con margen
         float island1W = CalcIslandW(island1);
         float island1X = winPos.x + kToolbarSideMargin;
         RenderIsland("island1", island1, island1X);
 
-        // 3. Tercera isla (Configuración / Ayuda) y Cuarta isla (Isla Pro):
+        // 2. Isla de Diseño (Estilos, Shaders, Transiciones, Pads, Tiles): junto a la primera isla
+        float islandDesignW = CalcIslandW(islandDesign);
+        float islandDesignX = island1X + island1W + kIslandGap;
+        RenderIsland("islandDesign", islandDesign, islandDesignX);
+
+        // 3. Extremo derecho: Status -> Ajustes (island3) -> Funciones Pro (islandPro)
         float rightEdge = statusScreenX - kIslandGap;
         float island3W = CalcIslandW(island3);
         float island3X = rightEdge - island3W;
 
-        float islandProW = 0.0f;
-        float islandProX = 0.0f;
-        if (isProActive && !islandPro.empty()) {
-            islandProW = CalcIslandW(islandPro);
-            // Margen generoso entre funciones premium (islandPro) e island3 para que ningún texto se solape
-            islandProX = island3X - kProIslandGap - islandProW;
-        }
+        float islandProW = CalcIslandW(islandPro);
+        float islandProX = island3X - kIslandGap - islandProW;
 
-        // 2. Segunda isla: centrada pero respetando los márgenes con island1 e islandPro/island3
+        // 4. Isla de Utilidades (Notas, Voz, Chat, Anuncios): centrada entre islandDesign e islandPro
         float island2W = CalcIslandW(island2);
-        float island2X = winPos.x + (winW - island2W) * 0.5f;
-        if (island2X < island1X + island1W + kIslandGap) {
-            island2X = island1X + island1W + kIslandGap;
+        float availCenter = (islandProX - kIslandGap) - (islandDesignX + islandDesignW + kIslandGap);
+        float island2X = (islandDesignX + islandDesignW + kIslandGap) + std::max(0.0f, (availCenter - island2W) * 0.5f);
+        if (island2X < islandDesignX + islandDesignW + kIslandGap) {
+            island2X = islandDesignX + islandDesignW + kIslandGap;
         }
-
-        float maxIsland2Right = (isProActive && !islandPro.empty())
-            ? (islandProX - kProIslandGap)
-            : (island3X - kIslandGap);
-
-        if (island2X + island2W > maxIsland2Right) {
-            island2X = maxIsland2Right - island2W;
+        if (island2X + island2W > islandProX - kIslandGap) {
+            island2X = (islandProX - kIslandGap) - island2W;
         }
 
         RenderIsland("island2", island2, island2X);
-        if (isProActive && !islandPro.empty()) {
-            RenderIsland("islandPro", islandPro, islandProX);
-        }
+        RenderIsland("islandPro", islandPro, islandProX);
         RenderIsland("island3", island3, island3X);
-
-        RenderStylesPopup();
 
         // ── Menú desplegable Ayuda ───────────────────────────────────────
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(8.0f, 4.0f));
@@ -1948,30 +2121,33 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
         core.SetStaging(false);
     }
 
-    const bool  showLbl        = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.showRailLabels;
-    const float islandH        = 36.0f;
+    const bool  showLbl        = false; // Modo compacto solo iconos en barra superior
+    const float uiS            = s_ToolbarScale;
+    const float islandH        = 40.0f * uiS;
     const float islandRounding = islandH * 0.5f;
-    const float targetRadius   = 16.0f;
-    const float iconSz         = 18.0f;
+    const float targetRadius   = 17.5f * uiS;
+    const float iconSz         = 21.0f * uiS;
     float islandOffsetY        = showLbl ? 5.0f : ((railH - islandH) * 0.5f);
     ImVec2 winPos              = ImGui::GetWindowPos();
     float islandTopY           = winPos.y + islandOffsetY;
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    const int count = isPro ? 3 : 2;
+    const int count = isPro ? 5 : 4;
     float maxPairHalfSum = 0.0f;
     if (showLbl) {
+        float wPrv = ImGui::CalcTextSize("Preview").x;
+        float wCnx = ImGui::CalcTextSize("Conexiones").x;
         float wAud = ImGui::CalcTextSize("Público").x;
         float wStg = isPro ? ImGui::CalcTextSize("Stage").x : 0.0f;
         float wClr = ImGui::CalcTextSize("Borrar Todo").x;
         if (isPro) {
-            maxPairHalfSum = std::max((wAud + wStg) * 0.5f, (wStg + wClr) * 0.5f);
+            maxPairHalfSum = std::max({(wPrv + wCnx) * 0.5f, (wCnx + wAud) * 0.5f, (wAud + wStg) * 0.5f, (wStg + wClr) * 0.5f});
         } else {
-            maxPairHalfSum = (wAud + wClr) * 0.5f;
+            maxPairHalfSum = std::max({(wPrv + wCnx) * 0.5f, (wCnx + wAud) * 0.5f, (wAud + wClr) * 0.5f});
         }
     }
-    float btnStep = showLbl ? std::max(48.0f, maxPairHalfSum + 12.0f) : (islandH + 4.0f);
+    float btnStep = showLbl ? std::max(48.0f, maxPairHalfSum + 12.0f) : (islandH + 6.0f * uiS);
     float islandW = islandRounding * 2.0f + (float)(count - 1) * btnStep;
 
     ImVec2 islandMin = { screenX, islandTopY };
@@ -2000,7 +2176,86 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
         ImVec2 bMax = { hitRight, islandMin.y + hitH };
 
         if (itemIdx == 0) {
-            // ── Botón 1: Público ──
+            // ── Botón 0: Preview ──
+            ImGui::SetCursorScreenPos(bMin);
+            bool clicked = ImGui::InvisibleButton("##statusBtn_Preview", { bMax.x - bMin.x, bMax.y - bMin.y });
+            bool hovered = isWindowFocused && ImGui::IsItemHovered();
+            if (clicked) m_ShowMediaPreviewWindow = !m_ShowMediaPreviewWindow;
+
+            dl->AddCircleFilled(iconCenter, targetRadius, IM_COL32(255, 255, 255, 8), 24);
+            dl->AddCircle(iconCenter, targetRadius, IM_COL32(255, 255, 255, 14), 24, 1.0f);
+
+            if (m_ShowMediaPreviewWindow) {
+                dl->AddCircleFilled(iconCenter, targetRadius, IM_COL32(56, 189, 248, 60), 24);
+                dl->AddCircle(iconCenter, targetRadius, IM_COL32(56, 189, 248, 255), 24, 1.4f);
+            } else if (hovered) {
+                dl->AddCircleFilled(iconCenter, targetRadius, IM_COL32(56, 189, 248, 35), 24);
+                dl->AddCircle(iconCenter, targetRadius, IM_COL32(56, 189, 248, 120), 24, 1.0f);
+            }
+
+            ImU32 iconCol = m_ShowMediaPreviewWindow ? IM_COL32(56, 189, 248, 255) : (hovered ? IM_COL32(255, 255, 255, 255) : DS::TextSecondary);
+            AppIcons::DrawIcon_MediaPreview(dl, { btnCenterX - iconSz * 0.5f, btnCenterY - iconSz * 0.5f }, iconSz, iconCol);
+
+            if (showLbl) {
+                float lblW = ImGui::CalcTextSize("Preview").x;
+                float lblX = btnCenterX - lblW * 0.5f;
+                float lblY = islandMax.y + 4.0f;
+                dl->AddText({ lblX, lblY }, iconCol, "Preview");
+            }
+
+            if (hovered && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+                ImGui::SetTooltip(m_ShowMediaPreviewWindow ? "Vista Previa Abierta (Clic para cerrar)" : "Abrir Vista Previa de Multimedia");
+            }
+        }
+        else if (itemIdx == 1) {
+            // ── Botón 1: Conexiones (Centro de Conexiones y Reloj) ──
+            ImGui::SetCursorScreenPos(bMin);
+            bool clicked = ImGui::InvisibleButton("##statusBtn_Conexiones", { bMax.x - bMin.x, bMax.y - bMin.y });
+            bool hovered = isWindowFocused && ImGui::IsItemHovered();
+            if (clicked) {
+                bool wasOpen = m_ShowConnectionsWindow;
+                CloseAllToolWindows();
+                m_ShowConnectionsWindow = !wasOpen;
+            }
+
+            dl->AddCircleFilled(iconCenter, targetRadius, IM_COL32(255, 255, 255, 8), 24);
+            dl->AddCircle(iconCenter, targetRadius, IM_COL32(255, 255, 255, 14), 24, 1.0f);
+
+            const ImU32 connAccentU32 = IM_COL32(14, 165, 233, 255); // Azul cielo conexiones
+            if (m_ShowConnectionsWindow) {
+                dl->AddCircleFilled(iconCenter, targetRadius, IM_COL32(14, 165, 233, 60), 24);
+                dl->AddCircle(iconCenter, targetRadius, connAccentU32, 24, 1.4f);
+            } else if (hovered) {
+                dl->AddCircleFilled(iconCenter, targetRadius, IM_COL32(14, 165, 233, 35), 24);
+                dl->AddCircle(iconCenter, targetRadius, IM_COL32(14, 165, 233, 120), 24, 1.0f);
+            }
+
+            ImU32 iconCol = m_ShowConnectionsWindow ? connAccentU32 : (hovered ? IM_COL32(255, 255, 255, 255) : DS::TextSecondary);
+            HomeIcons::DrawIcon_Broadcast(dl, { btnCenterX - iconSz * 0.5f, btnCenterY - iconSz * 0.5f }, iconSz, iconCol);
+
+            // Indicador de conexión activa o reloj transmitiendo
+            bool anyConnLive = (core.GetNetworkServer() && core.GetNetworkServer()->IsRunning()) ||
+                               ProyecThor::Settings::SettingsManager::Get().GetSettings().sync.enabled ||
+                               m_Broadcast.IsStreaming() ||
+                               (core.GetOClockRef() && core.GetOClockRef()->IsLive());
+            if (anyConnLive && !m_ShowConnectionsWindow) {
+                dl->AddCircleFilled(ImVec2(iconCenter.x + targetRadius * 0.60f, iconCenter.y - targetRadius * 0.60f), 3.5f, IM_COL32(34, 197, 94, 255));
+                dl->AddCircle(ImVec2(iconCenter.x + targetRadius * 0.60f, iconCenter.y - targetRadius * 0.60f), 5.0f, IM_COL32(34, 197, 94, 120), 12, 1.0f);
+            }
+
+            if (showLbl) {
+                float lblW = ImGui::CalcTextSize("Conexiones").x;
+                float lblX = btnCenterX - lblW * 0.5f;
+                float lblY = islandMax.y + 4.0f;
+                dl->AddText({ lblX, lblY }, iconCol, "Conexiones");
+            }
+
+            if (hovered && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+                ImGui::SetTooltip(m_ShowConnectionsWindow ? "Centro de Conexiones y Reloj (Clic para cerrar)" : "Centro de Conexiones y Reloj (Red, Móvil, Streaming, OSC, Reloj, Chat)");
+            }
+        }
+        else if (itemIdx == 2) {
+            // ── Botón 2: Público ──
             ImGui::SetCursorScreenPos(bMin);
             bool clicked = ImGui::InvisibleButton("##statusBtn_Publico", { bMax.x - bMin.x, bMax.y - bMin.y });
             bool hovered = isWindowFocused && ImGui::IsItemHovered();
@@ -2031,8 +2286,8 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
                 ImGui::SetTooltip(audienceOn ? "Público en Vivo (Clic para detener)" : "Proyectar a Pantalla de Público");
             }
         }
-        else if (isPro && itemIdx == 1) {
-            // ── Botón 2: Stage (Monitor de Escenario) ──
+        else if (isPro && itemIdx == 3) {
+            // ── Botón 3: Stage (Monitor de Escenario) ──
             ImGui::SetCursorScreenPos(bMin);
             bool clicked = ImGui::InvisibleButton("##statusBtn_Stage", { bMax.x - bMin.x, bMax.y - bMin.y });
             bool hovered = isWindowFocused && ImGui::IsItemHovered();
@@ -2050,7 +2305,7 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
             }
 
             ImU32 iconCol = stageOn ? prevAccentU32 : (hovered ? IM_COL32(255, 255, 255, 255) : DS::TextSecondary);
-            AppIcons::DrawIcon_Monitor(dl, { btnCenterX - iconSz * 0.5f, btnCenterY - iconSz * 0.5f }, iconSz, iconCol);
+            AppIcons::DrawIcon_StageDisplay(dl, { btnCenterX - iconSz * 0.5f, btnCenterY - iconSz * 0.5f }, iconSz, iconCol);
 
             if (showLbl) {
                 float lblW = ImGui::CalcTextSize("Stage").x;
@@ -2178,21 +2433,33 @@ void UIManager::ToggleStageQuick(bool active)
 bool UIManager::IsAnyToolWindowOpen() const
 {
     return m_ShowNotes || m_ShowConnectionsWindow || m_ShowConfig || m_ShowVoiceAssistant || m_ShowAIAssistant ||
-           m_ShowProCloudSongs || m_ShowProAIChat || m_ShowProImageGen;
+           m_ShowProCloudSongs || m_ShowProAIChat || m_ShowProImageGen ||
+           m_ShowStylesWindow || m_ShowShadersWindow || m_ShowTransitionsWindow || m_ShowAnnouncementsWindow ||
+           m_ShowPadsWindow || m_ShowTilesWindow || m_ShowChatWindow;
 }
 
 void UIManager::CloseAllToolWindows()
 {
     if (m_ShowNotes)
         m_NotesPanel.PersistNow();
-    m_ShowNotes             = false;
-    m_ShowConnectionsWindow = false;
-    m_ShowConfig            = false;
-    m_ShowVoiceAssistant    = false;
-    m_ShowAIAssistant       = false;
-    m_ShowProCloudSongs     = false;
-    m_ShowProAIChat         = false;
-    m_ShowProImageGen       = false;
+    m_ShowNotes               = false;
+    m_ShowConnectionsWindow   = false;
+    m_ShowConfig              = false;
+    m_ShowVoiceAssistant      = false;
+    m_ShowAIAssistant         = false;
+    m_ShowProCloudSongs       = false;
+    m_ShowProAIChat           = false;
+    m_ShowProImageGen         = false;
+    m_ShowCanvaWindow         = false;
+    m_ShowMuninCloud          = false;
+    m_ShowHuginStats          = false;
+    m_ShowStylesWindow        = false;
+    m_ShowShadersWindow       = false;
+    m_ShowTransitionsWindow   = false;
+    m_ShowAnnouncementsWindow = false;
+    m_ShowPadsWindow          = false;
+    m_ShowTilesWindow         = false;
+    m_ShowChatWindow          = false;
 }
 
 void UIManager::ToggleNotesWindow()
@@ -2254,157 +2521,477 @@ void UIManager::RenderProWindows()
     m_ProCloudSongsPanel.Render(&m_ShowProCloudSongs, m_GlassRenderer);
     m_ProAIChatPanel.Render(&m_ShowProAIChat, m_GlassRenderer);
     m_ProImageGenPanel.Render(&m_ShowProImageGen, m_GlassRenderer);
+    if (m_MuninCloudPanel) m_MuninCloudPanel->Render(&m_ShowMuninCloud);
+    if (m_HuginStatsPanel) m_HuginStatsPanel->Render(&m_ShowHuginStats);
+    // Canva se renderiza embebido directamente en LibraryPanel (LibrarySideMode::Canva), no como ventana flotante.
+}
+
+void UIManager::RenderMediaPreviewFloatingWindow()
+{
+    if (!m_ShowMediaPreviewWindow) return;
+
+    ImGui::SetNextWindowSize(ImVec2(600, 420), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(200, 120), ImGuiCond_FirstUseEver);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, DS::RadiusMedium);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 10.0f));
+
+    if (ImGui::Begin("Vista Previa##FloatingMediaPreview", &m_ShowMediaPreviewWindow, ImGuiWindowFlags_NoCollapse))
+    {
+        float availW = ImGui::GetContentRegionAvail().x;
+        float availH = ImGui::GetContentRegionAvail().y;
+
+        auto* previewPlayer = Core::PresentationCore::Get().GetPreviewPlayer();
+        if (m_HomePanelRef)
+        {
+            m_HomePanelRef->RenderFloatingPreview(previewPlayer, availW, availH);
+        }
+        else
+        {
+            ImGui::TextDisabled("Reproductor de vista previa no disponible.");
+        }
+    }
+    ImGui::End();
+
+    ImGui::PopStyleVar(2);
+}
+
+static inline ImVec4 ConnThemeCol(const float* a, float alphaMul = 1.0f) {
+    return ImVec4(a[0], a[1], a[2], a[3] * alphaMul);
+}
+
+static inline void ConnDrawFloatingShadow(ImDrawList* dl, ImVec2 pos, ImVec2 size, float rounding) {
+    const int   layers    = 6;
+    const float maxOffset = 20.0f;
+    for (int i = layers; i >= 1; --i) {
+        float  t      = (float)i / (float)layers;
+        float  offset = maxOffset * t;
+        int    alpha  = (int)(44.0f * (1.0f - t * 0.5f));
+        ImVec2 p0(pos.x - offset * 0.25f,         pos.y + offset * 0.25f);
+        ImVec2 p1(pos.x + size.x + offset * 0.25f, pos.y + size.y + offset * 0.60f);
+        dl->AddRectFilled(p0, p1, IM_COL32(0, 0, 0, alpha), rounding + offset * 0.20f);
+    }
 }
 
 void UIManager::RenderConnectionsWindow()
 {
-    static bool s_WasOpenLastFrame = false;
-    const bool  justOpened = !s_WasOpenLastFrame;
-    s_WasOpenLastFrame = true;
+    static bool s_ConnWasOpenLastFrame = false;
+    if (!m_ShowConnectionsWindow) {
+        s_ConnWasOpenLastFrame = false;
+        return;
+    }
 
-    const ImVec2 baseSize(760.0f, 680.0f);
+    const bool  justOpened = !s_ConnWasOpenLastFrame;
+    s_ConnWasOpenLastFrame = true;
+
+    auto&       mgr   = ProyecThor::Settings::SettingsManager::Get();
+    const auto& theme = mgr.GetSettings().theme;
+    auto&       core  = Core::PresentationCore::Get();
 
     ImGuiViewport* vp = ImGui::GetMainViewport();
     ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f,
-                       vp->WorkPos.y + vp->WorkSize.y * 0.5f);
+                      vp->WorkPos.y + vp->WorkSize.y * 0.5f);
 
+    // Fondo oscurecido (Dimmed Backdrop Scrim) idéntico al panel de Ajustes
+    ImDrawList* bgDl = ImGui::GetBackgroundDrawList(vp);
+    if (bgDl) {
+        bgDl->AddRectFilled(vp->Pos, ImVec2(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y), IM_COL32(0, 0, 0, 150));
+    }
+
+    const ImVec2 baseSize(1020.0f, 680.0f);
     if (justOpened) {
         ImGui::SetNextWindowPos(workCenter, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
         ImGui::SetNextWindowSize(baseSize, ImGuiCond_Always);
+    } else {
+        ImGui::SetNextWindowPos(workCenter, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(baseSize, ImGuiCond_Appearing);
     }
-    ImGui::SetNextWindowSizeConstraints(ImVec2(620.0f, 520.0f), ImVec2(10000.0f, 10000.0f));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(800.0f, 540.0f), ImVec2(FLT_MAX, FLT_MAX));
 
     ImGuiWindowClass floatingClass;
     floatingClass.DockingAllowUnclassed = false;
     ImGui::SetNextWindowClass(&floatingClass);
 
-    bool open = DS::BeginGlassPanel("Centro de Conexiones", m_GlassRenderer, &m_ShowConnectionsWindow,
-        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking,
-        ImVec2(16.0f, 14.0f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg,      ConnThemeCol(theme.base, 0.98f));
+    ImGui::PushStyleColor(ImGuiCol_TitleBg,       ConnThemeCol(theme.surface0, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ConnThemeCol(theme.surface1, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Border,        ConnThemeCol(theme.border, 0.70f));
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,    ImVec2(0.0f, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,   theme.windowRounding);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+
+    bool open = ImGui::Begin("Centro de Conexiones", &m_ShowConnectionsWindow,
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking);
 
     if (open)
     {
-        const auto& theme = ProyecThor::Settings::SettingsManager::Get().GetSettings().theme;
-        auto& core = Core::PresentationCore::Get();
-
-        // ── Cabecera / Status Summary Bar ──
-        bool lanActive = core.GetNetworkServer() && core.GetNetworkServer()->IsRunning();
-        bool syncActive = ProyecThor::Settings::SettingsManager::Get().GetSettings().sync.enabled;
+        bool lanActive   = core.GetNetworkServer() && core.GetNetworkServer()->IsRunning();
+        bool syncActive  = mgr.GetSettings().sync.enabled;
         bool bcastActive = m_Broadcast.IsStreaming();
+        bool oscActive   = true;
+        auto* clk        = core.GetOClockRef();
+        bool clockLive   = clk ? clk->IsLive() : false;
+        bool chatActive  = true;
 
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(theme.surface1[0], theme.surface1[1], theme.surface1[2], 0.45f));
-        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(theme.border[0], theme.border[1], theme.border[2], 0.35f));
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f, 8.0f));
+        struct ConnTabDef {
+            const char* label;
+            const char* desc;
+            ImU32 color;
+            bool isActive;
+            const char* statusStr;
+            void (*drawIcon)(ImDrawList* dl, ImVec2 center, float r, ImU32 col);
+        };
 
-        if (ImGui::BeginChild("##conn_summary_bar", ImVec2(0, 48), true, ImGuiWindowFlags_NoScrollbar))
+        ConnTabDef tabsDef[6] = {
+            {
+                "Red (LAN)",
+                "Control remoto en navegadores web y dispositivos en la red local WiFi",
+                IM_COL32(56, 189, 248, 255), // Azul cielo
+                lanActive,
+                lanActive ? "En línea :8080" : "Detenido",
+                [](ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+                    HomeIcons::DrawIcon_Broadcast(dl, ImVec2(c.x - r, c.y - r), r * 2.0f, col);
+                }
+            },
+            {
+                "App Móvil",
+                "Sincronización en vivo con la app complementaria ProyecThor Mobile",
+                IM_COL32(168, 85, 247, 255), // Púrpura
+                syncActive,
+                syncActive ? "Sincronizado" : "Inactivo",
+                [](ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+                    float pw = r * 1.15f;
+                    float ph = r * 1.75f;
+                    dl->AddRect(ImVec2(c.x - pw * 0.5f, c.y - ph * 0.5f), ImVec2(c.x + pw * 0.5f, c.y + ph * 0.5f), col, 2.5f, 0, 1.3f);
+                    dl->AddLine(ImVec2(c.x - pw * 0.35f, c.y - ph * 0.30f), ImVec2(c.x + pw * 0.35f, c.y - ph * 0.30f), col, 1.0f);
+                    dl->AddCircleFilled(ImVec2(c.x, c.y + ph * 0.33f), 1.3f, col);
+                }
+            },
+            {
+                "Transmisión",
+                "Emisión en directo RTMP para OBS, YouTube, Facebook y Twitch",
+                IM_COL32(239, 68, 68, 255), // Rojo coral
+                bcastActive,
+                bcastActive ? "Emitiendo en vivo" : "En espera",
+                [](ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+                    dl->AddLine(ImVec2(c.x, c.y - r * 0.8f), ImVec2(c.x, c.y + r * 0.8f), col, 1.4f);
+                    dl->AddCircleFilled(ImVec2(c.x, c.y - r * 0.8f), 2.2f, col);
+                    dl->PathArcTo(ImVec2(c.x, c.y - r * 0.8f), r * 0.45f, -IM_PI * 0.75f, -IM_PI * 0.25f, 6);
+                    dl->PathStroke(col, false, 1.2f);
+                    dl->PathClear();
+                    dl->PathArcTo(ImVec2(c.x, c.y - r * 0.8f), r * 0.85f, -IM_PI * 0.75f, -IM_PI * 0.25f, 8);
+                    dl->PathStroke(col, false, 1.2f);
+                    dl->AddLine(ImVec2(c.x - r * 0.55f, c.y + r * 0.8f), ImVec2(c.x + r * 0.55f, c.y + r * 0.8f), col, 1.4f);
+                }
+            },
+            {
+                "Control OSC",
+                "Control mediante consolas digitales de audio, iluminación y Stream Deck",
+                IM_COL32(34, 197, 94, 255), // Verde esmeralda
+                oscActive,
+                ":8000 / :9000",
+                [](ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+                    float w = r * 1.5f;
+                    float ys[3] = { c.y - r * 0.6f, c.y, c.y + r * 0.6f };
+                    float hx[3] = { c.x - w * 0.2f, c.x + w * 0.25f, c.x - w * 0.1f };
+                    for (int i = 0; i < 3; i++) {
+                        dl->AddLine(ImVec2(c.x - w * 0.5f, ys[i]), ImVec2(c.x + w * 0.5f, ys[i]), col, 1.3f);
+                        dl->AddCircleFilled(ImVec2(hx[i], ys[i]), r * 0.18f, col);
+                    }
+                }
+            },
+            {
+                "Reloj y Contadores",
+                "Reloj en vivo, cronómetro y cuenta regresiva transmitidos a red y pantalla",
+                IM_COL32(245, 158, 11, 255), // Ámbar reloj
+                clockLive,
+                clockLive ? "Transmitiendo" : "Listo",
+                [](ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+                    HomeIcons::DrawIcon_Clock(dl, ImVec2(c.x - r, c.y - r), r * 2.0f, col);
+                }
+            },
+            {
+                "Chat de Equipo",
+                "Mensajería instantánea interna para el equipo técnico en red local",
+                IM_COL32(16, 185, 129, 255), // Verde menta
+                chatActive,
+                "Red local",
+                [](ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+                    HomeIcons::DrawIcon_Chat(dl, ImVec2(c.x - r, c.y - r), r * 2.0f, col);
+                }
+            }
+        };
+
+        if (m_ConnectionsActiveTab < 0 || m_ConnectionsActiveTab >= 6) {
+            m_ConnectionsActiveTab = 0;
+        }
+
+        ImVec2 avail = ImGui::GetContentRegionAvail();
+        const float margin  = 14.0f;
+        const float gap     = 12.0f;
+        const float sideW   = 250.0f;
+        const float footerH = 46.0f;
+
+        const float islandH  = avail.y - margin * 2.0f;
+        const float contentW = avail.x - margin * 2.0f - sideW - gap;
+
+        ImVec2 origin(ImGui::GetCursorScreenPos().x + margin, ImGui::GetCursorScreenPos().y + margin);
+        ImVec2 sideOrigin(origin.x, origin.y);
+        ImVec2 contentOrigin(origin.x + sideW + gap, origin.y);
+
+        ImDrawList* winDl = ImGui::GetWindowDrawList();
+        ConnDrawFloatingShadow(winDl, sideOrigin,    ImVec2(sideW,    islandH), theme.windowRounding);
+        ConnDrawFloatingShadow(winDl, contentOrigin, ImVec2(contentW, islandH), theme.windowRounding);
+
+        // Conector sutil entre ambas islas estilo Ajustes
+        {
+            float midX = sideOrigin.x + sideW + gap * 0.5f;
+            float y0   = sideOrigin.y + islandH * 0.30f;
+            float y1   = sideOrigin.y + islandH * 0.70f;
+            ImU32 segCol = ImGui::ColorConvertFloat4ToU32(ConnThemeCol(theme.border, 0.95f));
+            winDl->AddLine(ImVec2(midX, y0), ImVec2(midX, y1), segCol, 1.5f);
+        }
+
+        // ── Isla derecha: Contenido + Barra inferior ──
+        ImGui::SetCursorScreenPos(contentOrigin);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ConnThemeCol(theme.surface0, 0.98f));
+        ImGui::PushStyleColor(ImGuiCol_Border,  ConnThemeCol(theme.border, 0.92f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding,   theme.windowRounding);
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.5f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,   ImVec2(0.0f, 0.0f));
+        ImGui::BeginChild("##conn_content_island", ImVec2(contentW, islandH), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar);
+        ImGui::PopStyleVar();
+
+        // Header de la categoría activa
+        const float headerH = 64.0f;
+        {
+            ImDrawList* cdl = ImGui::GetWindowDrawList();
+            ImVec2 hPos = ImGui::GetCursorScreenPos();
+            ImVec2 hEnd(hPos.x + contentW, hPos.y + headerH);
+
+            cdl->AddRectFilled(hPos, hEnd, ImGui::ColorConvertFloat4ToU32(ConnThemeCol(theme.surface1, 0.40f)), theme.windowRounding, ImDrawFlags_RoundCornersTop);
+
+            // Icon badge
+            ImVec2 hBadgeC(hPos.x + 36.0f, hPos.y + headerH * 0.5f);
+            ImVec4 hIconCol = ImGui::ColorConvertU32ToFloat4(tabsDef[m_ConnectionsActiveTab].color);
+            ImVec4 hBadgeFill = hIconCol; hBadgeFill.w = 0.22f;
+            cdl->AddCircleFilled(hBadgeC, 18.0f, ImGui::ColorConvertFloat4ToU32(hBadgeFill), 24);
+            cdl->AddCircle(hBadgeC, 18.0f, ImGui::ColorConvertFloat4ToU32(hIconCol), 24, 1.5f);
+            tabsDef[m_ConnectionsActiveTab].drawIcon(cdl, hBadgeC, 11.0f, tabsDef[m_ConnectionsActiveTab].color);
+
+            // Título y descripción
+            float hTextX = hPos.x + 66.0f;
+            cdl->AddText(ImVec2(hTextX, hPos.y + 13.0f), ImGui::ColorConvertFloat4ToU32(ConnThemeCol(theme.textPrimary)), tabsDef[m_ConnectionsActiveTab].label);
+            cdl->AddText(ImVec2(hTextX, hPos.y + 35.0f), ImGui::ColorConvertFloat4ToU32(ConnThemeCol(theme.textDim)), tabsDef[m_ConnectionsActiveTab].desc);
+
+            // Badge / Chip de estado a la derecha
+            bool curActive = tabsDef[m_ConnectionsActiveTab].isActive;
+            const char* statusBadgeText = curActive ? "● EN VIVO / CONECTADO" : "○ DETENIDO / EN ESPERA";
+            ImVec2 badgeTxtSz = ImGui::CalcTextSize(statusBadgeText);
+            float chipW = badgeTxtSz.x + 20.0f;
+            float chipH = 26.0f;
+            ImVec2 chipMin(hEnd.x - chipW - 24.0f, hPos.y + (headerH - chipH) * 0.5f);
+            ImVec2 chipMax(chipMin.x + chipW, chipMin.y + chipH);
+
+            ImU32 chipBg  = curActive ? IM_COL32(34, 197, 94, 35) : IM_COL32(148, 163, 184, 25);
+            ImU32 chipBrd = curActive ? IM_COL32(34, 197, 94, 180) : IM_COL32(148, 163, 184, 80);
+            ImU32 chipTxt = curActive ? IM_COL32(74, 222, 128, 255) : IM_COL32(148, 163, 184, 200);
+
+            cdl->AddRectFilled(chipMin, chipMax, chipBg, 13.0f);
+            cdl->AddRect(chipMin, chipMax, chipBrd, 13.0f, 0, 1.0f);
+            cdl->AddText(ImVec2(chipMin.x + 10.0f, chipMin.y + (chipH - badgeTxtSz.y) * 0.5f), chipTxt, statusBadgeText);
+
+            cdl->AddLine(ImVec2(hPos.x, hEnd.y), hEnd, ImGui::ColorConvertFloat4ToU32(ConnThemeCol(theme.border, 0.70f)), 1.0f);
+            ImGui::Dummy(ImVec2(contentW, headerH));
+        }
+
+        // Área de contenido scrollable
+        float scrollH = islandH - headerH - footerH;
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28.0f, 20.0f));
+        ImGui::BeginChild("##conn_content_scroll", ImVec2(contentW, scrollH), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+
+        switch (m_ConnectionsActiveTab) {
+            case 0: // Red LAN
+                m_Red.RenderContent();
+                break;
+            case 1: // App Móvil / Sync
+                m_Sync.RenderContent();
+                break;
+            case 2: // Transmisión / Streaming
+                m_Broadcast.RenderCaptureSection();
+                ImGui::Spacing();
+                m_Broadcast.RenderLayerSection();
+                ImGui::Spacing();
+                m_Broadcast.RenderStartSection();
+                break;
+            case 3: // OSC
+                m_OSC.RenderContent();
+                break;
+            case 4: // Reloj y Contadores
+                if (auto* c = core.GetOClockRef()) {
+                    c->Render(m_GlassRenderer);
+                } else {
+                    ImGui::TextDisabled("El módulo de Reloj y Contadores no se encuentra disponible.");
+                }
+                break;
+            case 5: // Chat del Equipo
+                m_Chat.RenderContent();
+                break;
+            default:
+                break;
+        }
+
+        ImGui::EndChild();
+        ImGui::PopStyleVar();
+
+        // Barra inferior (chips de estado + botón cerrar)
+        {
+            ImDrawList* fdl = ImGui::GetWindowDrawList();
+            ImVec2 fPos = ImGui::GetCursorScreenPos();
+            ImVec2 fEnd(fPos.x + contentW, fPos.y + footerH);
+
+            fdl->AddRectFilled(fPos, fEnd, ImGui::ColorConvertFloat4ToU32(ConnThemeCol(theme.surface1, 0.50f)), theme.windowRounding, ImDrawFlags_RoundCornersBottom);
+            fdl->AddLine(fPos, ImVec2(fEnd.x, fPos.y), ImGui::ColorConvertFloat4ToU32(ConnThemeCol(theme.border, 0.70f)), 1.0f);
+
+            ImGui::SetCursorScreenPos(ImVec2(fPos.x + 20.0f, fPos.y + 11.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ConnThemeCol(theme.textDim));
+            ImGui::Text("Servicios: LAN (%s)  |  Móvil (%s)  |  RTMP (%s)  |  Reloj (%s)",
+                lanActive ? "Activo" : "Off",
+                syncActive ? "Activo" : "Off",
+                bcastActive ? "En vivo" : "Off",
+                clockLive ? "En vivo" : "Off");
+            ImGui::PopStyleColor();
+
+            const float btnW = 90.0f;
+            const float btnH = 28.0f;
+            ImGui::SetCursorScreenPos(ImVec2(fEnd.x - btnW - 20.0f, fPos.y + (footerH - btnH) * 0.5f));
+            ImGui::PushStyleColor(ImGuiCol_Button,        ConnThemeCol(theme.surface2, 0.8f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ConnThemeCol(theme.surface3, 0.9f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ConnThemeCol(theme.accent, 0.9f));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, theme.frameRounding);
+            if (ImGui::Button("Cerrar", ImVec2(btnW, btnH))) {
+                m_ShowConnectionsWindow = false;
+            }
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(3);
+        }
+
+        ImGui::EndChild();
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(2);
+
+        // ── Isla izquierda: Navegación de conexiones (Sidebar) ──
+        ImGui::SetCursorScreenPos(sideOrigin);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ConnThemeCol(theme.base, 0.98f));
+        ImGui::PushStyleColor(ImGuiCol_Border,  ConnThemeCol(theme.border, 0.92f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding,   theme.windowRounding);
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.5f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,   ImVec2(0.0f, 20.0f));
+        ImGui::BeginChild("##conn_sidebar", ImVec2(sideW, islandH), ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar);
+        ImGui::PopStyleVar();
+
+        ImGui::SetCursorPosX(20.0f);
+        ImGui::PushStyleColor(ImGuiCol_Text, ConnThemeCol(theme.textPrimary));
+        ImGui::SetWindowFontScale(1.18f);
+        ImGui::TextUnformatted("Conexiones");
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
+
+        ImGui::SetCursorPosX(20.0f);
+        ImGui::PushStyleColor(ImGuiCol_Text, ConnThemeCol(theme.textDim));
+        int activeTotal = (lanActive ? 1 : 0) + (syncActive ? 1 : 0) + (bcastActive ? 1 : 0) + 1 + (clockLive ? 1 : 0) + 1;
+        ImGui::Text("%d de 6 activas", activeTotal);
+        ImGui::PopStyleColor();
+
+        ImGui::Dummy(ImVec2(0.0f, 12.0f));
+
         {
             ImDrawList* dl = ImGui::GetWindowDrawList();
             ImVec2 p0 = ImGui::GetCursorScreenPos();
-            float itemW = ImGui::GetContentRegionAvail().x / 4.0f;
-
-            auto DrawStatusChip = [&](int idx, const char* label, bool active, const char* detail) {
-                float chipX = p0.x + idx * itemW;
-                ImVec2 dotPos(chipX + 8.0f, p0.y + 14.0f);
-                ImU32 dotCol = active ? IM_COL32(34, 197, 94, 255) : IM_COL32(148, 163, 184, 160);
-                dl->AddCircleFilled(dotPos, 4.0f, dotCol);
-                if (active) dl->AddCircle(dotPos, 6.5f, IM_COL32(34, 197, 94, 90), 16, 1.2f);
-
-                ImGui::SetCursorScreenPos(ImVec2(chipX + 18.0f, p0.y + 4.0f));
-                ImGui::TextColored(ImVec4(theme.textPrimary[0], theme.textPrimary[1], theme.textPrimary[2], 1.0f), "%s", label);
-                ImGui::SetCursorScreenPos(ImVec2(chipX + 18.0f, p0.y + 18.0f));
-                ImGui::TextColored(ImVec4(theme.textDim[0], theme.textDim[1], theme.textDim[2], 0.9f), "%s", detail);
-            };
-
-            DrawStatusChip(0, "Red (LAN)", lanActive, lanActive ? "En línea :8080" : "Detenido");
-            DrawStatusChip(1, "App Móvil", syncActive, syncActive ? "Sincronizado" : "Inactivo");
-            DrawStatusChip(2, "Transmisión", bcastActive, bcastActive ? "Emitiendo" : "En espera");
-            DrawStatusChip(3, "OSC Control", true, ":8000 / :9000");
+            dl->AddLine(ImVec2(p0.x + 14.0f, p0.y), ImVec2(p0.x + sideW - 14.0f, p0.y),
+                        ImGui::ColorConvertFloat4ToU32(ConnThemeCol(theme.border, 0.6f)), 1.0f);
+            ImGui::Dummy(ImVec2(0.0f, 10.0f));
         }
-        ImGui::EndChild();
-        ImGui::PopStyleVar(3);
-        ImGui::PopStyleColor(2);
 
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
+        const float itemW = sideW - 20.0f;
+        const float itemH = 48.0f;
+        ImDrawList* dl = ImGui::GetWindowDrawList();
 
-        // ── Pestañas de Conexión Estilo Segmented Bar ──
-        struct TabInfo { const char* label; const char* icon; };
-        static const TabInfo tabs[] = {
-            { "Red (LAN)",      "\xF0\x9F\x8C\x90" }, // 🌐
-            { "App Móvil",      "\xF0\x9F\x93\xB1" }, // 📱
-            { "Transmisión",    "\xF0\x9F\x93\xA1" }, // 📡
-            { "Control OSC",    "\xF0\x9F\x8E\x9B" }, // 🎛
-            { "Chat de Equipo", "\xF0\x9F\x92\xAC" }, // 💬
-        };
-        const int tabCount = 5;
-        const float tabW = (ImGui::GetContentRegionAvail().x - (tabCount - 1) * 6.0f) / tabCount;
+        for (int i = 0; i < 6; i++) {
+            bool selected = (m_ConnectionsActiveTab == i);
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            p.x += 10.0f;
+            ImGui::SetCursorPosX(10.0f);
 
-        for (int i = 0; i < tabCount; i++) {
-            if (i > 0) ImGui::SameLine(0, 6.0f);
+            ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0,0,0,0));
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0,0,0,0));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0,0,0,0));
 
-            bool isSelected = (m_ConnectionsActiveTab == i);
-            ImVec4 btnBg = isSelected ? ImVec4(theme.accent[0], theme.accent[1], theme.accent[2], 0.85f)
-                                      : ImVec4(theme.surface1[0], theme.surface1[1], theme.surface1[2], 0.55f);
-            ImVec4 btnTxt = isSelected ? ImVec4(1, 1, 1, 1)
-                                       : ImVec4(theme.textPrimary[0], theme.textPrimary[1], theme.textPrimary[2], 0.85f);
+            char selectId[32];
+            snprintf(selectId, sizeof(selectId), "##connNav%d", i);
 
-            ImGui::PushStyleColor(ImGuiCol_Button, btnBg);
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(theme.surface2[0], theme.surface2[1], theme.surface2[2], 0.9f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(theme.surface3[0], theme.surface3[1], theme.surface3[2], 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_Text, btnTxt);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+            bool clicked = ImGui::Selectable(selectId, selected, ImGuiSelectableFlags_None, ImVec2(itemW, itemH));
+            bool hovered = ImGui::IsItemHovered() && !selected;
 
-            char tabLabel[64];
-            snprintf(tabLabel, sizeof(tabLabel), "%s %s##conn_tab_%d", tabs[i].icon, tabs[i].label, i);
-            if (ImGui::Button(tabLabel, ImVec2(tabW, 34.0f))) {
+            if (clicked) {
                 m_ConnectionsActiveTab = i;
             }
 
-            ImGui::PopStyleVar();
-            ImGui::PopStyleColor(4);
-        }
-
-        ImGui::Spacing();
-        ImGui::Spacing();
-
-        // ── Contenedor de la Pestaña Activa ──
-        if (ImGui::BeginChild("##conn_tab_content", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar))
-        {
-            switch (m_ConnectionsActiveTab) {
-                case 0: // Red LAN
-                    m_Red.RenderContent();
-                    break;
-                case 1: // App Móvil / Sync
-                    m_Sync.RenderContent();
-                    break;
-                case 2: // Transmisión / Captura
-                    m_Broadcast.RenderCaptureSection();
-                    ImGui::Spacing();
-                    m_Broadcast.RenderLayerSection();
-                    ImGui::Spacing();
-                    m_Broadcast.RenderStartSection();
-                    break;
-                case 3: // OSC
-                    m_OSC.RenderContent();
-                    break;
-                case 4: // Chat del Equipo
-                    m_Chat.RenderContent();
-                    break;
-                default:
-                    break;
+            if (selected) {
+                dl->AddRectFilled(p, ImVec2(p.x + itemW, p.y + itemH),
+                    ImGui::ColorConvertFloat4ToU32(ConnThemeCol(theme.accent, 0.22f)), 8.0f);
+                dl->AddRect(p, ImVec2(p.x + itemW, p.y + itemH),
+                    ImGui::ColorConvertFloat4ToU32(ConnThemeCol(theme.accent, 0.70f)), 8.0f, 0, 1.2f);
+                dl->AddRectFilled(ImVec2(p.x, p.y + 8.0f), ImVec2(p.x + 3.5f, p.y + itemH - 8.0f),
+                    ImGui::ColorConvertFloat4ToU32(ConnThemeCol(theme.accent, 1.0f)), 2.0f);
+            } else if (hovered) {
+                dl->AddRectFilled(p, ImVec2(p.x + itemW, p.y + itemH),
+                    ImGui::ColorConvertFloat4ToU32(ConnThemeCol(theme.surface2, 0.5f)), 8.0f);
             }
+
+            ImVec4 iconColV = ImGui::ColorConvertU32ToFloat4(tabsDef[i].color);
+            ImVec2 badgeC(p.x + 22.0f, p.y + itemH * 0.5f);
+            ImVec4 badgeFillV = iconColV;
+            badgeFillV.w = selected ? 0.28f : (hovered ? 0.18f : 0.10f);
+            dl->AddCircleFilled(badgeC, 14.0f, ImGui::ColorConvertFloat4ToU32(badgeFillV), 20);
+            if (selected) {
+                ImVec4 badgeRingV = iconColV; badgeRingV.w = 0.65f;
+                dl->AddCircle(badgeC, 14.0f, ImGui::ColorConvertFloat4ToU32(badgeRingV), 20, 1.2f);
+            }
+            iconColV.w *= selected ? 1.0f : (hovered ? 0.92f : 0.65f);
+            tabsDef[i].drawIcon(dl, badgeC, 8.5f, ImGui::ColorConvertFloat4ToU32(iconColV));
+
+            float textX = p.x + 44.0f;
+            float titleY = p.y + 8.0f;
+            float subY   = p.y + 25.0f;
+
+            ImVec4 titleCol = selected ? ConnThemeCol(theme.textPrimary) : ConnThemeCol(theme.textDim, hovered ? 1.0f : 0.85f);
+            dl->AddText(ImVec2(textX, titleY), ImGui::ColorConvertFloat4ToU32(titleCol), tabsDef[i].label);
+
+            ImVec4 subCol = selected ? ConnThemeCol(theme.textDim) : ConnThemeCol(theme.textFaint);
+            dl->AddText(ImVec2(textX, subY), ImGui::ColorConvertFloat4ToU32(subCol), tabsDef[i].statusStr);
+
+            ImVec2 dotPos(p.x + itemW - 12.0f, p.y + itemH * 0.5f);
+            ImU32 dotColor = tabsDef[i].isActive ? IM_COL32(34, 197, 94, 255) : IM_COL32(148, 163, 184, 120);
+            dl->AddCircleFilled(dotPos, 3.5f, dotColor);
+            if (tabsDef[i].isActive) {
+                dl->AddCircle(dotPos, 5.5f, IM_COL32(34, 197, 94, 90), 16, 1.0f);
+            }
+
+            ImGui::PopStyleColor(3);
+            ImGui::Dummy(ImVec2(0.0f, 3.0f));
         }
+
         ImGui::EndChild();
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(2);
     }
 
-    DS::EndGlassPanel();
-
-    if (!m_ShowConnectionsWindow) {
-        s_WasOpenLastFrame = false;
-    }
+    ImGui::End();
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(4);
 }
 
 void UIManager::RenderUrlImportModal()
@@ -2513,38 +3100,276 @@ void UIManager::RenderUrlImportModal()
 
 void UIManager::RenderStylesPopup()
 {
-    ImGui::SetNextWindowSize(ImVec2(260.0f, 0.0f), ImGuiCond_Appearing);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, DS::RadiusLarge);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(14.0f, 12.0f));
+}
 
-    if (ImGui::BeginPopup("##modeTbStylesPopup"))
-    {
-        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::AccentColor));
-        ImGui::TextUnformatted("ESTILOS");
-        ImGui::PopStyleColor();
-        ImGui::Separator();
-        ImGui::Spacing();
+void UIManager::RenderStylesWindow()
+{
+    static bool s_WasOpenLastFrame = false;
+    const bool  justOpened = !s_WasOpenLastFrame;
+    s_WasOpenLastFrame = true;
 
-        auto& core  = Core::PresentationCore::Get();
-        auto  names = core.GetSavedStyleNames();
+    const ImVec2 baseSize(780.0f, 620.0f);
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f,
+                      vp->WorkPos.y + vp->WorkSize.y * 0.5f);
 
-        if (names.empty()) {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
-            ImGui::TextWrapped("Todavia no guardaste ningun estilo (Diseño > Estilos).");
-            ImGui::PopStyleColor();
-        } else {
-            for (const auto& name : names) {
-                if (ImGui::Selectable(name.c_str())) {
-                    core.ApplyStyleByName(name);
-                    ImGui::CloseCurrentPopup();
-                }
-            }
+    if (justOpened) {
+        ImGui::SetNextWindowPos(workCenter, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(baseSize, ImGuiCond_Always);
+    }
+    ImGui::SetNextWindowSizeConstraints(ImVec2(520.0f, 420.0f), ImVec2(10000.0f, 10000.0f));
+
+    ImGuiWindowClass floatingClass;
+    floatingClass.DockingAllowUnclassed = false;
+    ImGui::SetNextWindowClass(&floatingClass);
+
+    bool open = DS::BeginGlassPanel("Estilos de Diapositiva", m_GlassRenderer, &m_ShowStylesWindow,
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking,
+        ImVec2(16.0f, 14.0f));
+
+    if (open) {
+        StylesHubPanel* hub = GetStylesHubPanelRef();
+        if (hub) {
+            hub->GetStyles().RenderContent();
         }
-
-        ImGui::EndPopup();
     }
 
-    ImGui::PopStyleVar(2);
+    DS::EndGlassPanel();
+
+    if (!m_ShowStylesWindow) {
+        s_WasOpenLastFrame = false;
+    }
+}
+
+void UIManager::RenderShadersWindow()
+{
+    static bool s_WasOpenLastFrame = false;
+    const bool  justOpened = !s_WasOpenLastFrame;
+    s_WasOpenLastFrame = true;
+
+    const ImVec2 baseSize(680.0f, 560.0f);
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f,
+                      vp->WorkPos.y + vp->WorkSize.y * 0.5f);
+
+    if (justOpened) {
+        ImGui::SetNextWindowPos(workCenter, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(baseSize, ImGuiCond_Always);
+    }
+    ImGui::SetNextWindowSizeConstraints(ImVec2(480.0f, 380.0f), ImVec2(10000.0f, 10000.0f));
+
+    ImGuiWindowClass floatingClass;
+    floatingClass.DockingAllowUnclassed = false;
+    ImGui::SetNextWindowClass(&floatingClass);
+
+    bool open = DS::BeginGlassPanel("Efectos y Shaders", m_GlassRenderer, &m_ShowShadersWindow,
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking,
+        ImVec2(16.0f, 14.0f));
+
+    if (open) {
+        StylesHubPanel* hub = GetStylesHubPanelRef();
+        if (hub) {
+            hub->GetShaders().RenderContent();
+        }
+    }
+
+    DS::EndGlassPanel();
+
+    if (!m_ShowShadersWindow) {
+        s_WasOpenLastFrame = false;
+    }
+}
+
+void UIManager::RenderTransitionsWindow()
+{
+    static bool s_WasOpenLastFrame = false;
+    const bool  justOpened = !s_WasOpenLastFrame;
+    s_WasOpenLastFrame = true;
+
+    const ImVec2 baseSize(640.0f, 520.0f);
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f,
+                      vp->WorkPos.y + vp->WorkSize.y * 0.5f);
+
+    if (justOpened) {
+        ImGui::SetNextWindowPos(workCenter, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(baseSize, ImGuiCond_Always);
+    }
+    ImGui::SetNextWindowSizeConstraints(ImVec2(440.0f, 360.0f), ImVec2(10000.0f, 10000.0f));
+
+    ImGuiWindowClass floatingClass;
+    floatingClass.DockingAllowUnclassed = false;
+    ImGui::SetNextWindowClass(&floatingClass);
+
+    bool open = DS::BeginGlassPanel("Transiciones", m_GlassRenderer, &m_ShowTransitionsWindow,
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking,
+        ImVec2(16.0f, 14.0f));
+
+    if (open) {
+        StylesHubPanel* hub = GetStylesHubPanelRef();
+        if (hub) {
+            hub->GetTransitions().RenderContent();
+        } else if (m_TransitionPanel) {
+            m_TransitionPanel->RenderContent();
+        }
+    }
+
+    DS::EndGlassPanel();
+
+    if (!m_ShowTransitionsWindow) {
+        s_WasOpenLastFrame = false;
+    }
+}
+
+void UIManager::RenderAnnouncementsWindow()
+{
+    static bool s_WasOpenLastFrame = false;
+    const bool  justOpened = !s_WasOpenLastFrame;
+    s_WasOpenLastFrame = true;
+
+    const ImVec2 baseSize(680.0f, 580.0f);
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f,
+                      vp->WorkPos.y + vp->WorkSize.y * 0.5f);
+
+    if (justOpened) {
+        ImGui::SetNextWindowPos(workCenter, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(baseSize, ImGuiCond_Always);
+    }
+    ImGui::SetNextWindowSizeConstraints(ImVec2(480.0f, 400.0f), ImVec2(10000.0f, 10000.0f));
+
+    ImGuiWindowClass floatingClass;
+    floatingClass.DockingAllowUnclassed = false;
+    ImGui::SetNextWindowClass(&floatingClass);
+
+    bool open = DS::BeginGlassPanel("Anuncios y Mensajes en Pantalla", m_GlassRenderer, &m_ShowAnnouncementsWindow,
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking,
+        ImVec2(16.0f, 14.0f));
+
+    if (open) {
+        StylesHubPanel* hub = GetStylesHubPanelRef();
+        if (hub) {
+            hub->GetAnnouncements().Render(m_GlassRenderer);
+        }
+    }
+
+    DS::EndGlassPanel();
+
+    if (!m_ShowAnnouncementsWindow) {
+        s_WasOpenLastFrame = false;
+    }
+}
+
+void UIManager::RenderPadsWindow()
+{
+    static bool s_WasOpenLastFrame = false;
+    const bool  justOpened = !s_WasOpenLastFrame;
+    s_WasOpenLastFrame = true;
+
+    const ImVec2 baseSize(560.0f, 480.0f);
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f,
+                      vp->WorkPos.y + vp->WorkSize.y * 0.5f);
+
+    if (justOpened) {
+        ImGui::SetNextWindowPos(workCenter, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(baseSize, ImGuiCond_Always);
+    }
+    ImGui::SetNextWindowSizeConstraints(ImVec2(420.0f, 360.0f), ImVec2(10000.0f, 10000.0f));
+
+    ImGuiWindowClass floatingClass;
+    floatingClass.DockingAllowUnclassed = false;
+    ImGui::SetNextWindowClass(&floatingClass);
+
+    bool open = DS::BeginGlassPanel("Pads de Escena y Estilo", m_GlassRenderer, &m_ShowPadsWindow,
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking,
+        ImVec2(16.0f, 14.0f));
+
+    if (open) {
+        if (m_ViewPanelRef) {
+            m_ViewPanelRef->RenderPadsContent();
+        }
+    }
+
+    DS::EndGlassPanel();
+
+    if (!m_ShowPadsWindow) {
+        s_WasOpenLastFrame = false;
+    }
+}
+
+void UIManager::RenderTilesWindow()
+{
+    static bool s_WasOpenLastFrame = false;
+    const bool  justOpened = !s_WasOpenLastFrame;
+    s_WasOpenLastFrame = true;
+
+    const ImVec2 baseSize(580.0f, 440.0f);
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f,
+                      vp->WorkPos.y + vp->WorkSize.y * 0.5f);
+
+    if (justOpened) {
+        ImGui::SetNextWindowPos(workCenter, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(baseSize, ImGuiCond_Always);
+    }
+    ImGui::SetNextWindowSizeConstraints(ImVec2(420.0f, 320.0f), ImVec2(10000.0f, 10000.0f));
+
+    ImGuiWindowClass floatingClass;
+    floatingClass.DockingAllowUnclassed = false;
+    ImGui::SetNextWindowClass(&floatingClass);
+
+    bool open = DS::BeginGlassPanel("Tiles (Pantalla Dividida)", m_GlassRenderer, &m_ShowTilesWindow,
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking,
+        ImVec2(16.0f, 14.0f));
+
+    if (open) {
+        if (m_ViewPanelRef) {
+            m_ViewPanelRef->RenderTilesContent();
+        }
+    }
+
+    DS::EndGlassPanel();
+
+    if (!m_ShowTilesWindow) {
+        s_WasOpenLastFrame = false;
+    }
+}
+
+void UIManager::RenderChatWindow()
+{
+    static bool s_WasOpenLastFrame = false;
+    const bool  justOpened = !s_WasOpenLastFrame;
+    s_WasOpenLastFrame = true;
+
+    const ImVec2 baseSize(540.0f, 600.0f);
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f,
+                      vp->WorkPos.y + vp->WorkSize.y * 0.5f);
+
+    if (justOpened) {
+        ImGui::SetNextWindowPos(workCenter, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(baseSize, ImGuiCond_Always);
+    }
+    ImGui::SetNextWindowSizeConstraints(ImVec2(400.0f, 420.0f), ImVec2(10000.0f, 10000.0f));
+
+    ImGuiWindowClass floatingClass;
+    floatingClass.DockingAllowUnclassed = false;
+    ImGui::SetNextWindowClass(&floatingClass);
+
+    bool open = DS::BeginGlassPanel("Chat de Equipo", m_GlassRenderer, &m_ShowChatWindow,
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking,
+        ImVec2(16.0f, 14.0f));
+
+    if (open) {
+        m_Chat.RenderContent();
+    }
+
+    DS::EndGlassPanel();
+
+    if (!m_ShowChatWindow) {
+        s_WasOpenLastFrame = false;
+    }
 }
 
 void UIManager::RenderQuickSwitcher()
@@ -2711,11 +3536,9 @@ void UIManager::BeginDockspace()
 }
 
 // ── Entorno de trabajo: "Clásico" (default) ─────────────────────────────────
-// Vista en Vivo a la derecha (alto completo); a la izquierda-centro, Diseño
-// ("bottommain") pasa por debajo TANTO de Biblioteca (izquierda) COMO de Home
-// ("main"), subiendo Biblioteca y su barra inferior (+/importar/borrar) y
-// otorgándole a Diseño todo el ancho combinado para mostrar cómodamente todos
-// sus paneles sin apretarlos.
+// Vista en Vivo a la derecha (alto completo); Biblioteca a la izquierda (alto
+// completo) y Home / Main al centro (alto completo con la Toolbar de Diseño
+// arriba integrada). Diseño ya no ocupa una franja abajo que robe espacio vertical.
 void UIManager::BuildWorkspaceLayoutClassic(ImGuiID dockspace_id)
 {
     const auto& str = ProyecThor::UI::GetUIStrings();
@@ -2724,77 +3547,54 @@ void UIManager::BuildWorkspaceLayoutClassic(ImGuiID dockspace_id)
     ImGuiID dock_right;
     ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.28f, &dock_right, &dock_main);
 
-    ImGuiID dock_top_area, dock_main_bottom;
-    ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Down, 0.30f, &dock_main_bottom, &dock_top_area);
-
-    ImGuiID dock_left, dock_main_top;
-    ImGui::DockBuilderSplitNode(dock_top_area, ImGuiDir_Left, 0.347f, &dock_left, &dock_main_top);
+    ImGuiID dock_left, dock_main_area;
+    ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Left, 0.347f, &dock_left, &dock_main_area);
 
     ImGui::DockBuilderDockWindow(str.library,        dock_left);
-    ImGui::DockBuilderDockWindow("Home",             dock_main_top);
+    ImGui::DockBuilderDockWindow("Home",             dock_main_area);
     ImGui::DockBuilderDockWindow("Vista en Vivo",    dock_right);
-    ImGui::DockBuilderDockWindow("Diseño",           dock_main_bottom);
 
-    ImGuiID leafNodes[] = { dock_left, dock_main_top, dock_main_bottom, dock_right };
+    ImGuiID leafNodes[] = { dock_left, dock_main_area, dock_right };
     for (ImGuiID nodeId : leafNodes)
         if (ImGuiDockNode* node = ImGui::DockBuilderGetNode(nodeId))
             node->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
 
     ImGui::DockBuilderFinish(dockspace_id);
 
-    // Orden fijo (1=Biblioteca, 2=Diseño, 3=Vista en Vivo, 4=Home), pedido
-    // explicito del operador -- ver Alt Gr + 1..4 en RenderAll.
+    // Orden fijo (1=Biblioteca, 2=Diseño, 3=Vista en Vivo, 4=Home)
     m_PanelCollapse[0] = { dock_left,        ImVec2(0, 0), true,  false, 0.0f }; // 1: Biblioteca
-    m_PanelCollapse[1] = { dock_main_bottom, ImVec2(0, 0), false, false, 0.0f }; // 2: Diseño
+    m_PanelCollapse[1] = { 0,                ImVec2(0, 0), false, false, 0.0f }; // 2: Diseño (integrado en Home)
     m_PanelCollapse[2] = { dock_right,       ImVec2(0, 0), true,  false, 0.0f }; // 3: Vista en Vivo
-    m_PanelCollapse[3] = { dock_main_top,    ImVec2(0, 0), true,  false, 0.0f }; // 4: Home
+    m_PanelCollapse[3] = { dock_main_area,   ImVec2(0, 0), true,  false, 0.0f }; // 4: Home
 }
 
 // ── Entorno de trabajo: "Simple" (estilo Holyrics) ──────────────────────────
-// Cuatro columnas de alto completo, nada apilado verticalmente: Biblioteca |
-// Home | Vista en Vivo | Diseño. Diseño se corre TODO a la derecha (a la
-// derecha de Vista en Vivo) en vez de vivir abajo de Home -- Home y Vista en
-// Vivo quedan cada uno en su propia columna al medio. Diseño (y en paneles
-// angostos, Vista en Vivo) quedan angostos y altos aca -- ver
-// StylesHubPanel::Render, que detecta esto y pasa su rail de iconos a
-// vertical, y ViewPanel::RenderCompactWide para el caso ancho-y-bajo (no
-// aplica en este preset, Vista en Vivo ya es una columna alta).
 void UIManager::BuildWorkspaceLayoutSimple(ImGuiID dockspace_id)
 {
     const auto& str = ProyecThor::UI::GetUIStrings();
     ImGuiID     dock_main = dockspace_id;
 
-    // Ratios pensados para que Vista en Vivo (video 16:9, cuyo alto depende
-    // de su ancho) quede con una columna realmente usable -- antes le tocaba
-    // ~26% y Home (que solo necesita ancho para su Preview+Cola) se llevaba
-    // demasiado, dejando el video chico con espacio vacio abajo.
-    ImGuiID dock_left = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Left, 0.22f, nullptr, &dock_main);
+    ImGuiID dock_left = ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Left, 0.25f, nullptr, &dock_main);
     ImGuiID dock_left_top, dock_left_bottom;
     ImGui::DockBuilderSplitNode(dock_left, ImGuiDir_Down, 0.40f, &dock_left_bottom, &dock_left_top);
 
     ImGuiID dock_right;
-    ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.20f, &dock_right, &dock_main);
-
-    ImGuiID dock_mid_right;
-    ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.52f, &dock_mid_right, &dock_main);
+    ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.32f, &dock_right, &dock_main);
 
     ImGui::DockBuilderDockWindow(str.library,        dock_left_top);
     ImGui::DockBuilderDockWindow("Home",             dock_main);
-    ImGui::DockBuilderDockWindow("Vista en Vivo",    dock_mid_right);
-    ImGui::DockBuilderDockWindow("Diseño",           dock_right);
+    ImGui::DockBuilderDockWindow("Vista en Vivo",    dock_right);
 
-    ImGuiID leafNodes[] = { dock_left_top, dock_left_bottom, dock_main, dock_mid_right, dock_right };
+    ImGuiID leafNodes[] = { dock_left_top, dock_left_bottom, dock_main, dock_right };
     for (ImGuiID nodeId : leafNodes)
         if (ImGuiDockNode* node = ImGui::DockBuilderGetNode(nodeId))
             node->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
 
     ImGui::DockBuilderFinish(dockspace_id);
 
-    // Las 4 son columnas puras (splits izquierda/derecha en cadena) -- todas
-    // colapsan por ancho.
     m_PanelCollapse[0] = { dock_left,      ImVec2(0, 0), true, false, 0.0f }; // 1: Biblioteca
-    m_PanelCollapse[1] = { dock_right,     ImVec2(0, 0), true, false, 0.0f }; // 2: Diseño
-    m_PanelCollapse[2] = { dock_mid_right, ImVec2(0, 0), true, false, 0.0f }; // 3: Vista en Vivo
+    m_PanelCollapse[1] = { 0,              ImVec2(0, 0), false, false, 0.0f }; // 2: Diseño (integrado en Home)
+    m_PanelCollapse[2] = { dock_right,     ImVec2(0, 0), true, false, 0.0f }; // 3: Vista en Vivo
     m_PanelCollapse[3] = { dock_main,      ImVec2(0, 0), true, false, 0.0f }; // 4: Home
 }
 
@@ -3060,17 +3860,17 @@ void UIManager::RenderProFeatureModal()
     if (!m_ShowProFeatureModal) return;
 
     ImGuiViewport* vp = ImGui::GetMainViewport();
-    const float modalW = 500.0f;
-    const float modalH = 260.0f;
+    const float modalW = 540.0f;
+    const float modalH = 340.0f;
 
     ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(modalW, modalH), ImGuiCond_Always);
 
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.10f, 0.11f, 0.15f, 0.98f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.09f, 0.11f, 0.16f, 0.98f));
     ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(0.95f, 0.75f, 0.20f, 0.90f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.5f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20.0f, 18.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(22.0f, 18.0f));
 
     if (ImGui::Begin("Función ProyecThor for Professionals##Modal", &m_ShowProFeatureModal,
                      ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize))
@@ -3090,23 +3890,41 @@ void UIManager::RenderProFeatureModal()
         ImGui::PopStyleColor();
 
         ImGui::Separator();
-        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+        ImGui::Dummy(ImVec2(0.0f, 6.0f));
 
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.88f, 0.94f, 1.0f));
         ImGui::TextWrapped("%s", m_ProFeatureModalDesc.c_str());
         ImGui::PopStyleColor();
 
-        ImGui::Dummy(ImVec2(0.0f, 16.0f));
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
-        // Botones inferiores: Ir a Cuenta (Pro) / Cerrar
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.65f, 0.15f, 0.90f));
+        // Tarjeta de Precio y Beneficios PRO
+        {
+            ImVec2 cardP0 = ImGui::GetCursorScreenPos();
+            float cardInnerW = modalW - 44.0f;
+            float cardInnerH = 68.0f;
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            dl->AddRectFilled(cardP0, ImVec2(cardP0.x + cardInnerW, cardP0.y + cardInnerH), IM_COL32(245, 158, 11, 24), 6.0f);
+            dl->AddRect(cardP0, ImVec2(cardP0.x + cardInnerW, cardP0.y + cardInnerH), IM_COL32(245, 158, 11, 140), 6.0f);
+
+            dl->AddText(ImVec2(cardP0.x + 12.0f, cardP0.y + 10.0f), IM_COL32(255, 215, 0, 255), "Suscripción ProyecThor PRO: $9.990 CLP / mes");
+            dl->AddText(ImVec2(cardP0.x + 12.0f, cardP0.y + 32.0f), IM_COL32(185, 205, 235, 255),
+                        "Incluye: MuninCloud (descargas R2 ilimitadas), Hugin Estadísticas,\nChat IA, Monitor Stage Display y Sincronización Multi-Sala.");
+            ImGui::Dummy(ImVec2(cardInnerW, cardInnerH));
+        }
+
+        ImGui::Dummy(ImVec2(0.0f, 12.0f));
+
+        // Botones inferiores: Obtener Pro / Cerrar
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.85f, 0.65f, 0.15f, 0.95f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.95f, 0.75f, 0.22f, 1.0f));
-        if (ImGui::Button("Ver Planes Pro en Cuenta", ImVec2(210.0f, 32.0f))) {
+        ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.08f, 0.08f, 0.10f, 1.0f));
+        if (ImGui::Button("Activar ProyecThor PRO ($9.990 CLP)", ImVec2(280.0f, 32.0f))) {
             m_ShowProFeatureModal = false;
             CloseAllToolWindows();
-            RequestSettings(10); // Categoría Cuenta / Pro
+            RequestSettings(10); // Categoría Cuenta / Suscripción Pro
         }
-        ImGui::PopStyleColor(2);
+        ImGui::PopStyleColor(3);
 
         ImGui::SameLine(0.0f, 12.0f);
         if (DS::GlassButton("Cerrar", ImVec2(100.0f, 32.0f))) {

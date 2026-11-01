@@ -642,7 +642,7 @@ void SetGlobalMute(bool mute);
         void        LoadCategoryStyles();
         void        SaveCategoryStyles() const;
 
-        void ToggleNetworkStream(bool enable, int port = 8080);
+        bool ToggleNetworkStream(bool enable, int port = 8080);
         bool IsStreamingNet() const;
         bool RenderProjectorToFBO(int w, int h, std::vector<uint8_t>& outRGB);
 

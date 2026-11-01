@@ -13,6 +13,7 @@
 #include "ui/panels/biblio/LibraryHelpers.h"
 #include "ui/views/audio/AudioHelpers.h"
 #include "ui/views/audio/AudioAlbumArt.h"
+#include "core/MediaCollections.h"
 #include <filesystem>
 
 namespace ProyecThor::UI {
@@ -32,9 +33,9 @@ void MonitorView::Update()
     //
     // ConsumeEndReached() es "se consume una sola vez por clip" -- por eso
     // esto SOLO corre si la cola NO esta activa (ella ya lo consume arriba
-    // en m_QueueEngine.Update(), con su propio criterio de loop). Los dos
-    // consumidores nunca deben pisarse sobre el mismo reproductor.
-    if (!m_QueueEngine.IsActive())
+    // en m_QueueEngine.Update() o en MediaCollectionManager, con su propio criterio de loop).
+    // Los consumidores nunca deben pisarse sobre el mismo reproductor.
+    if (!m_QueueEngine.IsActive() && !Core::MediaCollectionManager::Get().IsQueuePlaying())
     {
         auto& core  = Core::PresentationCore::Get();
         auto  state = core.GetState();
@@ -200,6 +201,11 @@ void MonitorView::Render(Core::VLCBasePlayer* player)
 
     ImGui::SameLine(0, 6);
     RenderQueue(queueW);
+}
+
+void MonitorView::RenderFloatingPreview(Core::VLCBasePlayer* player, float w, float h)
+{
+    RenderPreviewMonitor(player, w, h);
 }
 
 // ---------------------------------------------------------------------------

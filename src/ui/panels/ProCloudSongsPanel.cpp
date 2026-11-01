@@ -28,7 +28,7 @@ void ProCloudSongsPanel::Render(bool* pOpen, GlassRenderer& glass) {
     floatingClass.DockingAllowUnclassed = false;
     ImGui::SetNextWindowClass(&floatingClass);
 
-    bool open = DS::BeginGlassPanel("Gestor de Nube Pro (Firebase)", glass, pOpen,
+    bool open = DS::BeginGlassPanel("Gestor de Cancionero en Nube (Firebase)", glass, pOpen,
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking,
         ImVec2(18.0f, 16.0f));
 

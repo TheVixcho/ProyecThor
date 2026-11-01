@@ -18,7 +18,7 @@ SetCompressor /SOLID lzma
 !define PRODUCT_WEB_SITE "https://proyecthor.web.app"
 
 !ifndef VERSION
-  !define VERSION "1.1.0"
+  !define VERSION "1.1.3"
 !endif
 
 !ifndef BUILD_DIR

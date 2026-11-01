@@ -7,6 +7,7 @@
 #include "ui/panels/home/HomeIcons.h"
 #include "ui/framework/DesignSystem.h"
 #include "core/settings/SettingsManager.h"
+#include "core/AuthLicenseManager.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -20,9 +21,13 @@ namespace DS = ProyecThor::UI::DS;
 // para no crear una dependencia circular con el header del panel.
 // El orden debe coincidir con LibraryCategory.
 static constexpr int kCat_Songs      = 0;
+static constexpr int kCat_Videos     = 1;
+static constexpr int kCat_Images     = 2;
 static constexpr int kCat_Bibles     = 3;
 static constexpr int kCat_Documents  = 4;
+static constexpr int kCat_Audio      = 5;
 static constexpr int kCat_Multimedia = 6;
+static constexpr int kCat_Playlists  = 100;
 
 // Mismo motivo — espeja UI::LibrarySideMode (LibraryPanel.h).
 static constexpr int kSideMode_Categories = 0;
@@ -34,6 +39,8 @@ static constexpr int kSideMode_Model3D    = 6;
 static constexpr int kSideMode_Lab        = 7;
 static constexpr int kSideMode_Picker     = 8;
 static constexpr int kSideMode_Plugins    = 9;
+static constexpr int kSideMode_Canva      = 10;
+static constexpr int kSideMode_Capture    = 11;
 
 namespace ProyecThor::Library {
 
@@ -253,12 +260,15 @@ static void RenderCategoryButtonsVertical(LibraryContext& ctx)
     };
 
     const RailItemDef k_MainItems[] = {
-        { kCat_Multimedia,   true,  DrawIcon_Multimedia,                   str.libRailMultimedia, 1 },
-        { kSideMode_Overlay,  false, ProyecThor::UI::AppIcons::DrawIcon_Overlay, "Overlays",            9 },
         { kCat_Songs,        true,  DrawIcon_Music,                        str.libRailSongs,      0 },
+        { kCat_Playlists,    false, DrawIcon_Playlist,                     "Playlists",           1 },
+        { kCat_Videos,       true,  DrawIcon_Video,                        "Videos",              2 },
+        { kCat_Audio,        true,  DrawIcon_Audio,                        "Música",              8 },
+        { kCat_Images,       true,  DrawIcon_Image,                        "Imágenes",            1 },
         { kCat_Bibles,       true,  DrawIcon_Cross,                        str.libCatBible,       3 },
         { kCat_Documents,    true,  DrawIcon_Document,                     str.libRailDocs,       4 },
-        { kSideMode_Clock,    false, ProyecThor::UI::HomeIcons::DrawIcon_Clock, "Reloj",               7 },
+        { kSideMode_Overlay, false, ProyecThor::UI::AppIcons::DrawIcon_Overlay, "Overlays",        9 },
+        { kSideMode_Clock,   false, ProyecThor::UI::HomeIcons::DrawIcon_Clock, "Reloj",            7 },
     };
 
     const auto& sidebarSettings = ProyecThor::Settings::SettingsManager::Get().GetSettings().librarySidebar;
@@ -287,16 +297,29 @@ static void RenderCategoryButtonsVertical(LibraryContext& ctx)
     {
         const auto& it = k_MainItems[idx];
 
-        const bool active = it.isCategory
-            ? ((ctx.sideModeInt == kSideMode_Categories) && (ctx.currentCategoryInt == it.id))
-            : (ctx.sideModeInt == it.id);
+        bool active = false;
+        if (it.id == kCat_Playlists) {
+            active = (ctx.sideModeInt == kSideMode_Categories) && (ctx.currentCategoryInt == kCat_Songs) && ctx.showPlaylistsTab;
+        } else if (it.id == kCat_Songs) {
+            active = (ctx.sideModeInt == kSideMode_Categories) && (ctx.currentCategoryInt == kCat_Songs) && !ctx.showPlaylistsTab;
+        } else if (it.isCategory) {
+            active = (ctx.sideModeInt == kSideMode_Categories) && (ctx.currentCategoryInt == it.id);
+        } else {
+            active = (ctx.sideModeInt == it.id);
+        }
 
         bool clicked = RenderSidebarButton(dl, storage, sidebarW, btnH, iconSz, lt,
                                            it.label, it.drawIcon, active,
                                            sidebarSettings.categoryColor[it.colorIndex]);
         if (clicked) {
-            if (it.isCategory) {
+            if (it.id == kCat_Playlists) {
+                ctx.currentCategoryInt = kCat_Songs;
+                ctx.showPlaylistsTab   = true;
+                ctx.sideModeInt        = kSideMode_Categories;
+                ctx.selectedIndex      = -1;
+            } else if (it.isCategory) {
                 ctx.currentCategoryInt = it.id;
+                ctx.showPlaylistsTab   = false;
                 ctx.sideModeInt        = kSideMode_Categories;
                 ctx.selectedIndex      = -1;
                 ctx.refreshList();
@@ -312,6 +335,8 @@ static void RenderCategoryButtonsVertical(LibraryContext& ctx)
     struct SideDef { const char* label; DrawFn drawIcon; int mode; };
     static const SideDef k_SideItems[] = {
         { "Render",   ProyecThor::UI::AppIcons::DrawIcon_Swap,       kSideMode_Render    },
+        { "Canva",    ProyecThor::UI::AppIcons::DrawIcon_Canva,      kSideMode_Canva     },
+        { "Captura",  ProyecThor::UI::HomeIcons::DrawIcon_Camera,    kSideMode_Capture   },
         { "Web",      ProyecThor::UI::AppIcons::DrawIcon_Globe,      kSideMode_Web       },
         { "3D",       ProyecThor::UI::AppIcons::DrawIcon_Cube3D,     kSideMode_Model3D   },
         { "Lab",      ProyecThor::UI::AppIcons::DrawIcon_Formula,    kSideMode_Lab       },
@@ -319,8 +344,14 @@ static void RenderCategoryButtonsVertical(LibraryContext& ctx)
         { "Paneles",  ProyecThor::UI::AppIcons::DrawIcon_Grid,       kSideMode_Picker    },
     };
 
+    const bool isPro = ProyecThor::Core::AuthLicenseManager::Get().IsPro();
+    if (ctx.sideModeInt == kSideMode_Canva && !isPro) {
+        ctx.sideModeInt = kSideMode_Categories;
+    }
+
     for (const auto& sd : k_SideItems)
     {
+        if (sd.mode == kSideMode_Canva && !isPro) continue;
         if (sd.mode == kSideMode_Render && !sidebarSettings.showRender) continue;
         if (sd.mode == kSideMode_Web && !sidebarSettings.showWeb) continue;
         if (sd.mode == kSideMode_Model3D && !sidebarSettings.showModel3D) continue;
@@ -328,11 +359,13 @@ static void RenderCategoryButtonsVertical(LibraryContext& ctx)
         if (sd.mode == kSideMode_Plugins && !sidebarSettings.showPlugins) continue;
 
         const bool active = (ctx.sideModeInt == sd.mode);
-        int colorIdx = (sd.mode == kSideMode_Render) ? 8 : 9;
+        static const float kCanvaColor[4] = { 0.00f, 0.77f, 0.80f, 1.0f };
+        const float* btnCol = (sd.mode == kSideMode_Canva) ? kCanvaColor :
+                              sidebarSettings.categoryColor[(sd.mode == kSideMode_Render) ? 8 : 9];
 
         bool clicked = RenderSidebarButton(dl, storage, sidebarW, btnH, iconSz, lt,
                                            sd.label, sd.drawIcon, active,
-                                           sidebarSettings.categoryColor[colorIdx]);
+                                           btnCol);
         if (clicked) {
             if (sd.mode == kSideMode_Picker) {
                 if (ctx.openPanelPicker) {
@@ -360,12 +393,15 @@ static void RenderCategoryButtonsHorizontal(LibraryContext& ctx)
     };
 
     const RailItemDef k_MainItems[] = {
-        { kCat_Multimedia,   true,  DrawIcon_Multimedia,                   str.libRailMultimedia, 1 },
-        { kSideMode_Overlay,  false, ProyecThor::UI::AppIcons::DrawIcon_Overlay, "Overlays",            9 },
         { kCat_Songs,        true,  DrawIcon_Music,                        str.libRailSongs,      0 },
+        { kCat_Playlists,    false, DrawIcon_Playlist,                     "Playlists",           1 },
+        { kCat_Videos,       true,  DrawIcon_Video,                        "Videos",              2 },
+        { kCat_Audio,        true,  DrawIcon_Audio,                        "Música",              8 },
+        { kCat_Images,       true,  DrawIcon_Image,                        "Imágenes",            1 },
         { kCat_Bibles,       true,  DrawIcon_Cross,                        str.libCatBible,       3 },
         { kCat_Documents,    true,  DrawIcon_Document,                     str.libRailDocs,       4 },
-        { kSideMode_Clock,    false, ProyecThor::UI::HomeIcons::DrawIcon_Clock, "Reloj",               7 },
+        { kSideMode_Overlay, false, ProyecThor::UI::AppIcons::DrawIcon_Overlay, "Overlays",        9 },
+        { kSideMode_Clock,   false, ProyecThor::UI::HomeIcons::DrawIcon_Clock, "Reloj",            7 },
     };
 
     const auto& sidebarSettings = ProyecThor::Settings::SettingsManager::Get().GetSettings().librarySidebar;
@@ -373,6 +409,8 @@ static void RenderCategoryButtonsHorizontal(LibraryContext& ctx)
     struct SideDef { const char* label; DrawFn drawIcon; int mode; };
     static const SideDef k_SideItems[] = {
         { "Render",   ProyecThor::UI::AppIcons::DrawIcon_Swap,       kSideMode_Render    },
+        { "Canva",    ProyecThor::UI::AppIcons::DrawIcon_Canva,      kSideMode_Canva     },
+        { "Captura",  ProyecThor::UI::HomeIcons::DrawIcon_Camera,    kSideMode_Capture   },
         { "Web",      ProyecThor::UI::AppIcons::DrawIcon_Globe,      kSideMode_Web       },
         { "3D",       ProyecThor::UI::AppIcons::DrawIcon_Cube3D,     kSideMode_Model3D   },
         { "Lab",      ProyecThor::UI::AppIcons::DrawIcon_Formula,    kSideMode_Lab       },
@@ -381,8 +419,14 @@ static void RenderCategoryButtonsHorizontal(LibraryContext& ctx)
     };
 
     int sideCount = 0;
+    const bool isPro = ProyecThor::Core::AuthLicenseManager::Get().IsPro();
+    if (ctx.sideModeInt == kSideMode_Canva && !isPro) {
+        ctx.sideModeInt = kSideMode_Categories;
+    }
+
     for (const auto& sd : k_SideItems)
     {
+        if (sd.mode == kSideMode_Canva && !isPro) continue;
         if (sd.mode == kSideMode_Render && !sidebarSettings.showRender) continue;
         if (sd.mode == kSideMode_Web && !sidebarSettings.showWeb) continue;
         if (sd.mode == kSideMode_Model3D && !sidebarSettings.showModel3D) continue;
@@ -444,9 +488,16 @@ static void RenderCategoryButtonsHorizontal(LibraryContext& ctx)
     {
         const auto& it = k_MainItems[idx];
 
-        const bool active = it.isCategory
-            ? ((ctx.sideModeInt == kSideMode_Categories) && (ctx.currentCategoryInt == it.id))
-            : (ctx.sideModeInt == it.id);
+        bool active = false;
+        if (it.id == kCat_Playlists) {
+            active = (ctx.sideModeInt == kSideMode_Categories) && (ctx.currentCategoryInt == kCat_Songs) && ctx.showPlaylistsTab;
+        } else if (it.id == kCat_Songs) {
+            active = (ctx.sideModeInt == kSideMode_Categories) && (ctx.currentCategoryInt == kCat_Songs) && !ctx.showPlaylistsTab;
+        } else if (it.isCategory) {
+            active = (ctx.sideModeInt == kSideMode_Categories) && (ctx.currentCategoryInt == it.id);
+        } else {
+            active = (ctx.sideModeInt == it.id);
+        }
 
         if (idx > 0) ImGui::SameLine();
 
@@ -454,8 +505,14 @@ static void RenderCategoryButtonsHorizontal(LibraryContext& ctx)
                                                      it.label, it.drawIcon, active,
                                                      sidebarSettings.categoryColor[it.colorIndex]);
         if (clicked) {
-            if (it.isCategory) {
+            if (it.id == kCat_Playlists) {
+                ctx.currentCategoryInt = kCat_Songs;
+                ctx.showPlaylistsTab   = true;
+                ctx.sideModeInt        = kSideMode_Categories;
+                ctx.selectedIndex      = -1;
+            } else if (it.isCategory) {
                 ctx.currentCategoryInt = it.id;
+                ctx.showPlaylistsTab   = false;
                 ctx.sideModeInt        = kSideMode_Categories;
                 ctx.selectedIndex      = -1;
                 ctx.refreshList();
@@ -479,6 +536,7 @@ static void RenderCategoryButtonsHorizontal(LibraryContext& ctx)
     bool firstSide = true;
     for (const auto& sd : k_SideItems)
     {
+        if (sd.mode == kSideMode_Canva && !isPro) continue;
         if (sd.mode == kSideMode_Render && !sidebarSettings.showRender) continue;
         if (sd.mode == kSideMode_Web && !sidebarSettings.showWeb) continue;
         if (sd.mode == kSideMode_Model3D && !sidebarSettings.showModel3D) continue;
@@ -489,11 +547,13 @@ static void RenderCategoryButtonsHorizontal(LibraryContext& ctx)
         firstSide = false;
 
         const bool active = (ctx.sideModeInt == sd.mode);
-        int colorIdx = (sd.mode == kSideMode_Render) ? 8 : 9;
+        static const float kCanvaColor[4] = { 0.00f, 0.77f, 0.80f, 1.0f };
+        const float* btnCol = (sd.mode == kSideMode_Canva) ? kCanvaColor :
+                              sidebarSettings.categoryColor[(sd.mode == kSideMode_Render) ? 8 : 9];
 
         bool clicked = RenderSidebarButtonHorizontal(dl, storage, btnW, toolbarH, iconSz, effectiveLt,
                                                      sd.label, sd.drawIcon, active,
-                                                     sidebarSettings.categoryColor[colorIdx]);
+                                                     btnCol);
         if (clicked) {
             if (sd.mode == kSideMode_Picker) {
                 if (ctx.openPanelPicker) {

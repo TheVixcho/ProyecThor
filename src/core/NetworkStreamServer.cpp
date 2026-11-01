@@ -9,6 +9,7 @@
 
 #include "NetworkStreamServer.h"
 #include "httplib.h"
+#include "core/AuthLicenseManager.h"
 
 #include "stb_image_write.h"
 
@@ -439,6 +440,8 @@ std::string NetworkStreamServer::SnapshotToJSON(const StreamSnapshot& s) const
     auto B = [](bool v) -> const char* { return v ? "true" : "false"; };
 
   bool hiQ = (cfg.videoMode != StreamConfig::VideoMode::LowLatency);
+  bool isPro = Core::AuthLicenseManager::Get().IsPro();
+  bool effectiveSendBg = isPro ? cfg.sendBackground : true;
 
     std::ostringstream j;
     j << "{"
@@ -459,7 +462,8 @@ std::string NetworkStreamServer::SnapshotToJSON(const StreamSnapshot& s) const
       << "\"refW\":"          << s.refW                       << ","
       << "\"refH\":"          << s.refH                       << ","
       << "\"isBgVideo\":"     << B(s.isBgVideo)                << ","
-      << "\"hasFrame\":"      << B(s.hasFrame && cfg.sendBackground) << ","
+      << "\"hasFrame\":"      << B(s.hasFrame && effectiveSendBg) << ","
+      << "\"sendBackground\":"<< B(effectiveSendBg)           << ","
       << "\"highQuality\":"   << B(hiQ)                        << ","
       << "\"currentText\":\"" << escapeJSON(s.currentText)     << "\","
       << "\"textColor\":["
@@ -559,6 +563,16 @@ std::string NetworkStreamServer::BuildHTMLPage()
     overflow: hidden;
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
+  }
+  body.alpha-mode, body.alpha-mode #screen, body.alpha-mode #viewport {
+    background: transparent !important;
+    background-color: transparent !important;
+  }
+  body.alpha-mode #idle-overlay {
+    display: none !important;
+  }
+  body.alpha-mode #status-bar {
+    display: none !important;
   }
   #screen {
     position: relative;
@@ -764,6 +778,12 @@ function applyState(s) {
 
   ensureFontLoaded(s.fontVersion);
 
+  if (s.sendBackground === false) {
+    document.body.classList.add('alpha-mode');
+  } else {
+    document.body.classList.remove('alpha-mode');
+  }
+
   // Modo de video
   if (s.hasFrame) {
     if (s.highQuality && !highQuality) {
@@ -781,13 +801,15 @@ function applyState(s) {
     bgFrame.classList.add('visible');
     viewportEl.style.backgroundColor = 'transparent';
   } else {
-    // Sin frame: fondo de color sólido
+    // Sin frame: fondo de color sólido si sendBackground es true, o transparente si es false
     bgFrame.classList.remove('visible');
-    if (!s.isBgVideo) {
+    if (s.sendBackground !== false && !s.isBgVideo) {
       const r = Math.round(s.bgColor[0]*255);
       const g = Math.round(s.bgColor[1]*255);
       const b = Math.round(s.bgColor[2]*255);
       viewportEl.style.backgroundColor = `rgb(${r},${g},${b})`;
+    } else {
+      viewportEl.style.backgroundColor = 'transparent';
     }
   }
 

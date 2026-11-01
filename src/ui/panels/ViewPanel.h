@@ -1,3 +1,4 @@
+#include "core/settings/SettingsManager.h"
 #pragma once
 #include "../IPanel.h"
 #include "core/PresentationCore.h"
@@ -24,6 +25,21 @@ public:
     bool IsDetached() const { return m_IsDetached; }
     void SetDetached(bool detached);
 
+    void RenderOverlaysContent();
+    void RenderChatContent();
+    void RenderPadsContent(float w = 0.0f, float h = 0.0f);
+    void RenderPadEditorModal();
+    void SetFolderPlaylist(const std::vector<std::string>& vids) {
+        m_FolderPlaylistVideos = vids;
+        m_FolderPlaylistIndex = 0;
+    }
+    void ClearFolderPlaylist() {
+        m_FolderPlaylistVideos.clear();
+        m_FolderPlaylistIndex = 0;
+    }
+    void RenderClockContent();
+    void RenderTilesContent();
+
 private:
     UIManager*      m_UIManager        = nullptr;
     TeamChatPanel*  m_TeamChatPanelRef = nullptr;
@@ -41,11 +57,6 @@ private:
     static constexpr float kLiveTransportMinH = 160.0f;
 
     void RenderInlineTool(float w, float h);
-    void RenderOverlaysContent();
-    void RenderChatContent();
-    void RenderPadsContent();
-    void RenderClockContent();
-    void RenderTilesContent();
 
     void RenderNetworkBar(
         const ImVec2&                   p0,
@@ -73,6 +84,16 @@ private:
     bool        m_FocusLiveEditInput = false;
     double      m_LiveLyricsSavedFeedbackTime = 0.0;
     bool        m_IsDetached = false;
+
+    // ── Estado de Pads / Escenas Rápidas ──
+    int         m_EditingPadIndex = -1;
+    bool        m_ShowPadEditModal = false;
+    ProyecThor::Settings::PadSettings m_TempPadEdit;
+    int         m_LastActivatedPadIndex = -1;
+    double      m_LastPadActivatedFeedbackTime = 0.0;
+    std::string m_ActiveFeedbackName;
+    std::vector<std::string> m_FolderPlaylistVideos;
+    size_t      m_FolderPlaylistIndex = 0;
 };
 
 }

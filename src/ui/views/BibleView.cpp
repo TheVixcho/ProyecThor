@@ -28,6 +28,7 @@
 #endif
 #include "ui/framework/bin/StyleGeneralApp.h"
 #include "ui/framework/DesignSystem.h"
+#include "ui/panels/layers/LayersTheme.h"
 #include "ControlWidgets.h"
 
 namespace ProyecThor::UI {
@@ -2250,18 +2251,18 @@ void BibleView::RenderPreviewVerseGrid(const BookData& book, const ChapterData& 
 
             dl->PopClipRect();
 
-            // 3. Barra inferior (Footer profesional estilo ProPresenter / Holyrics)
+            // 3. Barra inferior (Footer con estilo de Fondos y colores del tema)
             ImU32 footerCol;
             if (isProjected) {
                 footerCol = ImGui::ColorConvertFloat4ToU32(ImVec4(r * 0.42f + 0.06f, g * 0.42f + 0.06f, bv * 0.42f + 0.06f, 0.98f));
             } else if (isSelected) {
-                footerCol = IM_COL32(42, 49, 78, 250);
+                footerCol = DS::AccentColorDim;
             } else {
-                footerCol = IM_COL32(20, 22, 29, 250);
+                footerCol = LPU32(LP::Surface0);
             }
 
             dl->AddRectFilled(footerMin, p_max, footerCol, rounding, ImDrawFlags_RoundCornersBottom);
-            dl->AddLine(footerMin, ImVec2(p_max.x, footerMin.y), IM_COL32(255, 255, 255, 24), 1.0f);
+            dl->AddLine(footerMin, ImVec2(p_max.x, footerMin.y), LPU32(LP::Border), 1.0f);
 
             float fMidY  = footerMin.y + footerH * 0.5f;
             float fTextY = footerMin.y + (footerH - ImGui::GetFontSize()) * 0.5f;
@@ -2323,12 +2324,12 @@ void BibleView::RenderPreviewVerseGrid(const BookData& book, const ChapterData& 
                             ImGui::ColorConvertFloat4ToU32(ImVec4(r, g, bv, 0.38f)), rounding + 1.5f, 0, 1.5f);
                 dl->AddRect(p_min, p_max, ImGui::ColorConvertFloat4ToU32(ImVec4(r, g, bv, 0.98f)), rounding, 0, 2.0f);
             } else if (isSelected) {
-                dl->AddRect(p_min, p_max, ColA(DS::AccentColor, 225), rounding, 0, 1.6f);
+                dl->AddRect(p_min, p_max, DS::AccentLight, rounding, 0, 1.8f);
             } else if (hovered) {
-                dl->AddRectFilled(p_min, slideMax, IM_COL32(255, 255, 255, 12), rounding, ImDrawFlags_RoundCornersTop);
-                dl->AddRect(p_min, p_max, IM_COL32(255, 255, 255, 85), rounding, 0, 1.2f);
+                dl->AddRectFilled(p_min, slideMax, DS::RowHoverFill, rounding, ImDrawFlags_RoundCornersTop);
+                dl->AddRect(p_min, p_max, LPU32(LP::BorderHov), rounding, 0, 1.2f);
             } else {
-                dl->AddRect(p_min, p_max, IM_COL32(255, 255, 255, 24), rounding, 0, 1.0f);
+                dl->AddRect(p_min, p_max, LPU32(LP::Border), rounding, 0, 1.0f);
             }
 
             // 5. Acciones rápidas flotantes al pasar el cursor (Favorito / Editar)

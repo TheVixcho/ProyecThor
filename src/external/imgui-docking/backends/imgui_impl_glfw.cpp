@@ -1390,6 +1390,14 @@ static void ImGui_ImplGlfw_CreateWindow(ImGuiViewport* viewport)
 #ifdef _WIN32
     viewport->PlatformHandleRaw = glfwGetWin32Window(vd->Window);
     ::SetPropA((HWND)viewport->PlatformHandleRaw, "IMGUI_BACKEND_DATA", bd);
+    if (bd->Window && vd->Window != bd->Window)
+    {
+        HWND mainHwnd = glfwGetWin32Window(bd->Window);
+        if (mainHwnd && (HWND)viewport->PlatformHandleRaw != mainHwnd)
+        {
+            ::SetWindowLongPtr((HWND)viewport->PlatformHandleRaw, GWLP_HWNDPARENT, (LONG_PTR)mainHwnd);
+        }
+    }
 #elif defined(__APPLE__)
     viewport->PlatformHandleRaw = (void*)glfwGetCocoaWindow(vd->Window);
 #endif
@@ -1474,6 +1482,22 @@ static void ImGui_ImplGlfw_ShowWindow(ImGuiViewport* viewport)
 #endif
 
     glfwShowWindow(vd->Window);
+#if defined(_WIN32)
+    ImGui_ImplGlfw_Data* bd = ImGui_ImplGlfw_GetBackendData();
+    if (bd && bd->Window)
+    {
+        HWND mainHwnd = glfwGetWin32Window(bd->Window);
+        if (mainHwnd && hwnd && hwnd != mainHwnd)
+        {
+            ::SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, (LONG_PTR)mainHwnd);
+        }
+    }
+    if (!(viewport->Flags & ImGuiViewportFlags_NoFocusOnAppearing))
+    {
+        ::BringWindowToTop(hwnd);
+        ::SetForegroundWindow(hwnd);
+    }
+#endif
 }
 
 static ImVec2 ImGui_ImplGlfw_GetWindowPos(ImGuiViewport* viewport)

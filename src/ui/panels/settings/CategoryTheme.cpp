@@ -599,26 +599,44 @@ void SettingsPanel::RenderCategoryTheme() {
         }
 
         ImGui::Dummy(ImVec2(0.0f, 10.0f));
-        ImGui::TextUnformatted("MÓDULOS DE HERRAMIENTAS ADICIONALES (BARRA INFERIOR)");
+        ImGui::TextUnformatted("MÓDULOS DE HERRAMIENTAS EN BARRA DE MAIN");
         ImGui::Separator();
         ImGui::Spacing();
 
+        auto& hubSettings = ProyecThor::Settings::SettingsManager::Get().GetSettings().stylesHub;
         auto& libSettings = ProyecThor::Settings::SettingsManager::Get().GetSettings().librarySidebar;
-        auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
 
-        if (ImGui::Checkbox("Conversor de Medios (Render) en barra inferior", &libSettings.showRender)) {
+        if (ImGui::Checkbox("Overlays en barra de Main", &hubSettings.showOverlays)) {
             ProyecThor::Settings::SettingsManager::Get().Save();
         }
-        if (ImGui::Checkbox("Navegador Web & HTML en barra inferior", &libSettings.showWeb)) {
+        if (ImGui::Checkbox("Estilos en barra de Main", &hubSettings.showStyles)) {
             ProyecThor::Settings::SettingsManager::Get().Save();
         }
-        if (ImGui::Checkbox("Modelos 3D en barra inferior", &libSettings.showModel3D)) {
+        if (ImGui::Checkbox("Shaders en barra de Main", &hubSettings.showShaders)) {
             ProyecThor::Settings::SettingsManager::Get().Save();
         }
-        if (ImGui::Checkbox("Laboratorio Matemático en barra inferior", &libSettings.showLab)) {
+        if (ImGui::Checkbox("Transiciones en barra de Main", &hubSettings.showTransitions)) {
             ProyecThor::Settings::SettingsManager::Get().Save();
         }
-        if (ImGui::Checkbox("Plugins y Extensiones en barra inferior", &libSettings.showPlugins)) {
+        if (ImGui::Checkbox("Anuncios en barra de Main", &hubSettings.showAnnouncements)) {
+            ProyecThor::Settings::SettingsManager::Get().Save();
+        }
+        if (ImGui::Checkbox("Captura en barra de Main", &hubSettings.showCapture)) {
+            ProyecThor::Settings::SettingsManager::Get().Save();
+        }
+        if (ImGui::Checkbox("Plugins y Extensiones en barra de Main", &libSettings.showPlugins)) {
+            ProyecThor::Settings::SettingsManager::Get().Save();
+        }
+        if (ImGui::Checkbox("Conversor de Medios (Render) en barra de Main", &libSettings.showRender)) {
+            ProyecThor::Settings::SettingsManager::Get().Save();
+        }
+        if (ImGui::Checkbox("Navegador Web & HTML en barra de Main", &libSettings.showWeb)) {
+            ProyecThor::Settings::SettingsManager::Get().Save();
+        }
+        if (ImGui::Checkbox("Modelos 3D en barra de Main", &libSettings.showModel3D)) {
+            ProyecThor::Settings::SettingsManager::Get().Save();
+        }
+        if (ImGui::Checkbox("Laboratorio Matemático en barra de Main", &libSettings.showLab)) {
             ProyecThor::Settings::SettingsManager::Get().Save();
         }
     }

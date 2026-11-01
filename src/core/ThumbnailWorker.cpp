@@ -1,5 +1,6 @@
 #include "ThumbnailWorker.h"
 #include "AppPaths.h"
+#include "MuninDRM.h"
 #include "stb_image.h"
 #include "stb_image_write.h"
 #include <vlc/vlc.h>
@@ -277,8 +278,22 @@ bool ThumbnailWorker::LoadThumbnailPixelsFromDisk(const std::string& path,
     if (!in.read(reinterpret_cast<char*>(raw.data()), fileSz))
         return false;
 
+    // Desencriptación en memoria si el archivo está protegido con MuninDRM
+    std::vector<uint8_t> decrypted;
+    const uint8_t* decodePtr = raw.data();
+    size_t decodeLen = raw.size();
+
+    if (MuninDRM::IsEncrypted(raw.data(), raw.size())) {
+        if (MuninDRM::DecryptBuffer(raw.data(), raw.size(), decrypted)) {
+            decodePtr = decrypted.data();
+            decodeLen = decrypted.size();
+        } else {
+            return false;
+        }
+    }
+
     int w = 0, h = 0, n = 0;
-    unsigned char* decoded = stbi_load_from_memory(raw.data(), static_cast<int>(raw.size()), &w, &h, &n, 4);
+    unsigned char* decoded = stbi_load_from_memory(decodePtr, static_cast<int>(decodeLen), &w, &h, &n, 4);
     if (!decoded || w <= 0 || h <= 0) {
         if (decoded) stbi_image_free(decoded);
         return false;

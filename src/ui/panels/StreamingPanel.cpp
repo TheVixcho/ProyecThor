@@ -1,5 +1,7 @@
 #include "StreamingPanel.h"
 #include "core/PresentationCore.h"
+#include "core/AuthLicenseManager.h"
+#include "ui/framework/UIManager.h"
 #include "SettingsManager.h"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -398,6 +400,7 @@ void StreamingPanel::RenderServerControl()
         ImGui::InvisibleButton("##b", btnSize);
         bool hoveredBtn = ImGui::IsItemHovered();
         bool clickedBtn = ImGui::IsItemClicked();
+        if (hoveredBtn) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
         ImGuiID bid    = ImGui::GetID("##b");
         float   hoverT = StreamAnimT(bid, 0xB3u, hoveredBtn, 14.0f);
@@ -413,9 +416,23 @@ void StreamingPanel::RenderServerControl()
         ImGui::PopID();
 
         if (clickedBtn) {
-            if (!on) core.ToggleNetworkStream(true, m_Port);
-            else     core.ToggleNetworkStream(false);
+            if (!on) {
+                m_StatusError.clear();
+                if (!core.ToggleNetworkStream(true, m_Port)) {
+                    m_StatusError = "No se pudo iniciar el servidor en el puerto " + std::to_string(m_Port) + ". Verifica que no esté en uso por otra aplicación.";
+                }
+            } else {
+                core.ToggleNetworkStream(false);
+                m_StatusError.clear();
+            }
         }
+    }
+
+    if (!m_StatusError.empty() && !on) {
+        ImGui::Spacing();
+        ImGui::PushStyleColor(ImGuiCol_Text, kRed);
+        ImGui::TextWrapped("%s", m_StatusError.c_str());
+        ImGui::PopStyleColor();
     }
     ImGui::Dummy(ImVec2(0.0f, 10.0f));
 }
@@ -423,18 +440,25 @@ void StreamingPanel::RenderServerControl()
 // ── RenderLayerSelector ───────────────────────────────────────────────────────
 void StreamingPanel::RenderLayerSelector()
 {
-    auto& core = Core::PresentationCore::Get();
-    bool  on   = core.IsStreamingNet();
-    float w    = ImGui::GetContentRegionAvail().x;
+    auto& core  = Core::PresentationCore::Get();
+    bool  on    = core.IsStreamingNet();
+    float w     = ImGui::GetContentRegionAvail().x;
+    const bool isPro = Core::AuthLicenseManager::Get().IsPro();
+
+    // Si no es PRO, garantizar que la capa Fondo esté siempre activa (Canal Alpha para OBS requiere PRO)
+    if (!isPro && !m_Config.sendBackground) {
+        m_Config.sendBackground = true;
+        m_ConfigDirty = true;
+    }
 
     SectionDivider("CAPAS A TRANSMITIR");
 
     bool dirty = false;
-    struct Row { const char* id; const char* name; const char* desc; bool* val; };
+    struct Row { const char* id; const char* name; const char* desc; bool* val; bool isProOnly; };
     Row rows[] = {
-        { "##cbg", "Fondo",   "Color sólido o cámara base", &m_Config.sendBackground },
-        { "##ctx", "Textos",  "Letras, Biblia y canciones", &m_Config.sendText       },
-        { "##cov", "Overlay", "Gráficos e imágenes superpuestas", &m_Config.sendOverlay    },
+        { "##cbg", "Fondo",   "Color sólido o cámara base (Desactivar para Canal Alpha / OBS)", &m_Config.sendBackground, true  },
+        { "##ctx", "Textos",  "Letras, Biblia y canciones",                                      &m_Config.sendText,       false },
+        { "##cov", "Overlay", "Gráficos e imágenes superpuestas",                                &m_Config.sendOverlay,    false },
     };
 
     // Reescrito con el mismo BeginChild de alto automático que Servidor y
@@ -480,6 +504,12 @@ void StreamingPanel::RenderLayerSelector()
 
         ImGui::SetCursorPosY(rowY + (rowH - ImGui::GetTextLineHeight()) * 0.5f);
         ImGui::TextUnformatted(row.name);
+        if (row.isProOnly) {
+            ImGui::SameLine(0.0f, 6.0f);
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.75f, 0.20f, 1.0f));
+            ImGui::TextUnformatted("[PRO]");
+            ImGui::PopStyleColor();
+        }
 
         ImGui::SameLine(descColX);
         ImGui::SetCursorPosY(rowY + (rowH - ImGui::GetTextLineHeight()) * 0.5f);
@@ -491,7 +521,21 @@ void StreamingPanel::RenderLayerSelector()
         ImGui::SetCursorPosY(rowY + (rowH - 20.0f) * 0.5f);
         char toggleId[16];
         snprintf(toggleId, sizeof(toggleId), "##tg%d", i);
-        if (DrawToggleSwitch(toggleId, *row.val)) { *row.val = !*row.val; dirty = true; }
+        if (DrawToggleSwitch(toggleId, *row.val)) {
+            if (row.isProOnly && *row.val == true && !isPro) {
+                // Al intentar desactivar el fondo para emitir sin fondo (Canal Alpha / OBS Overlay)
+                if (m_UIManager) {
+                    m_UIManager->ShowProFeatureModal(
+                        "Canal Alpha / Transmisión sin Fondo (Overlay OBS)",
+                        "La transmisión con canal alpha (sin fondo) para usar como overlay transparente en OBS Studio, vMix o consolas de video es una función exclusiva de ProyecThor for Professionals.\n\n"
+                        "En la versión estándar la transmisión LAN incluye el fondo completo. Activa tu suscripción Pro para desbloquear el canal alpha transparente."
+                    );
+                }
+            } else {
+                *row.val = !*row.val;
+                dirty = true;
+            }
+        }
 
         ImGui::SetCursorPosY(rowY + rowH);
         ImGui::Dummy(ImVec2(0.0f, 12.0f));
@@ -502,6 +546,38 @@ void StreamingPanel::RenderLayerSelector()
     ImGui::PopStyleColor(2);
 
     if (dirty) m_ConfigDirty = true;
+
+    // ── Aviso PRO de Canal Alpha / Overlay ──────────────────────────────
+    {
+        ImGui::Dummy(ImVec2(0.0f, 6.0f));
+        ImVec4 alertBorder = isPro ? ImVec4(0.25f, 0.55f, 1.0f, 0.35f) : ImVec4(0.95f, 0.75f, 0.20f, 0.45f);
+        ImVec4 alertBg     = isPro ? ImVec4(0.10f, 0.15f, 0.25f, 0.40f) : ImVec4(0.22f, 0.18f, 0.08f, 0.55f);
+
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, alertBg);
+        ImGui::PushStyleColor(ImGuiCol_Border, alertBorder);
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f, 10.0f));
+
+        ImGui::BeginChild("##alphaNoticeCard", ImVec2(w, 0.0f),
+            ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_Borders,
+            ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+        ImGui::TextColored(isPro ? ImVec4(0.4f, 0.8f, 1.0f, 1.0f) : ImVec4(0.95f, 0.80f, 0.25f, 1.0f),
+            isPro ? "★ MODO OVERLAY / CANAL ALPHA DISPONIBLE [PRO]" : "★ CANAL ALPHA Y OVERLAY OBS [PRO]");
+        ImGui::Spacing();
+        ImGui::PushStyleColor(ImGuiCol_Text, isPro ? kGrayText : ImVec4(0.90f, 0.90f, 0.92f, 1.0f));
+        if (isPro) {
+            ImGui::TextWrapped("Al desactivar la capa 'Fondo', la transmisión LAN emite la señal con canal alpha (fondo transparente) lista para incrustar como navegador en OBS Studio, vMix o consolas.");
+        } else {
+            ImGui::TextWrapped("La transmisión LAN estándar con fondo es 100%% gratuita. El uso de Canal Alpha (transmitir sin fondo para superponer textos directamente sobre video en OBS Studio) es exclusivo de ProyecThor for Professionals.");
+        }
+        ImGui::PopStyleColor();
+
+        ImGui::EndChild();
+        ImGui::PopStyleVar(3);
+        ImGui::PopStyleColor(2);
+    }
 
     ImGui::Dummy(ImVec2(0.0f, 15.0f));
     SectionDivider("RESOLUCIÓN Y CALIDAD");
@@ -867,6 +943,14 @@ void StreamingPanel::RenderURLSection()
 
         ImGui::SetCursorPosX(std::max((w - ts2.x) * 0.5f, 0.0f));
         ImGui::TextColored(kGrayDim, "%s", hint2);
+    }
+
+    // OBS Studio hint
+    {
+        ImGui::Dummy(ImVec2(0.0f, 6.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ColA(kGrayText, 0.70f));
+        ImGui::TextWrapped("Consejo para OBS Studio: añade una fuente 'Navegador' (Browser Source) con la URL anterior. Desactiva la capa 'Fondo' [PRO] para superponer letras directamente con fondo transparente (Canal Alpha).");
+        ImGui::PopStyleColor();
     }
 }
 

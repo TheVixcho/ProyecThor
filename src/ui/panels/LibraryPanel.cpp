@@ -1,5 +1,9 @@
 #include "LibraryPanel.h"
 
+#include "core/CanvaClient.h"
+#include "core/AuthLicenseManager.h"
+#include "ui/panels/capture/CapturePanel.h"
+#include "ui/panels/layers/LayersBgTab.h"
 #include "biblio/LibraryHelpers.h"
 #include "biblio/LibrarySidebar.h"
 #include "biblio/LibrarySongs.h"
@@ -288,6 +292,12 @@ void LibraryPanel::SetUIManager(UIManager* manager)
         m_PluginsPanel = std::make_unique<PluginsPanel>();
         m_PluginsPanel->SetUIManager(m_UIManagerRef);
     }
+    if (!m_CanvaPanel) {
+        m_CanvaPanel = std::make_unique<CanvaPanel>();
+        m_CanvaPanel->SetOnOpenMultimedia([this]() {
+            SelectCategory(LibraryCategory::Multimedia);
+        });
+    }
     if (!m_PanelPicker && m_UIManagerRef) {
         m_PanelPicker = std::make_unique<PanelPickerFullscreen>(this, m_UIManagerRef);
     }
@@ -409,10 +419,33 @@ void LibraryPanel::RefreshList()
         return;
     }
 
-    if (m_CurrentCategory == LibraryCategory::Audio) {
-        // Audio maneja su propio escaneo (AudioPanel::RefreshLibrary) en vez
-        // de usar m_Items.
+    if (m_CurrentCategory == LibraryCategory::Videos) {
         m_Items.clear();
+        Library::RefreshMultimediaLists();
+        for (const auto& it : Library::GetVideoList()) {
+            m_Items.push_back(it.filename);
+        }
+        LoadStreamURLs();
+        ForceListUpdate() = true;
+        return;
+    }
+
+    if (m_CurrentCategory == LibraryCategory::Images) {
+        m_Items.clear();
+        Library::RefreshMultimediaLists();
+        for (const auto& it : Library::GetImageList()) {
+            m_Items.push_back(it.filename);
+        }
+        ForceListUpdate() = true;
+        return;
+    }
+
+    if (m_CurrentCategory == LibraryCategory::Audio) {
+        m_Items.clear();
+        Library::RefreshMultimediaLists();
+        for (const auto& it : Library::GetAudioList()) {
+            m_Items.push_back(it.filename);
+        }
         ForceListUpdate() = true;
         return;
     }
@@ -660,6 +693,13 @@ void LibraryPanel::Render()
     // ahora.
     m_OClock.Update();
 
+    if (Core::CanvaClient::Get().ConsumeLibraryRefresh())
+    {
+        Library::RefreshMultimediaLists();
+        UI::BumpBackgroundsListRevision();
+        RefreshList();
+    }
+
     if (m_NeedsRefreshList.exchange(false))
     {
         RefreshList();
@@ -775,13 +815,30 @@ void LibraryPanel::Render()
             else
                 ImGui::TextDisabled("Reloj no disponible.");
         }
+        else if (m_SideMode == LibrarySideMode::Overlay)
+        {
+            if (m_OverlayTab) m_OverlayTab->Render();
+        }
         else if (m_SideMode == LibrarySideMode::Plugins)
         {
             if (m_PluginsPanel) m_PluginsPanel->Render();
         }
-        else if (m_CurrentCategory == LibraryCategory::Documents)
+        else if (m_SideMode == LibrarySideMode::Canva)
         {
-            Library::RenderDocumentSection(ctx, m_DocumentView);
+            if (!Core::AuthLicenseManager::Get().IsPro()) {
+                m_SideMode = LibrarySideMode::Categories;
+                Library::RenderSideList(ctx);
+            } else if (m_CanvaPanel) {
+                m_CanvaPanel->RenderContent(m_UIManagerRef ? &m_UIManagerRef->GetGlassRenderer() : nullptr);
+            }
+        }
+        else if (m_SideMode == LibrarySideMode::Capture)
+        {
+            if (auto* cap = Core::PresentationCore::Get().GetCapturePanelRef()) {
+                cap->RenderContent();
+            } else {
+                ImGui::TextDisabled("Módulo de Captura no disponible.");
+            }
         }
         else
         {

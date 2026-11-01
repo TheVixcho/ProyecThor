@@ -8,6 +8,7 @@
 #include "ui/panels/biblio/LibraryHelpers.h"
 #include "ui/panels/biblio/LibraryMultimedia.h"
 #include "ui/framework/FilePicker.h"
+#include "ui/framework/bin/StyleGeneralApp.h"
 #include <atomic>
 #include <unordered_set>
 #include <imgui.h>
@@ -721,27 +722,61 @@ void LayersBgTab::SelectFolder(const std::string& folderKey) {
 // ─────────────────────────────────────────────────────────────────────────────
 void LayersBgTab::RenderTopBar() {
     const std::string title = m_CurrentBgFolder.empty() ? "Todos" : m_CurrentBgFolder;
+    const float initCursorX = ImGui::GetCursorPosX();
+    const float availW      = ImGui::GetContentRegionAvail().x;
+    const float btnSz       = 28.0f;
+    const float zoomW       = 78.0f;
+    const float gap         = 6.0f;
+    const float padX        = 14.0f; // Margen lateral izquierdo y derecho
 
+    float collapseBtnW   = m_OnCollapseCallback ? 92.0f : 0.0f;
+    float rightControlsW = zoomW + btnSz * 4.0f + gap * 5.0f +
+                           (m_OnCollapseCallback ? (collapseBtnW + gap * 2.0f) : 0.0f);
+
+    const float startX          = initCursorX + padX;
+    const float effectiveAvailW = std::max(0.0f, availW - padX * 2.0f);
+
+    // ── 1. Buscador estilo Librería (DS::BtnDefaultFill, DS::RadiusMedium) ──
+    float searchW = std::clamp(effectiveAvailW - rightControlsW - 130.0f, 130.0f, 240.0f);
+
+    ImGui::SetCursorPosX(startX);
+
+    ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  LP::AccentDim);
+    ImGui::PushStyleColor(ImGuiCol_Border,         LP::Border);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(10.0f, 5.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+    ImGui::SetNextItemWidth(searchW);
+    ImGui::InputTextWithHint("##bgSearch", "Buscar fondo...", m_SearchBuffer, sizeof(m_SearchBuffer));
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(4);
+
+    // Ícono de búsqueda superpuesto si hay ícono disponible
+    if (StyleGeneralApp::Icons.count("search") > 0 && StyleGeneralApp::Icons["search"].textureID) {
+        ImVec2 iMin = ImGui::GetItemRectMin();
+        ImVec2 iMax = ImGui::GetItemRectMax();
+        float bH = iMax.y - iMin.y;
+        float pad = 5.0f;
+        ImGui::GetWindowDrawList()->AddImage(
+            StyleGeneralApp::Icons["search"].textureID,
+            { iMax.x - bH + pad, iMin.y + pad },
+            { iMax.x - pad,       iMax.y - pad },
+            { 0, 0 }, { 1, 1 }, LPU32(LP::TextMuted));
+    }
+
+    // ── 2. Carpeta actual (sin repetir "Fondos", sólo el nombre de la carpeta) ──
+    ImGui::SameLine(0, 8.0f);
     ImGui::AlignTextToFramePadding();
-    ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
-    ImGui::TextUnformatted("Fondos");
-    ImGui::PopStyleColor();
-    ImGui::SameLine(0, 6);
-    ImGui::PushStyleColor(ImGuiCol_Text, LP::TextMuted);
-    ImGui::TextUnformatted("\xE2\x80\xBA"); // ›
-    ImGui::PopStyleColor();
-    ImGui::SameLine(0, 6);
-    ImGui::PushStyleColor(ImGuiCol_Text, LP::Gold);
-    ImGui::TextUnformatted(title.c_str());
+    ImGui::PushStyleColor(ImGuiCol_Text, LP::Text);
+    ImGui::Text("📁 %s", title.c_str());
     ImGui::PopStyleColor();
 
-    // ── Botones a la derecha: zoom, grid/lista, + carpeta, + importar ───────
-    const float btnSz = 26.0f;
-    const float zoomW = 76.0f;
-    const float gap   = 4.0f;
-    const float rowW  = zoomW + gap + btnSz*4 + gap*4;
-    const float avail = ImGui::GetWindowContentRegionMax().x;
-    ImGui::SameLine(std::max(ImGui::GetCursorPosX(), avail - rowW));
+    // ── 3. Controles a la derecha (Zoom, Grid/List, +Carpeta, +Importar, Colapsar) ──
+    const float targetRightX   = initCursorX + availW - padX - rightControlsW;
+    const float rightControlsX = std::max(ImGui::GetCursorPosX(), targetRightX);
+    ImGui::SameLine(rightControlsX);
 
     if (m_GridMode) {
         LPZoomSlider("##bgzoom", &m_ThumbZoom, 0.65f, 1.8f, zoomW);
@@ -758,7 +793,7 @@ void LayersBgTab::RenderTopBar() {
                 ImVec2 o = { c.x - cs - g*0.5f + cI*(cs+g), c.y - cs - g*0.5f + rI*(cs+g) };
                 dl->AddRectFilled(o, {o.x+cs, o.y+cs}, col, 1.5f);
             }
-        }, "Vista en cuadricula", {btnSz,btnSz}, m_GridMode))
+        }, "Vista en cuadrícula", {btnSz,btnSz}, m_GridMode))
         m_GridMode = true;
     ImGui::SameLine(0, gap);
     if (LPCornerIconBtn("##listm", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
@@ -777,6 +812,22 @@ void LayersBgTab::RenderTopBar() {
     if (LPCornerIconBtn("##import", LPDrawPlus, "Importar fondo", {btnSz,btnSz}, true)) {
         ImportBackground();
     }
+
+    if (m_OnCollapseCallback) {
+        ImGui::SameLine(0, gap*2);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 5.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button, LP::Surface2);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, LP::Surface3);
+        ImGui::PushStyleColor(ImGuiCol_Border, LP::Border);
+        ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
+        if (ImGui::Button("\xE2\x96\xBC Colapsar", ImVec2(collapseBtnW, btnSz))) {
+            m_OnCollapseCallback();
+        }
+        ImGui::PopStyleColor(4);
+        ImGui::PopStyleVar(3);
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -791,27 +842,50 @@ void LayersBgTab::RenderSidebarItem(const std::string& label, const std::string&
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
     bool hovered = ImGui::IsMouseHoveringRect(pos, {pos.x+w, pos.y+rowH});
-    float t = LPHoverLerp(ImGui::GetID("##hov"), hovered);
 
+    // Fondo y barra de acento estilo Librería (DS::RowSelectedFill / DS::RowSelectedBar)
+    ImU32 bgCol = selected ? DS::RowSelectedFill : (hovered ? DS::RowHoverFill : 0);
+    if (bgCol) {
+        dl->AddRectFilled(pos, {pos.x + w, pos.y + rowH}, bgCol, DS::RadiusSmall);
+    }
     if (selected) {
-        ImVec4 bg = ImVec4(LP::Accent.x, LP::Accent.y, LP::Accent.z, 0.16f);
-        dl->AddRectFilled(pos, {pos.x+w, pos.y+rowH}, LPU32(bg), 5.0f);
-        dl->AddRectFilled(pos, {pos.x+2.5f, pos.y+rowH}, LPU32(LP::Accent), 2.0f);
-    } else if (t > 0.01f) {
-        dl->AddRectFilled(pos, {pos.x+w, pos.y+rowH}, LPU32(ImVec4(1,1,1,0.05f*t)), 5.0f);
+        dl->AddRectFilled(pos, {pos.x + 3.0f, pos.y + rowH}, DS::RowSelectedBar, 1.5f);
     }
 
-    ImU32 iconCol = selected ? LPU32(LP::Accent) : LPU32(ImVec4(LP::TextMuted.x, LP::TextMuted.y, LP::TextMuted.z, 0.55f+0.45f*t));
-    LPDrawFolderGlyph(dl, {pos.x + 15.0f, pos.y + rowH*0.5f}, 7.0f, iconCol);
+    // Ícono de carpeta
+    ImU32 iconCol = selected ? DS::RowSelectedBar : (hovered ? LPU32(LP::Text) : LPU32(LP::TextMuted));
+    LPDrawFolderGlyph(dl, {pos.x + 14.0f, pos.y + rowH * 0.5f}, 6.5f, iconCol);
 
-    std::string dn = label.length() > 14 ? label.substr(0,12)+"..." : label;
-    ImU32 textCol = selected ? LPU32(LP::Text) : LPU32(ImVec4(LP::TextSub.x, LP::TextSub.y, LP::TextSub.z, 0.75f+0.25f*t));
-    dl->AddText({pos.x + 28.0f, pos.y + (rowH - ImGui::GetTextLineHeight())*0.5f}, textCol, dn.c_str());
+    // Texto con elipse dinámica
+    float rightReserved = 8.0f;
+    if (count > 0) {
+        std::string cs = std::to_string(count);
+        rightReserved += ImGui::CalcTextSize(cs.c_str()).x + 12.0f;
+    }
+    float maxTextW = std::max(20.0f, w - 26.0f - rightReserved);
 
+    std::string dn = label;
+    if (ImGui::CalcTextSize(dn.c_str()).x > maxTextW) {
+        while (dn.length() > 3 && ImGui::CalcTextSize((dn + "...").c_str()).x > maxTextW) {
+            dn.pop_back();
+        }
+        dn += "...";
+    }
+
+    ImU32 textCol = selected ? DS::TextPrimary : (hovered ? LPU32(LP::Text) : LPU32(LP::TextSub));
+    dl->AddText({pos.x + 26.0f, pos.y + (rowH - ImGui::GetTextLineHeight()) * 0.5f}, textCol, dn.c_str());
+
+    // Badge píldora con contador
     if (count > 0) {
         std::string cs = std::to_string(count);
         ImVec2 cSz = ImGui::CalcTextSize(cs.c_str());
-        dl->AddText({pos.x + w - cSz.x - 8.0f, pos.y + (rowH - cSz.y)*0.5f}, LPU32(LP::TextMuted), cs.c_str());
+        float badgeW = cSz.x + 10.0f;
+        float badgeH = 17.0f;
+        ImVec2 badgePos = { pos.x + w - badgeW - 6.0f, pos.y + (rowH - badgeH) * 0.5f };
+        dl->AddRectFilled(badgePos, { badgePos.x + badgeW, badgePos.y + badgeH },
+                          selected ? LPU32(LP::Surface2) : LPU32(LP::Surface1), 4.0f);
+        dl->AddText({ badgePos.x + 5.0f, badgePos.y + (badgeH - cSz.y) * 0.5f },
+                    selected ? LPU32(LP::Text) : LPU32(LP::TextMuted), cs.c_str());
     }
 
     ImGui::InvisibleButton("##sfibtn", {w, rowH});
@@ -896,7 +970,8 @@ void LayersBgTab::RenderFolderChips() {
         }
     };
 
-    chip("Todos", "", rootCount, m_CurrentBgFolder.empty());
+    int totalCount = static_cast<int>(m_AllBackgrounds.size());
+    chip("Todos", "", totalCount, m_CurrentBgFolder.empty());
     for (const auto& fn : m_BgFolders) {
         int cnt = 0;
         for (const auto& bg : m_AllBackgrounds) if (bg.folder == fn) cnt++;
@@ -908,14 +983,12 @@ void LayersBgTab::RenderFolderChips() {
 
 void LayersBgTab::RenderFolderSidebar(float w, float h) {
     (void)h;
-    int rootCount = 0;
-    for (const auto& bg : m_AllBackgrounds) if (bg.folder.empty()) rootCount++;
+    int totalCount = static_cast<int>(m_AllBackgrounds.size());
 
-    ImGui::Dummy({w, 4.0f});
-    RenderSidebarItem("Todos", "", rootCount, m_CurrentBgFolder.empty(), w);
+    RenderSidebarItem("Todos", "", totalCount, m_CurrentBgFolder.empty(), w);
 
     if (!m_BgFolders.empty()) {
-        ImGui::Dummy({w, 4.0f});
+        ImGui::Dummy({w, 2.0f});
         for (const auto& fn : m_BgFolders) {
             int cnt = 0;
             for (const auto& bg : m_AllBackgrounds) if (bg.folder == fn) cnt++;
@@ -1143,21 +1216,40 @@ void LayersBgTab::RenderContentArea(float w, float h) {
         (presState.bgType == Core::PresentationState::BackgroundType::Video) &&
         !presState.bgPath.empty();
 
+    std::string searchLower = m_SearchBuffer;
+    for (char& c : searchLower) c = (char)::tolower((unsigned char)c);
+
     std::vector<const BgEntry*> files;
-    for (const auto& bg : m_AllBackgrounds) if (bg.folder == m_CurrentBgFolder) files.push_back(&bg);
+    for (const auto& bg : m_AllBackgrounds) {
+        if (!m_CurrentBgFolder.empty() && bg.folder != m_CurrentBgFolder) continue;
+
+        if (!searchLower.empty()) {
+            std::string nameLower = bg.name;
+            for (char& c : nameLower) c = (char)::tolower((unsigned char)c);
+            if (nameLower.find(searchLower) == std::string::npos) continue;
+        }
+        files.push_back(&bg);
+    }
 
     if (files.empty()) {
-        ImGui::Dummy({0,16});
+        ImGui::Dummy({0, 16});
         ImVec2 p = ImGui::GetCursorScreenPos();
-        ImGui::GetWindowDrawList()->AddRectFilled(p,{p.x+w,p.y+64},LPU32(LP::Surface1),10.0f);
-        ImGui::Dummy({0,12});
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddRectFilled(p, {p.x + w, p.y + 64}, LPU32(LP::Surface1), DS::RadiusMedium);
+        dl->AddRect(p, {p.x + w, p.y + 64}, LPU32(LP::Border), DS::RadiusMedium);
+        ImGui::Dummy({0, 20});
         ImGui::PushStyleColor(ImGuiCol_Text, LP::TextMuted);
-        const char* msg = m_CurrentBgFolder.empty()
-            ? "Sin fondos aun. Usa el botón + de arriba para importar."
-            : "Esta carpeta esta vacia.";
-        float tw = ImGui::CalcTextSize(msg).x;
-        ImGui::SetCursorPosX(std::max(0.0f, (w-tw)*0.5f));
-        ImGui::Text("%s", msg);
+        std::string msg;
+        if (!searchLower.empty()) {
+            msg = "No se encontraron fondos que coincidan con \"" + std::string(m_SearchBuffer) + "\".";
+        } else if (m_CurrentBgFolder.empty()) {
+            msg = "Sin fondos aun. Usa el botón '+' de arriba para importar.";
+        } else {
+            msg = "La carpeta \"" + m_CurrentBgFolder + "\" está vacía.";
+        }
+        float tw = ImGui::CalcTextSize(msg.c_str()).x;
+        ImGui::SetCursorPosX(std::max(0.0f, (w - tw) * 0.5f));
+        ImGui::Text("%s", msg.c_str());
         ImGui::PopStyleColor();
         return;
     }
@@ -1262,6 +1354,7 @@ void LayersBgTab::RenderHoldPreview() {
 //  sidebar de carpetas a la izquierda + contenido al centro.
 // ─────────────────────────────────────────────────────────────────────────────
 void LayersBgTab::Render() {
+    if (!this) return;
     if (m_SeenBgRevision != GetBackgroundsListRevision()) {
         ReloadList();
     }
@@ -1275,20 +1368,24 @@ void LayersBgTab::Render() {
     m_JustEnteredFolder = false;
     m_ContentFade = LPApproach(m_ContentFade, 1.0f, 9.0f);
 
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
     RenderTopBar();
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
     // Aviso chico y no-bloqueante: mientras el worker todavia tiene videos
     // por decodificar, se avisa sin frenar nada (las tarjetas ya visibles
     // siguen andando, esto es solo informativo).
     if (size_t pending = m_ThumbWorker.PendingCount(); pending > 0) {
         ImGui::Spacing();
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 14.0f);
         ImGui::PushStyleColor(ImGuiCol_Text, LP::TextMuted);
         ImGui::Text("Generando miniaturas... (%zu restantes)", pending);
         ImGui::PopStyleColor();
     }
 
-    ImGui::Spacing();
+    ImGui::Dummy(ImVec2(0.0f, 2.0f));
     LPSeparatorLine();
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
     const float totalW = ImGui::GetContentRegionAvail().x;
     const float totalH = ImGui::GetContentRegionAvail().y;
@@ -1312,22 +1409,23 @@ void LayersBgTab::Render() {
     }
     else
     {
-        const float sidebarW = 116.0f;
+        const float sidebarW = 145.0f;
 
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0,0,0,0));
-        ImGui::BeginChild("##bgSidebar", ImVec2(sidebarW, totalH), false,
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, LP::Surface0);
+        ImGui::PushStyleColor(ImGuiCol_Border,  LP::Border);
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, DS::RadiusMedium);
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f, 6.0f));
+
+        ImGui::BeginChild("##bgSidebar", ImVec2(sidebarW, totalH), true,
                           ImGuiWindowFlags_NoScrollbar);
-        RenderFolderSidebar(sidebarW, totalH);
+        RenderFolderSidebar(sidebarW - 8.0f, totalH);
         ImGui::EndChild();
-        ImGui::PopStyleColor();
 
-        ImGui::SameLine();
-        {
-            ImVec2 p = ImGui::GetCursorScreenPos();
-            ImGui::GetWindowDrawList()->AddLine({p.x, p.y}, {p.x, p.y+totalH}, LPU32(LP::Border), 1.0f);
-            ImGui::Dummy(ImVec2(1.0f, totalH));
-        }
-        ImGui::SameLine();
+        ImGui::PopStyleVar(3);
+        ImGui::PopStyleColor(2);
+
+        ImGui::SameLine(0, 6.0f);
 
         ImGui::BeginChild("##bgContent", ImVec2(0, totalH), false);
         ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * m_ContentFade);

@@ -1,5 +1,8 @@
 #include "SettingsPanel.h"
 #include "SettingsManager.h"
+#include "core/PresentationCore.h"
+#include "ui/views/OClock.h"
+#include "ui/framework/UIManager.h"
 #include "ui/panels/OSCPanel.h"
 #include "ui/panels/BroadcastPanel.h"
 #include "ui/panels/StreamingPanel.h"
@@ -83,6 +86,19 @@ void SettingsPanel::RenderCategoryConnections() {
             m_OSCPanelRef->RenderContent();
         else
             ImGui::TextDisabled("OSC no disponible.");
+    }
+
+    ImGui::Spacing();
+
+    if (SectionTitle("Reloj")) {
+        if (auto* clk = Core::PresentationCore::Get().GetOClockRef()) {
+            if (m_UIManagerRef)
+                clk->Render(m_UIManagerRef->GetGlassRenderer());
+            else
+                ImGui::TextDisabled("Renderizador de reloj no disponible.");
+        } else {
+            ImGui::TextDisabled("Reloj no disponible.");
+        }
     }
 }
 

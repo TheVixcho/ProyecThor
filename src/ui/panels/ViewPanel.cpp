@@ -1,3 +1,4 @@
+#include "ui/framework/FilePicker.h"
 #include "ViewPanel.h"
 #include "UIManager.h"
 #include "DesignSystem.h"
@@ -6,6 +7,7 @@
 #include "core/AuthLicenseManager.h"
 #include "core/settings/SettingsManager.h"
 #include "ui/views/Announcements.h"
+#include "ui/views/Audio.h"
 #include "ui/views/OClock.h"
 #include "capture/CapturePanel.h"
 #include "TeamChatPanel.h"
@@ -396,6 +398,140 @@ bool QuickActionButton(const char* id, const char* iconKey, DrawIconFn vectorIco
     return clicked;
 }
 
+void DrawIcon_FolderLoop(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = std::max(1.2f, sz * 0.07f);
+    ImVec2 p0 = AppIcons::IcPt(o, sz, 0.12f, 0.26f);
+    ImVec2 p1 = AppIcons::IcPt(o, sz, 0.88f, 0.82f);
+    // Pestaña superior de carpeta
+    ImVec2 tab[4] = {
+        AppIcons::IcPt(o, sz, 0.12f, 0.28f),
+        AppIcons::IcPt(o, sz, 0.18f, 0.16f),
+        AppIcons::IcPt(o, sz, 0.42f, 0.16f),
+        AppIcons::IcPt(o, sz, 0.48f, 0.26f)
+    };
+    dl->AddPolyline(tab, 4, col, ImDrawFlags_None, thick);
+    dl->AddRect(p0, p1, col, sz * 0.06f, ImDrawFlags_RoundCornersAll, thick);
+
+    // Triángulo Play en el interior
+    dl->AddTriangleFilled(
+        AppIcons::IcPt(o, sz, 0.43f, 0.41f),
+        AppIcons::IcPt(o, sz, 0.43f, 0.67f),
+        AppIcons::IcPt(o, sz, 0.64f, 0.54f), col);
+}
+
+void DrawIcon_PlusKey(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = std::max(1.4f, sz * 0.10f);
+    ImVec2 c = { o.x + sz * 0.5f, o.y + sz * 0.5f };
+    float r = sz * 0.34f;
+    dl->AddLine({ c.x - r, c.y }, { c.x + r, c.y }, col, thick);
+    dl->AddLine({ c.x, c.y - r }, { c.x, c.y + r }, col, thick);
+}
+
+void DrawIcon_CaptureSnap(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = std::max(1.2f, sz * 0.08f);
+    float m = 0.14f, b = 0.32f;
+    // Esquinas tipo visor broadcast [ + ]
+    dl->AddLine(AppIcons::IcPt(o, sz, m, b), AppIcons::IcPt(o, sz, m, m), col, thick);
+    dl->AddLine(AppIcons::IcPt(o, sz, m, m), AppIcons::IcPt(o, sz, b, m), col, thick);
+
+    dl->AddLine(AppIcons::IcPt(o, sz, 1.0f - b, m), AppIcons::IcPt(o, sz, 1.0f - m, m), col, thick);
+    dl->AddLine(AppIcons::IcPt(o, sz, 1.0f - m, m), AppIcons::IcPt(o, sz, 1.0f - m, b), col, thick);
+
+    dl->AddLine(AppIcons::IcPt(o, sz, m, 1.0f - b), AppIcons::IcPt(o, sz, m, 1.0f - m), col, thick);
+    dl->AddLine(AppIcons::IcPt(o, sz, m, 1.0f - m), AppIcons::IcPt(o, sz, b, 1.0f - m), col, thick);
+
+    dl->AddLine(AppIcons::IcPt(o, sz, 1.0f - b, 1.0f - m), AppIcons::IcPt(o, sz, 1.0f - m, 1.0f - m), col, thick);
+    dl->AddLine(AppIcons::IcPt(o, sz, 1.0f - m, 1.0f - m), AppIcons::IcPt(o, sz, 1.0f - m, 1.0f - b), col, thick);
+
+    // Cruz central
+    dl->AddLine(AppIcons::IcPt(o, sz, 0.36f, 0.50f), AppIcons::IcPt(o, sz, 0.64f, 0.50f), col, thick);
+    dl->AddLine(AppIcons::IcPt(o, sz, 0.50f, 0.36f), AppIcons::IcPt(o, sz, 0.50f, 0.64f), col, thick);
+}
+
+void DrawIcon_Trash(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = std::max(1.2f, sz * 0.075f);
+    dl->AddLine(AppIcons::IcPt(o, sz, 0.18f, 0.26f), AppIcons::IcPt(o, sz, 0.82f, 0.26f), col, thick);
+    dl->AddLine(AppIcons::IcPt(o, sz, 0.38f, 0.16f), AppIcons::IcPt(o, sz, 0.62f, 0.16f), col, thick);
+    dl->AddRect(AppIcons::IcPt(o, sz, 0.26f, 0.26f), AppIcons::IcPt(o, sz, 0.74f, 0.84f),
+                col, sz * 0.05f, ImDrawFlags_RoundCornersBottom, thick);
+    dl->AddLine(AppIcons::IcPt(o, sz, 0.42f, 0.40f), AppIcons::IcPt(o, sz, 0.42f, 0.70f), col, thick * 0.85f);
+    dl->AddLine(AppIcons::IcPt(o, sz, 0.58f, 0.40f), AppIcons::IcPt(o, sz, 0.58f, 0.70f), col, thick * 0.85f);
+}
+
+void DrawIcon_PlayTri(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    dl->AddTriangleFilled(
+        AppIcons::IcPt(o, sz, 0.26f, 0.18f),
+        AppIcons::IcPt(o, sz, 0.26f, 0.82f),
+        AppIcons::IcPt(o, sz, 0.80f, 0.50f), col);
+}
+
+void DrawIcon_CloseX(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = std::max(1.3f, sz * 0.09f);
+    dl->AddLine(AppIcons::IcPt(o, sz, 0.24f, 0.24f), AppIcons::IcPt(o, sz, 0.76f, 0.76f), col, thick);
+    dl->AddLine(AppIcons::IcPt(o, sz, 0.76f, 0.24f), AppIcons::IcPt(o, sz, 0.24f, 0.76f), col, thick);
+}
+
+bool DrawToggleSwitch(const char* id, bool* v, const ImVec4& accent)
+{
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    const float w = 30.0f;
+    const float h = 16.0f;
+    const float r = h * 0.5f;
+
+    bool clicked = ImGui::InvisibleButton(id, ImVec2(w, h));
+    if (clicked) *v = !(*v);
+    bool hovered = ImGui::IsItemHovered();
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImU32 trackCol = *v
+        ? ImGui::ColorConvertFloat4ToU32(ImVec4(accent.x, accent.y, accent.z, hovered ? 0.95f : 0.82f))
+        : (hovered ? IM_COL32(62, 68, 84, 255) : IM_COL32(42, 46, 58, 255));
+    dl->AddRectFilled(p, { p.x + w, p.y + h }, trackCol, r);
+    dl->AddRect(p, { p.x + w, p.y + h }, IM_COL32(255, 255, 255, *v ? 45 : 22), r);
+
+    float knobX = *v ? (p.x + w - r) : (p.x + r);
+    dl->AddCircleFilled({ knobX, p.y + r }, r - 2.2f, IM_COL32(250, 252, 255, 255), 16);
+    return clicked;
+}
+
+std::string TruncateUTF8ToWidth(ImFont* font, float fontSize, const std::string& s, float maxW)
+{
+    if (s.empty() || maxW <= 4.0f) return "";
+    if (font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, s.c_str()).x <= maxW) return s;
+
+    const char* ell = "..";
+    float ellW = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, ell).x;
+    if (ellW >= maxW) return "";
+
+    size_t pos = s.size();
+    while (pos > 0) {
+        --pos;
+        while (pos > 0 && ((unsigned char)s[pos] & 0xC0) == 0x80) --pos;
+        std::string cand = s.substr(0, pos) + ell;
+        if (font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, cand.c_str()).x <= maxW) {
+            return cand;
+        }
+    }
+    return "";
+}
+
+static constexpr float kPadPalette[8][4] = {
+    { 0.94f, 0.30f, 0.42f, 1.0f }, // Coral / Live
+    { 0.26f, 0.56f, 0.98f, 1.0f }, // Azul
+    { 0.18f, 0.80f, 0.52f, 1.0f }, // Esmeralda
+    { 0.96f, 0.66f, 0.18f, 1.0f }, // Ámbar
+    { 0.64f, 0.38f, 0.96f, 1.0f }, // Violeta
+    { 0.14f, 0.76f, 0.88f, 1.0f }, // Cian
+    { 0.90f, 0.34f, 0.78f, 1.0f }, // Magenta
+    { 0.42f, 0.50f, 0.96f, 1.0f }, // Índigo
+};
+
 using PadIconDrawFn = void(*)(ImDrawList*, ImVec2, float, ImU32);
 struct PadIconEntry { const char* name; PadIconDrawFn draw; };
 
@@ -405,16 +541,21 @@ static const PadIconEntry kPadIcons[] = {
     { "Capas",      AppIcons::DrawIcon_Layers    },
     { "Paleta",     AppIcons::DrawIcon_Palette   },
     { "Overlay",    AppIcons::DrawIcon_Overlay   },
-    { "Tipografia", AppIcons::DrawIcon_TextAa    },
+    { "Tipografía", AppIcons::DrawIcon_TextAa    },
     { "Transición", AppIcons::DrawIcon_Swap      },
-    { "Shader",     AppIcons::DrawIcon_Shader    },
-    { "Home",       HomeIcons::DrawIcon_Home     },
+    { "Efecto",     AppIcons::DrawIcon_Shader    },
+    { "Inicio",     HomeIcons::DrawIcon_Home     },
     { "Reloj",      HomeIcons::DrawIcon_Clock    },
     { "Anuncios",   HomeIcons::DrawIcon_Megaphone},
     { "Notas",      HomeIcons::DrawIcon_Notepad  },
-    { "Camara",     HomeIcons::DrawIcon_Camera   },
+    { "Cámara",     HomeIcons::DrawIcon_Camera   },
     { "Red",        HomeIcons::DrawIcon_Broadcast},
     { "Chat",       HomeIcons::DrawIcon_Chat     },
+    { "Carpeta",    DrawIcon_FolderLoop          },
+    { "Imagen",     AppIcons::DrawIcon_Image     },
+    { "Destello",   HomeIcons::DrawIcon_Sparkle  },
+    { "Audio",      AppIcons::DrawIcon_Disc      },
+    { "Proyector",  AppIcons::DrawIcon_Projector },
 };
 static constexpr int kPadIconCount = (int)(sizeof(kPadIcons) / sizeof(kPadIcons[0]));
 
@@ -427,8 +568,8 @@ bool RenderPadIconGrid(int& iconIndex)
 {
     bool changed = false;
     const int   cols    = 5;
-    const float cellSz  = 34.0f;
-    const float spacing = 6.0f;
+    const float cellSz  = 32.0f;
+    const float spacing = 5.0f;
 
     for (int i = 0; i < kPadIconCount; i++)
     {
@@ -436,20 +577,24 @@ bool RenderPadIconGrid(int& iconIndex)
 
         const bool sel = (i == iconIndex);
         ImGui::PushID(i);
-        ImGui::PushStyleColor(ImGuiCol_Button, sel ? MT::k_PrevBtn : ImVec4(1,1,1,0.04f));
+        ImGui::PushStyleColor(ImGuiCol_Button, sel ? MT::k_PrevBtn : ImVec4(1, 1, 1, 0.05f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, MT::k_PrevBtnHov);
         ImGui::PushStyleColor(ImGuiCol_ButtonActive,  MT::k_PrevBtnAct);
+        ImGui::PushStyleColor(ImGuiCol_Border, sel ? ImVec4(0.45f, 0.72f, 1.0f, 0.85f) : ImVec4(1, 1, 1, 0.08f));
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
 
         bool clicked = ImGui::Button("##padIcon", ImVec2(cellSz, cellSz));
         ImVec2 p = ImGui::GetItemRectMin();
         ImVec2 s = ImGui::GetItemRectSize();
-        float  iconSz = cellSz * 0.55f;
+        float  iconSz = cellSz * 0.54f;
         kPadIcons[i].draw(ImGui::GetWindowDrawList(),
-                          { p.x + (s.x - iconSz) * 0.5f, p.y + (s.y - iconSz) * 0.5f }, iconSz, ImGui::GetColorU32(ImVec4(1,1,1,0.92f)));
+                          { p.x + (s.x - iconSz) * 0.5f, p.y + (s.y - iconSz) * 0.5f },
+                          iconSz,
+                          sel ? IM_COL32(255, 255, 255, 255) : IM_COL32(215, 222, 238, 225));
 
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor(3);
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(4);
 
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
             ImGui::SetTooltip("%s", kPadIcons[i].name);
@@ -462,17 +607,63 @@ bool RenderPadIconGrid(int& iconIndex)
 
 using PadSettings = ProyecThor::Settings::PadSettings;
 
-void SavePad(PadSettings& pad)
+std::string CleanShortLabel(const std::string& raw)
+{
+    std::string line;
+    for (char c : raw) {
+        if (c == '\r' || c == '\n') {
+            if (!line.empty()) break;
+            continue;
+        }
+        line.push_back(c);
+    }
+    size_t a = line.find_first_not_of(" \t");
+    if (a == std::string::npos) return "";
+    size_t b = line.find_last_not_of(" \t");
+    line = line.substr(a, b - a + 1);
+    // Limitar longitud segura en UTF-8 (~18 bytes)
+    if (line.size() > 18) {
+        size_t p = 18;
+        while (p > 0 && ((unsigned char)line[p] & 0xC0) == 0x80) --p;
+        line = line.substr(0, p);
+    }
+    return line;
+}
+
+void SavePad(PadSettings& pad, int padIndex = 0)
 {
     auto& core = Core::PresentationCore::Get();
-
-    if (auto* cap = core.GetCapturePanelRef())
-        pad.hasCapture = cap->SnapshotCurrentCapture(pad.capture);
-    else
-        pad.hasCapture = false;
-
     auto state = core.GetState();
+    const bool wasAssigned = pad.assigned;
+
+    // 1. Fondo actual
+    pad.hasBackground   = (state.bgType != Core::PresentationState::BackgroundType::SolidColor ||
+                           state.bgColor[0] > 0.0f || state.bgColor[1] > 0.0f || state.bgColor[2] > 0.0f ||
+                           !state.bgPath.empty());
+    pad.applyBackground = pad.hasBackground;
+    pad.bgType          = (int)state.bgType;
+    pad.bgPath          = state.bgPath;
+    for (int c = 0; c < 3; c++) pad.bgColor[c] = state.bgColor[c];
+
+    if (!state.bgPath.empty()) {
+        try {
+            std::filesystem::path p = std::filesystem::u8path(state.bgPath);
+            if (p.has_parent_path()) {
+                pad.bgFolderName = p.parent_path().filename().u8string();
+            }
+        } catch (...) {}
+    }
+
+    // 2. Letra / Texto actual en vivo
+    pad.hasText   = state.showText && !state.currentText.empty();
+    pad.applyText = pad.hasText;
+    pad.text      = state.currentText;
+    auto sel      = core.PeekSelection();
+    pad.textTitle = sel.title;
+
+    // 3. Estilo tipográfico
     pad.hasStyle       = true;
+    pad.applyStyle     = true;
     pad.styleSize      = state.textSize;
     for (int c = 0; c < 4; c++) pad.styleColor[c] = state.textColor[c];
     pad.styleHAlign    = state.textAlignment;
@@ -480,25 +671,61 @@ void SavePad(PadSettings& pad)
     for (int c = 0; c < 4; c++) pad.styleMargins[c] = state.margins[c];
     pad.styleAutoScale = state.autoScale;
     pad.styleFontName  = state.selectedFont;
-    pad.bgType = (int)state.bgType;
-    pad.bgPath = state.bgPath;
-    for (int c = 0; c < 3; c++) pad.bgColor[c] = state.bgColor[c];
 
-    pad.assigned = pad.hasCapture || pad.hasStyle;
+    // 4. Captura
+    if (auto* cap = core.GetCapturePanelRef()) {
+        pad.hasCapture   = cap->SnapshotCurrentCapture(pad.capture);
+        pad.applyCapture = pad.hasCapture;
+    } else {
+        pad.hasCapture   = false;
+        pad.applyCapture = false;
+    }
+
+    // Auto-identidad limpia al guardar en un pad vacío
+    if (!wasAssigned) {
+        const float* pal = kPadPalette[std::clamp(padIndex, 0, 7)];
+        for (int c = 0; c < 4; c++) pad.color[c] = pal[c];
+
+        if (pad.hasCapture)                            pad.iconIndex = 12; // Cámara
+        else if (pad.bgType == 4)                      pad.iconIndex = 15; // Carpeta
+        else if (pad.hasText && pad.hasBackground)     pad.iconIndex = 2;  // Capas
+        else if (pad.hasText)                          pad.iconIndex = 5;  // Tipografía
+        else if (pad.bgType == 2)                      pad.iconIndex = 18; // Audio
+        else                                           pad.iconIndex = 16; // Imagen / Fondo
+
+        if (pad.name.empty()) {
+            std::string autoLbl;
+            if (pad.hasText && !pad.text.empty()) {
+                autoLbl = CleanShortLabel(pad.text);
+            } else if (!pad.bgPath.empty()) {
+                try {
+                    autoLbl = CleanShortLabel(std::filesystem::u8path(pad.bgPath).stem().u8string());
+                } catch (...) {}
+            }
+            pad.name = autoLbl;
+        }
+    }
+
+    pad.assigned = true;
     ProyecThor::Settings::SettingsManager::Get().Save();
 }
 
-void ApplyPad(const PadSettings& pad)
+void ApplyPad(ViewPanel* panel, const PadSettings& pad)
 {
+    if (!pad.assigned) return;
     auto& core = Core::PresentationCore::Get();
     using BgType = Core::PresentationState::BackgroundType;
 
-    if (pad.hasCapture) {
+    core.SetProjecting(true);
+
+    // 1. Captura
+    if (pad.applyCapture && pad.hasCapture) {
         if (auto* cap = core.GetCapturePanelRef())
             cap->ApplyCaptureScene(pad.capture);
     }
 
-    if (pad.hasStyle) {
+    // 2. Estilo tipográfico
+    if (pad.applyStyle && pad.hasStyle) {
         Core::TextBoxStyle box;
         box.sizeW    = std::max(0.02f, (1920.0f - pad.styleMargins[0] - pad.styleMargins[2]) / 1920.0f);
         box.sizeH    = std::max(0.02f, (1080.0f - pad.styleMargins[1] - pad.styleMargins[3]) / 1080.0f);
@@ -514,22 +741,78 @@ void ApplyPad(const PadSettings& pad)
         Core::SavedStyle snap;
         snap.lyrics = box;
         core.ApplyStyleSnapshot(snap);
+    }
 
-        core.SetProjecting(true);
-        switch ((BgType)pad.bgType) {
-            case BgType::SolidColor:
-                core.SetLayer0_Color(pad.bgColor[0], pad.bgColor[1], pad.bgColor[2]);
-                break;
-            case BgType::Video:
-                core.SetBackgroundMedia(pad.bgPath, true, false);
-                break;
-            case BgType::Audio:
-                core.SetBackgroundAudio();
-                break;
+    // 3. Fondo (Video, Imagen, Color sólido o Carpeta de videos en bucle)
+    if (pad.applyBackground && pad.hasBackground) {
+        if (pad.bgType == 4) { // VideoFolder
+            std::vector<std::string> vids;
+            std::filesystem::path folderPath;
+
+            if (!pad.bgPath.empty() && std::filesystem::exists(std::filesystem::u8path(pad.bgPath)) &&
+                std::filesystem::is_directory(std::filesystem::u8path(pad.bgPath))) {
+                folderPath = std::filesystem::u8path(pad.bgPath);
+            } else if (!pad.bgFolderName.empty()) {
+                std::filesystem::path root = std::filesystem::u8path(ProyecThor::GetAssetsPath()) / "backgrounds";
+                if (std::filesystem::exists(root / pad.bgFolderName)) {
+                    folderPath = root / pad.bgFolderName;
+                } else if (pad.bgFolderName == "Todos") {
+                    folderPath = root;
+                }
+            }
+
+            if (!folderPath.empty() && std::filesystem::exists(folderPath)) {
+                try {
+                    for (const auto& entry : std::filesystem::recursive_directory_iterator(folderPath)) {
+                        if (!entry.is_regular_file()) continue;
+                        std::string ext = entry.path().extension().string();
+                        std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+                        if (ext == ".mp4" || ext == ".mkv" || ext == ".mov" || ext == ".webm" || ext == ".avi" || ext == ".m4v") {
+                            vids.push_back(entry.path().u8string());
+                        }
+                    }
+                    std::sort(vids.begin(), vids.end());
+                } catch (...) {}
+            }
+
+            if (panel) {
+                panel->SetFolderPlaylist(vids);
+            }
+
+            if (!vids.empty()) {
+                core.SetBackgroundMedia(vids[0], true, false);
+            }
+        } else {
+            if (panel) {
+                panel->ClearFolderPlaylist();
+            }
+
+            switch ((BgType)pad.bgType) {
+                case BgType::SolidColor:
+                    core.SetLayer0_Color(pad.bgColor[0], pad.bgColor[1], pad.bgColor[2]);
+                    break;
+                case BgType::Video:
+                    core.SetBackgroundMedia(pad.bgPath, true, false);
+                    break;
+                case BgType::Audio:
+                    core.SetBackgroundAudio();
+                    break;
+                default:
+                    core.SetBackgroundMedia(pad.bgPath, false, false);
+                    break;
+            }
+        }
+    }
+
+    // 4. Letra / Texto / Palabra fija
+    if (pad.applyText && pad.hasText) {
+        if (!pad.text.empty()) {
+            core.SetLayer2_Text(pad.text, -1, false);
+        } else {
+            core.ClearLayer2();
         }
     }
 }
-
 }
 
 ViewPanel::ViewPanel(UIManager* uiManager)
@@ -593,6 +876,7 @@ void ViewPanel::Render()
             const bool showQuickActionsCompact = ProyecThor::Settings::SettingsManager::Get()
                                                         .GetSettings().general.showViewQuickActions;
             RenderCompactWide(avail, showQuickActionsCompact);
+            RenderPadEditorModal();
             ImGui::PopStyleVar();
             ImGui::End();
             return;
@@ -601,11 +885,11 @@ void ViewPanel::Render()
         const bool  showQuickActions = ProyecThor::Settings::SettingsManager::Get()
                                             .GetSettings().general.showViewQuickActions;
         const bool  narrowColumn = avail.x < 340.0f;
-        const bool  showClearRail = showQuickActions && !narrowColumn;
-        const float railW      = showClearRail ? kQuickActionsRailW : 0.0f;
+        const bool  showClearRail = false; // Rail derecho movido hacia abajo reemplazando la barra inferior
+        const float railW      = 0.0f;
         const float stripH     = showQuickActions ? kConfigStripH : 0.0f;
         const float topAreaH   = avail.y;
-        const float contentW   = std::max(0.0f, avail.x - railW);
+        const float contentW   = avail.x;
 
         if (contentW > 8.0f && topAreaH > 8.0f)
         {
@@ -657,10 +941,18 @@ void ViewPanel::Render()
                 ImGui::PopStyleColor();
             }
 
-            if (inlineToolH > 8.0f)
+            const float bottomAreaH = std::max(0.0f, sobrante - transportH);
+            if (bottomAreaH > 15.0f)
             {
                 ImGui::SetCursorPosY(topReservedH + videoH + transportH + stripH);
-                RenderInlineTool(contentW, inlineToolH);
+                if (m_ActiveTool != InlineTool::None && inlineToolH > 8.0f)
+                {
+                    RenderInlineTool(contentW, bottomAreaH);
+                }
+                else
+                {
+                    RenderPadsContent(contentW, bottomAreaH);
+                }
             }
 
             ImGui::EndChild();
@@ -677,6 +969,20 @@ void ViewPanel::Render()
             ImGui::EndChild();
             ImGui::PopStyleColor();
         }
+
+        // ── Loop de Carpeta de Videos en Fondo si está activa ──
+        if (!m_FolderPlaylistVideos.empty()) {
+            auto& core = Core::PresentationCore::Get();
+            if (Core::VLCBasePlayer* bg = core.GetBackgroundPlayer()) {
+                if (bg->ConsumeEndReached()) {
+                    m_FolderPlaylistIndex = (m_FolderPlaylistIndex + 1) % m_FolderPlaylistVideos.size();
+                    core.SetBackgroundMedia(m_FolderPlaylistVideos[m_FolderPlaylistIndex], true, false);
+                }
+            }
+        }
+
+        // ── Modal de Edición de Escenas ──
+        RenderPadEditorModal();
 
         ImGui::PopStyleVar();
     }
@@ -770,10 +1076,24 @@ void ViewPanel::RenderQuickActionsConfig(float stripH)
     auto& core = Core::PresentationCore::Get();
     bool stretchOn = core.GetStretchToFill();
 
-    ImVec4 baseFill     = ToVec4(DS::BtnDefaultFill);
-    ImVec4 hoverClear   = ToVec4(DS::AccentColorDim);
-    ImVec4 activeStretch= ToVec4((DS::AccentColor & 0x00FFFFFFu) | (140u << 24));
-    ImVec4 textPrimary  = ToVec4(DS::TextPrimary);
+    auto* announcements= core.GetAnnouncementsRef();
+    auto* oclock       = core.GetOClockRef();
+    auto* capturePanel = core.GetCapturePanelRef();
+
+    bool showText    = core.GetState().showText;
+    bool discLive    = core.GetState().bgType == Core::PresentationState::BackgroundType::Audio;
+    bool bgLive      = core.GetState().bgType != Core::PresentationState::BackgroundType::SolidColor;
+    bool annLive     = announcements && announcements->IsLive();
+    bool clockLive   = oclock && oclock->IsLive();
+    bool capLive     = capturePanel && capturePanel->IsLive();
+    bool overlayLive = core.HasOverlay() || core.HasOverlayClockLayer();
+
+    ImVec4 baseFill      = ToVec4(DS::BtnDefaultFill);
+    ImVec4 hoverClear    = ToVec4(DS::AccentColorDim);
+    ImVec4 activeContent = Design::k_EQ_Yellow;
+    ImVec4 activeStretch = ToVec4((DS::AccentColor & 0x00FFFFFFu) | (140u << 24));
+    ImVec4 textPrimary   = ToVec4(DS::TextPrimary);
+    ImVec4 tintOnYellow  = ImVec4(0.10f, 0.09f, 0.06f, 1.0f);
 
     struct ActionDef {
         const char* id;
@@ -825,34 +1145,33 @@ void ViewPanel::RenderQuickActionsConfig(float stripH)
              getPreviewSourceLabel(availableSources[curSourceIdx]),
              getPreviewSourceLabel(availableSources[nextSourceIdx]));
 
-    const bool overlaysOn = (m_ActiveTool == InlineTool::Overlays);
-    const bool chatOn     = (m_ActiveTool == InlineTool::Chat);
-    const bool padsOn     = (m_ActiveTool == InlineTool::Pads);
-    const bool tilesOn    = (m_ActiveTool == InlineTool::Tiles);
-
     const bool detachedOn = m_IsDetached;
     const char* detachTip = m_IsDetached ? "Acoplar panel al entorno (Ctrl+Shift+D)" : "Poner en ventana aparte (Ctrl+Shift+D)";
 
-    ActionDef actions[7] = {
-        { "vaStretch",   "fit_screen", nullptr, "\xF0\x9F\x93\x90",
-          "Alternar proporción", hoverClear, activeStretch, stretchOn, textPrimary },
-        { "vaTiles",     "", nullptr, "\xE2\x8A\x9E", "Tiles (Pantalla dividida)",
-          hoverClear, activeStretch, tilesOn, textPrimary },
-        { "vaPreviewSource", "repeat", nullptr, "\xF0\x9F\x94\x84",
-          previewSourceTooltip,
+    ActionDef actions[10] = {
+        { "vaClearText", "cleaning_services", AppIcons::DrawIcon_Broom, "\xF0\x9F\x93\x9D", "Limpiar texto (Ctrl+L)",
+          hoverClear, activeContent, showText, showText ? tintOnYellow : textPrimary },
+        { "vaClearDisc", "stop", AppIcons::DrawIcon_Disc, "\xF0\x9F\x92\xBF", "Detener disco en vivo",
+          hoverClear, activeContent, discLive, discLive ? tintOnYellow : textPrimary },
+        { "vaClearBg",   "original_screen", AppIcons::DrawIcon_Image, "\xF0\x9F\x96\xBC", "Quitar fondo",
+          hoverClear, activeContent, bgLive, bgLive ? tintOnYellow : textPrimary },
+        { "vaClearOverlay", "fit_screen", AppIcons::DrawIcon_Overlay, "\xF0\x9F\x93\x91", "Quitar overlay",
+          hoverClear, activeContent, overlayLive, overlayLive ? tintOnYellow : textPrimary },
+        { "vaClearAnn",  "volume_up", HomeIcons::DrawIcon_Megaphone, "\xF0\x9F\x93\xA2", "Detener anuncios",
+          hoverClear, activeContent, annLive, annLive ? tintOnYellow : textPrimary },
+        { "vaClearClock","", HomeIcons::DrawIcon_Clock, "\xE2\x8F\xB0", "Quitar reloj",
+          hoverClear, activeContent, clockLive, clockLive ? tintOnYellow : textPrimary },
+        { "vaClearCap",  "motion_play", HomeIcons::DrawIcon_Camera, "\xF0\x9F\x93\xB9", "Detener captura",
+          hoverClear, activeContent, capLive, capLive ? tintOnYellow : textPrimary },
+        { "vaPreviewSource", "repeat", AppIcons::DrawIcon_Swap, "\xF0\x9F\x94\x84", previewSourceTooltip,
           hoverClear, activeStretch, previewingAlt, textPrimary },
-        { "vaOverlays",  "fit_screen", nullptr, "\xF0\x9F\x93\x91", "Overlays",
-          hoverClear, activeStretch, overlaysOn, textPrimary },
-        { "vaChat",      "", nullptr, "\xF0\x9F\x92\xAC", "Chat",
-          hoverClear, activeStretch, chatOn, textPrimary },
-        { "vaPads",      "", nullptr, "\xF0\x9F\x8E\x9B", "Pads",
-          hoverClear, activeStretch, padsOn, textPrimary },
-        { "vaDetach",    "", nullptr, m_IsDetached ? "\xE2\x87\xB1" : "\xE2\x87\xB2",
-          detachTip,
+        { "vaStretch",   "fit_screen", AppIcons::DrawIcon_Monitor, "\xF0\x9F\x93\x90", "Alternar proporción",
+          hoverClear, activeStretch, stretchOn, textPrimary },
+        { "vaDetach",    "", AppIcons::DrawIcon_Popout, m_IsDetached ? "\xE2\x87\xB1" : "\xE2\x87\xB2", detachTip,
           hoverClear, activeStretch, detachedOn, textPrimary },
     };
 
-    constexpr int kCount = 7;
+    constexpr int kCount = 10;
     constexpr float kGap = 4.0f;
     const float   btnH   = std::min(stripH - 4.0f, 30.0f);
     const float   totalW = ImGui::GetContentRegionAvail().x;
@@ -873,16 +1192,20 @@ void ViewPanel::RenderQuickActionsConfig(float stripH)
 
         if (clicked)
         {
-            if (i == 0)      core.SetStretchToFill(!stretchOn);
-            else if (i == 1) m_ActiveTool = tilesOn    ? InlineTool::None : InlineTool::Tiles;
-            else if (i == 2)
-            {
-                m_PreviewSource = availableSources[nextSourceIdx];
+            if (i == 0)      core.ClearLayer2();
+            else if (i == 1) core.StopBackgroundMedia();
+            else if (i == 2) {
+                core.StopBackgroundMedia();
+                if (!core.GetState().currentText.empty())
+                    core.SetProjecting(true);
             }
-            else if (i == 3) m_ActiveTool = overlaysOn ? InlineTool::None : InlineTool::Overlays;
-            else if (i == 4) m_ActiveTool = chatOn     ? InlineTool::None : InlineTool::Chat;
-            else if (i == 5) m_ActiveTool = padsOn     ? InlineTool::None : InlineTool::Pads;
-            else if (i == 6) SetDetached(!m_IsDetached);
+            else if (i == 3) core.ClearOverlay();
+            else if (i == 4 && announcements) announcements->SetLive(false);
+            else if (i == 5 && oclock)        oclock->StopTransmitting();
+            else if (i == 6 && capturePanel)  capturePanel->Stop();
+            else if (i == 7) m_PreviewSource = availableSources[nextSourceIdx];
+            else if (i == 8) core.SetStretchToFill(!stretchOn);
+            else if (i == 9) SetDetached(!m_IsDetached);
         }
     }
 
@@ -912,10 +1235,18 @@ void ViewPanel::RenderCompactWide(ImVec2 avail, bool showQuickActions)
         ImGui::PopStyleColor();
 
         ImGui::SetCursorPosY(transportH + kConfigStripH + 6.0f);
-        ImGui::SetCursorPosX(std::max(0.0f, (leftW - kQuickActionsRailW) * 0.5f));
-        ImGui::BeginGroup();
-        RenderQuickActionsClear(kQuickActionsRailW);
-        ImGui::EndGroup();
+        float compactRemainH = std::max(0.0f, avail.y - transportH - kConfigStripH - 8.0f);
+        if (compactRemainH > 40.0f)
+        {
+            RenderPadsContent(leftW, compactRemainH);
+        }
+        else
+        {
+            ImGui::SetCursorPosX(std::max(0.0f, (leftW - kQuickActionsRailW) * 0.5f));
+            ImGui::BeginGroup();
+            RenderQuickActionsClear(kQuickActionsRailW);
+            ImGui::EndGroup();
+        }
 
         ImGui::EndChild();
         ImGui::PopStyleColor();
@@ -1364,90 +1695,1139 @@ void ViewPanel::RenderChatContent()
         ImGui::TextDisabled("Chat no disponible.");
 }
 
-void ViewPanel::RenderPadsContent()
+void ViewPanel::RenderPadsContent(float w, float h)
 {
-    ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::AccentColor));
-    ImGui::TextUnformatted("PADS");
-    ImGui::PopStyleColor();
-    ImGui::Separator();
-    ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(DS::TextSecondary));
-    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 290.0f);
-    ImGui::TextWrapped("Click: aplicar. Click derecho: guardar lo que hay en pantalla "
-                       "(captura + estilo/fondo + overlay activo, no la letra) o elegir icono.");
-    ImGui::PopTextWrapPos();
-    ImGui::PopStyleColor();
-    ImGui::Spacing();
-
     auto& padsArr = ProyecThor::Settings::SettingsManager::Get().GetSettings().pads.pads;
+    const float availW = (w > 0.0f) ? w : ImGui::GetContentRegionAvail().x;
+    const float availH = (h > 0.0f) ? h : ImGui::GetContentRegionAvail().y;
 
-    const int   cols    = 4;
-    const float btnSize = 56.0f;
-    const float spacing = 10.0f;
+    if (availW < 16.0f || availH < 24.0f) return;
 
-    for (int i = 0; i < ProyecThor::Settings::kPadCount; i++)
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, MT::k_Bg1);
+
+    ImGui::BeginChild("##viewPadsSection", ImVec2(availW, availH), false,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+    auto& core = Core::PresentationCore::Get();
+    auto  state = core.GetState();
+    auto* capPanel = core.GetCapturePanelRef();
+    const bool hasLiveContent = state.isProjecting ||
+                                state.bgType != Core::PresentationState::BackgroundType::SolidColor ||
+                                !state.bgPath.empty() ||
+                                (state.showText && !state.currentText.empty()) ||
+                                (capPanel && capPanel->IsLive());
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 secOrigin = ImGui::GetWindowPos();
+    const float padX = MT::k_PadLg;
+    const float padInnerW = std::max(20.0f, availW - padX * 2.0f);
+    const double nowTime = ImGui::GetTime();
+    ImFont* font = ImGui::GetFont();
+
+    // Línea divisoria sutil integrada con la consola superior
+    dl->AddLine(
+        { secOrigin.x + padX, secOrigin.y + 1.0f },
+        { secOrigin.x + availW - padX, secOrigin.y + 1.0f },
+        ImGui::GetColorU32(MT::k_BorderSubtle), 1.0f);
+
+    // ── Barra superior minimalista estilo hardware ──
+    const float topBarY = 5.0f;
+    const float topBtnH = 20.0f;
+    const float topBtnW = 22.0f;
+
+    // Ícono + sello sutil "PADS"
+    AppIcons::DrawIcon_Pads(dl, { secOrigin.x + padX, secOrigin.y + topBarY + 3.5f }, 13.0f,
+                            IM_COL32(155, 165, 190, 210));
+    dl->AddText(font, 11.0f,
+                { secOrigin.x + padX + 17.0f, secOrigin.y + topBarY + 4.0f },
+                ImGui::GetColorU32(MT::k_TextSecondary), "PADS");
+
+    // Indicador compacto si hay bucle de carpeta activo
+    if (!m_FolderPlaylistVideos.empty()) {
+        char loopTxt[24];
+        snprintf(loopTxt, sizeof(loopTxt), "%zu/%zu",
+                 (m_FolderPlaylistIndex % m_FolderPlaylistVideos.size()) + 1,
+                 m_FolderPlaylistVideos.size());
+        ImVec2 lSz = font->CalcTextSizeA(10.5f, FLT_MAX, 0.0f, loopTxt);
+        float pillX = secOrigin.x + padX + 54.0f;
+        float pillY = secOrigin.y + topBarY + 2.0f;
+        float pillW = 16.0f + lSz.x + 7.0f;
+        if (pillX + pillW < secOrigin.x + availW - padX - (topBtnW * 2.0f + 10.0f)) {
+            dl->AddRectFilled({ pillX, pillY }, { pillX + pillW, pillY + 16.0f },
+                              IM_COL32(36, 115, 185, 55), 4.0f);
+            DrawIcon_FolderLoop(dl, { pillX + 3.0f, pillY + 2.5f }, 11.0f, IM_COL32(110, 195, 255, 230));
+            dl->AddText(font, 10.5f, { pillX + 16.0f, pillY + 2.5f }, IM_COL32(160, 215, 255, 230), loopTxt);
+        }
+    }
+
+    // Dos micro-botones de consola a la derecha (sin texto, nunca se cortan)
+    auto DrawMicroActionBtn = [&](const char* id, ImVec2 pos, PadIconDrawFn icFn, const char* tip) -> bool {
+        ImGui::SetCursorPos(pos);
+        ImVec2 sMin = ImGui::GetCursorScreenPos();
+        ImVec2 sMax = { sMin.x + topBtnW, sMin.y + topBtnH };
+        bool pr = ImGui::InvisibleButton(id, ImVec2(topBtnW, topBtnH));
+        bool hv = ImGui::IsItemHovered();
+        bool ac = ImGui::IsItemActive();
+
+        ImU32 bgC = ac ? ImGui::GetColorU32(MT::k_NeutBtnAct)
+                       : (hv ? ImGui::GetColorU32(MT::k_NeutBtnHov) : ImGui::GetColorU32(MT::k_NeutBtn));
+        dl->AddRectFilled(sMin, sMax, bgC, 5.0f);
+        dl->AddRect(sMin, sMax, IM_COL32(255, 255, 255, hv ? 40 : 18), 5.0f);
+        float icS = 12.0f;
+        icFn(dl, { sMin.x + (topBtnW - icS) * 0.5f, sMin.y + (topBtnH - icS) * 0.5f },
+             icS, hv ? IM_COL32(245, 248, 255, 255) : IM_COL32(165, 175, 198, 225));
+        if (hv && tip) ImGui::SetTooltip("%s", tip);
+        return pr;
+    };
+
+    const float rightClusterX = availW - padX - (topBtnW * 2.0f + 4.0f);
+    if (DrawMicroActionBtn("##padQuickCap", { rightClusterX, topBarY }, DrawIcon_CaptureSnap, "Capturar escena actual"))
     {
-        if (i % cols != 0) ImGui::SameLine(0.0f, spacing);
+        int targetSlot = 0;
+        bool foundEmpty = false;
+        for (int pIdx = 0; pIdx < ProyecThor::Settings::kPadCount; pIdx++) {
+            if (!padsArr[pIdx].assigned) { targetSlot = pIdx; foundEmpty = true; break; }
+        }
+        if (!foundEmpty && m_LastActivatedPadIndex >= 0 && m_LastActivatedPadIndex < ProyecThor::Settings::kPadCount)
+            targetSlot = m_LastActivatedPadIndex;
 
+        SavePad(padsArr[targetSlot], targetSlot);
+        m_LastActivatedPadIndex = targetSlot;
+        m_LastPadActivatedFeedbackTime = nowTime;
+        m_ActiveFeedbackName = padsArr[targetSlot].name;
+    }
+
+    if (DrawMicroActionBtn("##padQuickCfg", { rightClusterX + topBtnW + 4.0f, topBarY }, AppIcons::DrawIcon_Settings, "Editar escenas"))
+    {
+        int editIdx = (m_LastActivatedPadIndex >= 0 && m_LastActivatedPadIndex < ProyecThor::Settings::kPadCount)
+                        ? m_LastActivatedPadIndex : 0;
+        m_EditingPadIndex = editIdx;
+        m_TempPadEdit = padsArr[editIdx];
+        if (!m_TempPadEdit.assigned) {
+            const float* pal = kPadPalette[editIdx % 8];
+            for (int c = 0; c < 4; c++) m_TempPadEdit.color[c] = pal[c];
+        }
+        m_ShowPadEditModal = true;
+    }
+
+    // ── Grilla de Pads estilo Stream Deck / Launchpad ──
+    const float gridStartY = topBarY + topBtnH + 6.0f;
+    const float remainH = std::max(28.0f, availH - gridStartY - 6.0f);
+
+    const int totalPads = ProyecThor::Settings::kPadCount;
+    int cols = 4;
+    if (padInnerW >= 500.0f && remainH < 105.0f) cols = 8;
+    else if (padInnerW < 175.0f)                 cols = 2;
+    else                                         cols = 4;
+
+    const int   rows = (totalPads + cols - 1) / cols;
+    const float gap  = 6.5f;
+    const float padCellW = std::max(26.0f, (padInnerW - gap * (float)(cols - 1)) / (float)cols);
+    const float idealMaxH = std::clamp(padCellW * 0.92f, 44.0f, 76.0f);
+    const float padCellH = std::clamp((remainH - gap * (float)(rows - 1)) / (float)rows, 28.0f, idealMaxH);
+
+    auto OpenEditorFor = [&](int idx) {
+        m_EditingPadIndex = idx;
+        m_TempPadEdit = padsArr[idx];
+        if (!m_TempPadEdit.assigned) {
+            const float* pal = kPadPalette[idx % 8];
+            for (int c = 0; c < 4; c++) m_TempPadEdit.color[c] = pal[c];
+            m_TempPadEdit.iconIndex = 2;
+        }
+        m_ShowPadEditModal = true;
+    };
+
+    for (int i = 0; i < totalPads; i++)
+    {
+        const int colIdx = i % cols;
+        const int rowIdx = i / cols;
+        const float cellX = padX + (float)colIdx * (padCellW + gap);
+        const float cellY = gridStartY + (float)rowIdx * (padCellH + gap);
+
+        ImGui::SetCursorPos({ cellX, cellY });
         auto& pad = padsArr[i];
-        const auto& icon = PadIconFor(pad.iconIndex);
-
-        ImVec4 fillCol = pad.assigned ? MT::k_PrevBtn : ImVec4(MT::k_PrevBtn.x, MT::k_PrevBtn.y, MT::k_PrevBtn.z, 0.12f);
-        ImVec4 bordCol = pad.assigned ? ImVec4(1.0f, 1.0f, 1.0f, 0.35f) : MT::k_BorderSubtle;
-
         ImGui::PushID(i);
-        ImGui::PushStyleColor(ImGuiCol_Button,        fillCol);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  MT::k_PrevBtnHov);
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,   MT::k_PrevBtnAct);
-        ImGui::PushStyleColor(ImGuiCol_Border,         bordCol);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.5f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,   10.0f);
 
-        bool clicked = ImGui::Button("##pad", ImVec2(btnSize, btnSize));
+        ImVec2 pMin = ImGui::GetCursorScreenPos();
+        ImVec2 pMax = { pMin.x + padCellW, pMin.y + padCellH };
 
-        ImVec2 p       = ImGui::GetItemRectMin();
-        ImVec2 s       = ImGui::GetItemRectSize();
-        float  iconSz  = btnSize * 0.42f;
-        ImU32  iconCol = ImGui::GetColorU32(pad.assigned ? ImVec4(1.0f, 1.0f, 1.0f, 0.92f) : MT::k_TextDim);
-        icon.draw(ImGui::GetWindowDrawList(),
-                  { p.x + (s.x - iconSz) * 0.5f, p.y + (s.y - iconSz) * 0.5f }, iconSz, iconCol);
+        bool clicked = ImGui::InvisibleButton("##padKey", ImVec2(padCellW, padCellH));
+        bool hovered = ImGui::IsItemHovered();
+        bool held    = ImGui::IsItemActive();
 
-        ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor(4);
+        // Zona de engranaje en la esquina superior derecha al pasar el cursor
+        ImRect gearRect({ pMax.x - 19.0f, pMin.y + 2.0f }, { pMax.x - 2.0f, pMin.y + 19.0f });
+        bool gearHovered = hovered && (padCellW >= 42.0f) && gearRect.Contains(ImGui::GetIO().MousePos);
 
-        if (clicked && pad.assigned) ApplyPad(pad);
+        const float rounding = 8.0f;
+        char idxStr[8];
+        snprintf(idxStr, sizeof(idxStr), "%d", i + 1);
 
-        if (ImGui::BeginPopupContextItem("##padCtx")) {
-            if (ImGui::MenuItem(pad.assigned ? "Guardar aquí (reemplazar)" : "Guardar aquí"))
-                SavePad(pad);
+        if (!pad.assigned)
+        {
+            // ── Pad vacío: tecla oscura empotrada, sin texto, glifo '+' central ──
+            ImU32 bgCol = (hovered && !gearHovered)
+                ? IM_COL32(28, 32, 42, 255)
+                : IM_COL32(13, 15, 20, 235);
+            dl->AddRectFilled(pMin, pMax, bgCol, rounding);
+            dl->AddRect(pMin, pMax, IM_COL32(255, 255, 255, hovered ? 42 : 16), rounding, 0, 1.0f);
 
-            if (ImGui::BeginMenu("Elegir icono")) {
-                if (RenderPadIconGrid(pad.iconIndex))
-                    ProyecThor::Settings::SettingsManager::Get().Save();
-                ImGui::EndMenu();
+            // Índice discreto en esquina superior izquierda
+            dl->AddText(font, 10.0f, { pMin.x + 6.0f, pMin.y + 4.0f },
+                        IM_COL32(255, 255, 255, hovered ? 85 : 36), idxStr);
+
+            // Símbolo '+' limpio en el centro
+            ImVec2 center = { (pMin.x + pMax.x) * 0.5f, (pMin.y + pMax.y) * 0.5f + (held && !gearHovered ? 1.0f : 0.0f) };
+            if (hovered && !gearHovered) {
+                dl->AddCircleFilled(center, std::min(padCellH, padCellW) * 0.22f, IM_COL32(255, 255, 255, 14), 16);
+            }
+            float plusSz = std::clamp(std::min(padCellW, padCellH) * 0.24f, 10.0f, 15.0f);
+            DrawIcon_PlusKey(dl, { center.x - plusSz * 0.5f, center.y - plusSz * 0.5f }, plusSz,
+                             IM_COL32(255, 255, 255, (hovered && !gearHovered) ? 195 : 42));
+
+            // Engranaje sutil en hover para abrir el configurador
+            if (hovered && padCellW >= 42.0f) {
+                if (gearHovered) {
+                    dl->AddRectFilled(gearRect.Min, gearRect.Max, IM_COL32(255, 255, 255, 28), 4.0f);
+                }
+                AppIcons::DrawIcon_Settings(dl, { gearRect.Min.x + 3.0f, gearRect.Min.y + 3.0f }, 11.0f,
+                                            IM_COL32(255, 255, 255, gearHovered ? 240 : 115));
+            }
+        }
+        else
+        {
+            // ── Pad asignado: tecla táctil iluminada estilo consola broadcast ──
+            const ImVec4 accent(pad.color[0], pad.color[1], pad.color[2], 1.0f);
+            const bool   isLivePad = (i == m_LastActivatedPadIndex && state.isProjecting);
+            const double sinceTrig = nowTime - m_LastPadActivatedFeedbackTime;
+            const float  trigFlash = (i == m_LastActivatedPadIndex && sinceTrig >= 0.0 && sinceTrig < 0.45)
+                                        ? (float)(1.0 - sinceTrig / 0.45) : 0.0f;
+
+            const float tintAmt = (isLivePad ? 0.28f : (hovered && !gearHovered ? 0.24f : 0.15f)) + trigFlash * 0.18f;
+            ImVec4 keyBg = {
+                Lerp(MT::k_NeutBtn.x, accent.x, tintAmt),
+                Lerp(MT::k_NeutBtn.y, accent.y, tintAmt),
+                Lerp(MT::k_NeutBtn.z, accent.z, tintAmt),
+                1.0f
+            };
+            if (held && !gearHovered) keyBg = Brighten(keyBg, -0.05f);
+
+            // Resplandor exterior si es la escena activa
+            if (isLivePad || trigFlash > 0.01f) {
+                float glowA = (isLivePad ? 0.26f : 0.0f) + trigFlash * 0.35f;
+                dl->AddRect({ pMin.x - 1.0f, pMin.y - 1.0f }, { pMax.x + 1.0f, pMax.y + 1.0f },
+                            ImGui::ColorConvertFloat4ToU32(ImVec4(accent.x, accent.y, accent.z, glowA)),
+                            rounding + 1.0f, 0, 2.0f);
             }
 
+            dl->AddRectFilled(pMin, pMax, ImGui::ColorConvertFloat4ToU32(keyBg), rounding);
+
+            // Bisel superior táctil
+            dl->AddRectFilled(pMin, { pMax.x, pMin.y + padCellH * 0.48f },
+                              IM_COL32(255, 255, 255, hovered ? 16 : 9),
+                              rounding, ImDrawFlags_RoundCornersTop);
+            dl->AddLine({ pMin.x + 6.0f, pMin.y + 1.0f }, { pMax.x - 6.0f, pMin.y + 1.0f },
+                        IM_COL32(255, 255, 255, hovered ? 42 : 22), 1.0f);
+
+            // Borde nítido
+            float bordAlpha = isLivePad ? 0.92f : (hovered ? 0.65f : 0.34f);
+            dl->AddRect(pMin, pMax,
+                        ImGui::ColorConvertFloat4ToU32(ImVec4(accent.x, accent.y, accent.z, bordAlpha)),
+                        rounding, 0, isLivePad ? 1.5f : 1.0f);
+
+            // Barra LED inferior
+            float ledInset = std::min(10.0f, padCellW * 0.20f);
+            dl->AddRectFilled(
+                { pMin.x + ledInset, pMax.y - 3.5f },
+                { pMax.x - ledInset, pMax.y - 1.0f },
+                ImGui::ColorConvertFloat4ToU32(ImVec4(accent.x, accent.y, accent.z, isLivePad ? 1.0f : 0.72f)),
+                1.5f);
+
+            // Índice en esquina superior izquierda
+            dl->AddText(font, 10.0f, { pMin.x + 6.0f, pMin.y + 4.0f },
+                        IM_COL32(255, 255, 255, isLivePad ? 155 : 75), idxStr);
+
+            // Esquina superior derecha: engranaje al pasar el cursor, o micro-iconos de capas activas
+            if (hovered && padCellW >= 42.0f) {
+                if (gearHovered) {
+                    dl->AddRectFilled(gearRect.Min, gearRect.Max, IM_COL32(0, 0, 0, 110), 4.0f);
+                }
+                AppIcons::DrawIcon_Settings(dl, { gearRect.Min.x + 3.0f, gearRect.Min.y + 3.0f }, 11.0f,
+                                            IM_COL32(255, 255, 255, gearHovered ? 250 : 155));
+            } else if (padCellW >= 54.0f) {
+                float miX = pMax.x - 5.0f;
+                const float miY = pMin.y + 5.0f;
+                const float miSz = 9.0f;
+                const ImU32 miCol = IM_COL32(235, 240, 252, 125);
+                if (pad.applyCapture && pad.hasCapture) {
+                    miX -= miSz;
+                    HomeIcons::DrawIcon_Camera(dl, { miX, miY }, miSz, miCol);
+                    miX -= 2.5f;
+                }
+                if (pad.applyText && pad.hasText) {
+                    miX -= miSz;
+                    AppIcons::DrawIcon_TextAa(dl, { miX, miY }, miSz, miCol);
+                    miX -= 2.5f;
+                }
+                if (pad.applyBackground && pad.hasBackground) {
+                    miX -= miSz;
+                    if (pad.bgType == 4) DrawIcon_FolderLoop(dl, { miX, miY }, miSz, miCol);
+                    else                 AppIcons::DrawIcon_Image(dl, { miX, miY }, miSz, miCol);
+                }
+            }
+
+            // Ícono central + etiqueta corta opcional
+            const float pressY = (held && !gearHovered) ? 1.5f : 0.0f;
+            const bool  showLabel = !pad.name.empty() && padCellH >= 44.0f;
+            const float icSz = std::clamp(padCellH * (showLabel ? 0.35f : 0.44f), 14.0f, 25.0f);
+            const float icCenterY = showLabel
+                ? (pMin.y + (padCellH - 15.0f) * 0.50f + 2.0f + pressY)
+                : (pMin.y + padCellH * 0.50f - 1.0f + pressY);
+
+            ImVec4 icTintF = {
+                Lerp(accent.x, 1.0f, isLivePad ? 0.82f : 0.68f),
+                Lerp(accent.y, 1.0f, isLivePad ? 0.82f : 0.68f),
+                Lerp(accent.z, 1.0f, isLivePad ? 0.82f : 0.68f),
+                isLivePad ? 1.0f : 0.94f
+            };
+            const auto& iconEntry = PadIconFor(pad.iconIndex);
+            iconEntry.draw(dl,
+                           { (pMin.x + pMax.x - icSz) * 0.5f, icCenterY - icSz * 0.5f },
+                           icSz,
+                           ImGui::ColorConvertFloat4ToU32(icTintF));
+
+            if (showLabel) {
+                const float lblFontSz = 11.0f;
+                std::string fitLbl = TruncateUTF8ToWidth(font, lblFontSz, pad.name, padCellW - 10.0f);
+                if (!fitLbl.empty()) {
+                    ImVec2 tSz = font->CalcTextSizeA(lblFontSz, FLT_MAX, 0.0f, fitLbl.c_str());
+                    dl->AddText(font, lblFontSz,
+                                { pMin.x + (padCellW - tSz.x) * 0.5f, pMax.y - 16.5f + pressY },
+                                IM_COL32(236, 240, 250, isLivePad ? 255 : 225),
+                                fitLbl.c_str());
+                }
+            }
+        }
+
+        // Tooltip limpio y conciso
+        if (hovered && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        {
+            if (gearHovered) {
+                ImGui::SetTooltip("Editar Pad %d", i + 1);
+            } else if (pad.assigned) {
+                std::string tip = pad.name.empty() ? ("Pad " + std::to_string(i + 1)) : pad.name;
+                if (pad.applyBackground && pad.hasBackground) {
+                    if (pad.bgType == 4) {
+                        tip += "\n• Carpeta: " + (!pad.bgFolderName.empty() ? pad.bgFolderName : "Videos");
+                    } else if (!pad.bgPath.empty()) {
+                        try {
+                            tip += "\n• Fondo: " + std::filesystem::u8path(pad.bgPath).filename().u8string();
+                        } catch (...) {}
+                    } else {
+                        tip += "\n• Color sólido";
+                    }
+                }
+                if (pad.applyText && pad.hasText) {
+                    if (!pad.text.empty()) tip += "\n• Texto: \"" + CleanShortLabel(pad.text) + "\"";
+                    else                   tip += "\n• Texto: Limpiar pantalla";
+                }
+                if (pad.applyCapture && pad.hasCapture) {
+                    tip += "\n• Cámara";
+                }
+                ImGui::SetTooltip("%s", tip.c_str());
+            } else {
+                ImGui::SetTooltip(hasLiveContent ? "Guardar escena actual" : "Configurar escena");
+            }
+        }
+
+        // Acción de clic izquierdo
+        if (clicked)
+        {
+            if (gearHovered) {
+                OpenEditorFor(i);
+            } else if (pad.assigned) {
+                ApplyPad(this, pad);
+                m_LastActivatedPadIndex = i;
+                m_LastPadActivatedFeedbackTime = nowTime;
+                m_ActiveFeedbackName = pad.name;
+            } else if (hasLiveContent) {
+                SavePad(pad, i);
+                m_LastActivatedPadIndex = i;
+                m_LastPadActivatedFeedbackTime = nowTime;
+                m_ActiveFeedbackName = pad.name;
+            } else {
+                OpenEditorFor(i);
+            }
+        }
+
+        // Menú contextual limpio (sin emojis rotos)
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 8.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 8.0f);
+        if (ImGui::BeginPopupContextItem("##padCtx"))
+        {
             if (pad.assigned) {
+                if (ImGui::MenuItem("Activar escena")) {
+                    ApplyPad(this, pad);
+                    m_LastActivatedPadIndex = i;
+                    m_LastPadActivatedFeedbackTime = nowTime;
+                    m_ActiveFeedbackName = pad.name;
+                }
+            }
+            if (ImGui::MenuItem(pad.assigned ? "Reemplazar con actual" : "Capturar escena actual")) {
+                SavePad(pad, i);
+                m_LastActivatedPadIndex = i;
+                m_LastPadActivatedFeedbackTime = nowTime;
+                m_ActiveFeedbackName = pad.name;
+            }
+            if (ImGui::MenuItem("Editar...")) {
+                OpenEditorFor(i);
+            }
+            if (ImGui::BeginMenu("Icono y color")) {
+                // Puntos rápidos de color
+                for (int cIdx = 0; cIdx < 8; cIdx++) {
+                    if (cIdx > 0) ImGui::SameLine(0.0f, 6.0f);
+                    ImGui::PushID(cIdx);
+                    ImVec2 cp = ImGui::GetCursorScreenPos();
+                    if (ImGui::InvisibleButton("##colDot", ImVec2(16.0f, 16.0f))) {
+                        for (int k = 0; k < 4; k++) pad.color[k] = kPadPalette[cIdx][k];
+                        ProyecThor::Settings::SettingsManager::Get().Save();
+                    }
+                    ImDrawList* pdl = ImGui::GetWindowDrawList();
+                    ImVec2 cc = { cp.x + 8.0f, cp.y + 8.0f };
+                    pdl->AddCircleFilled(cc, 6.5f, ImGui::ColorConvertFloat4ToU32(
+                        ImVec4(kPadPalette[cIdx][0], kPadPalette[cIdx][1], kPadPalette[cIdx][2], 1.0f)), 16);
+                    bool sameCol = std::fabs(pad.color[0] - kPadPalette[cIdx][0]) < 0.03f &&
+                                   std::fabs(pad.color[1] - kPadPalette[cIdx][1]) < 0.03f &&
+                                   std::fabs(pad.color[2] - kPadPalette[cIdx][2]) < 0.03f;
+                    if (sameCol) pdl->AddCircle(cc, 8.0f, IM_COL32(255, 255, 255, 230), 16, 1.5f);
+                    ImGui::PopID();
+                }
+                ImGui::Spacing();
                 ImGui::Separator();
-                if (ImGui::MenuItem("Borrar pad")) {
-                    pad = PadSettings{};
+                ImGui::Spacing();
+                if (RenderPadIconGrid(pad.iconIndex)) {
                     ProyecThor::Settings::SettingsManager::Get().Save();
                 }
+                ImGui::EndMenu();
+            }
+            if (pad.assigned) {
+                ImGui::Separator();
+                ImGui::PushStyleColor(ImGuiCol_Text, MT::k_BtnDelT);
+                if (ImGui::MenuItem("Vaciar")) {
+                    pad = ProyecThor::Settings::PadSettings{};
+                    if (m_LastActivatedPadIndex == i) m_LastActivatedPadIndex = -1;
+                    ProyecThor::Settings::SettingsManager::Get().Save();
+                }
+                ImGui::PopStyleColor();
             }
             ImGui::EndPopup();
         }
-
-        if (pad.assigned && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
-            std::string tip = "Pad " + std::to_string(i + 1);
-            if (pad.hasCapture) tip += "\n- Captura";
-            if (pad.hasStyle)   tip += "\n- Estilo y fondo";
-            ImGui::SetTooltip("%s", tip.c_str());
-        }
+        ImGui::PopStyleVar(2);
 
         ImGui::PopID();
     }
 
-    if (auto* cap = Core::PresentationCore::Get().GetCapturePanelRef())
-        cap->RenderSceneButtons();
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar();
+}
+
+void ViewPanel::RenderPadEditorModal()
+{
+    if (m_ShowPadEditModal && !ImGui::IsPopupOpen("##padSceneEditorModal")) {
+        ImGui::OpenPopup("##padSceneEditorModal");
+    }
+
+    ImGui::SetNextWindowSize(ImVec2(476.0f, 0.0f), ImGuiCond_Always);
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, MT::k_Bg1);
+    ImGui::PushStyleColor(ImGuiCol_Border,  MT::k_BorderFocus);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.2f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f, 14.0f));
+
+    if (ImGui::BeginPopupModal("##padSceneEditorModal", nullptr,
+                               ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings))
+    {
+        if (m_EditingPadIndex < 0 || m_EditingPadIndex >= ProyecThor::Settings::kPadCount) {
+            m_ShowPadEditModal = false;
+            ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+            ImGui::PopStyleVar(3);
+            ImGui::PopStyleColor(2);
+            return;
+        }
+
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            m_ShowPadEditModal = false;
+            ImGui::CloseCurrentPopup();
+        }
+
+        auto& padsArr = ProyecThor::Settings::SettingsManager::Get().GetSettings().pads.pads;
+        auto& core = Core::PresentationCore::Get();
+        auto  state = core.GetState();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImFont* font = ImGui::GetFont();
+        const ImVec4 accent(m_TempPadEdit.color[0], m_TempPadEdit.color[1], m_TempPadEdit.color[2], 1.0f);
+
+        // ── Selector rápido de Pad 1..8 ──
+        {
+            const float stripW = ImGui::GetContentRegionAvail().x;
+            const float sGap = 5.0f;
+            const float pillW = (stripW - sGap * 7.0f) / 8.0f;
+            const float pillH = 22.0f;
+            for (int pIdx = 0; pIdx < ProyecThor::Settings::kPadCount; pIdx++) {
+                if (pIdx > 0) ImGui::SameLine(0.0f, sGap);
+                ImGui::PushID(1000 + pIdx);
+                ImVec2 sMin = ImGui::GetCursorScreenPos();
+                ImVec2 sMax = { sMin.x + pillW, sMin.y + pillH };
+                bool pClk = ImGui::InvisibleButton("##selPadSlot", ImVec2(pillW, pillH));
+                bool pHov = ImGui::IsItemHovered();
+                const bool isCur = (pIdx == m_EditingPadIndex);
+                const auto& slotRef = padsArr[pIdx];
+                const ImVec4 slotCol(slotRef.color[0], slotRef.color[1], slotRef.color[2], 1.0f);
+
+                if (isCur) {
+                    dl->AddRectFilled(sMin, sMax,
+                        ImGui::ColorConvertFloat4ToU32(ImVec4(accent.x, accent.y, accent.z, 0.28f)), 5.0f);
+                    dl->AddRect(sMin, sMax,
+                        ImGui::ColorConvertFloat4ToU32(ImVec4(accent.x, accent.y, accent.z, 0.85f)), 5.0f, 0, 1.2f);
+                } else {
+                    dl->AddRectFilled(sMin, sMax,
+                        pHov ? IM_COL32(36, 40, 52, 255) : IM_COL32(18, 20, 27, 230), 5.0f);
+                    dl->AddRect(sMin, sMax, IM_COL32(255, 255, 255, pHov ? 36 : 14), 5.0f);
+                }
+
+                char slotLbl[8];
+                snprintf(slotLbl, sizeof(slotLbl), "%d", pIdx + 1);
+                ImVec2 lSz = font->CalcTextSizeA(11.0f, FLT_MAX, 0.0f, slotLbl);
+                dl->AddText(font, 11.0f,
+                            { sMin.x + (pillW - lSz.x) * 0.5f, sMin.y + (pillH - lSz.y) * 0.5f - (slotRef.assigned ? 1.0f : 0.0f) },
+                            isCur ? IM_COL32(255, 255, 255, 255) : IM_COL32(165, 175, 195, 215),
+                            slotLbl);
+
+                if (slotRef.assigned) {
+                    dl->AddRectFilled({ sMin.x + pillW * 0.28f, sMax.y - 3.0f },
+                                      { sMax.x - pillW * 0.28f, sMax.y - 1.2f },
+                                      ImGui::ColorConvertFloat4ToU32(slotCol), 1.0f);
+                }
+
+                if (pClk && !isCur) {
+                    m_EditingPadIndex = pIdx;
+                    m_TempPadEdit = padsArr[pIdx];
+                    if (!m_TempPadEdit.assigned) {
+                        const float* pal = kPadPalette[pIdx % 8];
+                        for (int c = 0; c < 4; c++) m_TempPadEdit.color[c] = pal[c];
+                        m_TempPadEdit.iconIndex = 2;
+                    }
+                }
+                ImGui::PopID();
+            }
+            ImGui::Dummy(ImVec2(0.0f, 4.0f));
+        }
+
+        // ── Cabecera Visual: Vista previa de tecla + Nombre + Colores + Captura rápida ──
+        ImVec2 previewPos = ImGui::GetCursorScreenPos();
+        const float keyPreviewSz = 48.0f;
+        bool openIconPicker = ImGui::InvisibleButton("##padPreviewKeyBtn", ImVec2(keyPreviewSz, keyPreviewSz));
+        bool prevHov = ImGui::IsItemHovered();
+        {
+            ImVec2 kMax = { previewPos.x + keyPreviewSz, previewPos.y + keyPreviewSz };
+            ImVec4 kBg = {
+                Lerp(MT::k_NeutBtn.x, accent.x, prevHov ? 0.30f : 0.22f),
+                Lerp(MT::k_NeutBtn.y, accent.y, prevHov ? 0.30f : 0.22f),
+                Lerp(MT::k_NeutBtn.z, accent.z, prevHov ? 0.30f : 0.22f),
+                1.0f
+            };
+            dl->AddRectFilled(previewPos, kMax, ImGui::ColorConvertFloat4ToU32(kBg), 9.0f);
+            dl->AddRectFilled(previewPos, { kMax.x, previewPos.y + keyPreviewSz * 0.48f },
+                              IM_COL32(255, 255, 255, 14), 9.0f, ImDrawFlags_RoundCornersTop);
+            dl->AddRect(previewPos, kMax,
+                        ImGui::ColorConvertFloat4ToU32(ImVec4(accent.x, accent.y, accent.z, prevHov ? 0.90f : 0.60f)),
+                        9.0f, 0, 1.3f);
+            dl->AddRectFilled({ previewPos.x + 9.0f, kMax.y - 3.5f }, { kMax.x - 9.0f, kMax.y - 1.2f },
+                              ImGui::ColorConvertFloat4ToU32(accent), 1.5f);
+
+            const float icSz = 22.0f;
+            PadIconFor(m_TempPadEdit.iconIndex).draw(
+                dl,
+                { previewPos.x + (keyPreviewSz - icSz) * 0.5f, previewPos.y + (keyPreviewSz - icSz) * 0.5f - 1.0f },
+                icSz, IM_COL32(250, 252, 255, 250));
+
+            char pNum[8];
+            snprintf(pNum, sizeof(pNum), "%d", m_EditingPadIndex + 1);
+            dl->AddText(font, 9.5f, { previewPos.x + 5.0f, previewPos.y + 3.0f }, IM_COL32(255, 255, 255, 120), pNum);
+        }
+        if (prevHov) ImGui::SetTooltip("Cambiar icono");
+        if (openIconPicker) ImGui::OpenPopup("##padIconPickerPop");
+
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 10.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 8.0f);
+        if (ImGui::BeginPopup("##padIconPickerPop")) {
+            if (RenderPadIconGrid(m_TempPadEdit.iconIndex)) {
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
+        ImGui::PopStyleVar(2);
+
+        // Columna derecha de la cabecera (2 filas compactas)
+        ImGui::SameLine(0.0f, 10.0f);
+        ImGui::BeginGroup();
+        {
+            const float rightAvail = ImGui::GetContentRegionAvail().x;
+            const float snapBtnW = 94.0f;
+            const float closeBtnW = 24.0f;
+            const float nameW = std::max(100.0f, rightAvail - snapBtnW - closeBtnW - 12.0f);
+
+            char nameBuf[64];
+            strncpy(nameBuf, m_TempPadEdit.name.c_str(), sizeof(nameBuf) - 1);
+            nameBuf[sizeof(nameBuf) - 1] = '\0';
+
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 4.0f));
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, MT::k_Bg3);
+            ImGui::SetNextItemWidth(nameW);
+            if (ImGui::InputTextWithHint("##padNameInp", "Nombre (opcional)...", nameBuf, sizeof(nameBuf))) {
+                m_TempPadEdit.name = nameBuf;
+            }
+            ImGui::PopStyleColor();
+            ImGui::PopStyleVar(2);
+
+            // Botón Capturar actual (icono vectorial + etiqueta breve)
+            ImGui::SameLine(0.0f, 6.0f);
+            {
+                ImVec2 bMin = ImGui::GetCursorScreenPos();
+                ImVec2 bMax = { bMin.x + snapBtnW, bMin.y + 24.0f };
+                bool snapClk = ImGui::InvisibleButton("##snapLiveAll", ImVec2(snapBtnW, 24.0f));
+                bool snapHov = ImGui::IsItemHovered();
+                dl->AddRectFilled(bMin, bMax,
+                                  ImGui::ColorConvertFloat4ToU32(snapHov ? MT::k_PrevBtnHov : MT::k_PrevBtn), 6.0f);
+                dl->AddRect(bMin, bMax, IM_COL32(120, 185, 255, snapHov ? 140 : 70), 6.0f);
+                DrawIcon_CaptureSnap(dl, { bMin.x + 7.0f, bMin.y + 5.0f }, 14.0f, IM_COL32(235, 245, 255, 255));
+                dl->AddText(font, 11.5f, { bMin.x + 25.0f, bMin.y + 5.0f }, IM_COL32(235, 245, 255, 255), "Capturar");
+                if (snapHov) ImGui::SetTooltip("Tomar fondo, texto, estilo y cámara actuales");
+                if (snapClk) {
+                    m_TempPadEdit.hasBackground   = true;
+                    m_TempPadEdit.applyBackground = true;
+                    m_TempPadEdit.bgType          = (int)state.bgType;
+                    m_TempPadEdit.bgPath          = state.bgPath;
+                    for (int c = 0; c < 3; c++) m_TempPadEdit.bgColor[c] = state.bgColor[c];
+                    if (!state.bgPath.empty()) {
+                        try {
+                            std::filesystem::path p = std::filesystem::u8path(state.bgPath);
+                            if (p.has_parent_path()) m_TempPadEdit.bgFolderName = p.parent_path().filename().u8string();
+                        } catch (...) {}
+                    }
+                    if (state.showText && !state.currentText.empty()) {
+                        m_TempPadEdit.hasText   = true;
+                        m_TempPadEdit.applyText = true;
+                        m_TempPadEdit.text      = state.currentText;
+                        m_TempPadEdit.textTitle = core.PeekSelection().title;
+                    }
+                    m_TempPadEdit.hasStyle       = true;
+                    m_TempPadEdit.applyStyle     = true;
+                    m_TempPadEdit.styleSize      = state.textSize;
+                    for (int c = 0; c < 4; c++) m_TempPadEdit.styleColor[c] = state.textColor[c];
+                    m_TempPadEdit.styleHAlign    = state.textAlignment;
+                    m_TempPadEdit.styleVAlign    = state.vAlignment;
+                    for (int c = 0; c < 4; c++) m_TempPadEdit.styleMargins[c] = state.margins[c];
+                    m_TempPadEdit.styleAutoScale = state.autoScale;
+                    m_TempPadEdit.styleFontName  = state.selectedFont;
+                    if (auto* cap = core.GetCapturePanelRef()) {
+                        m_TempPadEdit.hasCapture   = cap->SnapshotCurrentCapture(m_TempPadEdit.capture);
+                        m_TempPadEdit.applyCapture = m_TempPadEdit.hasCapture;
+                    }
+                    if (m_TempPadEdit.name.empty()) {
+                        if (m_TempPadEdit.applyText && !m_TempPadEdit.text.empty())
+                            m_TempPadEdit.name = CleanShortLabel(m_TempPadEdit.text);
+                        else if (!m_TempPadEdit.bgPath.empty()) {
+                            try { m_TempPadEdit.name = CleanShortLabel(std::filesystem::u8path(m_TempPadEdit.bgPath).stem().u8string()); } catch (...) {}
+                        }
+                    }
+                }
+            }
+
+            // Botón cerrar 'X'
+            ImGui::SameLine(0.0f, 6.0f);
+            {
+                ImVec2 xMin = ImGui::GetCursorScreenPos();
+                ImVec2 xMax = { xMin.x + closeBtnW, xMin.y + 24.0f };
+                bool xClk = ImGui::InvisibleButton("##closePadModal", ImVec2(closeBtnW, 24.0f));
+                bool xHov = ImGui::IsItemHovered();
+                if (xHov) dl->AddRectFilled(xMin, xMax, IM_COL32(255, 255, 255, 22), 6.0f);
+                DrawIcon_CloseX(dl, { xMin.x + 5.0f, xMin.y + 5.0f }, 14.0f,
+                                xHov ? IM_COL32(255, 255, 255, 240) : IM_COL32(165, 172, 190, 200));
+                if (xClk) {
+                    m_ShowPadEditModal = false;
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+
+            // Fila 2: Swatches de color LED en 1 clic + selector libre
+            ImGui::Dummy(ImVec2(0.0f, 1.0f));
+            for (int cIdx = 0; cIdx < 8; cIdx++) {
+                if (cIdx > 0) ImGui::SameLine(0.0f, 6.0f);
+                ImGui::PushID(cIdx);
+                ImVec2 cp = ImGui::GetCursorScreenPos();
+                if (ImGui::InvisibleButton("##palDot", ImVec2(16.0f, 16.0f))) {
+                    for (int k = 0; k < 4; k++) m_TempPadEdit.color[k] = kPadPalette[cIdx][k];
+                }
+                bool cHov = ImGui::IsItemHovered();
+                ImVec2 cc = { cp.x + 8.0f, cp.y + 8.0f };
+                dl->AddCircleFilled(cc, cHov ? 7.0f : 6.0f,
+                    ImGui::ColorConvertFloat4ToU32(ImVec4(kPadPalette[cIdx][0], kPadPalette[cIdx][1], kPadPalette[cIdx][2], 1.0f)), 16);
+                bool selCol = std::fabs(m_TempPadEdit.color[0] - kPadPalette[cIdx][0]) < 0.03f &&
+                              std::fabs(m_TempPadEdit.color[1] - kPadPalette[cIdx][1]) < 0.03f &&
+                              std::fabs(m_TempPadEdit.color[2] - kPadPalette[cIdx][2]) < 0.03f;
+                if (selCol) dl->AddCircle(cc, 8.0f, IM_COL32(255, 255, 255, 235), 16, 1.4f);
+                ImGui::PopID();
+            }
+            ImGui::SameLine(0.0f, 8.0f);
+            ImGui::ColorEdit4("##customPadCol", m_TempPadEdit.color,
+                              ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_NoBorder);
+        }
+        ImGui::EndGroup();
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Helper para botones compactos secundarios dentro de tarjetas
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 3.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button, MT::k_NeutBtn);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, MT::k_NeutBtnHov);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, MT::k_NeutBtnAct);
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, MT::k_Bg3);
+
+        const float cardW = ImGui::GetContentRegionAvail().x;
+
+        // ══════════════════════════════════════════════════════════════════════
+        // 1. TARJETA: FONDO (Archivo | Carpeta | Color)
+        // ══════════════════════════════════════════════════════════════════════
+        {
+            ImVec2 cStart = ImGui::GetCursorScreenPos();
+            const float cardH = m_TempPadEdit.applyBackground ? 68.0f : 34.0f;
+            dl->AddRectFilled(cStart, { cStart.x + cardW, cStart.y + cardH },
+                              ImGui::GetColorU32(m_TempPadEdit.applyBackground ? MT::k_Bg2 : MT::k_Bg3), 8.0f);
+            dl->AddRect(cStart, { cStart.x + cardW, cStart.y + cardH },
+                        ImGui::GetColorU32(m_TempPadEdit.applyBackground ? MT::k_BorderSubtle : ImVec4(1, 1, 1, 0.05f)), 8.0f);
+
+            ImGui::BeginGroup();
+            ImGui::SetCursorScreenPos({ cStart.x + 10.0f, cStart.y + 9.0f });
+            if (DrawToggleSwitch("##swBg", &m_TempPadEdit.applyBackground, accent)) {
+                if (m_TempPadEdit.applyBackground) m_TempPadEdit.hasBackground = true;
+            }
+
+            ImU32 hdrCol = m_TempPadEdit.applyBackground ? IM_COL32(235, 240, 250, 255) : IM_COL32(130, 138, 158, 190);
+            if (m_TempPadEdit.bgType == 4)
+                DrawIcon_FolderLoop(dl, { cStart.x + 48.0f, cStart.y + 9.5f }, 15.0f, hdrCol);
+            else
+                AppIcons::DrawIcon_Image(dl, { cStart.x + 48.0f, cStart.y + 9.5f }, 15.0f, hdrCol);
+            dl->AddText(font, 12.5f, { cStart.x + 69.0f, cStart.y + 9.5f }, hdrCol, "Fondo");
+
+            if (m_TempPadEdit.applyBackground)
+            {
+                m_TempPadEdit.hasBackground = true;
+
+                int bgMode = 0; // 0 = Archivo, 1 = Carpeta, 2 = Color
+                if (m_TempPadEdit.bgType == 4) bgMode = 1;
+                else if (m_TempPadEdit.bgType == 0 && m_TempPadEdit.bgPath.empty()) bgMode = 2;
+
+                // Selector segmentado compacto a la derecha del encabezado
+                const char* segLabels[3] = { "Archivo", "Carpeta", "Color" };
+                const float segW = 60.0f;
+                const float segTotalW = segW * 3.0f + 4.0f;
+                ImVec2 segPos = { cStart.x + cardW - segTotalW - 10.0f, cStart.y + 6.0f };
+                dl->AddRectFilled(segPos, { segPos.x + segTotalW, segPos.y + 22.0f }, IM_COL32(12, 14, 20, 220), 6.0f);
+
+                for (int s = 0; s < 3; s++) {
+                    ImVec2 sp0 = { segPos.x + 2.0f + s * segW, segPos.y + 2.0f };
+                    ImVec2 sp1 = { sp0.x + segW, sp0.y + 18.0f };
+                    ImGui::SetCursorScreenPos(sp0);
+                    ImGui::PushID(s);
+                    bool sClk = ImGui::InvisibleButton("##bgSeg", ImVec2(segW, 18.0f));
+                    bool sHov = ImGui::IsItemHovered();
+                    if (bgMode == s) {
+                        dl->AddRectFilled(sp0, sp1,
+                            ImGui::ColorConvertFloat4ToU32(ImVec4(accent.x, accent.y, accent.z, 0.35f)), 4.5f);
+                        dl->AddRect(sp0, sp1,
+                            ImGui::ColorConvertFloat4ToU32(ImVec4(accent.x, accent.y, accent.z, 0.70f)), 4.5f);
+                    } else if (sHov) {
+                        dl->AddRectFilled(sp0, sp1, IM_COL32(255, 255, 255, 16), 4.5f);
+                    }
+                    ImVec2 ts = font->CalcTextSizeA(11.0f, FLT_MAX, 0.0f, segLabels[s]);
+                    dl->AddText(font, 11.0f, { sp0.x + (segW - ts.x) * 0.5f, sp0.y + (18.0f - ts.y) * 0.5f },
+                                bgMode == s ? IM_COL32(250, 252, 255, 255) : IM_COL32(155, 165, 185, 220), segLabels[s]);
+                    if (sClk) {
+                        if (s == 0) {
+                            m_TempPadEdit.bgType = 1;
+                            if (!m_TempPadEdit.bgPath.empty() &&
+                                std::filesystem::is_directory(std::filesystem::u8path(m_TempPadEdit.bgPath))) {
+                                m_TempPadEdit.bgPath.clear();
+                            }
+                        } else if (s == 1) {
+                            m_TempPadEdit.bgType = 4;
+                            if (m_TempPadEdit.bgFolderName.empty()) m_TempPadEdit.bgFolderName = "Todos";
+                        } else {
+                            m_TempPadEdit.bgType = 0;
+                            m_TempPadEdit.bgPath.clear();
+                        }
+                        bgMode = s;
+                    }
+                    ImGui::PopID();
+                }
+
+                // Fila inferior de controles del modo activo
+                ImGui::SetCursorScreenPos({ cStart.x + 10.0f, cStart.y + 36.0f });
+                const float rowInnerW = cardW - 20.0f;
+
+                if (bgMode == 0) // Archivo único
+                {
+                    std::string fileLabel = "Sin archivo";
+                    if (!m_TempPadEdit.bgPath.empty()) {
+                        try { fileLabel = std::filesystem::u8path(m_TempPadEdit.bgPath).filename().u8string(); }
+                        catch (...) { fileLabel = m_TempPadEdit.bgPath; }
+                    }
+                    const float btnPickW = 74.0f;
+                    const float btnLiveW = 58.0f;
+                    const float boxW = std::max(60.0f, rowInnerW - btnPickW - btnLiveW - 12.0f);
+
+                    ImVec2 fMin = ImGui::GetCursorScreenPos();
+                    ImVec2 fMax = { fMin.x + boxW, fMin.y + 22.0f };
+                    dl->AddRectFilled(fMin, fMax, IM_COL32(12, 14, 20, 220), 5.0f);
+                    dl->AddRect(fMin, fMax, IM_COL32(255, 255, 255, 18), 5.0f);
+                    std::string truncF = TruncateUTF8ToWidth(font, 11.5f, fileLabel, boxW - 14.0f);
+                    dl->AddText(font, 11.5f, { fMin.x + 7.0f, fMin.y + 4.0f },
+                                m_TempPadEdit.bgPath.empty() ? IM_COL32(120, 128, 148, 200) : IM_COL32(220, 228, 242, 255),
+                                truncF.c_str());
+                    ImGui::Dummy(ImVec2(boxW, 22.0f));
+
+                    ImGui::SameLine(0.0f, 6.0f);
+                    if (ImGui::Button("Elegir...##bgPick", ImVec2(btnPickW, 22.0f))) {
+                        std::string picked = PickImageOrVideoFile();
+                        if (!picked.empty()) {
+                            m_TempPadEdit.bgPath = picked;
+                            m_TempPadEdit.bgType = LooksLikeVideoPath(picked) ? 1 : 3;
+                        }
+                    }
+                    ImGui::SameLine(0.0f, 6.0f);
+                    if (ImGui::Button("Actual##bgCur", ImVec2(btnLiveW, 22.0f))) {
+                        m_TempPadEdit.bgPath = state.bgPath;
+                        m_TempPadEdit.bgType = (int)state.bgType;
+                    }
+                }
+                else if (bgMode == 1) // Carpeta en bucle
+                {
+                    std::vector<std::string> bgFolders;
+                    bgFolders.push_back("Todos");
+                    std::filesystem::path bgRoot = std::filesystem::u8path(ProyecThor::GetAssetsPath()) / "backgrounds";
+                    if (std::filesystem::exists(bgRoot)) {
+                        try {
+                            for (const auto& e : std::filesystem::directory_iterator(bgRoot)) {
+                                if (e.is_directory()) bgFolders.push_back(e.path().filename().u8string());
+                            }
+                        } catch (...) {}
+                    }
+
+                    int curFolderIdx = -1;
+                    for (size_t fI = 0; fI < bgFolders.size(); fI++) {
+                        if (bgFolders[fI] == m_TempPadEdit.bgFolderName) { curFolderIdx = (int)fI; break; }
+                    }
+                    std::string comboPreview = (curFolderIdx >= 0)
+                        ? bgFolders[curFolderIdx]
+                        : (!m_TempPadEdit.bgFolderName.empty() ? m_TempPadEdit.bgFolderName : "Todos");
+
+                    const float extBtnW = 92.0f;
+                    ImGui::SetNextItemWidth(std::max(100.0f, rowInnerW - extBtnW - 6.0f));
+                    if (ImGui::BeginCombo("##fldCombo", comboPreview.c_str())) {
+                        for (size_t fI = 0; fI < bgFolders.size(); fI++) {
+                            bool isSel = (curFolderIdx == (int)fI);
+                            if (ImGui::Selectable(bgFolders[fI].c_str(), isSel)) {
+                                m_TempPadEdit.bgFolderName = bgFolders[fI];
+                                m_TempPadEdit.bgPath = (fI == 0) ? bgRoot.u8string() : (bgRoot / bgFolders[fI]).u8string();
+                            }
+                            if (isSel) ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+
+                    ImGui::SameLine(0.0f, 6.0f);
+                    if (ImGui::Button("Otra...##pickExtFld", ImVec2(extBtnW, 22.0f))) {
+                        std::string pickedFld = PickFolder("Seleccionar carpeta de videos");
+                        if (!pickedFld.empty()) {
+                            m_TempPadEdit.bgPath = pickedFld;
+                            try { m_TempPadEdit.bgFolderName = std::filesystem::u8path(pickedFld).filename().u8string(); }
+                            catch (...) { m_TempPadEdit.bgFolderName = pickedFld; }
+                        }
+                    }
+                }
+                else // Color sólido
+                {
+                    ImGui::ColorEdit3("##bgSolidPicker", m_TempPadEdit.bgColor, ImGuiColorEditFlags_NoInputs);
+                    ImGui::SameLine(0.0f, 8.0f);
+                    if (ImGui::Button("Negro##blkBg", ImVec2(64.0f, 22.0f))) {
+                        m_TempPadEdit.bgColor[0] = 0.0f;
+                        m_TempPadEdit.bgColor[1] = 0.0f;
+                        m_TempPadEdit.bgColor[2] = 0.0f;
+                    }
+                    ImGui::SameLine(0.0f, 6.0f);
+                    if (ImGui::Button("Actual##colCur", ImVec2(64.0f, 22.0f))) {
+                        for (int c = 0; c < 3; c++) m_TempPadEdit.bgColor[c] = state.bgColor[c];
+                    }
+                }
+            }
+
+            ImGui::EndGroup();
+            ImGui::SetCursorScreenPos({ cStart.x, cStart.y + cardH });
+            ImGui::Dummy(ImVec2(cardW, 6.0f));
+        }
+
+        // ══════════════════════════════════════════════════════════════════════
+        // 2. TARJETA: TEXTO / LETRA
+        // ══════════════════════════════════════════════════════════════════════
+        {
+            ImVec2 cStart = ImGui::GetCursorScreenPos();
+            const float cardH = m_TempPadEdit.applyText ? 92.0f : 34.0f;
+            dl->AddRectFilled(cStart, { cStart.x + cardW, cStart.y + cardH },
+                              ImGui::GetColorU32(m_TempPadEdit.applyText ? MT::k_Bg2 : MT::k_Bg3), 8.0f);
+            dl->AddRect(cStart, { cStart.x + cardW, cStart.y + cardH },
+                        ImGui::GetColorU32(m_TempPadEdit.applyText ? MT::k_BorderSubtle : ImVec4(1, 1, 1, 0.05f)), 8.0f);
+
+            ImGui::BeginGroup();
+            ImGui::SetCursorScreenPos({ cStart.x + 10.0f, cStart.y + 9.0f });
+            if (DrawToggleSwitch("##swTxt", &m_TempPadEdit.applyText, accent)) {
+                if (m_TempPadEdit.applyText) m_TempPadEdit.hasText = true;
+            }
+
+            ImU32 hdrCol = m_TempPadEdit.applyText ? IM_COL32(235, 240, 250, 255) : IM_COL32(130, 138, 158, 190);
+            AppIcons::DrawIcon_TextAa(dl, { cStart.x + 48.0f, cStart.y + 9.5f }, 15.0f, hdrCol);
+            dl->AddText(font, 12.5f, { cStart.x + 69.0f, cStart.y + 9.5f }, hdrCol, "Texto");
+
+            if (m_TempPadEdit.applyText)
+            {
+                m_TempPadEdit.hasText = true;
+                ImGui::SetCursorScreenPos({ cStart.x + cardW - 134.0f, cStart.y + 6.0f });
+                if (ImGui::Button("Actual##cpTxt", ImVec2(58.0f, 21.0f))) {
+                    m_TempPadEdit.text = state.currentText;
+                    m_TempPadEdit.textTitle = core.PeekSelection().title;
+                }
+                ImGui::SameLine(0.0f, 6.0f);
+                if (ImGui::Button("Limpiar##clrTxt", ImVec2(60.0f, 21.0f))) {
+                    m_TempPadEdit.text.clear();
+                }
+
+                ImGui::SetCursorScreenPos({ cStart.x + 10.0f, cStart.y + 34.0f });
+                char lyricsBuf[2048];
+                strncpy(lyricsBuf, m_TempPadEdit.text.c_str(), sizeof(lyricsBuf) - 1);
+                lyricsBuf[sizeof(lyricsBuf) - 1] = '\0';
+                ImVec2 inpMin = ImGui::GetCursorScreenPos();
+                if (ImGui::InputTextMultiline("##padLyricsInput", lyricsBuf, sizeof(lyricsBuf),
+                                              ImVec2(cardW - 20.0f, 48.0f))) {
+                    m_TempPadEdit.text = lyricsBuf;
+                }
+                if (m_TempPadEdit.text.empty() && !ImGui::IsItemActive()) {
+                    dl->AddText(font, 11.5f, { inpMin.x + 8.0f, inpMin.y + 6.0f },
+                                IM_COL32(125, 132, 152, 165), "Palabra o letra (vacío = limpiar texto)...");
+                }
+            }
+
+            ImGui::EndGroup();
+            ImGui::SetCursorScreenPos({ cStart.x, cStart.y + cardH });
+            ImGui::Dummy(ImVec2(cardW, 6.0f));
+        }
+
+        // ══════════════════════════════════════════════════════════════════════
+        // 3. TARJETA: ESTILO TIPOGRÁFICO (1 sola fila limpia)
+        // ══════════════════════════════════════════════════════════════════════
+        {
+            ImVec2 cStart = ImGui::GetCursorScreenPos();
+            const float cardH = 34.0f;
+            dl->AddRectFilled(cStart, { cStart.x + cardW, cStart.y + cardH },
+                              ImGui::GetColorU32(m_TempPadEdit.applyStyle ? MT::k_Bg2 : MT::k_Bg3), 8.0f);
+            dl->AddRect(cStart, { cStart.x + cardW, cStart.y + cardH },
+                        ImGui::GetColorU32(m_TempPadEdit.applyStyle ? MT::k_BorderSubtle : ImVec4(1, 1, 1, 0.05f)), 8.0f);
+
+            ImGui::BeginGroup();
+            ImGui::SetCursorScreenPos({ cStart.x + 10.0f, cStart.y + 9.0f });
+            if (DrawToggleSwitch("##swSty", &m_TempPadEdit.applyStyle, accent)) {
+                if (m_TempPadEdit.applyStyle) m_TempPadEdit.hasStyle = true;
+            }
+
+            ImU32 hdrCol = m_TempPadEdit.applyStyle ? IM_COL32(235, 240, 250, 255) : IM_COL32(130, 138, 158, 190);
+            AppIcons::DrawIcon_Palette(dl, { cStart.x + 48.0f, cStart.y + 9.5f }, 15.0f, hdrCol);
+            dl->AddText(font, 12.5f, { cStart.x + 69.0f, cStart.y + 9.5f }, hdrCol, "Estilo");
+
+            if (m_TempPadEdit.applyStyle)
+            {
+                m_TempPadEdit.hasStyle = true;
+                std::string fntShort = TruncateUTF8ToWidth(font, 11.0f, m_TempPadEdit.styleFontName, 120.0f);
+                dl->AddText(font, 11.0f, { cStart.x + 124.0f, cStart.y + 10.5f },
+                            IM_COL32(165, 175, 196, 220), fntShort.c_str());
+
+                ImGui::SetCursorScreenPos({ cStart.x + cardW - 156.0f, cStart.y + 6.0f });
+                ImGui::ColorEdit4("##padTxtCol", m_TempPadEdit.styleColor,
+                                  ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                ImGui::SameLine(0.0f, 6.0f);
+                ImGui::SetNextItemWidth(56.0f);
+                ImGui::DragFloat("##padTxtSz", &m_TempPadEdit.styleSize, 1.0f, 18.0f, 180.0f, "%.0fpx");
+                ImGui::SameLine(0.0f, 6.0f);
+                if (ImGui::Button("Actual##cpSty", ImVec2(58.0f, 21.0f))) {
+                    m_TempPadEdit.styleSize      = state.textSize;
+                    for (int c = 0; c < 4; c++) m_TempPadEdit.styleColor[c] = state.textColor[c];
+                    m_TempPadEdit.styleHAlign    = state.textAlignment;
+                    m_TempPadEdit.styleVAlign    = state.vAlignment;
+                    for (int c = 0; c < 4; c++) m_TempPadEdit.styleMargins[c] = state.margins[c];
+                    m_TempPadEdit.styleAutoScale = state.autoScale;
+                    m_TempPadEdit.styleFontName  = state.selectedFont;
+                }
+            }
+
+            ImGui::EndGroup();
+            ImGui::SetCursorScreenPos({ cStart.x, cStart.y + cardH });
+            ImGui::Dummy(ImVec2(cardW, 6.0f));
+        }
+
+        // ══════════════════════════════════════════════════════════════════════
+        // 4. TARJETA: CÁMARA (1 sola fila limpia)
+        // ══════════════════════════════════════════════════════════════════════
+        {
+            ImVec2 cStart = ImGui::GetCursorScreenPos();
+            const float cardH = 34.0f;
+            dl->AddRectFilled(cStart, { cStart.x + cardW, cStart.y + cardH },
+                              ImGui::GetColorU32(m_TempPadEdit.applyCapture ? MT::k_Bg2 : MT::k_Bg3), 8.0f);
+            dl->AddRect(cStart, { cStart.x + cardW, cStart.y + cardH },
+                        ImGui::GetColorU32(m_TempPadEdit.applyCapture ? MT::k_BorderSubtle : ImVec4(1, 1, 1, 0.05f)), 8.0f);
+
+            ImGui::BeginGroup();
+            ImGui::SetCursorScreenPos({ cStart.x + 10.0f, cStart.y + 9.0f });
+            if (DrawToggleSwitch("##swCam", &m_TempPadEdit.applyCapture, accent)) {
+                if (m_TempPadEdit.applyCapture && !m_TempPadEdit.hasCapture) {
+                    if (auto* cap = core.GetCapturePanelRef())
+                        m_TempPadEdit.hasCapture = cap->SnapshotCurrentCapture(m_TempPadEdit.capture);
+                }
+            }
+
+            ImU32 hdrCol = m_TempPadEdit.applyCapture ? IM_COL32(235, 240, 250, 255) : IM_COL32(130, 138, 158, 190);
+            HomeIcons::DrawIcon_Camera(dl, { cStart.x + 48.0f, cStart.y + 9.5f }, 15.0f, hdrCol);
+            dl->AddText(font, 12.5f, { cStart.x + 69.0f, cStart.y + 9.5f }, hdrCol, "Cámara");
+
+            if (m_TempPadEdit.applyCapture)
+            {
+                std::string camLbl = !m_TempPadEdit.capture.sourceName.empty()
+                    ? TruncateUTF8ToWidth(font, 11.0f, m_TempPadEdit.capture.sourceName, 180.0f)
+                    : (m_TempPadEdit.hasCapture ? "Lista" : "Sin fuente activa");
+                dl->AddText(font, 11.0f, { cStart.x + 132.0f, cStart.y + 10.5f },
+                            IM_COL32(165, 175, 196, 220), camLbl.c_str());
+
+                ImGui::SetCursorScreenPos({ cStart.x + cardW - 68.0f, cStart.y + 6.0f });
+                if (ImGui::Button("Actual##cpCam", ImVec2(58.0f, 21.0f))) {
+                    if (auto* cap = core.GetCapturePanelRef())
+                        m_TempPadEdit.hasCapture = cap->SnapshotCurrentCapture(m_TempPadEdit.capture);
+                }
+            }
+
+            ImGui::EndGroup();
+            ImGui::SetCursorScreenPos({ cStart.x, cStart.y + cardH });
+            ImGui::Dummy(ImVec2(cardW, 8.0f));
+        }
+
+        ImGui::PopStyleColor(4);
+        ImGui::PopStyleVar(2);
+
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // ── Pie del modal: Vaciar (izq)  |  Cancelar · Guardar · Aplicar (der) ──
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+        const float footerY = ImGui::GetCursorPosY();
+
+        if (padsArr[m_EditingPadIndex].assigned)
+        {
+            ImVec2 dMin = ImGui::GetCursorScreenPos();
+            ImVec2 dMax = { dMin.x + 76.0f, dMin.y + 28.0f };
+            bool delClk = ImGui::InvisibleButton("##delPadScene", ImVec2(76.0f, 28.0f));
+            bool delHov = ImGui::IsItemHovered();
+            dl->AddRectFilled(dMin, dMax,
+                              ImGui::GetColorU32(delHov ? MT::k_BtnDelH : MT::k_BtnDel), 6.0f);
+            DrawIcon_Trash(dl, { dMin.x + 9.0f, dMin.y + 7.0f }, 14.0f, ImGui::GetColorU32(MT::k_BtnDelT));
+            dl->AddText(font, 12.0f, { dMin.x + 27.0f, dMin.y + 7.0f }, ImGui::GetColorU32(MT::k_BtnDelT), "Vaciar");
+            if (delClk) {
+                padsArr[m_EditingPadIndex] = ProyecThor::Settings::PadSettings{};
+                if (m_LastActivatedPadIndex == m_EditingPadIndex) m_LastActivatedPadIndex = -1;
+                ProyecThor::Settings::SettingsManager::Get().Save();
+                m_ShowPadEditModal = false;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+
+        const float btnCancelW = 80.0f;
+        const float btnSaveW   = 84.0f;
+        const float btnApplyW  = 94.0f;
+        const float rightBtnsW = btnCancelW + btnSaveW + btnApplyW + 14.0f;
+        ImGui::SetCursorPos({ ImGui::GetWindowWidth() - 14.0f - rightBtnsW, footerY });
+
+        ImGui::PushStyleColor(ImGuiCol_Button, MT::k_NeutBtn);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, MT::k_NeutBtnHov);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, MT::k_NeutBtnAct);
+        if (ImGui::Button("Cancelar", ImVec2(btnCancelW, 28.0f)))
+        {
+            m_ShowPadEditModal = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::PopStyleColor(3);
+
+        auto CommitEditedPad = [&]() {
+            m_TempPadEdit.assigned      = true;
+            m_TempPadEdit.hasBackground = m_TempPadEdit.applyBackground;
+            m_TempPadEdit.hasText       = m_TempPadEdit.applyText;
+            m_TempPadEdit.hasStyle      = m_TempPadEdit.applyStyle;
+            if (m_TempPadEdit.applyCapture) m_TempPadEdit.hasCapture = true;
+            padsArr[m_EditingPadIndex] = m_TempPadEdit;
+            ProyecThor::Settings::SettingsManager::Get().Save();
+        };
+
+        ImGui::SameLine(0.0f, 7.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button, MT::k_BtnGreen);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, MT::k_BtnGreenH);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, MT::k_BtnGreenA);
+        if (ImGui::Button("Guardar", ImVec2(btnSaveW, 28.0f)))
+        {
+            CommitEditedPad();
+            m_ShowPadEditModal = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::PopStyleColor(3);
+
+        ImGui::SameLine(0.0f, 7.0f);
+        {
+            ImVec2 aMin = ImGui::GetCursorScreenPos();
+            ImVec2 aMax = { aMin.x + btnApplyW, aMin.y + 28.0f };
+            bool appClk = ImGui::InvisibleButton("##applyPadNow", ImVec2(btnApplyW, 28.0f));
+            bool appHov = ImGui::IsItemHovered();
+            dl->AddRectFilled(aMin, aMax,
+                              ImGui::GetColorU32(appHov ? MT::k_PrevBtnHov : MT::k_PrevBtn), 6.0f);
+            dl->AddRect(aMin, aMax, IM_COL32(130, 195, 255, appHov ? 180 : 95), 6.0f);
+            DrawIcon_PlayTri(dl, { aMin.x + 12.0f, aMin.y + 8.0f }, 12.0f, IM_COL32(255, 255, 255, 255));
+            dl->AddText(font, 12.0f, { aMin.x + 29.0f, aMin.y + 7.0f }, IM_COL32(255, 255, 255, 255), "Aplicar");
+            if (appClk) {
+                CommitEditedPad();
+                ApplyPad(this, padsArr[m_EditingPadIndex]);
+                m_LastActivatedPadIndex = m_EditingPadIndex;
+                m_LastPadActivatedFeedbackTime = ImGui::GetTime();
+                m_ActiveFeedbackName = m_TempPadEdit.name;
+                m_ShowPadEditModal = false;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+
+        ImGui::PopStyleVar();
+        ImGui::EndPopup();
+    }
+
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(2);
 }
 
 void ViewPanel::RenderLiveTransport(float w, float h)
@@ -1455,13 +2835,26 @@ void ViewPanel::RenderLiveTransport(float w, float h)
     auto& core = Core::PresentationCore::Get();
     Core::VLCBasePlayer* bg = core.GetBackgroundPlayer();
 
-    m_LiveMuted   = core.GetLiveMute();
-    m_LiveVolume  = static_cast<float>(core.GetLiveVolume()) * 0.01f;
-    m_LivePlaying = bg && !bg->IsPaused();
+    // Si el fondo en vivo es MUSICA (AudioPanel), el transporte controla esa
+    // misma reproduccion (play/pausa, seek, anterior/siguiente, volumen) en vez
+    // del reproductor de video de fondo: una sola fuente de verdad.
+    UI::AudioPanel* musicPanel = core.GetAudioPanelRef();
+    const bool audioLive = musicPanel && musicPanel->IsLiveBackground() &&
+                           core.GetState().bgType == Core::PresentationState::BackgroundType::Audio;
 
-    int64_t liveLenMs = bg ? bg->GetLength() : 0;
+    if (audioLive) {
+        m_LiveMuted   = musicPanel->IsMusicMuted();
+        m_LiveVolume  = static_cast<float>(musicPanel->GetMusicVolume()) * 0.01f;
+        m_LivePlaying = musicPanel->IsMusicActive() && !musicPanel->IsMusicPaused();
+    } else {
+        m_LiveMuted   = core.GetLiveMute();
+        m_LiveVolume  = static_cast<float>(core.GetLiveVolume()) * 0.01f;
+        m_LivePlaying = bg && !bg->IsPaused();
+    }
 
-    if (m_LivePlaying && bg && liveLenMs > 0)
+    int64_t liveLenMs = audioLive ? musicPanel->GetMusicLengthMs() : (bg ? bg->GetLength() : 0);
+
+    if (!audioLive && m_LivePlaying && bg && liveLenMs > 0)
     {
         int64_t curMs = bg->GetTime();
         float   fpos  = (liveLenMs > 0)
@@ -1485,8 +2878,8 @@ void ViewPanel::RenderLiveTransport(float w, float h)
 
     ImGui::Spacing();
 
-    int64_t liveCurMs = bg ? bg->GetTime()   : 0;
-    int64_t liveLen   = bg ? bg->GetLength() : 0;
+    int64_t liveCurMs = audioLive ? musicPanel->GetMusicTimeMs()   : (bg ? bg->GetTime()   : 0);
+    int64_t liveLen   = audioLive ? musicPanel->GetMusicLengthMs() : (bg ? bg->GetLength() : 0);
     float   livePos   = (liveLen > 0)
         ? std::clamp(static_cast<float>(liveCurMs) / static_cast<float>(liveLen), 0.0f, 1.0f)
         : 0.0f;
@@ -1498,7 +2891,8 @@ void ViewPanel::RenderLiveTransport(float w, float h)
                  { MT::k_LiveGrab.x * 1.1f, MT::k_LiveGrab.y * 1.1f, MT::k_LiveGrab.z * 1.1f, 1.0f },
                  innerW))
     {
-        core.SetLivePosition(displayPos);
+        if (audioLive) musicPanel->SeekNormalized(displayPos);
+        else           core.SetLivePosition(displayPos);
         liveCurMs = static_cast<int64_t>(displayPos * static_cast<float>(liveLen));
     }
 
@@ -1516,24 +2910,32 @@ void ViewPanel::RenderLiveTransport(float w, float h)
 
     ImGui::PushID("vp_pad_nav_prev");
     if (DrawPadButton("arrow_back", padSize * 0.44f, kNeutral, { padSize, padSize }, false)) {
-        core.RequestNavigate(-1);
-        auto sel = core.PeekSelection();
-        if (sel.type != Core::ItemType::Song &&
-            sel.type != Core::ItemType::Bible &&
-            sel.type != Core::ItemType::Documents && bg && liveLen > 0)
-        {
-            float np = livePos - (liveLen > 0 ? 10000.0f / static_cast<float>(liveLen) : 0.0f);
-            core.SetLivePosition(std::max(0.0f, np));
+        if (audioLive) {
+            musicPanel->Previous();
+        } else {
+            core.RequestNavigate(-1);
+            auto sel = core.PeekSelection();
+            if (sel.type != Core::ItemType::Song &&
+                sel.type != Core::ItemType::Bible &&
+                sel.type != Core::ItemType::Documents && bg && liveLen > 0)
+            {
+                float np = livePos - (liveLen > 0 ? 10000.0f / static_cast<float>(liveLen) : 0.0f);
+                core.SetLivePosition(std::max(0.0f, np));
+            }
         }
     }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Retroceder / Anterior (Flecha Izquierda)");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip(audioLive ? "Pista anterior (reinicia si pasaron 3 s)" : "Retroceder / Anterior (Flecha Izquierda)");
     ImGui::PopID();
     ImGui::SameLine(0.0f, gap);
 
     ImGui::PushID("vp_pad_replay");
     if (DrawPadButton("replay_10", padSize * 0.34f, kNeutral, { padSize, padSize }, false)) {
-        float np = livePos - (liveLen > 0 ? 10000.0f / static_cast<float>(liveLen) : 0.0f);
-        core.SetLivePosition(std::max(0.0f, np));
+        if (audioLive) {
+            musicPanel->SkipBy(-10);
+        } else {
+            float np = livePos - (liveLen > 0 ? 10000.0f / static_cast<float>(liveLen) : 0.0f);
+            core.SetLivePosition(std::max(0.0f, np));
+        }
     }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Atrasar 10 segundos");
     ImGui::PopID();
@@ -1542,7 +2944,9 @@ void ViewPanel::RenderLiveTransport(float w, float h)
     const char* mainIcon = m_LivePlaying ? "pause" : "play";
     ImGui::PushID("vp_pad_main");
     if (DrawPadButton(mainIcon, padSize * 0.40f, m_LivePlaying ? kLive : kNeutral, { padSize, padSize }, m_LivePlaying)) {
-        if (bg) {
+        if (audioLive) {
+            musicPanel->TogglePlayPause();
+        } else if (bg) {
             if (m_LivePlaying) {
                 bg->SetPause(true);
             } else {
@@ -1558,8 +2962,12 @@ void ViewPanel::RenderLiveTransport(float w, float h)
 
     ImGui::PushID("vp_pad_fwd");
     if (DrawPadButton("forward_10", padSize * 0.34f, kNeutral, { padSize, padSize }, false)) {
-        float np = livePos + (liveLen > 0 ? 10000.0f / static_cast<float>(liveLen) : 0.0f);
-        core.SetLivePosition(std::min(1.0f, np));
+        if (audioLive) {
+            musicPanel->SkipBy(10);
+        } else {
+            float np = livePos + (liveLen > 0 ? 10000.0f / static_cast<float>(liveLen) : 0.0f);
+            core.SetLivePosition(std::min(1.0f, np));
+        }
     }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Adelantar 10 segundos");
     ImGui::PopID();
@@ -1567,28 +2975,35 @@ void ViewPanel::RenderLiveTransport(float w, float h)
 
     ImGui::PushID("vp_pad_stop");
     if (DrawPadButton("stop", padSize * 0.34f, kNeutral, { padSize, padSize }, false)) {
-        core.SetLivePosition(0.0f);
-        if (bg) { bg->SetPosition(0.0f); bg->SetPause(true); }
+        if (audioLive) {
+            musicPanel->Stop();
+        } else {
+            core.SetLivePosition(0.0f);
+            if (bg) { bg->SetPosition(0.0f); bg->SetPause(true); }
+        }
     }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Detener video");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip(audioLive ? "Detener música" : "Detener video");
     ImGui::PopID();
     ImGui::SameLine(0.0f, gap);
 
     ImGui::PushID("vp_pad_nav_next");
     if (DrawPadButton("arrow_forward", padSize * 0.44f, kNeutral, { padSize, padSize }, false)) {
-        core.RequestNavigate(1);
-        auto sel = core.PeekSelection();
-        if (sel.type != Core::ItemType::Song &&
-            sel.type != Core::ItemType::Bible &&
-            sel.type != Core::ItemType::Documents && bg && liveLen > 0)
-        {
-            float np = livePos + (liveLen > 0 ? 10000.0f / static_cast<float>(liveLen) : 0.0f);
-            core.SetLivePosition(std::min(1.0f, np));
+        if (audioLive) {
+            musicPanel->Next();
+        } else {
+            core.RequestNavigate(1);
+            auto sel = core.PeekSelection();
+            if (sel.type != Core::ItemType::Song &&
+                sel.type != Core::ItemType::Bible &&
+                sel.type != Core::ItemType::Documents && bg && liveLen > 0)
+            {
+                float np = livePos + (liveLen > 0 ? 10000.0f / static_cast<float>(liveLen) : 0.0f);
+                core.SetLivePosition(std::min(1.0f, np));
+            }
         }
     }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Avanzar / Siguiente (Flecha Derecha)");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip(audioLive ? "Pista siguiente" : "Avanzar / Siguiente (Flecha Derecha)");
     ImGui::PopID();
-
     ImGui::Spacing();
 
     const float volRowH   = std::clamp(padSize * 0.85f, 26.0f, 32.0f);
@@ -1605,8 +3020,12 @@ void ViewPanel::RenderLiveTransport(float w, float h)
     if (DrawPadButton(m_LiveMuted ? "no_sound" : "volume_up", muteW * 0.44f, m_LiveMuted ? kLive : kNeutral,
                       { muteW, volRowH }, m_LiveMuted, speakerFn)) {
         m_LiveMuted = !m_LiveMuted;
-        core.SetLiveMute(m_LiveMuted);
-        core.SetLiveVolume(m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
+        if (audioLive) {
+            musicPanel->SetMusicMuted(m_LiveMuted);
+        } else {
+            core.SetLiveMute(m_LiveMuted);
+            core.SetLiveVolume(m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
+        }
     }
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip(m_LiveMuted ? "Audio silenciado — click para activar" : "Silenciar audio");
@@ -1619,7 +3038,8 @@ void ViewPanel::RenderLiveTransport(float w, float h)
 
     if (HorizontalFader("##vp_vol_fader", &m_LiveVolume, 0.0f, 2.0f, { faderW, volRowH },
                          trackCol, fillCol, capCol)) {
-        core.SetLiveVolume(m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
+        if (audioLive) musicPanel->SetMusicVolume(static_cast<int>(m_LiveVolume * 100.0f));
+        else           core.SetLiveVolume(m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
     }
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Volumen en vivo: %d%%", static_cast<int>(m_LiveVolume * 100.0f));
@@ -2057,4 +3477,3 @@ void ViewPanel::RenderContent(float panelW, float panelH)
 }
 
 }
-

@@ -16,8 +16,8 @@ float IconRailThickness(bool vertical)
 {
     bool wantLabels = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.showRailLabels;
     float target = vertical
-        ? (wantLabels ? kIconRailVerticalSize   : kIconRailVerticalSizeCompact)
-        : (wantLabels ? kIconRailHorizontalSize : kIconRailHorizontalSizeCompact);
+        ? (wantLabels ? kIconRailVerticalSize : kIconRailVerticalSizeCompact)
+        : kIconRailHorizontalSizeCompact;
 
     ImGuiStorage* storage = ImGui::GetStateStorage();
     ImGuiID id = ImGui::GetID(vertical ? "##railThicknessV" : "##railThicknessH");
@@ -158,7 +158,7 @@ static bool RenderHorizontal(const IconRailItem* items, int count, int& currentI
     const float  railH  = ImGui::GetContentRegionAvail().y;
     const float  winW   = ImGui::GetWindowWidth();
     const ImVec2 winPos = ImGui::GetWindowPos();
-    const float  lt     = RailLabelProgress();
+    const float  lt     = 0.0f; // Main toolbar icon-only sin texto inferior
 
     dl->AddRectFilled(winPos, { winPos.x + winW, winPos.y + railH },
                       DS::GlassFillTop);

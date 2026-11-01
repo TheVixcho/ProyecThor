@@ -16,6 +16,8 @@
 #include "LibraryTags.h"
 
 #include "LibraryPlaylists.h"
+#include "LibraryMultimedia.h"
+#include "core/MediaCollections.h"
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -28,6 +30,7 @@
 #include <cctype>
 #include <cstring>
 #include <cstdlib>
+#include <mutex>
 
 namespace fs = std::filesystem;
 namespace DS = ProyecThor::UI::DS;
@@ -37,6 +40,7 @@ static constexpr int kCat_Videos    = 1;
 static constexpr int kCat_Images    = 2;
 static constexpr int kCat_Bibles    = 3;
 static constexpr int kCat_Documents = 4;
+static constexpr int kCat_Audio     = 5;
 
 namespace ProyecThor::Library {
 
@@ -156,43 +160,78 @@ int CalcVerseDurationMs(const std::string& stanza, int bpm)
     return (int)std::lround(totalSec * 1000.0);
 }
 
-std::vector<std::string> LoadSongVerses(const std::string& filename)
+// =============================================================================
+//  Detalle y Análisis de Coincidencias de Búsqueda de Canciones
+// =============================================================================
+enum class SongMatchKind {
+    None,
+    Title,
+    Author,
+    Tag,
+    Verse
+};
+
+struct SongMatchDetail {
+    SongMatchKind kind        = SongMatchKind::None;
+    int           stanzaIndex = -1;
+    int           lineIndex   = -1;
+    std::string   snippet;
+    std::string   matchParam;
+};
+
+static inline std::string NormalizeForSearch(const std::string& s)
 {
-    std::vector<std::string> verses;
-    std::ifstream file(U8Path(GetAssetsPath() + "/songs/" + filename),
-                       std::ios::binary);
-    if (!file.is_open()) {
-        verses.push_back("Error: No se pudo abrir el archivo.\nRuta: " +
-                         GetAssetsPath() + "/songs/" + filename);
-        return verses;
-    }
+    return ProyecThor::UI::TextUtils::StripAccents(ProyecThor::UI::TextUtils::ToLowerUTF8(s));
+}
 
-    std::string raw((std::istreambuf_iterator<char>(file)),
-                     std::istreambuf_iterator<char>());
-    file.close();
-    if (raw.empty()) return verses;
-
-    std::string content = NormalizeToUtf8(raw);
-    const int linesPerSlide = GetSongMeta(filename).linesPerSlide;
-    return GroupLyricsIntoSlides(content, linesPerSlide);
+std::string GetSongDisplayName(const std::string& filename)
+{
+    std::string title = GetSongMeta(filename).title;
+    return !title.empty() ? title : StripExtension(filename);
 }
 
 // =============================================================================
 //  Autor de cancion — persistido aparte en songs_authors.ini
-//  (mismo patron que category_styles.ini en PresentationCore). No se mete
-//  dentro del .txt de la cancion para no romper el parseo por estrofas de
-//  LoadSongVerses (separadas por linea en blanco).
+//  (con caché en RAM y validación de última modificación para evitar I/O)
 // =============================================================================
 static std::string SongAuthorsFilePath()
 {
     return GetAssetsPath() + "/../songs_authors.ini";
 }
 
+static std::mutex s_SongAuthorsMutex;
+static std::unordered_map<std::string, std::string> s_SongAuthorsCache;
+static fs::file_time_type s_SongAuthorsLastMod{};
+static bool s_SongAuthorsLoaded = false;
+
+// Forward declaration de invalidación de caché de canción
+static void InvalidateSongCacheEntry(const std::string& filename);
+
 static std::unordered_map<std::string, std::string> LoadSongAuthors()
 {
+    std::lock_guard<std::mutex> lock(s_SongAuthorsMutex);
+    std::string path = SongAuthorsFilePath();
+    std::error_code ec;
+    fs::file_time_type curMod = fs::last_write_time(U8Path(path), ec);
+    if (!ec && s_SongAuthorsLoaded && curMod == s_SongAuthorsLastMod) {
+        return s_SongAuthorsCache;
+    }
+
+    if (ec) {
+        if (s_SongAuthorsLoaded) return s_SongAuthorsCache;
+        s_SongAuthorsCache.clear();
+        s_SongAuthorsLoaded = true;
+        return s_SongAuthorsCache;
+    }
+
     std::unordered_map<std::string, std::string> authors;
-    std::ifstream f(U8Path(SongAuthorsFilePath()));
-    if (!f.is_open()) return authors;
+    std::ifstream f(U8Path(path));
+    if (!f.is_open()) {
+        s_SongAuthorsCache = authors;
+        s_SongAuthorsLoaded = true;
+        s_SongAuthorsLastMod = curMod;
+        return authors;
+    }
 
     std::string line;
     while (std::getline(f, line)) {
@@ -201,6 +240,9 @@ static std::unordered_map<std::string, std::string> LoadSongAuthors()
         if (sep == std::string::npos) continue;
         authors[line.substr(0, sep)] = line.substr(sep + 1);
     }
+    s_SongAuthorsCache = authors;
+    s_SongAuthorsLoaded = true;
+    s_SongAuthorsLastMod = curMod;
     return authors;
 }
 
@@ -210,10 +252,20 @@ void SetSongAuthor(const std::string& filename, const std::string& author)
     if (author.empty()) authors.erase(filename);
     else                authors[filename] = author;
 
-    std::ofstream f(U8Path(SongAuthorsFilePath()));
+    std::string path = SongAuthorsFilePath();
+    std::ofstream f(U8Path(path));
     if (!f.is_open()) return;
     for (const auto& [k, v] : authors)
         f << k << "=" << v << "\n";
+    f.close();
+
+    std::lock_guard<std::mutex> lock(s_SongAuthorsMutex);
+    s_SongAuthorsCache = authors;
+    std::error_code ec;
+    s_SongAuthorsLastMod = fs::last_write_time(U8Path(path), ec);
+    s_SongAuthorsLoaded = true;
+
+    InvalidateSongCacheEntry(filename);
 }
 
 std::string GetSongAuthor(const std::string& filename)
@@ -224,7 +276,7 @@ std::string GetSongAuthor(const std::string& filename)
 }
 
 // =============================================================================
-//  Etiquetas de cancion — songs_tags.ini, mismo patron que songs_authors.ini.
+//  Etiquetas de cancion — songs_tags.ini, con caché en RAM
 //  Formato: archivo=tag1,tag2,tag3
 // =============================================================================
 static std::string SongTagsFilePath()
@@ -257,11 +309,36 @@ static std::string JoinTags(const std::vector<std::string>& tags)
     return out;
 }
 
+static std::mutex s_SongTagsMutex;
+static std::unordered_map<std::string, std::string> s_SongTagsRawCache;
+static fs::file_time_type s_SongTagsRawLastMod{};
+static bool s_SongTagsRawLoaded = false;
+
 static std::unordered_map<std::string, std::string> LoadSongTagsRaw()
 {
+    std::lock_guard<std::mutex> lock(s_SongTagsMutex);
+    std::string path = SongTagsFilePath();
+    std::error_code ec;
+    fs::file_time_type curMod = fs::last_write_time(U8Path(path), ec);
+    if (!ec && s_SongTagsRawLoaded && curMod == s_SongTagsRawLastMod) {
+        return s_SongTagsRawCache;
+    }
+
+    if (ec) {
+        if (s_SongTagsRawLoaded) return s_SongTagsRawCache;
+        s_SongTagsRawCache.clear();
+        s_SongTagsRawLoaded = true;
+        return s_SongTagsRawCache;
+    }
+
     std::unordered_map<std::string, std::string> map;
-    std::ifstream f(U8Path(SongTagsFilePath()));
-    if (!f.is_open()) return map;
+    std::ifstream f(U8Path(path));
+    if (!f.is_open()) {
+        s_SongTagsRawCache = map;
+        s_SongTagsRawLoaded = true;
+        s_SongTagsRawLastMod = curMod;
+        return map;
+    }
 
     std::string line;
     while (std::getline(f, line)) {
@@ -270,6 +347,9 @@ static std::unordered_map<std::string, std::string> LoadSongTagsRaw()
         if (sep == std::string::npos) continue;
         map[line.substr(0, sep)] = line.substr(sep + 1);
     }
+    s_SongTagsRawCache = map;
+    s_SongTagsRawLoaded = true;
+    s_SongTagsRawLastMod = curMod;
     return map;
 }
 
@@ -287,10 +367,127 @@ void SetSongTags(const std::string& filename, const std::vector<std::string>& ta
     if (tags.empty()) map.erase(filename);
     else              map[filename] = JoinTags(tags);
 
-    std::ofstream f(U8Path(SongTagsFilePath()));
+    std::string path = SongTagsFilePath();
+    std::ofstream f(U8Path(path));
     if (!f.is_open()) return;
     for (const auto& [k, v] : map)
         f << k << "=" << v << "\n";
+    f.close();
+
+    std::lock_guard<std::mutex> lock(s_SongTagsMutex);
+    s_SongTagsRawCache = map;
+    std::error_code ec;
+    s_SongTagsRawLastMod = fs::last_write_time(U8Path(path), ec);
+    s_SongTagsRawLoaded = true;
+
+    InvalidateSongCacheEntry(filename);
+}
+
+// =============================================================================
+//  Caché e Indexación en memoria de Canciones (para búsqueda instantánea >300 canciones)
+// =============================================================================
+struct SongCacheEntry {
+    fs::file_time_type fileWriteTime{};
+    std::string displayName;
+    std::string displayNameNorm;
+    std::string fileStemNorm;
+    std::string author;
+    std::string authorNorm;
+    std::vector<std::string> tags;
+    std::vector<std::string> tagsNorm;
+    std::vector<std::string> verses;
+    std::vector<std::string> versesNorm;
+    std::string allLyricsNorm;
+};
+
+static std::unordered_map<std::string, SongCacheEntry> s_SongCache;
+static std::mutex s_SongCacheMutex;
+
+static void InvalidateSongCacheEntry(const std::string& filename)
+{
+    std::lock_guard<std::mutex> lock(s_SongCacheMutex);
+    s_SongCache.erase(filename);
+}
+
+void ClearSongIndexCache()
+{
+    {
+        std::lock_guard<std::mutex> lock(s_SongCacheMutex);
+        s_SongCache.clear();
+    }
+    {
+        std::lock_guard<std::mutex> lock(s_SongAuthorsMutex);
+        s_SongAuthorsLoaded = false;
+        s_SongAuthorsCache.clear();
+    }
+    {
+        std::lock_guard<std::mutex> lock(s_SongTagsMutex);
+        s_SongTagsRawLoaded = false;
+        s_SongTagsRawCache.clear();
+    }
+    ClearSongMetaCache();
+}
+
+static SongCacheEntry GetSongCacheEntry(const std::string& filename)
+{
+    std::string fullPath = GetAssetsPath() + "/songs/" + filename;
+    std::error_code ec;
+    fs::file_time_type curTime = fs::last_write_time(U8Path(fullPath), ec);
+
+    {
+        std::lock_guard<std::mutex> lock(s_SongCacheMutex);
+        auto it = s_SongCache.find(filename);
+        if (it != s_SongCache.end() && !ec && it->second.fileWriteTime == curTime) {
+            return it->second;
+        }
+    }
+
+    SongCacheEntry entry;
+    entry.fileWriteTime   = curTime;
+    entry.displayName     = GetSongDisplayName(filename);
+    entry.displayNameNorm = NormalizeForSearch(entry.displayName);
+    entry.fileStemNorm    = NormalizeForSearch(StripExtension(filename));
+    entry.author          = GetSongAuthor(filename);
+    entry.authorNorm      = NormalizeForSearch(entry.author);
+    entry.tags            = GetSongTags(filename);
+    entry.tagsNorm.reserve(entry.tags.size());
+    for (const auto& t : entry.tags) {
+        entry.tagsNorm.push_back(NormalizeForSearch(t));
+    }
+
+    std::ifstream file(U8Path(fullPath), std::ios::binary);
+    if (!file.is_open()) {
+        entry.verses.push_back("Error: No se pudo abrir el archivo.\nRuta: " + fullPath);
+        return entry;
+    }
+
+    std::string raw((std::istreambuf_iterator<char>(file)),
+                     std::istreambuf_iterator<char>());
+    file.close();
+
+    if (!raw.empty()) {
+        std::string content = NormalizeToUtf8(raw);
+        const int linesPerSlide = GetSongMeta(filename).linesPerSlide;
+        entry.verses = GroupLyricsIntoSlides(content, linesPerSlide);
+        entry.versesNorm.reserve(entry.verses.size());
+        std::string allNorm;
+        for (const auto& v : entry.verses) {
+            std::string vn = NormalizeForSearch(v);
+            entry.versesNorm.push_back(vn);
+            allNorm.append(vn);
+            allNorm.push_back('\n');
+        }
+        entry.allLyricsNorm = std::move(allNorm);
+    }
+
+    std::lock_guard<std::mutex> lock(s_SongCacheMutex);
+    s_SongCache[filename] = entry;
+    return entry;
+}
+
+std::vector<std::string> LoadSongVerses(const std::string& filename)
+{
+    return GetSongCacheEntry(filename).verses;
 }
 
 // =============================================================================
@@ -401,15 +598,12 @@ void SetStanzaColor(const std::string& filename, int stanzaIndex, unsigned int c
     SaveKeyValueIni(StanzaColorsFilePath(), map);
 }
 
-std::string GetSongDisplayName(const std::string& filename)
-{
-    std::string title = GetSongMeta(filename).title;
-    return !title.empty() ? title : StripExtension(filename);
-}
-
 void MigrateSongSidecars(const std::string& oldFilename, const std::string& newFilename)
 {
     if (oldFilename.empty() || newFilename.empty() || oldFilename == newFilename) return;
+
+    InvalidateSongCacheEntry(oldFilename);
+    InvalidateSongCacheEntry(newFilename);
 
     // Autor / etiquetas / estilo preset / fondo preset: mapas simples
     // "archivo=valor", solo hay que reasignar la clave.
@@ -537,28 +731,6 @@ static void RenderPaneHeader(const char* label, int count)
 // =============================================================================
 //  Detalle y Análisis de Coincidencias de Búsqueda de Canciones
 // =============================================================================
-enum class SongMatchKind {
-    None,
-    Title,
-    Author,
-    Tag,
-    Verse
-};
-
-struct SongMatchDetail {
-    SongMatchKind kind        = SongMatchKind::None;
-    int           stanzaIndex = -1;
-    int           lineIndex   = -1;
-    std::string   snippet;
-    std::string   matchParam;
-};
-
-static inline std::string NormalizeForSearch(const std::string& s)
-{
-    return ProyecThor::UI::TextUtils::StripAccents(ProyecThor::UI::TextUtils::ToLowerUTF8(s));
-}
-
-// Encuentra qué parte de la canción coincide específicamente con la búsqueda
 static SongMatchDetail AnalyzeSongMatch(const std::string& filename, const std::string& rawQuery, LibraryContext& ctx)
 {
     SongMatchDetail detail;
@@ -577,76 +749,81 @@ static SongMatchDetail AnalyzeSongMatch(const std::string& filename, const std::
         }
     }
 
-    // 1. Título y nombre de archivo (con y sin extensión)
-    std::string title = GetSongDisplayName(filename);
-    std::string titleNorm = NormalizeForSearch(title);
-    std::string fileStem = StripExtension(filename);
-    std::string fileNorm = NormalizeForSearch(fileStem);
+    SongCacheEntry entry = GetSongCacheEntry(filename);
 
-    if (titleNorm.find(qNorm) != std::string::npos || fileNorm.find(qNorm) != std::string::npos) {
+    // 1. Título y nombre de archivo (con y sin extensión)
+    if (entry.displayNameNorm.find(qNorm) != std::string::npos || entry.fileStemNorm.find(qNorm) != std::string::npos) {
         detail.kind = SongMatchKind::Title;
-        detail.snippet = title;
+        detail.snippet = entry.displayName;
         return detail;
     }
     if (words.size() > 1) {
         bool allWordsMatch = true;
         for (const auto& w : words) {
-            if (titleNorm.find(w) == std::string::npos && fileNorm.find(w) == std::string::npos) {
+            if (entry.displayNameNorm.find(w) == std::string::npos && entry.fileStemNorm.find(w) == std::string::npos) {
                 allWordsMatch = false;
                 break;
             }
         }
         if (allWordsMatch) {
             detail.kind = SongMatchKind::Title;
-            detail.snippet = title;
+            detail.snippet = entry.displayName;
             return detail;
         }
     }
 
     // 2. Autor
-    std::string author = GetSongAuthor(filename);
-    if (!author.empty()) {
-        std::string authorNorm = NormalizeForSearch(author);
-        if (authorNorm.find(qNorm) != std::string::npos) {
+    if (!entry.authorNorm.empty()) {
+        if (entry.authorNorm.find(qNorm) != std::string::npos) {
             detail.kind = SongMatchKind::Author;
-            detail.matchParam = author;
-            detail.snippet = author;
+            detail.matchParam = entry.author;
+            detail.snippet = entry.author;
             return detail;
         }
         if (words.size() > 1) {
             bool allWordsInAuthor = true;
             for (const auto& w : words) {
-                if (authorNorm.find(w) == std::string::npos) {
+                if (entry.authorNorm.find(w) == std::string::npos) {
                     allWordsInAuthor = false;
                     break;
                 }
             }
             if (allWordsInAuthor) {
                 detail.kind = SongMatchKind::Author;
-                detail.matchParam = author;
-                detail.snippet = author;
+                detail.matchParam = entry.author;
+                detail.snippet = entry.author;
                 return detail;
             }
         }
     }
 
     // 3. Etiquetas (Tags)
-    auto tags = ctx.getSongTags(filename);
-    for (const auto& tag : tags) {
-        std::string tagNorm = NormalizeForSearch(tag);
-        if (tagNorm.find(qNorm) != std::string::npos) {
+    for (size_t ti = 0; ti < entry.tags.size(); ++ti) {
+        if (ti < entry.tagsNorm.size() && entry.tagsNorm[ti].find(qNorm) != std::string::npos) {
             detail.kind = SongMatchKind::Tag;
-            detail.matchParam = tag;
-            detail.snippet = tag;
+            detail.matchParam = entry.tags[ti];
+            detail.snippet = entry.tags[ti];
             return detail;
         }
     }
 
     // 4. Letra / Estrofas (Verses)
-    auto verses = ctx.loadSongVerses(filename);
-    for (size_t vi = 0; vi < verses.size(); ++vi) {
-        const std::string& stanza = verses[vi];
-        std::string stanzaNorm = NormalizeForSearch(stanza);
+    // Filtro de rechazo ultrarrápido en RAM: si la frase completa no está en toda la letra,
+    // o si alguna palabra requerida no existe en toda la letra, salir inmediatamente
+    if (entry.allLyricsNorm.empty()) return detail;
+
+    if (entry.allLyricsNorm.find(qNorm) == std::string::npos) {
+        if (words.size() <= 1) return detail;
+        for (const auto& w : words) {
+            if (entry.allLyricsNorm.find(w) == std::string::npos) {
+                return detail;
+            }
+        }
+    }
+
+    // Si pasó el filtro de rechazo, buscar la estrofa y línea exacta para el snippet
+    for (size_t vi = 0; vi < entry.versesNorm.size(); ++vi) {
+        const std::string& stanzaNorm = entry.versesNorm[vi];
         bool stanzaMatches = (stanzaNorm.find(qNorm) != std::string::npos);
         if (!stanzaMatches && words.size() > 1) {
             bool allWordsInStanza = true;
@@ -663,6 +840,7 @@ static SongMatchDetail AnalyzeSongMatch(const std::string& filename, const std::
             detail.kind = SongMatchKind::Verse;
             detail.stanzaIndex = (int)vi;
 
+            const std::string& stanza = (vi < entry.verses.size()) ? entry.verses[vi] : "";
             std::stringstream ss(stanza);
             std::string line;
             int li = 0;
@@ -762,7 +940,7 @@ static void DrawHighlightedText(ImDrawList* dl, ImFont* font, float fontSize,
 //  para pintar el fondo con el color de la etiqueta asignada a la cancion y
 //  resaltar detalles de coincidencia específicos en búsquedas.
 // =============================================================================
-static inline float RadiusSmallLocal() { return DS::RadiusSmall * 0.5f; }
+static inline float RadiusSmallLocal() { return DS::RadiusSmall; }
 
 static bool SongListRow(const char* label, bool selected,
                         ImVec4 tagColor, bool hasTag,
@@ -799,15 +977,15 @@ static bool SongListRow(const char* label, bool selected,
 
     // ── Fondo de seleccion / hover ─────────────────────────────────────────
     if (selected) {
-        dl->AddRectFilled(rMin, rMax, IM_COL32(99, 112, 255, 42));
+        dl->AddRectFilled(rMin, rMax, DS::RowSelectedFill, DS::RadiusSmall);
         dl->AddRectFilled(rMin, ImVec2(rMin.x + 3.0f, rMax.y), DS::RowSelectedBar, 1.5f);
         dl->AddLine(
             ImVec2(rMin.x + 4.0f, rMax.y - 0.5f),
             ImVec2(rMax.x,        rMax.y - 0.5f),
-            IM_COL32(99, 112, 255, 40), 1.0f);
+            DS::SepColor, 1.0f);
     } else if (hovered && !hasTag) {
-        dl->AddRectFilled(rMin, rMax, DS::RowHoverFill, DS::RadiusSmall * 0.5f);
-        dl->AddRect(rMin, rMax, IM_COL32(255, 255, 255, 18), DS::RadiusSmall * 0.5f, 0, 0.5f);
+        dl->AddRectFilled(rMin, rMax, DS::RowHoverFill, DS::RadiusSmall);
+        dl->AddRect(rMin, rMax, DS::SepColor, DS::RadiusSmall, 0, 0.5f);
     }
 
     // ── Texto de la fila (con recorte estricto para nunca desbordar) ───────
@@ -1081,13 +1259,13 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
                 // reposo no hay caja ni borde, solo texto sobre el fondo del
                 // panel. El acento se nota unicamente en hover (relleno +
                 // borde sutil) o activo (tinte translucido + barra lateral).
-                ImU32 bg = isActive ? IM_COL32(99, 112, 255, 42)
+                ImU32 bg = isActive ? DS::RowSelectedFill
                          : isHovered ? DS::RowHoverFill
                          : IM_COL32(0, 0, 0, 0);
 
-                dl->AddRectFilled(p_min, p_max, bg, DS::RadiusSmall * 0.5f);
+                dl->AddRectFilled(p_min, p_max, bg, DS::RadiusSmall);
                 if (isHovered && !isActive)
-                    dl->AddRect(p_min, p_max, IM_COL32(255, 255, 255, 18), DS::RadiusSmall * 0.5f, 0, 0.5f);
+                    dl->AddRect(p_min, p_max, DS::SepColor, DS::RadiusSmall, 0, 0.5f);
                 if (isActive)
                     dl->AddRectFilled(p_min, { p_min.x + 3.0f, p_max.y }, DS::RowSelectedBar, 1.5f);
 
@@ -1124,6 +1302,7 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
                 ImGui::PopStyleVar();
 
                 ImGui::SetCursorScreenPos({ p_min.x, p_max.y });
+                ImGui::Dummy(ImVec2(0.0f, 0.0f));
                 ImGui::PopID();
             }
 
@@ -1162,14 +1341,21 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
 
     // ── Modal nueva playlist ──────────────────────────────────────────────
     if (showNewModal) ImGui::OpenPopup("NuevaPlaylistModal##lib");
+    ImGuiViewport* vpPl = ImGui::GetMainViewport();
+    if (vpPl) {
+        ImGui::SetNextWindowViewport(vpPl->ID);
+        ImGui::SetNextWindowPos(vpPl->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    }
     if (ImGui::BeginPopupModal("NuevaPlaylistModal##lib", &showNewModal,
                                ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
     {
         ImGui::TextUnformatted(str.libPlaylistNameLabel);
         ImGui::SetNextItemWidth(320.f);
-        ImGui::InputText("##newPlName", nameBuffer, sizeof(nameBuffer));
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        bool enterPressed = ImGui::InputText("##newPlName", nameBuffer, sizeof(nameBuffer),
+                                             ImGuiInputTextFlags_EnterReturnsTrue);
         ImGui::Spacing();
-        if (DS::GlassButton(str.libCreateBtn, { 150.f, 34.f })) {
+        if (DS::GlassButton(str.libCreateBtn, { 150.f, 34.f }) || enterPressed) {
             std::string nm(nameBuffer);
             if (!nm.empty() && ctx.createPlaylist(nm)) {
                 openPlaylist = nm;
@@ -1187,14 +1373,20 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
 
     // ── Modal renombrar ───────────────────────────────────────────────────
     if (showRenameModal) ImGui::OpenPopup("RenombrarPlaylistModal##lib");
+    if (vpPl) {
+        ImGui::SetNextWindowViewport(vpPl->ID);
+        ImGui::SetNextWindowPos(vpPl->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    }
     if (ImGui::BeginPopupModal("RenombrarPlaylistModal##lib", &showRenameModal,
                                ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
     {
         ImGui::TextUnformatted(str.libNewNameLabel);
         ImGui::SetNextItemWidth(320.f);
-        ImGui::InputText("##renPlName", nameBuffer, sizeof(nameBuffer));
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        bool enterPressed = ImGui::InputText("##renPlName", nameBuffer, sizeof(nameBuffer),
+                                             ImGuiInputTextFlags_EnterReturnsTrue);
         ImGui::Spacing();
-        if (DS::GlassButton(str.libRename, { 150.f, 34.f })) {
+        if (DS::GlassButton(str.libRename, { 150.f, 34.f }) || enterPressed) {
             std::string nm(nameBuffer);
             if (!nm.empty() && ctx.renamePlaylist(ctx.renameOldName, nm)) {
                 if (openPlaylist == ctx.renameOldName) openPlaylist = nm;
@@ -1296,10 +1488,7 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
             matches.push_back(item);
         }
         std::sort(matches.begin(), matches.end(), [](const std::string& a, const std::string& b) {
-            std::string ta = GetSongDisplayName(a), tb = GetSongDisplayName(b);
-            std::transform(ta.begin(), ta.end(), ta.begin(), [](unsigned char c){ return (char)::tolower(c); });
-            std::transform(tb.begin(), tb.end(), tb.begin(), [](unsigned char c){ return (char)::tolower(c); });
-            return ta < tb;
+            return GetSongCacheEntry(a).displayNameNorm < GetSongCacheEntry(b).displayNameNorm;
         });
 
         {
@@ -1324,9 +1513,14 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
 
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.f, 3.f));
 
-            for (const auto& item : matches)
+            ImGuiListClipper clipper;
+            clipper.Begin((int)matches.size());
+            while (clipper.Step())
             {
-                ImGui::PushID(item.c_str());
+                for (int matchIdx = clipper.DisplayStart; matchIdx < clipper.DisplayEnd; ++matchIdx)
+                {
+                    const auto& item = matches[matchIdx];
+                    ImGui::PushID(item.c_str());
 
                 bool already = std::find(currentSongs.begin(), currentSongs.end(), item) != currentSongs.end();
 
@@ -1356,8 +1550,9 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
                 if (isHovered)
                     dl->AddRect(p_min, p_max, IM_COL32(255, 255, 255, 18), DS::RadiusSmall, 0, 0.5f);
 
-                std::string title  = GetSongDisplayName(item);
-                std::string author = GetSongAuthor(item);
+                SongCacheEntry entry = GetSongCacheEntry(item);
+                std::string title  = entry.displayName;
+                std::string author = entry.author;
 
                 dl->PushClipRect(p_min, { p_min.x + clickW - 8.f, p_max.y }, true);
                 if (!hasMatchDetail)
@@ -1455,7 +1650,9 @@ static void RenderPlaylistsSection(LibraryContext& ctx)
                     ctx.addSongToPlaylist(openPlaylist, item);
 
                 ImGui::SetCursorScreenPos({ p_min.x, p_max.y });
+                ImGui::Dummy(ImVec2(0.0f, 0.0f));
                 ImGui::PopID();
+            }
             }
 
             ImGui::PopStyleVar();
@@ -1604,7 +1801,15 @@ static void RenderItemsListPane(LibraryContext& ctx)
             }
         }
 
-        for (int n = 0; n < (int)filteredItems.size(); ++n)
+        ImGuiListClipper clipper;
+        clipper.Begin((int)filteredItems.size());
+        if (s_PendingScrollIdx >= 0) {
+            clipper.IncludeItemByIndex(s_PendingScrollIdx);
+        }
+
+        while (clipper.Step())
+        {
+        for (int n = clipper.DisplayStart; n < clipper.DisplayEnd; ++n)
         {
             auto it = std::find(ctx.items.begin(), ctx.items.end(), filteredItems[n]);
             int origIdx = (it != ctx.items.end())
@@ -1613,11 +1818,23 @@ static void RenderItemsListPane(LibraryContext& ctx)
             const bool sel   = (ctx.selectedIndex == origIdx);
             std::string disp;
             std::string badgePrefixStr;
+            ImVec4 tagColor(0.f, 0.f, 0.f, 0.f);
+            bool   hasTag = false;
+
             if (ctx.currentCategoryInt == kCat_Songs) {
-                disp = GetSongDisplayName(filteredItems[n]);
-                std::string author = GetSongAuthor(filteredItems[n]);
-                if (!author.empty())
-                    disp += "  —  " + author;
+                SongCacheEntry entry = GetSongCacheEntry(filteredItems[n]);
+                disp = entry.displayName;
+                if (!entry.author.empty())
+                    disp += "  —  " + entry.author;
+
+                if (!entry.tags.empty()) {
+                    auto grpIt = std::find_if(tagGroups.begin(), tagGroups.end(),
+                        [&](const SongTagGroup& g){ return g.id == entry.tags[0]; });
+                    if (grpIt != tagGroups.end()) {
+                        tagColor = grpIt->color;
+                        hasTag   = true;
+                    }
+                }
             } else if (ctx.currentCategoryInt == kCat_Bibles) {
                 auto bInfo = ProyecThor::UI::BibleNames::ParseBibleName(filteredItems[n]);
                 badgePrefixStr = bInfo.langCode;
@@ -1626,21 +1843,6 @@ static void RenderItemsListPane(LibraryContext& ctx)
                     disp += "  ·  " + bInfo.fullTitle;
             } else {
                 disp = StripExtension(filteredItems[n]);
-            }
-
-            // ── Color de fondo por etiqueta ──────────────────────────────────
-            ImVec4 tagColor(0.f, 0.f, 0.f, 0.f);
-            bool   hasTag = false;
-            if (ctx.currentCategoryInt == kCat_Songs) {
-                auto songTags = ctx.getSongTags(filteredItems[n]);
-                if (!songTags.empty()) {
-                    auto grpIt = std::find_if(tagGroups.begin(), tagGroups.end(),
-                        [&](const SongTagGroup& g){ return g.id == songTags[0]; });
-                    if (grpIt != tagGroups.end()) {
-                        tagColor = grpIt->color;
-                        hasTag   = true;
-                    }
-                }
             }
 
             const SongMatchDetail* matchPtr = nullptr;
@@ -1718,6 +1920,7 @@ static void RenderItemsListPane(LibraryContext& ctx)
             if (clicked)
                 SelectLibraryItem(ctx, filteredItems, n);
         }
+        }
 
         ImGui::PopStyleVar(); // ItemSpacing
     }
@@ -1733,10 +1936,13 @@ static void RenderItemsListPane(LibraryContext& ctx)
 
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(sp, sp));
 
-        if (ctx.currentCategoryInt == kCat_Bibles) {
-            const float bw2 = std::floor((avail - sp) / 2.0f);
-            const ImVec2 btnSize(bw2, DS::ButtonHeight);
+        if (ctx.currentCategoryInt == kCat_Songs) {
+            const float bw3 = std::floor((avail - sp * 2.0f) / 3.0f);
+            const ImVec2 btnSize(bw3, DS::ButtonHeight);
 
+            if (GlassIconButton("newSong", "add", "+", str.newLabel, btnSize))
+                CreateNewSong(ctx);
+            ImGui::SameLine();
             if (GlassIconButton("importSong", "upload_file", "^", str.importLabel, btnSize))
                 ctx.importFile();
             ImGui::SameLine();
@@ -1744,12 +1950,9 @@ static void RenderItemsListPane(LibraryContext& ctx)
                                 ImGui::ColorConvertU32ToFloat4(DS::DangerColor)))
                 ctx.deleteSelectedItem();
         } else {
-            const float bw3 = std::floor((avail - sp * 2.0f) / 3.0f);
-            const ImVec2 btnSize(bw3, DS::ButtonHeight);
+            const float bw2 = std::floor((avail - sp) / 2.0f);
+            const ImVec2 btnSize(bw2, DS::ButtonHeight);
 
-            if (GlassIconButton("newSong", "add", "+", str.newLabel, btnSize))
-                CreateNewSong(ctx);
-            ImGui::SameLine();
             if (GlassIconButton("importSong", "upload_file", "^", str.importLabel, btnSize))
                 ctx.importFile();
             ImGui::SameLine();
@@ -1896,6 +2099,7 @@ bool SetSongText(const std::string& filename, const std::string& text)
     f << text;
     f.close();
 
+    InvalidateSongCacheEntry(filename);
     ForceListUpdate() = true;
     return true;
 }
@@ -2000,6 +2204,332 @@ bool UpdateSongStanza(const std::string& filename, int stanzaIndex, const std::s
 }
 
 // =============================================================================
+//  RenderMediaFoldersPane
+//  Muestra las carpetas / colecciones para Videos, Imágenes o Música en la
+//  barra lateral con botón de reproducción directa en cola, conteo de items,
+//  reordenamiento por arrastre y creación/edición de carpetas.
+// =============================================================================
+static void RenderMediaFoldersPane(LibraryContext& ctx, Core::CollectionMediaType type)
+{
+    auto& colMgr = Core::MediaCollectionManager::Get();
+    auto colNames = colMgr.GetCollectionNames(type);
+    std::string activeCol = colMgr.GetActiveCollection(type);
+
+    int totalCount = 0;
+    std::vector<std::string> allFilesFallback;
+    if (type == Core::CollectionMediaType::Video) {
+        const auto& list = Library::GetVideoList();
+        totalCount = (int)list.size();
+        for (const auto& it : list) allFilesFallback.push_back(it.filename);
+    } else if (type == Core::CollectionMediaType::Image) {
+        const auto& list = Library::GetImageList();
+        totalCount = (int)list.size();
+        for (const auto& it : list) allFilesFallback.push_back(it.filename);
+    } else {
+        const auto& list = Library::GetAudioList();
+        totalCount = (int)list.size();
+        for (const auto& it : list) allFilesFallback.push_back(it.filename);
+    }
+
+    bool isQueuePlaying = colMgr.IsQueuePlaying() && colMgr.GetQueueType() == type;
+    std::string queueCol = isQueuePlaying ? colMgr.GetQueueCollectionName() : "";
+
+    static bool s_ShowNewFolderModal = false;
+    static char s_NewFolderNameBuf[64] = "";
+    static bool s_ShowRenameFolderModal = false;
+    static std::string s_RenameTargetFolder = "";
+    static char s_RenameFolderNameBuf[64] = "";
+
+    const float itemSpY   = ImGui::GetStyle().ItemSpacing.y;
+    const float btnRowH   = DS::ButtonHeight;
+    const float reservedH = btnRowH + itemSpY * 2.0f + 6.0f;
+
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.f, 0.f, 0.f, 0.f));
+    ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(1.f, 1.f, 1.f, 0.06f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding,   DS::RadiusMedium);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,   ImVec2(6.f, 6.f));
+
+    if (ImGui::BeginChild("FoldersListChild", { 0.f, -reservedH }, true))
+    {
+        std::string searchLower = ctx.searchBuffer ? ctx.searchBuffer : "";
+        std::transform(searchLower.begin(), searchLower.end(), searchLower.begin(), ::tolower);
+
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+
+        auto RenderFolderRow = [&](const std::string& name, int count, bool isAll, int colIdx) {
+            if (!searchLower.empty()) {
+                std::string nameLower = name;
+                std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
+                if (nameLower.find(searchLower) == std::string::npos) return;
+            }
+
+            bool isSelected = isAll ? activeCol.empty() : (activeCol == name);
+            bool isThisQueueRunning = isQueuePlaying && (isAll ? queueCol.empty() : (queueCol == name));
+
+            ImGui::PushID(isAll ? "##all_folder" : name.c_str());
+
+            const float rowH = 34.0f;
+            const float btnSz = 24.0f;
+            const float spX = 4.0f;
+            const float actionW = isAll ? btnSz : (btnSz * 2.0f + spX);
+            const float availRowW = ImGui::GetContentRegionAvail().x;
+            const float mainW = std::max(10.0f, availRowW - actionW - spX - 8.0f);
+
+            ImVec2 pMin = ImGui::GetCursorScreenPos();
+            ImVec2 pMax = { pMin.x + availRowW, pMin.y + rowH };
+
+            std::string invId = "##rowInvBtn_" + (isAll ? std::string("all") : name);
+            bool rowClicked = ImGui::InvisibleButton(invId.c_str(), ImVec2(mainW, rowH));
+            bool rowHovered = ImGui::IsItemHovered();
+
+            if (!isAll) {
+                // Drag Source for reordering
+                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+                    ImGui::SetDragDropPayload("FOLDER_REORDER_IDX", &colIdx, sizeof(int));
+                    ImGui::Text("Mover carpeta '%s'", name.c_str());
+                    ImGui::EndDragDropSource();
+                }
+
+                // Drag Target for reordering & dropping media items
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("FOLDER_REORDER_IDX")) {
+                        int fromIdx = *(const int*)p->Data;
+                        colMgr.MoveCollection(type, fromIdx, colIdx);
+                    }
+                    if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("MEDIA_ITEM_FILENAME")) {
+                        const char* droppedFile = (const char*)p->Data;
+                        colMgr.AddItemToCollection(type, name, droppedFile);
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+
+                if (ImGui::BeginPopupContextItem("##folderRowCtxMenu")) {
+                    if (ImGui::MenuItem("▶ Reproducir en Cola")) {
+                        colMgr.SetActiveCollection(type, name);
+                        colMgr.StartQueue(type, name, {}, 0);
+                    }
+                    ImGui::Separator();
+                    if (colIdx > 0 && ImGui::MenuItem("🔼 Mover arriba")) {
+                        colMgr.MoveCollection(type, colIdx, colIdx - 1);
+                    }
+                    if (colIdx < (int)colNames.size() - 1 && ImGui::MenuItem("🔽 Mover abajo")) {
+                        colMgr.MoveCollection(type, colIdx, colIdx + 1);
+                    }
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("✏ Renombrar")) {
+                        s_ShowRenameFolderModal = true;
+                        s_RenameTargetFolder = name;
+                        strncpy_s(s_RenameFolderNameBuf, name.c_str(), sizeof(s_RenameFolderNameBuf) - 1);
+                    }
+                    ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(239, 68, 68, 255));
+                    if (ImGui::MenuItem("🗑 Eliminar Carpeta")) {
+                        colMgr.DeleteCollection(type, name);
+                        if (activeCol == name) colMgr.SetActiveCollection(type, "");
+                    }
+                    ImGui::PopStyleColor();
+                    ImGui::EndPopup();
+                }
+            }
+
+            if (rowClicked) {
+                colMgr.SetActiveCollection(type, isAll ? "" : name);
+            }
+
+            // Background & border across full row width
+            ImU32 bgCol = isSelected ? IM_COL32(56, 189, 248, 35) :
+                          (rowHovered ? IM_COL32(255, 255, 255, 18) : IM_COL32(255, 255, 255, 6));
+            ImU32 bdrCol = isSelected ? IM_COL32(56, 189, 248, 180) :
+                           (rowHovered ? IM_COL32(255, 255, 255, 40) : IM_COL32(255, 255, 255, 12));
+            dl->AddRectFilled(pMin, pMax, bgCol, DS::RadiusSmall);
+            dl->AddRect(pMin, pMax, bdrCol, DS::RadiusSmall, 0, isSelected ? 1.5f : 1.0f);
+
+            // Icon 📁 and Folder Name
+            float textY = pMin.y + (rowH - ImGui::GetTextLineHeight()) * 0.5f;
+            dl->AddText({ pMin.x + 8.0f, textY }, isAll ? IM_COL32(56, 189, 248, 255) : IM_COL32(245, 158, 11, 255), "📁");
+
+            std::string dispName = isAll ? ((type == Core::CollectionMediaType::Video) ? "Todos los Videos" :
+                                            (type == Core::CollectionMediaType::Image) ? "Todas las Imágenes" :
+                                                                                         "Toda la Música") : name;
+            float maxTextW = mainW - 46.0f;
+            if (ImGui::CalcTextSize(dispName.c_str()).x > maxTextW) {
+                while (!dispName.empty() && ImGui::CalcTextSize((dispName + "...").c_str()).x > maxTextW) {
+                    dispName.pop_back();
+                }
+                dispName += "...";
+            }
+
+            ImU32 nameCol = isSelected ? IM_COL32(255, 255, 255, 255) :
+                            (rowHovered ? IM_COL32(240, 240, 240, 255) : DS::TextPrimary);
+            dl->AddText({ pMin.x + 28.0f, textY }, nameCol, dispName.c_str());
+
+            std::string countStr = "(" + std::to_string(count) + ")";
+            float countX = pMin.x + 30.0f + ImGui::CalcTextSize(dispName.c_str()).x + 6.0f;
+            if (countX + ImGui::CalcTextSize(countStr.c_str()).x < pMin.x + mainW) {
+                dl->AddText({ countX, textY }, DS::TextSecondary, countStr.c_str());
+            }
+
+            // Buttons on the right
+            ImGui::SameLine(0.0f, spX);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
+            if (isThisQueueRunning) {
+                ImGui::PushStyleColor(ImGuiCol_Button,        IM_COL32(239, 68, 68, 180));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(239, 68, 68, 240));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  IM_COL32(220, 38, 38, 255));
+                if (ImGui::Button("⏹##qStop", ImVec2(btnSz, rowH))) {
+                    colMgr.StopQueue();
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Detener cola");
+                ImGui::PopStyleColor(3);
+            } else {
+                ImGui::PushStyleColor(ImGuiCol_Button,        IM_COL32(34, 197, 94, 80));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(34, 197, 94, 180));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  IM_COL32(34, 197, 94, 240));
+                if (ImGui::Button("▶##qPlay", ImVec2(btnSz, rowH))) {
+                    if (isAll) {
+                        colMgr.SetActiveCollection(type, "");
+                        colMgr.StartQueue(type, "", allFilesFallback, 0);
+                    } else {
+                        colMgr.SetActiveCollection(type, name);
+                        colMgr.StartQueue(type, name, {}, 0);
+                    }
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip(isAll ? "Reproducir todos en cola" : "Reproducir carpeta en cola");
+                ImGui::PopStyleColor(3);
+            }
+
+            if (!isAll) {
+                ImGui::SameLine(0.0f, spX);
+                if (ImGui::Button("...##ctxBtn", ImVec2(btnSz, rowH))) {
+                    ImGui::OpenPopup("##folderRowCtxMenu");
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Opciones de carpeta");
+            }
+            ImGui::PopStyleVar();
+
+            ImGui::PopID();
+        };
+
+        // 1. "Todos" row
+        RenderFolderRow("Todos", totalCount, true, -1);
+
+        // 2. Custom folder rows
+        for (int i = 0; i < (int)colNames.size(); i++) {
+            const auto* c = colMgr.GetCollection(type, colNames[i]);
+            int count = c ? (int)c->itemFilenames.size() : 0;
+            RenderFolderRow(colNames[i], count, false, i);
+        }
+
+        if (colNames.empty()) {
+            ImGui::Spacing();
+            ImGui::TextDisabled("  Sin carpetas creadas.");
+            ImGui::TextDisabled("  Haz clic abajo en '+ Nueva Carpeta'.");
+        }
+        ImGui::Dummy(ImVec2(0.0f, 0.0f));
+    }
+    ImGui::EndChild();
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(2);
+
+    ImGui::Spacing();
+
+    // ── Footer Buttons: [+ Nueva Carpeta] [Importar] [Actualizar] ────────
+    {
+        const float avail = ImGui::GetContentRegionAvail().x;
+        const float sp    = ImGui::GetStyle().ItemSpacing.x;
+        const float bwNew = avail - 2.0f * (DS::ButtonHeight + sp);
+        const ImVec2 newBtnSize(bwNew, DS::ButtonHeight);
+        const ImVec2 iconBtnSize(DS::ButtonHeight, DS::ButtonHeight);
+
+        ImGui::PushStyleColor(ImGuiCol_Button,        IM_COL32(56, 189, 248, 60));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(56, 189, 248, 140));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  IM_COL32(56, 189, 248, 200));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
+        if (ImGui::Button("+ Nueva Carpeta", newBtnSize)) {
+            s_ShowNewFolderModal = true;
+            s_NewFolderNameBuf[0] = '\0';
+        }
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(3);
+
+        ImGui::SameLine();
+        if (GlassIconButton("importMediaFolders", "upload_file", "^", "Importar archivo", iconBtnSize)) {
+            ctx.importFile();
+        }
+        ImGui::SameLine();
+        if (GlassIconButton("refreshMediaFolders", "repeat", "R", "Actualizar", iconBtnSize)) {
+            ctx.refreshList();
+        }
+    }
+
+    // Modal: Nueva Carpeta
+    if (s_ShowNewFolderModal) {
+        ImGui::OpenPopup("Nueva Carpeta##modalFolder");
+    }
+    ImGuiViewport* vpFolder = ImGui::GetMainViewport();
+    if (vpFolder) {
+        ImGui::SetNextWindowViewport(vpFolder->ID);
+        ImGui::SetNextWindowPos(vpFolder->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    }
+    if (ImGui::BeginPopupModal("Nueva Carpeta##modalFolder", &s_ShowNewFolderModal,
+                               ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
+        ImGui::Text("Nombre de la nueva carpeta:");
+        ImGui::SetNextItemWidth(260.0f);
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        bool enterPressed = ImGui::InputText("##newFldName", s_NewFolderNameBuf, sizeof(s_NewFolderNameBuf),
+                                            ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::Spacing();
+        if (ImGui::Button("Crear", ImVec2(100.0f, DS::ButtonHeight)) || enterPressed) {
+            std::string n = s_NewFolderNameBuf;
+            if (!n.empty()) {
+                colMgr.CreateCollection(type, n);
+                colMgr.SetActiveCollection(type, n);
+            }
+            s_ShowNewFolderModal = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancelar", ImVec2(100.0f, DS::ButtonHeight))) {
+            s_ShowNewFolderModal = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
+    // Modal: Renombrar Carpeta
+    if (s_ShowRenameFolderModal) {
+        ImGui::OpenPopup("Renombrar Carpeta##modalRenameFld");
+    }
+    if (vpFolder) {
+        ImGui::SetNextWindowViewport(vpFolder->ID);
+        ImGui::SetNextWindowPos(vpFolder->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    }
+    if (ImGui::BeginPopupModal("Renombrar Carpeta##modalRenameFld", &s_ShowRenameFolderModal,
+                               ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
+        ImGui::Text("Nuevo nombre para '%s':", s_RenameTargetFolder.c_str());
+        ImGui::SetNextItemWidth(260.0f);
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        bool enterPressed = ImGui::InputText("##renFldName", s_RenameFolderNameBuf, sizeof(s_RenameFolderNameBuf),
+                                            ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::Spacing();
+        if (ImGui::Button("Guardar", ImVec2(100.0f, DS::ButtonHeight)) || enterPressed) {
+            std::string n = s_RenameFolderNameBuf;
+            if (!n.empty() && n != s_RenameTargetFolder) {
+                colMgr.RenameCollection(type, s_RenameTargetFolder, n);
+            }
+            s_ShowRenameFolderModal = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancelar", ImVec2(100.0f, DS::ButtonHeight))) {
+            s_ShowRenameFolderModal = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
+// =============================================================================
 //  RenderSideList
 //  Todo el contenido vive dentro de un contenedor con padding parejo en
 //  los 4 lados (izquierda/derecha/arriba/abajo), para que el buscador, el
@@ -2015,6 +2545,115 @@ void RenderSideList(LibraryContext& ctx)
     ImGui::BeginChild("LibraryPad", ImGui::GetContentRegionAvail(), false,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
+    // ── Selector de Assets (Canciones, Playlists, Videos, Música, Imágenes) ──
+    const float availW = ImGui::GetContentRegionAvail().x;
+    constexpr float tabH = 32.0f;
+    constexpr float tabGap = 4.0f;
+
+    struct AssetDef {
+        const char* label;
+        int category;
+        bool isPlaylist;
+        ImU32 accentCol;
+        void (*drawIcon)(ImDrawList*, ImVec2, float, ImU32);
+    };
+
+    const AssetDef k_Assets[] = {
+        { "Canciones",  kCat_Songs,     false, IM_COL32(56, 189, 248, 255), Library::DrawIcon_Music },
+        { "Playlists",  kCat_Songs,     true,  IM_COL32(168, 85, 247, 255), Library::DrawIcon_Playlist },
+        { "Videos",     kCat_Videos,    false, IM_COL32(239, 68, 68, 255),   Library::DrawIcon_Video },
+        { "Música",     kCat_Audio,     false, IM_COL32(34, 197, 94, 255),   Library::DrawIcon_Audio },
+        { "Imágenes",   kCat_Images,    false, IM_COL32(245, 158, 11, 255), Library::DrawIcon_Image },
+        { "Documentos", kCat_Documents, false, IM_COL32(99, 102, 241, 255),  Library::DrawIcon_Document },
+    };
+
+    bool singleRow = (availW >= 240.0f);
+    int row1Count  = singleRow ? 6 : 3;
+    int row2Count  = singleRow ? 0 : 3;
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    auto DrawAssetButton = [&](int i, float btnW) {
+        const auto& a = k_Assets[i];
+        bool isActive = false;
+        if (a.isPlaylist) {
+            isActive = (ctx.currentCategoryInt == kCat_Songs && ctx.showPlaylistsTab);
+        } else if (a.category == kCat_Songs) {
+            isActive = (ctx.currentCategoryInt == kCat_Songs && !ctx.showPlaylistsTab);
+        } else {
+            isActive = (ctx.currentCategoryInt == a.category);
+        }
+
+        ImVec2 pMin = ImGui::GetCursorScreenPos();
+        ImVec2 pMax = { pMin.x + btnW, pMin.y + tabH };
+
+        std::string btnId = "##libAssetBtn_" + std::to_string(i);
+        bool clicked = ImGui::InvisibleButton(btnId.c_str(), ImVec2(btnW, tabH));
+        bool hovered = ImGui::IsItemHovered();
+
+        ImU32 bgCol = isActive ? ImGui::ColorConvertFloat4ToU32(ImVec4(
+                                    ((a.accentCol >> 0) & 0xFF) / 255.0f,
+                                    ((a.accentCol >> 8) & 0xFF) / 255.0f,
+                                    ((a.accentCol >> 16) & 0xFF) / 255.0f, 0.22f))
+                               : (hovered ? IM_COL32(255, 255, 255, 22) : IM_COL32(255, 255, 255, 9));
+
+        ImU32 bdrCol = isActive ? a.accentCol : (hovered ? IM_COL32(255, 255, 255, 50) : IM_COL32(255, 255, 255, 16));
+        float bdrThick = isActive ? 1.5f : 1.0f;
+
+        dl->AddRectFilled(pMin, pMax, bgCol, DS::RadiusSmall);
+        dl->AddRect(pMin, pMax, bdrCol, DS::RadiusSmall, 0, bdrThick);
+
+        dl->PushClipRect(pMin, pMax, true);
+        float iconSz = 16.0f;
+        ImVec2 iconPos = { pMin.x + (btnW - iconSz) * 0.5f, pMin.y + (tabH - iconSz) * 0.5f };
+        ImU32 textCol = isActive ? IM_COL32(255, 255, 255, 255) : (hovered ? IM_COL32(230, 230, 230, 255) : DS::TextSecondary);
+        ImU32 icCol   = isActive ? a.accentCol : textCol;
+
+        if (a.drawIcon) {
+            a.drawIcon(dl, iconPos, iconSz, icCol);
+        }
+        dl->PopClipRect();
+
+        if (hovered && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+            ImGui::SetTooltip("%s", a.label);
+        }
+
+        if (clicked) {
+            if (a.isPlaylist) {
+                ctx.currentCategoryInt = kCat_Songs;
+                ctx.showPlaylistsTab   = true;
+                ctx.selectedIndex      = -1;
+            } else if (a.category == kCat_Songs) {
+                ctx.currentCategoryInt = kCat_Songs;
+                ctx.showPlaylistsTab   = false;
+                ctx.selectedIndex      = -1;
+                ctx.refreshList();
+            } else {
+                ctx.currentCategoryInt = a.category;
+                ctx.showPlaylistsTab   = false;
+                ctx.selectedIndex      = -1;
+                ctx.refreshList();
+            }
+        }
+    };
+
+    float wRow1 = (availW - tabGap * (row1Count - 1)) / row1Count;
+    for (int i = 0; i < row1Count; i++) {
+        if (i > 0) ImGui::SameLine(0.0f, tabGap);
+        DrawAssetButton(i, wRow1);
+    }
+
+    if (row2Count > 0) {
+        ImGui::Dummy(ImVec2(0.0f, 1.0f));
+        float wRow2 = (availW - tabGap * (row2Count - 1)) / row2Count;
+        for (int i = 0; i < row2Count; i++) {
+            if (i > 0) ImGui::SameLine(0.0f, tabGap);
+            DrawAssetButton(row1Count + i, wRow2);
+        }
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
     // ── Barra de búsqueda + boton de actualizar (mismo renglon: antes el
     //    refresh vivia en su propio renglon abajo, junto al combo de estilo
     //    por defecto) ───────────────────────────────────────────────────────
@@ -2029,7 +2668,15 @@ void RenderSideList(LibraryContext& ctx)
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(10.f, 7.f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
     ImGui::SetNextItemWidth(-(refreshBtnW + refreshGap));
-    if (ImGui::InputTextWithHint("##search", str.libSearchHint,
+
+    const char* searchHint = str.libSearchHint;
+    if (ctx.showPlaylistsTab) searchHint = "Buscar playlist...";
+    else if (ctx.currentCategoryInt == kCat_Videos) searchHint = "Buscar carpeta de videos...";
+    else if (ctx.currentCategoryInt == kCat_Audio) searchHint = "Buscar carpeta de música...";
+    else if (ctx.currentCategoryInt == kCat_Images) searchHint = "Buscar carpeta de imágenes...";
+    else if (ctx.currentCategoryInt == kCat_Documents) searchHint = "Buscar documentos...";
+
+    if (ImGui::InputTextWithHint("##search", searchHint,
                                  ctx.searchBuffer, ctx.searchBufferSize))
         ForceListUpdate() = true;
     ImGui::PopStyleVar(3);
@@ -2068,9 +2715,15 @@ void RenderSideList(LibraryContext& ctx)
 
     ImGui::Spacing();
 
-    // ── Canciones: se muestran junto a Playlists en un grid, sin pestañas ───
+    // ── Vistas según categoría activa ───
     if (ctx.currentCategoryInt == kCat_Songs)
         RenderSongsAndPlaylistsGrid(ctx);
+    else if (ctx.currentCategoryInt == kCat_Videos)
+        RenderMediaFoldersPane(ctx, Core::CollectionMediaType::Video);
+    else if (ctx.currentCategoryInt == kCat_Images)
+        RenderMediaFoldersPane(ctx, Core::CollectionMediaType::Image);
+    else if (ctx.currentCategoryInt == kCat_Audio)
+        RenderMediaFoldersPane(ctx, Core::CollectionMediaType::Audio);
     else
         RenderItemsListPane(ctx);
 
@@ -2105,6 +2758,7 @@ static void SelectLibraryItem(LibraryContext& ctx,
         case kCat_Images:    s.type = Core::ItemType::Image;     break;
         case kCat_Bibles:    s.type = Core::ItemType::Bible;     break;
         case kCat_Documents: s.type = Core::ItemType::Documents; break;
+        case kCat_Audio:     s.type = Core::ItemType::Audio;     break;
         default:             s.type = Core::ItemType::None;      break;
     }
     if (ctx.currentCategoryInt == kCat_Songs)

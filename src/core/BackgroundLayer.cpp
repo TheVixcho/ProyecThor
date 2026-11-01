@@ -1075,6 +1075,8 @@ void main() {
             RetireActiveNative();
         }
 
+        bool wantNativeLoop = !allowAudio && !m_PingPongEnabled;
+
         // FIX (freeze/flash en clicks repetidos): si esto es EXACTAMENTE lo
         // que ya se esta mostrando o abriendo en Active() (sin swap pendiente),
         // o lo que ya se esta precargando en Standby() (con swap pendiente),
@@ -1083,8 +1085,17 @@ void main() {
         // ping-pong entre Active/Standby.
         if (!m_SwapPending && m_IsVideo && path == Active().GetCurrentPath())
         {
-            if (Active().GetLoadState() == VLCBasePlayer::LoadState::Ready &&
-                (Active().GetPosition() >= 0.99f || !Active().IsPlaying()))
+            if (Active().GetPosition() >= 0.95f || !Active().IsPlaying() ||
+                Active().GetLoadState() != VLCBasePlayer::LoadState::Ready)
+            {
+                Active().Stop();
+                Active().Play(path, wantNativeLoop, !allowAudio);
+                Active().SetAudioActive(allowAudio);
+                Active().SetMute(!allowAudio || m_TargetMuted.load());
+                Active().SetVolume((allowAudio && !m_TargetMuted.load()) ? m_TargetVolume.load() : 0);
+                Active().ConsumeEndReached();
+            }
+            else
             {
                 Active().SetPosition(0.0f);
                 Active().SetPause(false);
@@ -1099,12 +1110,6 @@ void main() {
         const bool hasRunningVideo = (m_IsVideo && Active().HasVideoFrame());
         m_IsVideo = true;
 
-        // Fondos con ping-pong activo NO deben loopear via libVLC
-        // (input-repeat): necesitamos que llegue un EndReached real al
-        // terminar el pase hacia adelante para poder arrancar la fase de
-        // reversa manual (ver Update()). Videos reales (allowAudio=true)
-        // nunca loopean de todos modos, con o sin ping-pong.
-        bool wantNativeLoop = !allowAudio && !m_PingPongEnabled;
         m_PingPongReverse    = false;
         m_PingPongLastStepAt = 0.0;
 

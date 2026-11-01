@@ -909,7 +909,7 @@ std::wstring VoiceAssistant::BuildOfflineGrammarXml(const std::wstring& langTag)
     }
     out << "    </one-of>\n  </rule>\n\n";
 
-    // ── Frases comunes cristianas / litúrgicas ──
+    // ── Frases comunes auditorio / cristianas ──
     out << "  <rule id=\"church_phrases\">\n    <one-of>\n";
     static const char* kPhrases[] = {
         "dios esta aqui", "gloria a dios", "santo santo santo",

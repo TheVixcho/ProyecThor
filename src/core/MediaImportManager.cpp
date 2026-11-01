@@ -442,9 +442,11 @@ void MediaImportManager::Update() {
     }
 
     // 3. Escaneo periodico no bloqueante de Descargas + Carpetas Vinculadas
+    const auto& perf = Settings::SettingsManager::Get().GetSettings().performance;
+    const bool pauseScan = perf.performanceMode || perf.pauseBackgroundScan;
     const double now = ImGui::GetTime();
     const bool forceNow = m_ForceImmediateScan.exchange(false);
-    if ((forceNow || (now - m_LastScanTimeSec >= 3.2)) && !m_ScanRunning.load()) {
+    if ((forceNow || (!pauseScan && (now - m_LastScanTimeSec >= 3.2))) && !m_ScanRunning.load()) {
         m_LastScanTimeSec = now;
         StartAsyncWatcherScan();
     }

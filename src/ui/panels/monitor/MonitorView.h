@@ -20,6 +20,7 @@ public:
     ~MonitorView() = default;
 
     void Render(Core::VLCBasePlayer* player);
+    void RenderFloatingPreview(Core::VLCBasePlayer* player, float w, float h);
 
     // Necesario para el boton de pantalla completa del Preview (ver
     // RequestPreviewFullscreen -> UIManager::EnterFullscreenEditor). Mismo

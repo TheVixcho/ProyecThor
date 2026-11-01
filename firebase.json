@@ -4,7 +4,29 @@
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "**/*.exe"
+    ],
+    "redirects": [
+      {
+        "source": "/download",
+        "destination": "https://github.com/TheVixcho/ProyecThor/releases/latest/download/ProyecThor_Setup.exe",
+        "type": 302
+      },
+      {
+        "source": "/downloads/ProyecThor_Setup.exe",
+        "destination": "https://github.com/TheVixcho/ProyecThor/releases/latest/download/ProyecThor_Setup.exe",
+        "type": 302
+      }
+    ],
+    "headers": [
+      {
+        "source": "/downloads/version.json",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" },
+          { "key": "Access-Control-Allow-Origin", "value": "*" }
+        ]
+      }
     ],
     "rewrites": [
       {

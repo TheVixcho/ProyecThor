@@ -1,5 +1,6 @@
 #include "VLCBasePlayer.h"
 #include "core/plugins/PluginManager.h"
+#include "media/audio/WindowsAudioSession.h"
 
 #ifdef _WIN32
 #include <basetsd.h>
@@ -25,12 +26,10 @@
 
 #ifdef _WIN32
 #include <windows.h>
-#include <mmsystem.h>
-#include <mmreg.h>
-#ifndef WAVE_FORMAT_IEEE_FLOAT
-#define WAVE_FORMAT_IEEE_FLOAT 0x0003
-#endif
-#pragma comment(lib, "winmm.lib")
+#include <mmdeviceapi.h>
+#include <audiopolicy.h>
+#include <endpointvolume.h>
+#pragma comment(lib, "ole32.lib")
 #endif
 
 namespace {
@@ -67,38 +66,97 @@ std::string NormalizePathForCompare(const std::string& path)
 
 #ifdef _WIN32
 
-static inline void AtomicUpdateMax(std::atomic<float>& target, float value)
-{
-    float current = target.load(std::memory_order_relaxed);
-    while (value > current &&
-           !target.compare_exchange_weak(current, value, std::memory_order_relaxed))
+// Medidor de picos de las sesiones de audio de ESTE proceso (WASAPI). VLC
+// reproduce por su salida nativa (mmdevice); el medidor solo observa, no toca
+// el flujo de audio, asi que no puede causar cortes ni desfases.
+class ProcessAudioMeter {
+public:
+    static ProcessAudioMeter& Get() { static ProcessAudioMeter m; return m; }
+
+    void Read(float& left, float& right)
     {
+        left = right = 0.0f;
+        std::lock_guard<std::mutex> lk(m_Mutex);
+        const auto now = std::chrono::steady_clock::now();
+        if (now >= m_NextRefresh) {
+            Refresh();
+            m_NextRefresh = now + std::chrono::milliseconds(1500);
+        }
+        for (auto* meter : m_Meters) {
+            UINT channels = 0;
+            float peaks[8] = { 0.0f };
+            if (SUCCEEDED(meter->GetMeteringChannelCount(&channels)) && channels > 0 && channels <= 8 &&
+                SUCCEEDED(meter->GetChannelsPeakValues(channels, peaks))) {
+                left  = std::max(left,  peaks[0]);
+                right = std::max(right, channels > 1 ? peaks[1] : peaks[0]);
+            }
+        }
     }
-}
-#endif
 
-struct VLCAudioCtx {
-    std::atomic<float> peakL{0.0f};
-    std::atomic<float> peakR{0.0f};
+private:
+    ProcessAudioMeter() = default;
+    ~ProcessAudioMeter() = default;
 
-    std::atomic<float>* volumeMultiplier = nullptr;
-    std::atomic<bool>*  muted            = nullptr;
-    std::atomic<bool>*  audioActive      = nullptr;
-    std::atomic<bool>*  forceSilent      = nullptr;
+    void ReleaseAll()
+    {
+        for (auto* m : m_Meters) m->Release();
+        m_Meters.clear();
+    }
 
-#ifdef _WIN32
-    HWAVEOUT hWaveOut = nullptr;
-    static const int NUM_BUFFERS = 8;
-    WAVEHDR waveHeaders[NUM_BUFFERS] = {};
-    int currentHeader = 0;
+    void Refresh()
+    {
+        ReleaseAll();
+        // COM por hilo (idempotente). Se deja inicializado: el hilo de UI ya lo usa.
+        const HRESULT hrInit = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        (void)hrInit;
 
-    bool deviceInitialized = false;
+        IMMDeviceEnumerator* en = nullptr;
+        if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                    __uuidof(IMMDeviceEnumerator), reinterpret_cast<void**>(&en))) || !en)
+            return;
+        IMMDevice* dev = nullptr;
+        if (SUCCEEDED(en->GetDefaultAudioEndpoint(eRender, eMultimedia, &dev)) && dev) {
+            IAudioSessionManager2* mgr = nullptr;
+            if (SUCCEEDED(dev->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr,
+                                        reinterpret_cast<void**>(&mgr))) && mgr) {
+                IAudioSessionEnumerator* sessions = nullptr;
+                if (SUCCEEDED(mgr->GetSessionEnumerator(&sessions)) && sessions) {
+                    int count = 0;
+                    sessions->GetCount(&count);
+                    const DWORD myPid = GetCurrentProcessId();
+                    for (int i = 0; i < count; ++i) {
+                        IAudioSessionControl* ctl = nullptr;
+                        if (FAILED(sessions->GetSession(i, &ctl)) || !ctl) continue;
+                        IAudioSessionControl2* ctl2 = nullptr;
+                        if (SUCCEEDED(ctl->QueryInterface(__uuidof(IAudioSessionControl2),
+                                                          reinterpret_cast<void**>(&ctl2))) && ctl2) {
+                            DWORD pid = 0;
+                            if (SUCCEEDED(ctl2->GetProcessId(&pid)) && pid == myPid) {
+                                IAudioMeterInformation* meter = nullptr;
+                                if (SUCCEEDED(ctl->QueryInterface(__uuidof(IAudioMeterInformation),
+                                                                  reinterpret_cast<void**>(&meter))) && meter)
+                                    m_Meters.push_back(meter);
+                            }
+                            ctl2->Release();
+                        }
+                        ctl->Release();
+                    }
+                    sessions->Release();
+                }
+                mgr->Release();
+            }
+            dev->Release();
+        }
+        en->Release();
+        ProyecThor::Audio::EnsureProcessAudioUnmutedAndMaxVolume();
+    }
 
-    UINT_PTR deviceId = WAVE_MAPPER;
-
-    std::mutex deviceMutex;
-#endif
+    std::mutex m_Mutex;
+    std::vector<IAudioMeterInformation*> m_Meters;
+    std::chrono::steady_clock::time_point m_NextRefresh{};
 };
+
+#endif
 
 struct VLCVideoCtx {
     std::mutex mutex;
@@ -112,210 +170,6 @@ struct VLCVideoCtx {
 
     bool     everHadFrame = false;
 };
-
-#ifdef _WIN32
-
-static bool OpenWaveOutDeviceLocked(VLCAudioCtx* ctx, UINT_PTR deviceId)
-{
-    WAVEFORMATEX wfx       = {};
-    wfx.wFormatTag         = WAVE_FORMAT_PCM;
-    wfx.nChannels          = 2;
-    wfx.nSamplesPerSec     = 44100;
-    wfx.wBitsPerSample     = 16;
-    wfx.nBlockAlign        = (wfx.nChannels * wfx.wBitsPerSample) / 8;
-    wfx.nAvgBytesPerSec    = wfx.nSamplesPerSec * wfx.nBlockAlign;
-
-    if (waveOutOpen(&ctx->hWaveOut, static_cast<UINT>(deviceId), &wfx, 0, 0, CALLBACK_NULL)
-        != MMSYSERR_NOERROR)
-    {
-        ctx->hWaveOut = nullptr;
-        return false;
-    }
-
-    for (int i = 0; i < VLCAudioCtx::NUM_BUFFERS; ++i)
-    {
-        ctx->waveHeaders[i] = {};
-        ctx->waveHeaders[i].dwBufferLength = 4096 * 8;
-        ctx->waveHeaders[i].lpData         = new char[ctx->waveHeaders[i].dwBufferLength];
-        waveOutPrepareHeader(ctx->hWaveOut, &ctx->waveHeaders[i], sizeof(WAVEHDR));
-    }
-    ctx->currentHeader     = 0;
-    ctx->deviceId          = deviceId;
-    ctx->deviceInitialized = true;
-    return true;
-}
-
-static void CloseWaveOutDeviceLocked(VLCAudioCtx* ctx)
-{
-    if (!ctx->hWaveOut)
-    {
-        ctx->deviceInitialized = false;
-        return;
-    }
-
-    waveOutReset(ctx->hWaveOut);
-    for (int i = 0; i < VLCAudioCtx::NUM_BUFFERS; ++i)
-    {
-        waveOutUnprepareHeader(ctx->hWaveOut, &ctx->waveHeaders[i], sizeof(WAVEHDR));
-        delete[] ctx->waveHeaders[i].lpData;
-        ctx->waveHeaders[i].lpData = nullptr;
-    }
-    waveOutClose(ctx->hWaveOut);
-    ctx->hWaveOut          = nullptr;
-    ctx->deviceInitialized = false;
-}
-
-static int vlc_audio_setup(void** opaque, char* format, unsigned* rate, unsigned* channels)
-{
-    auto* ctx = static_cast<VLCAudioCtx*>(*opaque);
-    std::memcpy(format, "S16N", 4);
-    *rate     = 44100;
-    *channels = 2;
-
-    std::lock_guard<std::mutex> lock(ctx->deviceMutex);
-    if (ctx->deviceInitialized)
-        return 0;
-
-    if (!OpenWaveOutDeviceLocked(ctx, ctx->deviceId))
-        std::cerr << "[Audio] Error al abrir la salida WinMM (deviceId="
-                  << ctx->deviceId << ").\n";
-
-    return 0;
-}
-
-static void vlc_audio_cleanup(void* opaque)
-{
-    auto* ctx = static_cast<VLCAudioCtx*>(opaque);
-    std::lock_guard<std::mutex> lock(ctx->deviceMutex);
-    if (ctx->hWaveOut)
-        waveOutReset(ctx->hWaveOut);
-}
-
-static void vlc_audio_destroy_device(VLCAudioCtx* ctx)
-{
-    std::lock_guard<std::mutex> lock(ctx->deviceMutex);
-    CloseWaveOutDeviceLocked(ctx);
-}
-
-static void vlc_audio_pause(void* opaque, int64_t )
-{
-    auto* ctx = static_cast<VLCAudioCtx*>(opaque);
-    std::lock_guard<std::mutex> lock(ctx->deviceMutex);
-    if (ctx->hWaveOut)
-        waveOutPause(ctx->hWaveOut);
-}
-
-static void vlc_audio_resume(void* opaque, int64_t )
-{
-    auto* ctx = static_cast<VLCAudioCtx*>(opaque);
-    std::lock_guard<std::mutex> lock(ctx->deviceMutex);
-    if (ctx->hWaveOut)
-        waveOutRestart(ctx->hWaveOut);
-}
-
-static void vlc_audio_flush(void* opaque, int64_t )
-{
-    auto* ctx = static_cast<VLCAudioCtx*>(opaque);
-    std::lock_guard<std::mutex> lock(ctx->deviceMutex);
-    if (ctx->hWaveOut)
-    {
-        waveOutReset(ctx->hWaveOut);
-        for (int i = 0; i < VLCAudioCtx::NUM_BUFFERS; ++i)
-        {
-            ctx->waveHeaders[i].dwFlags &= ~WHDR_INQUEUE;
-        }
-        ctx->currentHeader = 0;
-    }
-}
-
-static void vlc_audio_drain(void* opaque)
-{
-    auto* ctx = static_cast<VLCAudioCtx*>(opaque);
-    for (int i = 0; i < 100; ++i)
-    {
-        bool anyInQueue = false;
-        {
-            std::lock_guard<std::mutex> lock(ctx->deviceMutex);
-            if (!ctx->hWaveOut) break;
-            for (int b = 0; b < VLCAudioCtx::NUM_BUFFERS; ++b)
-            {
-                if (ctx->waveHeaders[b].dwFlags & WHDR_INQUEUE)
-                {
-                    anyInQueue = true;
-                    break;
-                }
-            }
-        }
-        if (!anyInQueue) break;
-        Sleep(5);
-    }
-}
-
-static void vlc_audio_play(void* opaque, const void* samples, unsigned count, int64_t )
-{
-    auto* ctx = static_cast<VLCAudioCtx*>(opaque);
-
-    if (ctx->audioActive && !ctx->audioActive->load(std::memory_order_relaxed))
-        return;
-
-    if (!ctx->volumeMultiplier || !ctx->muted) return;
-
-    if (!ctx->deviceInitialized) return;
-
-    while (true)
-    {
-        {
-            std::lock_guard<std::mutex> lock(ctx->deviceMutex);
-            if (!ctx->hWaveOut || !ctx->deviceInitialized)
-                return;
-            WAVEHDR& checkHdr = ctx->waveHeaders[ctx->currentHeader];
-            if (!(checkHdr.dwFlags & WHDR_INQUEUE))
-                break;
-        }
-        Sleep(1);
-    }
-
-    std::unique_lock<std::mutex> devLock(ctx->deviceMutex);
-    if (!ctx->hWaveOut || !ctx->deviceInitialized) return;
-
-    bool isForceSilent = ctx->forceSilent && ctx->forceSilent->load(std::memory_order_relaxed);
-    bool isMuted        = isForceSilent || ctx->muted->load(std::memory_order_relaxed);
-    float vol            = isMuted ? 0.0f : ctx->volumeMultiplier->load(std::memory_order_relaxed);
-
-    const int16_t* pIn = static_cast<const int16_t*>(samples);
-    float maxL = 0.0f;
-    float maxR = 0.0f;
-
-    WAVEHDR& hdr = ctx->waveHeaders[ctx->currentHeader];
-    int16_t* pOut = reinterpret_cast<int16_t*>(hdr.lpData);
-
-    for (unsigned i = 0; i < count; ++i)
-    {
-        float sL = pIn[i * 2]     * vol;
-        float sR = pIn[i * 2 + 1] * vol;
-
-        if (sL >  32767.0f) sL =  32767.0f;
-        else if (sL < -32768.0f) sL = -32768.0f;
-        if (sR >  32767.0f) sR =  32767.0f;
-        else if (sR < -32768.0f) sR = -32768.0f;
-
-        pOut[i * 2]     = static_cast<int16_t>(sL);
-        pOut[i * 2 + 1] = static_cast<int16_t>(sR);
-
-        float nL = std::abs(sL) / 32768.0f;
-        float nR = std::abs(sR) / 32768.0f;
-        if (nL > maxL) maxL = nL;
-        if (nR > maxR) maxR = nR;
-    }
-
-    AtomicUpdateMax(ctx->peakL, maxL);
-    AtomicUpdateMax(ctx->peakR, maxR);
-
-    hdr.dwBufferLength = count * 2 * sizeof(int16_t);
-    waveOutWrite(ctx->hWaveOut, &hdr, sizeof(WAVEHDR));
-    ctx->currentHeader = (ctx->currentHeader + 1) % VLCAudioCtx::NUM_BUFFERS;
-}
-#endif
 
 static unsigned vlc_format(void** opaque, char* chroma, unsigned* width, unsigned* height,
                             unsigned* pitches, unsigned* lines)
@@ -457,8 +311,11 @@ void VLCBasePlayer::InitVLC()
     argStorage.push_back("--quiet");
     argStorage.push_back("--no-osd");
     argStorage.push_back("--no-video-title-show");
-    argStorage.push_back("--file-caching=120");
+    argStorage.push_back("--file-caching=300");
     argStorage.push_back("--network-caching=1000");
+    argStorage.push_back("--app-name=ProyecThor");
+    argStorage.push_back("--app-id=ProyecThor");
+    argStorage.push_back("--no-mmdevice-volume-save");
 
     if (m_ForceSilent.load(std::memory_order_relaxed)) {
         argStorage.push_back("--no-audio");
@@ -485,7 +342,7 @@ void VLCBasePlayer::InitVLC()
             "--quiet",
             "--no-osd",
             "--no-video-title-show",
-            "--file-caching=120",
+            "--file-caching=300",
             "--network-caching=1000",
         };
         m_Instance = libvlc_new(sizeof(fallbackArgs) / sizeof(fallbackArgs[0]), fallbackArgs);
@@ -538,30 +395,11 @@ void VLCBasePlayer::CreatePersistentPlayer()
         libvlc_video_set_callbacks(m_MediaPlayer, vlc_lock, vlc_unlock, vlc_display, vCtx);
     }
 
-    auto* aCtx = new VLCAudioCtx();
-    aCtx->volumeMultiplier = &m_VolumeMultiplier;
-    aCtx->muted            = &m_Muted;
-    aCtx->audioActive      = &m_AudioActive;
-    aCtx->forceSilent      = &m_ForceSilent;
-    m_AudioCtx = aCtx;
-
-#ifdef _WIN32
-
-    libvlc_audio_set_format_callbacks(m_MediaPlayer, vlc_audio_setup, vlc_audio_cleanup);
-    libvlc_audio_set_callbacks(m_MediaPlayer, vlc_audio_play,
-                               vlc_audio_pause, vlc_audio_resume,
-                               vlc_audio_flush, vlc_audio_drain, aCtx);
-#else
-
-    bool initialMute = m_Muted.load(std::memory_order_relaxed) ||
-                        m_ForceSilent.load(std::memory_order_relaxed);
-    libvlc_audio_set_mute(m_MediaPlayer, initialMute ? 1 : 0);
-
-    int initialVolume = m_ForceSilent.load(std::memory_order_relaxed)
-        ? 0
-        : static_cast<int>(m_VolumeMultiplier.load(std::memory_order_relaxed) * 100.0f);
-    libvlc_audio_set_volume(m_MediaPlayer, initialVolume);
-#endif
+    // Audio: salida NATIVA de VLC (mmdevice/WASAPI en Windows). VLC gestiona el
+    // reloj de audio, el remuestreo y la sincronia A/V por si mismo; antes el audio
+    // se desviaba por callbacks propios a waveOut (44.1 kHz fijo, buffers a mano),
+    // causa de los chasquidos, desfases y cuelgues.
+    ApplyAudioState();
 
     libvlc_event_manager_t* em = libvlc_media_player_event_manager(m_MediaPlayer);
     libvlc_event_attach(em, libvlc_MediaPlayerEndReached,       &VLCBasePlayer::OnVlcEvent, this);
@@ -589,15 +427,6 @@ void VLCBasePlayer::DestroyVLC()
         delete[] static_cast<uint8_t*>(ctx->backBuf);
         delete ctx;
         m_VideoCtx = nullptr;
-    }
-    if (m_AudioCtx)
-    {
-        auto* ctx = static_cast<VLCAudioCtx*>(m_AudioCtx);
-#ifdef _WIN32
-        vlc_audio_destroy_device(ctx);
-#endif
-        delete ctx;
-        m_AudioCtx = nullptr;
     }
     if (m_Instance)
     {
@@ -716,6 +545,9 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool , uint6
     if (loop)
         libvlc_media_add_option(media, "input-repeat=65535");
 
+    if (m_ForceSilent.load(std::memory_order_relaxed))
+        libvlc_media_add_option(media, ":no-audio");
+
     std::string hw = s_HwDecoder.empty() ? "any" : s_HwDecoder;
     if (!m_UseHardwareDecode || hw == "none") {
         hw = "none";
@@ -770,6 +602,12 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool , uint6
         }
 
         libvlc_media_player_set_media(m_MediaPlayer, media);
+        // Mute/volumen ANTES de arrancar: asi un reproductor en espera (Standby,
+        // preview, fondo sin audio) nunca deja escapar un instante de sonido.
+        ApplyAudioState();
+        if (!m_AudioDeviceId.empty() && m_AudioDeviceId != "default" &&
+            !std::isdigit(static_cast<unsigned char>(m_AudioDeviceId[0])))
+            libvlc_audio_output_device_set(m_MediaPlayer, nullptr, m_AudioDeviceId.c_str());
         libvlc_media_player_play(m_MediaPlayer);
         ApplyDeinterlace(s_Deinterlace);
         m_Paused.store(false, std::memory_order_relaxed);
@@ -778,12 +616,6 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool , uint6
     }
 
     libvlc_media_release(media);
-
-#ifndef _WIN32
-
-    if (!m_AudioDeviceId.empty() && m_AudioDeviceId != "default")
-        libvlc_audio_output_device_set(m_MediaPlayer, nullptr, m_AudioDeviceId.c_str());
-#endif
 }
 
 void VLCBasePlayer::Stop()
@@ -812,6 +644,38 @@ bool VLCBasePlayer::ConsumeHadError()
     return m_HadError.exchange(false, std::memory_order_relaxed);
 }
 
+void VLCBasePlayer::ApplyAudioState()
+{
+    if (!m_MediaPlayer) return;
+
+    const bool silent = m_ForceSilent.load(std::memory_order_relaxed) ||
+                        !m_AudioActive.load(std::memory_order_relaxed) ||
+                        m_Muted.load(std::memory_order_relaxed);
+    if (silent)
+    {
+        // Documentación oficial libVLC:
+        // "To force silent playback, disable all audio tracks. This is more efficient and reliable than mute."
+        // Al poner la pista en -1, VLC desactiva la salida de audio internamente
+        // sin llamar a ISimpleAudioVolume::SetMute(TRUE), evitando que Windows
+        // mutee la sesión de toda la aplicación en el Mezclador de Windows.
+        libvlc_audio_set_track(m_MediaPlayer, -1);
+    }
+    else
+    {
+        libvlc_audio_set_mute(m_MediaPlayer, 0);
+        if (libvlc_audio_get_track(m_MediaPlayer) == -1)
+        {
+            libvlc_audio_set_track(m_MediaPlayer, 1);
+        }
+        int vol = static_cast<int>(m_VolumeMultiplier.load(std::memory_order_relaxed) * 100.0f + 0.5f);
+        if (vol < 0) vol = 0;
+        libvlc_audio_set_volume(m_MediaPlayer, vol);
+#ifdef _WIN32
+        ProyecThor::Audio::EnsureProcessAudioUnmutedAndMaxVolume();
+#endif
+    }
+}
+
 void VLCBasePlayer::SetMute(bool mute)
 {
     m_SilenceEnforced.store(false, std::memory_order_relaxed);
@@ -822,27 +686,7 @@ void VLCBasePlayer::SetMute(bool mute)
     std::cerr << "[VLC#" << m_InstanceId << "] SetMute(" << (mute ? "true" : "false")
               << ") -> effectiveMute=" << (effectiveMute ? "true" : "false") << "\n";
 
-#ifdef _WIN32
-    if (effectiveMute && m_AudioCtx)
-    {
-        auto* ctx = static_cast<VLCAudioCtx*>(m_AudioCtx);
-        std::lock_guard<std::mutex> lock(ctx->deviceMutex);
-        if (ctx->hWaveOut) {
-            waveOutReset(ctx->hWaveOut);
-        }
-    }
-#else
-    if (m_MediaPlayer)
-    {
-        libvlc_audio_set_mute(m_MediaPlayer, effectiveMute ? 1 : 0);
-
-        if (effectiveMute)
-            libvlc_audio_set_volume(m_MediaPlayer, 0);
-        else if (m_AudioActive.load(std::memory_order_relaxed))
-            libvlc_audio_set_volume(m_MediaPlayer,
-                static_cast<int>(m_VolumeMultiplier.load(std::memory_order_relaxed) * 100.0f));
-    }
-#endif
+    ApplyAudioState();
 }
 
 void VLCBasePlayer::SetAudioActive(bool active)
@@ -855,28 +699,7 @@ void VLCBasePlayer::SetAudioActive(bool active)
     std::cerr << "[VLC#" << m_InstanceId << "] SetAudioActive(" << (active ? "true" : "false")
               << ") -> effectiveActive=" << (effectiveActive ? "true" : "false") << "\n";
 
-#ifdef _WIN32
-    if (!effectiveActive && m_AudioCtx)
-    {
-        auto* ctx = static_cast<VLCAudioCtx*>(m_AudioCtx);
-        std::lock_guard<std::mutex> lock(ctx->deviceMutex);
-        if (ctx->hWaveOut) {
-            waveOutReset(ctx->hWaveOut);
-        }
-    }
-#else
-    if (m_MediaPlayer)
-    {
-        bool shouldMute = !effectiveActive || m_Muted.load(std::memory_order_relaxed);
-        libvlc_audio_set_mute(m_MediaPlayer, shouldMute ? 1 : 0);
-
-        if (!effectiveActive)
-            libvlc_audio_set_volume(m_MediaPlayer, 0);
-        else if (!m_Muted.load(std::memory_order_relaxed))
-            libvlc_audio_set_volume(m_MediaPlayer,
-                static_cast<int>(m_VolumeMultiplier.load(std::memory_order_relaxed) * 100.0f));
-    }
-#endif
+    ApplyAudioState();
 }
 
 void VLCBasePlayer::SetVolume(int volume)
@@ -889,18 +712,7 @@ void VLCBasePlayer::SetVolume(int volume)
     if (multiplier < 0.0f) multiplier = 0.0f;
     m_VolumeMultiplier.store(multiplier, std::memory_order_relaxed);
 
-#ifndef _WIN32
-
-    if (m_MediaPlayer)
-    {
-        bool shouldMute = m_Muted.load(std::memory_order_relaxed) ||
-                          !m_AudioActive.load(std::memory_order_relaxed) ||
-                          m_ForceSilent.load(std::memory_order_relaxed);
-        libvlc_audio_set_mute(m_MediaPlayer, shouldMute ? 1 : 0);
-        libvlc_audio_set_volume(m_MediaPlayer, shouldMute ? 0 : volume);
-    }
-#endif
-
+    ApplyAudioState();
 }
 
 void VLCBasePlayer::SetSoftwareVolume(float percent)
@@ -913,50 +725,29 @@ void VLCBasePlayer::SetSoftwareVolume(float percent)
     if (multiplier < 0.0f) multiplier = 0.0f;
     m_VolumeMultiplier.store(multiplier, std::memory_order_relaxed);
 
-#ifndef _WIN32
-    if (m_MediaPlayer)
-    {
-        bool shouldMute = m_Muted.load(std::memory_order_relaxed) ||
-                          !m_AudioActive.load(std::memory_order_relaxed) ||
-                          m_ForceSilent.load(std::memory_order_relaxed);
-        libvlc_audio_set_mute(m_MediaPlayer, shouldMute ? 1 : 0);
-        libvlc_audio_set_volume(m_MediaPlayer, shouldMute ? 0 : static_cast<int>(percent));
-    }
-#endif
+    ApplyAudioState();
 }
 
 void VLCBasePlayer::EnforceSilenceIfNeeded()
 {
-#ifndef _WIN32
     if (!m_MediaPlayer) return;
-    bool shouldBeSilent = m_ForceSilent.load(std::memory_order_relaxed) ||
-                           !m_AudioActive.load(std::memory_order_relaxed);
 
-    bool needsSync = m_AudioNeedsSync.exchange(false, std::memory_order_relaxed);
+    // La salida de audio de VLC solo existe una vez que el medio esta en
+    // reproduccion (evento Playing): ahi se reaplican mute / volumen / dispositivo.
+    // Tambien se reaplica si cambia el estado "silencio" deseado.
+    const bool shouldBeSilent = m_ForceSilent.load(std::memory_order_relaxed) ||
+                                !m_AudioActive.load(std::memory_order_relaxed);
+    const bool needsSync = m_AudioNeedsSync.exchange(false, std::memory_order_relaxed);
+    const bool silenceChanged = m_SilenceEnforced.exchange(shouldBeSilent, std::memory_order_relaxed) != shouldBeSilent;
 
-    if (shouldBeSilent)
+    if (needsSync || silenceChanged)
     {
-        if (needsSync || !m_SilenceEnforced.exchange(true, std::memory_order_relaxed))
-        {
-            libvlc_audio_set_mute(m_MediaPlayer, 1);
-            libvlc_audio_set_volume(m_MediaPlayer, 0);
-        }
+        ApplyAudioState();
+        if (!shouldBeSilent && !m_AudioDeviceId.empty() && m_AudioDeviceId != "default" &&
+            !std::isdigit(static_cast<unsigned char>(m_AudioDeviceId[0])))
+            libvlc_audio_output_device_set(m_MediaPlayer, nullptr, m_AudioDeviceId.c_str());
     }
-    else
-    {
-        if (needsSync || m_SilenceEnforced.exchange(false, std::memory_order_relaxed))
-        {
-            bool isMuted = m_Muted.load(std::memory_order_relaxed);
-            libvlc_audio_set_mute(m_MediaPlayer, isMuted ? 1 : 0);
-            int vol = isMuted ? 0 : static_cast<int>(m_VolumeMultiplier.load(std::memory_order_relaxed) * 100.0f);
-            libvlc_audio_set_volume(m_MediaPlayer, vol);
-            if (!m_AudioDeviceId.empty() && m_AudioDeviceId != "default")
-                libvlc_audio_output_device_set(m_MediaPlayer, nullptr, m_AudioDeviceId.c_str());
-        }
-    }
-#endif
 }
-
 void VLCBasePlayer::ApplyEqualizer()
 {
     if (!m_MediaPlayer) return;
@@ -1111,97 +902,56 @@ bool VLCBasePlayer::UpdateTexture()
 std::vector<VLCBasePlayer::AudioDevice> VLCBasePlayer::GetAvailableAudioDevices()
 {
     std::vector<AudioDevice> devices;
+    devices.push_back({ "default", "Dispositivo predeterminado del sistema" });
+    if (!m_Instance) return devices;
 
 #ifdef _WIN32
-
-    devices.push_back({ "default", "Dispositivo predeterminado del sistema" });
-
-    UINT numDevs = waveOutGetNumDevs();
-    for (UINT i = 0; i < numDevs; ++i)
-    {
-        WAVEOUTCAPSA caps{};
-        if (waveOutGetDevCapsA(i, &caps, sizeof(caps)) == MMSYSERR_NOERROR)
-            devices.push_back({ std::to_string(i), caps.szPname });
-    }
+    const char* aout = "mmdevice";
 #else
-    if (!m_MediaPlayer) return devices;
-
-    libvlc_audio_output_device_t* devList = libvlc_audio_output_device_enum(m_MediaPlayer);
+    const char* aout = nullptr;
+#endif
+    libvlc_audio_output_device_t* devList = aout
+        ? libvlc_audio_output_device_list_get(m_Instance, aout)
+        : (m_MediaPlayer ? libvlc_audio_output_device_enum(m_MediaPlayer) : nullptr);
     for (auto* p = devList; p != nullptr; p = p->p_next)
     {
-        if (p->psz_device && p->psz_description)
+        if (p->psz_device && p->psz_description && p->psz_device[0] != '\0')
             devices.push_back({ p->psz_device, p->psz_description });
     }
     if (devList)
         libvlc_audio_output_device_list_release(devList);
-#endif
 
     return devices;
 }
 
 void VLCBasePlayer::SetAudioDevice(const std::string& deviceId)
 {
-
     m_AudioDeviceId = deviceId;
 
     std::cerr << "[VLC#" << m_InstanceId << "] SetAudioDevice(\""
               << deviceId << "\")\n";
 
-#ifdef _WIN32
-    if (!m_AudioCtx) return;
-    auto* ctx = static_cast<VLCAudioCtx*>(m_AudioCtx);
-
-    UINT_PTR targetId = WAVE_MAPPER;
-    if (!deviceId.empty() && deviceId != "default")
-    {
-        try { targetId = static_cast<UINT_PTR>(std::stoul(deviceId)); }
-        catch (...) { targetId = WAVE_MAPPER; }
-    }
-
-    std::lock_guard<std::mutex> lock(ctx->deviceMutex);
-
-    if (ctx->deviceInitialized && ctx->deviceId == targetId)
+    // Ajustes antiguos guardaban el indice numerico de waveOut: ya no es valido
+    // para VLC, se interpreta como "predeterminado".
+    if (!m_MediaPlayer || deviceId.empty() || deviceId == "default" ||
+        std::isdigit(static_cast<unsigned char>(deviceId[0])))
         return;
-
-    bool wasInitialized = ctx->deviceInitialized;
-    if (wasInitialized)
-        CloseWaveOutDeviceLocked(ctx);
-
-    if (wasInitialized)
-    {
-
-        if (!OpenWaveOutDeviceLocked(ctx, targetId))
-            std::cerr << "[Audio] No se pudo cambiar al dispositivo " << targetId << ".\n";
-    }
-    else
-    {
-
-        ctx->deviceId = targetId;
-    }
-#else
-    if (m_MediaPlayer && !deviceId.empty() && deviceId != "default")
-        libvlc_audio_output_device_set(m_MediaPlayer, nullptr, deviceId.c_str());
-#endif
+    libvlc_audio_output_device_set(m_MediaPlayer, nullptr, deviceId.c_str());
 }
 
 void VLCBasePlayer::GetAudioLevels(float& left, float& right)
 {
-#ifdef _WIN32
-    if (!m_AudioCtx)
-    {
-        left = right = 0.0f;
-        return;
-    }
-    auto* ctx = static_cast<VLCAudioCtx*>(m_AudioCtx);
-
-    left  = ctx->peakL.exchange(0.0f, std::memory_order_relaxed);
-    right = ctx->peakR.exchange(0.0f, std::memory_order_relaxed);
-#else
-
     left = right = 0.0f;
+#ifdef _WIN32
+    const bool audible = m_MediaPlayer && !m_Paused.load(std::memory_order_relaxed) &&
+                         !m_Muted.load(std::memory_order_relaxed) &&
+                         m_AudioActive.load(std::memory_order_relaxed) &&
+                         !m_ForceSilent.load(std::memory_order_relaxed) &&
+                         libvlc_media_player_is_playing(m_MediaPlayer) != 0;
+    if (!audible) return;
+    ProcessAudioMeter::Get().Read(left, right);
 #endif
 }
-
 void VLCBasePlayer::AttachNativeWindow(void* nativeHandle)
 {
     if (m_NativeWindowHandle == nativeHandle) return;

@@ -17,6 +17,77 @@ struct UpdateVersionInfo {
 inline const std::vector<UpdateVersionInfo>& GetPatchNotesRegistry() {
     static const std::vector<UpdateVersionInfo> s_Registry = {
         {
+            26, "1.1.3",
+            "VERSIÓN 1.1.3 - PADS DE CONSOLA, MODO RENDIMIENTO & TRANSMISIÓN LAN", "ACTUALIZACIÓN OFICIAL",
+            "splash_bg7.jpg",
+            "### Consola de Pads de Escena en Vista en Vivo\n"
+            "• [NUEVO] Pads Integrados estilo Launchpad: Los 8 Pads de escenas rápidas ahora residen directamente en la consola inferior de Vista en Vivo con estética táctil, indicadores LED de color e iconografía vectorial limpia.\n"
+            "• [NUEVO] Constructor Modular de Escenas: Guarda y dispara en un clic combinaciones opcionales o completas de fondos, reproducción en bucle de carpetas de video, letras o palabras fijas, estilos tipográficos y cámara.\n"
+            "\n"
+            "### Optimización Extrema y Modo Rendimiento\n"
+            "• [NUEVO] Modo Rendimiento en Ajustes: Optimizado para equipos de bajos recursos (Pentium Gold / Celeron / 8 GB RAM), reduciendo hilos de trabajo, escaneo en segundo plano y efectos pesados en GPU.\n"
+            "• [MEJORA] Búsqueda Instantánea de Canciones: Indexación en caché de alta velocidad para bibliotecas con más de 300 canciones TXT sin bloqueos ni lecturas repetitivas en disco.\n"
+            "\n"
+            "### Transmisión LAN e Interfaz Renovada\n"
+            "• [MEJORA] Transmisión LAN Gratuita + Canal Alpha Pro: El envío de pantalla por red local es gratuito para todos los usuarios; la salida transparente (Canal Alpha para overlays en OBS) se incorpora como función Pro.\n"
+            "• [CORRECCIÓN] Orientación y Arranque LAN: Solucionado el inicio del servidor LAN y corregida la inversión vertical/espejo de los fondos al visualizar desde otros dispositivos.\n"
+            "• [MEJORA] Ajustes a Pantalla Completa: Ventana de Configuraciones integrada a pantalla completa con barra de búsqueda unificada en el encabezado y márgenes pulidos en la barra de fondos.",
+            false
+        },
+        {
+            25, "1.1.2",
+            "VERSIÓN 1.1.2 - NUEVA NAVEGACIÓN, TOOLBARS & GESTIÓN DE COLAS", "ACTUALIZACIÓN OFICIAL",
+            "splash_bg7.jpg",
+            "### Nueva Experiencia de Navegación e Islas Flotantes\n"
+            "• [NUEVO] Islas de herramientas superiores: Estilos, Shaders, Transiciones, Pads, Tiles, Chat, Anuncios, Overlays y Librería ahora residen en la barra superior en cápsulas estilizadas, abriendo sus propias ventanas flotantes independientes.\n"
+            "• [NUEVO] Conexiones y Reloj Unificados: El panel de Conexiones (LAN, Chat, Broadcast, Sync, OSC) y el Reloj se trasladaron a la cápsula de emisión junto a 'Proyectar a Público', con una nueva ventana de configuración integrada estilo Ajustes.\n"
+            "• [MEJORA] Navegación limpia y solo con iconos: Barra más espaciosa, sin etiquetas de texto fijas, con tooltips explicativos al pasar el cursor y auto-escalado proporcional para evitar solapamientos en cualquier resolución.\n"
+            "• [MEJORA] Pestaña Diapositivas renombrada a 'Home', y los plugins/extensiones ahora vienen desactivados por defecto para un arranque más ligero.\n"
+            "\n"
+            "### Gestión de Colas y Reproducción Multimedia\n"
+            "• [NUEVO] Control de Colas Integrado: Botón directo 'Detener Cola' y visualización del estado de cola en la barra superior de Multimedia y Videos.\n"
+            "• [MEJORA] Distintivo de Transmisión en Vivo: Indicador visual [EN VIVO] en las miniaturas activas, permitiendo identificar al instante qué medio está saliendo a pantalla.\n"
+            "• [MEJORA] Previsualización Rápida (Preview): Controles directos de Proyectar, Preview y Detener en cada tarjeta de video.\n"
+            "\n"
+            "### Toolbars, Galerías y Miniaturas Pulidas\n"
+            "• [MEJORA] Miniaturas compactas por defecto: El tamaño inicial de las cuadrículas en Fondos y Overlays se ajustó al mínimo (zoom 0.65x) para visualizar más contenido simultáneamente.\n"
+            "• [MEJORA] Padding y Estética Profesional: Mayor espaciado visual en la barra de búsqueda y en el botón 'Colapsar', logrando una separación armónica con la barra divisoria.\n"
+            "• [CORRECCIÓN] Eliminación de Solapamiento en Scroll: Corregido el fallo donde los videos y miniaturas se montaban sobre las barras de herramientas superiores al hacer scroll vertical.\n"
+            "\n"
+            "### Diálogos y Ventanas Centradas con Foco Activo\n"
+            "• [CORRECCIÓN] Centrado Automático de Ventanas: Los nuevos cuadros de diálogo (creación de carpetas, confirmaciones y modales) ahora aparecen siempre en el centro de la pantalla en vez de la esquina.\n"
+            "• [CORRECCIÓN] Foco Prioritario de Ventanas: Las ventanas emergentes reciben el foco del sistema inmediatamente al abrirse, evitando que queden ocultas detrás de la ventana principal.\n"
+            "\n"
+            "### Iconografía Renovada y MuninCloud\n"
+            "• [MEJORA] Icono de Nube en Munin: Sustituido el logo anterior por una nube celeste moderna y eliminada la etiqueta restrictiva 'PRO' del encabezado.\n"
+            "• [NUEVO] Cancionero en Nube: Nuevo icono representativo de hoja de acordes con nube para el gestor de canciones en Firebase.\n"
+            "• [MEJORA] Interfaz de Munin y Hugin alineada con el diseño visual de Ajustes, con miniaturas protegidas para fondos en la nube.\n"
+            "\n"
+            "### Vista en Vivo Optimizada\n"
+            "• [MEJORA] Aprovechamiento Total de Pantalla: El riel lateral de ViewPanel se reubicó en la barra inferior (limpiar texto, fondo, overlay, anuncios, reloj, proporción y ventana flotante), dejando el 100% del ancho para la vista previa.",
+            false
+        },
+        {
+            24, "1.1.1",
+            "VERSIÓN 1.1.1 - PROYECTHOR PRO & REPARACIONES", "ACTUALIZACIÓN OFICIAL",
+            "splash_bg7.jpg",
+            "### ProyecThor for Professionals & Ecosistema en la Nube\n"
+            "• [NUEVO] Integración Oficial con Canva Connect API: Vinculación directa mediante OAuth 2.0 PKCE para explorar tus presentaciones y diseños de Canva desde la biblioteca e importar diapositivas en alta resolución directamente a Fondos o Multimedia.\n"
+            "• [NUEVO] Autenticación y Licenciamiento Cloud con Firebase: Inicio de sesión con correo, actualización de nombre de usuario, restablecimiento de contraseña y sincronización en tiempo real del estado de cuenta y suscripción Pro mediante Google Firebase.\n"
+            "• [NUEVO] Pasarela de Pago Integrada con Flow: Contratación y renovación de planes Pro ($9.990 CLP/mes) realizada directamente desde la aplicación de escritorio en Ajustes > Mi Cuenta > Suscripción Pro, con detección automática de Webpay y activación instantánea de licencia.\n"
+            "• [SEGURIDAD] Gestión Dinámica de Visibilidad Pro: El botón y sección de Canva se muestran exclusivamente cuando el usuario cuenta con una licencia Pro activa, optimizando el espacio y protegiendo las funciones de suscripción.\n"
+            "\n"
+            "### Correcciones en el Reloj y Renderizado de Overlays\n"
+            "• [CORRECCIÓN] Resolución y Escalado del Reloj en Pantalla: Corregido el problema de dimensionamiento del canvas en capas de reloj de superposición (Overlay Clock Canvas), sincronizando con precisión el ancho y alto del canvas nativo con la resolución real de salida del proyector.\n"
+            "• [CORRECCIÓN] Temporizadores y Cuenta Regresiva Precisos: Eliminada la desincronización de escala al alternar entre pantallas de distinta resolución (Monitor local vs Proyector 1080p/4K vs Stage Display).\n"
+            "\n"
+            "### Estabilidad, Robustez y Prevención de Cierres Inesperados\n"
+            "• [ESTABILIDAD] Corrección de Asertos ImGui en Contenedores Hijos: Reemplazo de banderas incompatibles (ImGuiWindowFlags_AlwaysAutoResize) por ImGuiChildFlags en CanvaPanel y VoiceAssistantPanel, erradicando por completo el error de abort() al interactuar con paneles laterales.\n"
+            "• [ESTABILIDAD] Cierre de Sesión Atómico y Seguro: Limpieza protegida de sesión y buffers de interfaz al cerrar sesión o cambiar de cuenta sin excepciones de puntero nulo ni fugas de memoria.\n"
+            "• [ESTABILIDAD] Sistema de Captura de Errores y Diagnóstico: Incorporación de filtros de excepción no controlada y trazas de depuración nativas para garantizar máxima fiabilidad durante cultos y eventos en vivo.",
+            false
+        },
+        {
             23, "1.1.0",
             "GRAN ACTUALIZACIÓN v1.1.0", "GRAN ACTUALIZACIÓN",
             "splash_bg7.jpg",

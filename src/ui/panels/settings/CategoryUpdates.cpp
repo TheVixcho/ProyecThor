@@ -226,20 +226,28 @@ static void DoCheckUpdate(const std::string& currentVersion,
                            bool showPopupIfAvailable) {
     s_Status = UpdateStatus::Checking;
 
+    std::string body;
 #if defined(_WIN32)
-    std::wstring host = L"api.github.com";
-    std::wstring path = (channel == "beta")
-        ? L"/repos/TheVixcho/ProyecThor/releases?per_page=1"
-        : L"/repos/TheVixcho/ProyecThor/releases/latest";
+    // 1. Consultar endpoint oficial en Firebase Hosting (proyecthor.web.app/downloads/version.json)
+    body = FetchURL(L"proyecthor.web.app", L"/downloads/version.json");
 
-    std::string body = FetchURL(host, path);
+    // 2. Fallback a GitHub Releases si el servidor web no respondió
+    if (body.empty()) {
+        std::wstring host = L"api.github.com";
+        std::wstring path = (channel == "beta")
+            ? L"/repos/TheVixcho/ProyecThor/releases?per_page=1"
+            : L"/repos/TheVixcho/ProyecThor/releases/latest";
+        body = FetchURL(host, path);
+    }
 #else
-    std::string host = "api.github.com";
-    std::string path = (channel == "beta")
-        ? "/repos/TheVixcho/ProyecThor/releases?per_page=1"
-        : "/repos/TheVixcho/ProyecThor/releases/latest";
-
-    std::string body = FetchURL(host, path);
+    body = FetchURL("proyecthor.web.app", "/downloads/version.json");
+    if (body.empty()) {
+        std::string host = "api.github.com";
+        std::string path = (channel == "beta")
+            ? "/repos/TheVixcho/ProyecThor/releases?per_page=1"
+            : "/repos/TheVixcho/ProyecThor/releases/latest";
+        body = FetchURL(host, path);
+    }
 #endif
     if (body.empty()) {
         s_ErrorMsg = "No se pudo conectar al servidor.";
@@ -249,6 +257,9 @@ static void DoCheckUpdate(const std::string& currentVersion,
 
     std::string tag = ExtractJsonString(body, "tag_name");
     if (tag.empty()) {
+        tag = ExtractJsonString(body, "version");
+    }
+    if (tag.empty()) {
         s_ErrorMsg = "Respuesta inesperada del servidor.";
         s_Status   = UpdateStatus::Error;
         return;
@@ -257,6 +268,12 @@ static void DoCheckUpdate(const std::string& currentVersion,
 
 #if defined(_WIN32)
     s_DownloadUrl    = ExtractAssetDownloadUrl(body, "ProyecThor_Setup.exe");
+    if (s_DownloadUrl.empty()) {
+        s_DownloadUrl = ExtractJsonString(body, "browser_download_url");
+    }
+    if (s_DownloadUrl.empty()) {
+        s_DownloadUrl = ExtractJsonString(body, "download_url");
+    }
 #else
     s_DownloadUrl    = ExtractAssetDownloadUrl(body, "ProyecThor-x86_64.AppImage");
     if (s_DownloadUrl.empty()) {
@@ -264,6 +281,12 @@ static void DoCheckUpdate(const std::string& currentVersion,
     }
     if (s_DownloadUrl.empty()) {
         s_DownloadUrl = ExtractAppImageDownloadUrl(body);
+    }
+    if (s_DownloadUrl.empty()) {
+        s_DownloadUrl = ExtractJsonString(body, "browser_download_url");
+    }
+    if (s_DownloadUrl.empty()) {
+        s_DownloadUrl = ExtractJsonString(body, "download_url");
     }
 #endif
     s_LatestVersion  = tag;

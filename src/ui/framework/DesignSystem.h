@@ -8,13 +8,14 @@ namespace ProyecThor::Settings { struct ThemeSettings; }
 
 namespace ProyecThor::UI::DS {
 
-// Bordes sutiles, modernos y cuadrados (1-3px) consistentes con OBS/DaVinci Resolve/VS Code
-constexpr float RadiusSmall  =  1.0f;
-constexpr float RadiusMedium =  2.0f;
-constexpr float RadiusLarge  =  3.0f;
-// Filas y botones compactos de alta densidad para produccion en vivo
-constexpr float RowHeight    = 24.0f;
-constexpr float ButtonHeight = 26.0f;
+// Bordes modernos y redondeados con el estilo de Fondos (4-10px)
+constexpr float RadiusSmall  =  4.0f;
+constexpr float RadiusMedium =  6.0f;
+constexpr float RadiusLarge  =  8.0f;
+constexpr float RadiusCard   = 10.0f;
+// Filas y botones ergonómicos
+constexpr float RowHeight    = 26.0f;
+constexpr float ButtonHeight = 28.0f;
 
 // Gris neutro tipo ProPresenter/OBS (ver MakeThemePreset(Dark) en
 // SettingsManager.cpp para el preset real; esto es solo el valor antes del

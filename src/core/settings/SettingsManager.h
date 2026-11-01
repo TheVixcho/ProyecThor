@@ -229,8 +229,8 @@ namespace ProyecThor::Settings {
         bool        duplicateMediaFiles = false;
         Language    language            = Language::Spanish;
         std::string dismissedChangelog  = "";
-        // Titulos bajo los iconos de los rails y la toolbar. Activo por defecto.
-        bool        showRailLabels      = true;
+        // Titulos bajo los iconos de los rails y la toolbar. Desactivado por defecto para diseño limpio compacto.
+        bool        showRailLabels      = false;
         // Panel opcional de diagnostico (CPU/RAM/FPS/GPU), activable desde
         // el menu Vista. Apagado por default: es una herramienta puntual,
         // no algo que se quiera ver todo el tiempo.
@@ -353,7 +353,7 @@ namespace ProyecThor::Settings {
 
     // ── Actualizaciones ──────────────────────────────────────────────────
     struct UpdatesSettings {
-        std::string currentVersion = "1.1.0";
+        std::string currentVersion = "1.1.3";
         std::string lastChecked    = "";
         std::string updateChannel  = "beta";
         bool        checkOnStartup = true;
@@ -414,11 +414,11 @@ namespace ProyecThor::Settings {
             { 0.90f, 0.40f, 0.70f, 1.0f }, // Overlay
         };
         bool showRender  = false;
-        bool showOverlay = true;
+        bool showOverlay = false;
         bool showWeb     = false;
         bool showModel3D = false;
         bool showLab     = false;
-        bool showPlugins = true;
+        bool showPlugins = false;
     };
 
     // ── Sidebar de Home (Home/Reloj/Anuncios/Notas/Captura/Transmision) ──
@@ -454,6 +454,12 @@ namespace ProyecThor::Settings {
             { 0.45f, 0.60f, 1.00f, 1.0f }, // Anuncios
             { 0.90f, 0.35f, 0.45f, 1.0f }, // Captura
         };
+        bool showOverlays       = false;
+        bool showStyles         = false;
+        bool showShaders        = false;
+        bool showTransitions    = false;
+        bool showAnnouncements  = false;
+        bool showCapture        = false;
     };
 
     // ── Sidebar de Herramientas (debajo de Vista en Vivo): Control
@@ -491,22 +497,28 @@ namespace ProyecThor::Settings {
         CaptureSceneSettings scenes[kCaptureSceneCount];
     };
 
-    // ── Pads de ViewTools ─────────────────────────────────────────────────
-    // 8 botones tipo pad MIDI: cada uno guarda, de forma independiente,
-    // una disposicion de Captura (mismos campos que CaptureSceneSettings —
-    // ver CapturePanel::SnapshotCurrentCapture/ApplyCaptureScene) y un
-    // snapshot directo del estilo+fondo que esta en pantalla en ese momento
-    // (no una referencia por nombre a un estilo guardado). hasCapture/
-    // hasStyle pueden faltar -- un pad no tiene por que tocar las dos cosas
-    // a la vez. Nunca guarda la letra/texto en pantalla.
+    // ── Pads de Escena (ViewPanel > Pads) ─────────────────────────────────
+    // Botones de escena rápida: guardan de forma modular o combinada
+    // fondo (video, imagen, color o carpeta de videos en bucle), letra /
+    // texto / palabra fija, estilo tipográfico y captura de video/cámara.
     struct PadSettings {
-        bool assigned  = false;
-        int  iconIndex = 0; // indice en la tabla fija de iconos, ver ViewToolsPanel.cpp
+        bool        assigned   = false;
+        std::string name;             // Nombre personalizado (ej. "Bienvenida", "Alabanza 1")
+        int         iconIndex  = 0;
+        float       color[4]   = { 0.25f, 0.45f, 0.90f, 1.0f }; // Color acento del Pad
 
+        // Componentes activos en esta escena (modulares: opcional o todos juntos)
+        bool        applyBackground = true;
+        bool        applyStyle      = true;
+        bool        applyText       = false;
+        bool        applyCapture    = false;
+
+        // Captura
         bool                  hasCapture = false;
         CaptureSceneSettings  capture;
 
-        bool        hasStyle = false;
+        // Estilo tipográfico
+        bool        hasStyle        = false;
         float       styleSize       = 60.0f;
         float       styleColor[4]   = { 1.0f, 1.0f, 1.0f, 1.0f };
         int         styleHAlign     = 1;
@@ -514,9 +526,18 @@ namespace ProyecThor::Settings {
         float       styleMargins[4] = { 50.0f, 50.0f, 50.0f, 50.0f };
         bool        styleAutoScale  = true;
         std::string styleFontName   = "Predeterminada";
-        int         bgType = 0; // espeja PresentationCore::PresentationState::BackgroundType
-        std::string bgPath;
-        float       bgColor[3] = { 0.0f, 0.0f, 0.0f };
+
+        // Fondo (Video, Imagen, Color sólido, Carpeta de videos)
+        bool        hasBackground   = false;
+        int         bgType          = 0; // 0=SolidColor, 1=Video, 2=Audio, 3=Image, 4=VideoFolder
+        std::string bgPath;              // Ruta de archivo o ruta de carpeta
+        std::string bgFolderName;        // Nombre de carpeta si es de la biblioteca
+        float       bgColor[3]      = { 0.0f, 0.0f, 0.0f };
+
+        // Letra / Texto / Palabra fija
+        bool        hasText         = false;
+        std::string text;                // Texto o palabra fija (ej. "BIENVENIDOS")
+        std::string textTitle;           // Título referencial de la canción/versículo
     };
     static constexpr int kPadCount = 8;
     struct PadsSettings {
@@ -630,6 +651,14 @@ namespace ProyecThor::Settings {
         std::vector<std::string>   knownWatchedFiles;
     };
 
+    struct PerformanceSettings {
+        bool performanceMode     = false; // Modo Rendimiento: bajo consumo para Pentium, Celeron, 8GB RAM
+        bool disableGlassBlur    = false; // Desactivar desenfoque Glass / Gaussian blur en GPU
+        bool pauseBackgroundScan = true;  // Limitar escaneo periódico en segundo plano
+        int  targetFPS           = 60;    // 30, 60, o 0 (sin límite)
+        bool lowMemoryMode       = false; // Modo ahorro de memoria
+    };
+
     struct AppSettings {
         ProjectionSettings     projection;
         AudioSettings          audio;
@@ -651,6 +680,7 @@ namespace ProyecThor::Settings {
         TransitionSettings     transitions;
         AISettings             ai;
         StorageSettings        storage;
+        PerformanceSettings    performance;
     };
 
     class SettingsManager {

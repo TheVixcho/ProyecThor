@@ -127,66 +127,9 @@ void StylesHubPanel::RenderTransitionQuickBar()
     }
 }
 
-// Icono en el rail de arriba con dibujo vectorial y popup moderno
+// Icono en el rail de arriba (removido: las transiciones ahora se abren desde la nueva isla en la barra superior)
 void StylesHubPanel::RenderTransitionRailButton()
 {
-    if (!m_TransitionsRef) return;
-
-    TransitionType current  = m_TransitionsRef->GetCurrentType();
-    float          duration = m_TransitionsRef->GetDuration();
-    bool           hasTrans = (current != TransitionType::None);
-
-    const ImVec2 size = { 32.0f, 32.0f };
-    ImVec2 cursor = ImGui::GetCursorScreenPos();
-    ImVec2 bMin   = cursor;
-    ImVec2 bMax   = { cursor.x + size.x, cursor.y + size.y };
-
-    ImGui::SetCursorScreenPos(bMin);
-    bool clicked = ImGui::InvisibleButton("##transRailBtn", size);
-    bool hovered = ImGui::IsItemHovered();
-    if (clicked) {
-        ImGui::OpenPopup("##transQuickPopup");
-    }
-
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    constexpr float rounding = 6.0f;
-
-    if (hasTrans) {
-        ImVec4 ac = ImGui::ColorConvertU32ToFloat4(DS::AccentColor);
-        ac.w = 0.18f;
-        dl->AddRectFilled(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding);
-        ac.w = 0.35f;
-        dl->AddRect(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding, 0, 1.0f);
-    } else if (hovered) {
-        dl->AddRectFilled(bMin, bMax, IM_COL32(255, 255, 255, 20), rounding);
-    } else {
-        dl->AddRectFilled(bMin, bMax, IM_COL32(255, 255, 255, 8), rounding);
-    }
-
-    ImVec2 center = { (bMin.x + bMax.x) * 0.5f, (bMin.y + bMax.y) * 0.5f };
-    ImU32 icCol = hasTrans ? DS::AccentLight : (hovered ? DS::TextPrimary : DS::TextSecondary);
-    const float iconSz = 18.0f;
-    ImVec2 iconPos = { center.x - iconSz * 0.5f, center.y - iconSz * 0.5f };
-    AppIcons::DrawIcon_Swap(dl, iconPos, iconSz, icCol);
-
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
-        const char* typeName = (current == TransitionType::None) ? "Sin transición" :
-                               (current == TransitionType::Fade) ? "Disolver" :
-                               (current == TransitionType::Iris) ? "Teatro (Iris)" : "Avanzada";
-        ImGui::SetTooltip("Transición rápida: %s (%.2fs)", typeName, duration);
-    }
-
-    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.11f, 0.12f, 0.15f, 0.98f));
-    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 8.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f, 12.0f));
-
-    if (ImGui::BeginPopup("##transQuickPopup")) {
-        RenderTransitionQuickBar();
-        ImGui::EndPopup();
-    }
-
-    ImGui::PopStyleVar(2);
-    ImGui::PopStyleColor();
 }
 
 // Divisor con gradiente entre el rail de iconos y el contenido -- horizontal
@@ -216,15 +159,167 @@ static void RenderStylesHubDivider(bool vertical, float length)
 void StylesHubPanel::SelectSection(StylesSection section)
 {
     m_CurrentSection = section;
+    m_InDesignMode = true;
     if (m_UIManager) {
         m_UIManager->CloseAllToolWindows();
-        m_UIManager->SetPanelCollapsed(1, false);
-        m_UIManager->SetPanelCollapsed(0, true);
+    }
+}
+
+void StylesHubPanel::RenderTopToolbar(float totalW)
+{
+    const float railH = IconRailThickness(false);
+
+    const auto& hubSettings = ProyecThor::Settings::SettingsManager::Get().GetSettings().stylesHub;
+    const auto& libSettings = ProyecThor::Settings::SettingsManager::Get().GetSettings().librarySidebar;
+
+    std::vector<IconRailItem> railItems = {
+        { -1,                              AppIcons::DrawIcon_Monitor, "Home"   },
+        { (int)StylesSection::Backgrounds, AppIcons::DrawIcon_Layers,  "Fondos" },
+    };
+
+    std::vector<std::array<float, 4>> railColors = {
+        { 0.22f, 0.74f, 0.97f, 1.0f }, // Home (Cian)
+        { hubSettings.categoryColor[0][0], hubSettings.categoryColor[0][1], hubSettings.categoryColor[0][2], 1.0f }, // Fondos
+    };
+
+    if (hubSettings.showOverlays || m_CurrentSection == StylesSection::Overlays) {
+        railItems.push_back({ (int)StylesSection::Overlays, AppIcons::DrawIcon_Overlay, "Overlays" });
+        railColors.push_back({ 0.95f, 0.58f, 0.22f, 1.0f });
+    }
+    if (hubSettings.showStyles || m_CurrentSection == StylesSection::Styles) {
+        railItems.push_back({ (int)StylesSection::Styles, AppIcons::DrawIcon_TextAa, "Estilos" });
+        railColors.push_back({ hubSettings.categoryColor[1][0], hubSettings.categoryColor[1][1], hubSettings.categoryColor[1][2], 1.0f });
+    }
+    if (hubSettings.showShaders || m_CurrentSection == StylesSection::Shaders) {
+        railItems.push_back({ (int)StylesSection::Shaders, AppIcons::DrawIcon_Shader, "Shaders" });
+        railColors.push_back({ hubSettings.categoryColor[2][0], hubSettings.categoryColor[2][1], hubSettings.categoryColor[2][2], 1.0f });
+    }
+    if (hubSettings.showTransitions || m_CurrentSection == StylesSection::Transitions) {
+        railItems.push_back({ (int)StylesSection::Transitions, AppIcons::DrawIcon_Swap, "Transiciones" });
+        railColors.push_back({ hubSettings.categoryColor[3][0], hubSettings.categoryColor[3][1], hubSettings.categoryColor[3][2], 1.0f });
+    }
+    if (hubSettings.showAnnouncements || m_CurrentSection == StylesSection::Announcements) {
+        railItems.push_back({ (int)StylesSection::Announcements, HomeIcons::DrawIcon_Megaphone, "Anuncios" });
+        railColors.push_back({ hubSettings.categoryColor[4][0], hubSettings.categoryColor[4][1], hubSettings.categoryColor[4][2], 1.0f });
+    }
+    if (hubSettings.showCapture || m_CurrentSection == StylesSection::Capture) {
+        railItems.push_back({ (int)StylesSection::Capture, HomeIcons::DrawIcon_Camera, "Captura" });
+        railColors.push_back({ hubSettings.categoryColor[5][0], hubSettings.categoryColor[5][1], hubSettings.categoryColor[5][2], 1.0f });
+    }
+
+    if (libSettings.showRender || m_CurrentSection == StylesSection::Render) {
+        railItems.push_back({ (int)StylesSection::Render, AppIcons::DrawIcon_Swap, "Render" });
+        railColors.push_back({ 0.93f, 0.28f, 0.60f, 1.0f });
+    }
+    if (libSettings.showWeb || m_CurrentSection == StylesSection::Web) {
+        railItems.push_back({ (int)StylesSection::Web, AppIcons::DrawIcon_Globe, "Web" });
+        railColors.push_back({ 0.39f, 0.40f, 0.95f, 1.0f });
+    }
+    if (libSettings.showModel3D || m_CurrentSection == StylesSection::Model3D) {
+        railItems.push_back({ (int)StylesSection::Model3D, AppIcons::DrawIcon_Cube3D, "3D" });
+        railColors.push_back({ 0.55f, 0.36f, 0.96f, 1.0f });
+    }
+    if (libSettings.showLab || m_CurrentSection == StylesSection::Lab) {
+        railItems.push_back({ (int)StylesSection::Lab, AppIcons::DrawIcon_Formula, "Lab" });
+        railColors.push_back({ 0.66f, 0.33f, 0.97f, 1.0f });
+    }
+    if (libSettings.showPlugins || m_CurrentSection == StylesSection::Plugins) {
+        railItems.push_back({ (int)StylesSection::Plugins, AppIcons::DrawIcon_Plugin, "Plugins" });
+        railColors.push_back({ 0.96f, 0.62f, 0.04f, 1.0f });
+    }
+
+    int activeRailIndex = m_InDesignMode ? (int)m_CurrentSection : -1;
+
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
+    ImGui::BeginChild("##stylesRailInMain", ImVec2(totalW, railH), false,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor();
+
+    float reservedRight = 0.0f;
+    bool clicked = RenderIconRail(railItems.data(), (int)railItems.size(), activeRailIndex,
+                                  IconRailOrientation::Horizontal,
+                                  (const float(*)[4])railColors.data(), reservedRight);
+    if (clicked) {
+        if (activeRailIndex == -1) {
+            m_InDesignMode = false;
+        } else {
+            if (m_InDesignMode && m_CurrentSection == (StylesSection)activeRailIndex) {
+                m_InDesignMode = false; // Toggle off -> vuelve a diapositivas (Home)
+            } else {
+                m_InDesignMode = true;
+                m_CurrentSection = (StylesSection)activeRailIndex;
+            }
+        }
+    }
+
+    ImGui::EndChild();
+    RenderStylesHubDivider(false, totalW);
+}
+
+void StylesHubPanel::RenderCurrentSectionContent()
+{
+    switch (m_CurrentSection)
+    {
+        case StylesSection::Backgrounds:
+            m_Backgrounds.RenderContent();
+            break;
+        case StylesSection::Multimedia:
+            RenderMultimedia();
+            break;
+        case StylesSection::Overlays:
+            if (m_OverlayTab) m_OverlayTab->Render();
+            break;
+        case StylesSection::Styles:
+            m_Styles.RenderContent();
+            break;
+        case StylesSection::Shaders:
+            m_Shaders.RenderContent();
+            break;
+        case StylesSection::Transitions:
+            m_TransitionsTab.RenderContent();
+            break;
+        case StylesSection::Announcements:
+            if (m_UIManager) m_Announcements.Render(m_UIManager->GetGlassRenderer());
+            break;
+        case StylesSection::Capture:
+            m_Capture.RenderContent();
+            break;
+        case StylesSection::Render:
+            if (m_UIManager && m_UIManager->GetLibraryPanelRef())
+                m_UIManager->GetLibraryPanelRef()->RenderConverterSection();
+            break;
+        case StylesSection::Web:
+            if (m_UIManager && m_UIManager->GetLibraryPanelRef() && m_UIManager->GetLibraryPanelRef()->GetWebBrowserPanel())
+                m_UIManager->GetLibraryPanelRef()->GetWebBrowserPanel()->Render();
+            break;
+        case StylesSection::Model3D:
+            if (m_UIManager && m_UIManager->GetLibraryPanelRef() && m_UIManager->GetLibraryPanelRef()->GetModel3DPanel())
+                m_UIManager->GetLibraryPanelRef()->GetModel3DPanel()->Render();
+            break;
+        case StylesSection::Lab:
+            if (m_UIManager && m_UIManager->GetLibraryPanelRef() && m_UIManager->GetLibraryPanelRef()->GetLabPanel())
+                m_UIManager->GetLibraryPanelRef()->GetLabPanel()->Render();
+            break;
+        case StylesSection::Plugins:
+            if (m_UIManager && m_UIManager->GetLibraryPanelRef() && m_UIManager->GetLibraryPanelRef()->GetPluginsPanel())
+                m_UIManager->GetLibraryPanelRef()->GetPluginsPanel()->Render();
+            break;
     }
 }
 
 void StylesHubPanel::Render()
 {
+    // Si el entorno actual es Clásico, Simple o Biblioteca, Diseño vive integrado arriba de Main (Home).
+    // No abrimos la ventana dockeada para eliminar por completo la barra inferior y no robar espacio vertical.
+    if (m_UIManager)
+    {
+        using ProyecThor::Settings::WorkspaceLayoutPreset;
+        auto preset = ProyecThor::Settings::SettingsManager::Get().GetSettings().workspace.layoutPreset;
+        if (preset == WorkspaceLayoutPreset::Classic || preset == WorkspaceLayoutPreset::Simple || preset == WorkspaceLayoutPreset::Library)
+            return;
+    }
     bool visible = m_UIManager
         ? DS::BeginGlassPanel(GetName().c_str(), m_UIManager->GetGlassRenderer(),
                               nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse, ImVec2(0.0f, 0.0f))
@@ -246,7 +341,6 @@ void StylesHubPanel::Render()
 
     std::vector<IconRailItem> railItems = {
         { (int)StylesSection::Backgrounds,   AppIcons::DrawIcon_Layers,          "Fondos"      },
-        { (int)StylesSection::Multimedia,    Library::DrawIcon_Multimedia,       "Multimedia"  },
         { (int)StylesSection::Overlays,      AppIcons::DrawIcon_Overlay,         "Overlays"    },
         { (int)StylesSection::Styles,        AppIcons::DrawIcon_TextAa,          "Estilos"     },
         { (int)StylesSection::Shaders,       AppIcons::DrawIcon_Shader,          "Shaders"     },
@@ -257,7 +351,6 @@ void StylesHubPanel::Render()
 
     std::vector<std::array<float, 4>> railColors = {
         { hubSettings.categoryColor[0][0], hubSettings.categoryColor[0][1], hubSettings.categoryColor[0][2], 1.0f }, // Fondos
-        { 0.30f, 0.72f, 0.95f, 1.0f }, // Multimedia
         { 0.95f, 0.58f, 0.22f, 1.0f }, // Overlays
         { hubSettings.categoryColor[1][0], hubSettings.categoryColor[1][1], hubSettings.categoryColor[1][2], 1.0f }, // Estilos
         { hubSettings.categoryColor[2][0], hubSettings.categoryColor[2][1], hubSettings.categoryColor[2][2], 1.0f }, // Shaders
@@ -333,13 +426,10 @@ void StylesHubPanel::Render()
         ImGui::PopStyleVar();
         ImGui::PopStyleColor();
 
-        bool clicked = RenderIconRail(railItems.data(), (int)railItems.size(), activeRailIndex, IconRailOrientation::Horizontal, (const float(*)[4])railColors.data(), 44.0f);
+        bool clicked = RenderIconRail(railItems.data(), (int)railItems.size(), activeRailIndex, IconRailOrientation::Horizontal, (const float(*)[4])railColors.data(), 0.0f);
         if (clicked) {
             SelectSection((StylesSection)activeRailIndex);
         }
-
-        ImGui::SetCursorPos(ImVec2(std::max(0.0f, totalW - 38.0f), std::max(0.0f, (railH - 32.0f) * 0.5f)));
-        RenderTransitionRailButton();
 
         ImGui::EndChild();
         RenderStylesHubDivider(false, totalW);

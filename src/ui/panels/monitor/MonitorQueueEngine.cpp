@@ -75,13 +75,26 @@ void MonitorQueueEngine::Move(int from, int to)
 void MonitorQueueEngine::Remove(int index)
 {
     if (index < 0 || index >= (int)m_Items.size()) return;
-    if (index == m_CurrentIndex)
-        Stop();
+    bool wasCurrent = (index == m_CurrentIndex);
 
     m_Items.erase(m_Items.begin() + index);
     int sz = (int)m_Items.size();
-    m_CurrentIndex  = RemapAfterRemove(m_CurrentIndex,  index, sz);
-    m_SelectedIndex = RemapAfterRemove(m_SelectedIndex, index, sz);
+    if (sz == 0)
+    {
+        Stop();
+    }
+    else
+    {
+        m_CurrentIndex  = RemapAfterRemove(m_CurrentIndex,  index, sz);
+        m_SelectedIndex = RemapAfterRemove(m_SelectedIndex, index, sz);
+        if (wasCurrent)
+        {
+            if (m_CurrentIndex >= 0 && m_CurrentIndex < sz)
+                PlayIndex(m_CurrentIndex);
+            else
+                Stop();
+        }
+    }
     Save();
 }
 
@@ -121,6 +134,7 @@ void MonitorQueueEngine::PlayIndex(int index)
         m_SelectedIndex = index;
         m_State         = QueueState::Playing;
         m_PrefetchedForCurrent = false;
+        m_ItemPlayTimer = 0.0f;
 
         auto& core = Core::PresentationCore::Get();
 
@@ -240,6 +254,17 @@ void MonitorQueueEngine::Update()
 
     auto* p = ActivePlayer();
     if (!p) { Stop(); return; }
+
+    static double s_LastQueueTime = glfwGetTime();
+    double now = glfwGetTime();
+    double dt = now - s_LastQueueTime;
+    s_LastQueueTime = now;
+    if (dt > 0.1) dt = 0.1;
+    m_ItemPlayTimer += static_cast<float>(dt);
+
+    // Margen de gracia inicial para evitar disparos prematuros o bucles
+    if (m_ItemPlayTimer < 0.35f)
+        return;
 
     // Precarga del siguiente item mientras el actual todavia esta
     // reproduciendose (ver PreloadNextIfNeeded) — le da al siguiente clip

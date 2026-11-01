@@ -8,12 +8,16 @@
 
 namespace ProyecThor::UI {
 
+class UIManager;
+
 // Ya no es un IPanel independiente: ahora vive como contenido de una de las
 // secciones del sidebar de HomePanel ("Transmisión en Red"). Ver HomePanel.cpp.
 class StreamingPanel {
 public:
     StreamingPanel()  = default;
     ~StreamingPanel() = default;
+
+    void SetUIManager(UIManager* mgr) { m_UIManager = mgr; }
 
     // Debe llamarse UNA VEZ POR FRAME sin importar que seccion de Home este
     // activa: mantiene vivo el envio de frames/QR al stream LAN aunque el
@@ -38,6 +42,8 @@ private:
     void DrawQR(ImDrawList* dl, ImVec2 origin, float size);
 
     int  m_Port        = 8080;
+    std::string m_StatusError;
+    UIManager*  m_UIManager   = nullptr;
 
     // Config local — se sincroniza con el servidor al cambiar
     Core::StreamConfig m_Config;

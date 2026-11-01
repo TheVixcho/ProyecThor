@@ -33,7 +33,12 @@ public:
     // Precarga real de miniaturas de imágenes y videos de fondo en el arranque
     void PreloadThumbnails(const std::function<void(int done, int total, const std::string& name)>& onProgress = nullptr);
 
+    void SetOnCollapseCallback(std::function<void()> cb) { m_OnCollapseCallback = std::move(cb); }
+
 private:
+    char                     m_SearchBuffer[128] = {};
+    std::function<void()>    m_OnCollapseCallback = nullptr;
+
     // ── Datos ─────────────────────────────────────────────────────────────────
     uint64_t                 m_SeenBgRevision = 0;
     std::vector<BgEntry>     m_AllBackgrounds;
@@ -65,7 +70,7 @@ private:
 
     // ── Vistas ────────────────────────────────────────────────────────────────
     bool  m_GridMode  = true;
-    float m_ThumbZoom = 1.0f; // 0.6 .. 1.8 — controla el tamano de las tarjetas
+    float m_ThumbZoom = 0.65f; // 0.65 .. 1.8 — controla el tamano de las tarjetas (mínimo por defecto)
 
     // ── Estado de renombrado ──────────────────────────────────────────────────
     bool        m_RenamingBg      = false;

@@ -46,6 +46,13 @@ public:
     void SelectSection(StylesSection section);
     StylesSection GetCurrentSection() const { return m_CurrentSection; }
 
+    // ── Integración de Toolbar y Contenido en Main ──
+    void RenderTopToolbar(float totalW);
+    void RenderCurrentSectionContent();
+    bool IsInDesignMode() const { return m_InDesignMode; }
+    void SetDesignMode(bool active) { m_InDesignMode = active; }
+    void SwitchToPresentation() { m_InDesignMode = false; }
+
     // TransitionPanel sigue siendo dueño de UIManager (su Update/Trigger ya
     // corre incondicionalmente cada frame, independiente de este hub) — acá
     // solo se recibe un puntero para dibujar su UI de configuracion.
@@ -57,8 +64,14 @@ public:
     // Usado por UIManager (bloque ProjectorLive) para llegar a Anuncios/
     // Captura en vivo sin que sean IPanel propios (mismo patron que HomePanel
     // usaba antes de que se mudaran aca).
-    Announcements& GetAnnouncements() { return m_Announcements; }
-    CapturePanel&  GetCapturePanel()  { return m_Capture; }
+    Announcements&        GetAnnouncements() { return m_Announcements; }
+    CapturePanel&         GetCapturePanel()  { return m_Capture; }
+    CanvasStylesPanel&    GetStyles()        { return m_Styles; }
+    ShadersPanel&         GetShaders()       { return m_Shaders; }
+    LayersTransitionsTab& GetTransitions()   { return m_TransitionsTab; }
+    BackgroundsPanel&     GetBackgrounds()   { return m_Backgrounds; }
+    void                  RenderBackgrounds() { m_Backgrounds.RenderContent(); }
+    void                  SetBackgroundsOnCollapse(std::function<void()> cb) { m_Backgrounds.SetOnCollapseCallback(std::move(cb)); }
 
     void PreloadThumbnails(const std::function<void(int done, int total, const std::string& name)>& onProgress = nullptr) {
         m_Backgrounds.PreloadThumbnails(onProgress);
@@ -89,6 +102,7 @@ private:
     std::unique_ptr<OverlayLibraryTab> m_OverlayTab;
 
     char m_MultimediaSearch[128] = {0};
+    bool m_InDesignMode          = false;
 };
 
 } // namespace ProyecThor::UI

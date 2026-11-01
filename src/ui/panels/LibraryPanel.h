@@ -17,6 +17,7 @@
 #include "model3d/Model3DPanel.h"
 #include "lab/LabPanel.h"
 #include "PluginsPanel.h"
+#include "CanvaPanel.h"
 #include <memory>
 #include <atomic>
 #include <thread>
@@ -61,6 +62,8 @@ enum class LibrarySideMode {
     Lab        = 7, // "Lab" — laboratorio matemático de fórmulas y graficador de funciones en vivo
     Picker     = 8,
     Plugins    = 9, // "Plugins" — gestor de complementos y utilidades externas
+    Canva      = 10, // "Canva" — integración oficial Canva Connect
+    Capture    = 11, // "Captura" — cámara, ventana o monitor en vivo
 };
 
 class LibraryPanel : public IPanel {
@@ -92,6 +95,7 @@ public:
     Model3DPanel*    GetModel3DPanel()    { return m_Model3DPanel.get(); }
     LabPanel*        GetLabPanel()        { return m_LabPanel.get(); }
     PluginsPanel* GetPluginsPanel() { return m_PluginsPanel.get(); }
+    CanvaPanel*   GetCanvaPanel()   { return m_CanvaPanel.get(); }
     void OpenPanelPickerFullscreen();
 
     // Preset de workspace "Biblioteca" (ver Settings::WorkspaceLayoutPreset::
@@ -184,6 +188,7 @@ private:
     std::unique_ptr<LabPanel>         m_LabPanel;
     std::unique_ptr<PanelPickerFullscreen> m_PanelPicker;
     std::unique_ptr<PluginsPanel>     m_PluginsPanel;
+    std::unique_ptr<CanvaPanel>       m_CanvaPanel;
 
     // ── Render (conversor de formato) ─────────────────────────────────────
     struct ConvertibleItem { std::string filename; bool isVideo; };

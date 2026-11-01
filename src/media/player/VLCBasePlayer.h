@@ -109,7 +109,9 @@ namespace ProyecThor::Core {
         libvlc_instance_t*       m_Instance    = nullptr;
         libvlc_media_player_t*   m_MediaPlayer = nullptr;
         void* m_VideoCtx = nullptr;
-        void* m_AudioCtx = nullptr;
+
+        // Aplica mute/volumen/silencio forzado a la salida nativa de VLC.
+        void ApplyAudioState();
 
         mutable std::mutex m_MediaSwapMutex;
 

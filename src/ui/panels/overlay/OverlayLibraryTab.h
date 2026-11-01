@@ -69,7 +69,7 @@ private:
     std::unordered_map<std::string, ImTextureID> m_ThumbnailCache;
 
     bool  m_GridMode  = true;
-    float m_ThumbZoom = 1.0f;
+    float m_ThumbZoom = 0.65f;
 
     std::unique_ptr<OverlayCanvasEditor> m_Editor;
 };

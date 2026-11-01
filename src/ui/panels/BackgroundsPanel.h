@@ -26,6 +26,7 @@ public:
 
     void RenderContent();
     void PreloadThumbnails(const std::function<void(int done, int total, const std::string& name)>& onProgress = nullptr);
+    void SetOnCollapseCallback(std::function<void()> cb);
     std::string GetName() const { return "Fondos"; }
 
 private:

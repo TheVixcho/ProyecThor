@@ -39,13 +39,34 @@ namespace ProyecThor::Library {
 //  Listas y carpetas
 // =============================================================================
 
-struct MMItem {
-    std::string    filename;
-    Core::ItemType type;
-    std::string    customFullPath = "";
-};
-
 static std::vector<MMItem> s_Videos, s_Audios, s_Images;
+
+const std::vector<MMItem>& GetVideoList() {
+    static bool s_Init = false;
+    if (!s_Init || (s_Videos.empty() && s_Images.empty() && s_Audios.empty())) {
+        RefreshMultimediaLists();
+        s_Init = true;
+    }
+    return s_Videos;
+}
+
+const std::vector<MMItem>& GetImageList() {
+    static bool s_Init = false;
+    if (!s_Init || (s_Videos.empty() && s_Images.empty() && s_Audios.empty())) {
+        RefreshMultimediaLists();
+        s_Init = true;
+    }
+    return s_Images;
+}
+
+const std::vector<MMItem>& GetAudioList() {
+    static bool s_Init = false;
+    if (!s_Init || (s_Videos.empty() && s_Images.empty() && s_Audios.empty())) {
+        RefreshMultimediaLists();
+        s_Init = true;
+    }
+    return s_Audios;
+}
 
 // ── Vista: grilla (miniaturas grandes) o lista (compacta) -- default grilla,
 //    mismo criterio que la galeria de Overlays. s_ThumbZoom solo aplica en
@@ -304,6 +325,23 @@ static ImTextureID GetAudioThumbnail(const std::string& path) {
     return t;
 }
 
+ImTextureID GetMMVideoThumbnail(const std::string& path) {
+    DrainVideoThumbnails();
+    return GetVideoThumbnail(path);
+}
+
+ImTextureID GetMMImageThumbnail(const std::string& path) {
+    return GetImageThumbnail(path);
+}
+
+ImTextureID GetMMAudioThumbnail(const std::string& path) {
+    return GetAudioThumbnail(path);
+}
+
+std::string GetMMItemFullPath(const MMItem& it) {
+    return ItemFullPath(it);
+}
+
 void PreloadMultimediaThumbnails(const MultimediaPreloadProgressFn& onProgress)
 {
     if (s_Videos.empty() && s_Images.empty() && s_Audios.empty())
@@ -456,12 +494,20 @@ static void RequestDelete(const MMItem& item) {
 static void RenderRenameModal() {
     if (!s_ShowRenameModal) return;
     ImGui::OpenPopup("Renombrar##mm");
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    if (vp) {
+        ImGui::SetNextWindowViewport(vp->ID);
+        ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    }
     ImGui::SetNextWindowSize(ImVec2(360, 0));
-    if (ImGui::BeginPopupModal("Renombrar##mm", &s_ShowRenameModal, ImGuiWindowFlags_NoResize)) {
+    if (ImGui::BeginPopupModal("Renombrar##mm", &s_ShowRenameModal,
+                               ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings)) {
         ImGui::SetNextItemWidth(-1.0f);
-        ImGui::InputText("##mmRenameBuf", s_RenameBuffer, sizeof(s_RenameBuffer));
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        bool enterPressed = ImGui::InputText("##mmRenameBuf", s_RenameBuffer, sizeof(s_RenameBuffer),
+                                             ImGuiInputTextFlags_EnterReturnsTrue);
 
-        if (ImGui::Button("Renombrar", ImVec2(160, 0))) {
+        if (ImGui::Button("Renombrar", ImVec2(160, 0)) || enterPressed) {
             std::string ext;
             SplitExtension(s_RenameItem.filename, ext);
             std::string newName = std::string(s_RenameBuffer) + ext;
@@ -487,9 +533,15 @@ static void RenderRenameModal() {
 static void RenderDeleteModal() {
     if (!s_ShowDeleteModal) return;
     ImGui::OpenPopup("Eliminar##mm");
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    if (vp) {
+        ImGui::SetNextWindowViewport(vp->ID);
+        ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    }
     const bool isExternal = !s_DeleteItem.customFullPath.empty();
     ImGui::SetNextWindowSize(ImVec2(isExternal ? 440.0f : 360.0f, 0));
-    if (ImGui::BeginPopupModal("Eliminar##mm", &s_ShowDeleteModal, ImGuiWindowFlags_NoResize)) {
+    if (ImGui::BeginPopupModal("Eliminar##mm", &s_ShowDeleteModal,
+                               ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings)) {
         if (isExternal) {
             ImGui::TextWrapped("¿Quitar \"%s\" de ProyecThor?\nEl archivo original permanecerá intacto en su carpeta.",
                                s_DeleteItem.filename.c_str());

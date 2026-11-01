@@ -54,18 +54,47 @@ public:
 
     void Logout();
 
-    // ── Compra de Suscripción (Lemon Squeezy) ─────────────────────────────────
+    // ── Gestión de Perfil de Usuario en Firebase ─────────────────────────────
+    void UpdateDisplayName(const std::string& newDisplayName,
+                           std::function<void(bool success, const std::string& msg)> onComplete = nullptr);
+
+    void ChangePassword(const std::string& newPassword,
+                        std::function<void(bool success, const std::string& msg)> onComplete = nullptr);
+
+    void DeleteAccount(std::function<void(bool success, const std::string& msg)> onComplete = nullptr);
+
+    void SendEmailVerification(std::function<void(bool success, const std::string& msg)> onComplete = nullptr);
+
+    // ── Compra de Suscripción (Flow Chile / Lemon Squeezy Internacional) ──────
     // Retorna true si el usuario tiene sesión iniciada y puede proceder a la compra
     bool CanBuySubscription() const;
     bool OpenCheckoutUrl(std::string& outError);
+    void SetFlowCheckoutUrl(const std::string& url);
+    std::string GetFlowCheckoutUrl() const;
 
-    // ── Licencia Lemon Squeezy (ProyecThor for Professionals) ──────────────────
+    // Pasarela de Pago directa e Integración Flow API con detección automática
+    void SetFlowCredentials(const std::string& apiKey, const std::string& secretKey);
+    bool CreateFlowPaymentOrder(std::string& outRedirectUrl, std::string& outError,
+                                std::function<void(bool success, const std::string& msg)> onComplete = nullptr);
+    void StartPaymentPolling(const std::string& token,
+                             std::function<void(bool success, const std::string& msg)> onComplete = nullptr);
+    void CancelPaymentPolling();
+    bool IsPollingPayment() const;
+    std::string GetPendingPaymentToken() const;
+
+    // Comprueba suscripciones activas en Flow para el correo del usuario
+    void CheckFlowSubscriptionActive(std::function<void(bool isPro, const std::string& msg)> onComplete = nullptr);
+
+    // ── Licencia ProyecThor (ProyecThor for Professionals) ─────────────────────
     bool IsPro() const;
     bool IsLicenseExpired() const;
     int64_t GetDaysRemaining() const;
     const LicenseInfo& GetLicenseInfo() const;
     const std::string& GetLicenseError() const;
     bool IsLicenseBusy() const;
+
+    // Sincronización directa con Firebase Firestore (Servidor)
+    void RefreshProStatus(std::function<void(bool isPro, const std::string& msg)> onComplete = nullptr);
 
     void ActivateLicense(const std::string& licenseKey, const std::string& instanceName = "",
                          std::function<void(bool success, const std::string& msg)> onComplete = nullptr);
@@ -89,9 +118,22 @@ private:
     std::string GetDefaultInstanceName() const;
 
     // Métodos internos de red HTTPS nativos (WinHTTP en Windows / fallback en Linux)
+    static std::string PerformHttpsRequest(const std::string& method, const std::string& host, const std::string& path,
+                                           const std::string& data, const std::string& contentType,
+                                           const std::string& bearerToken,
+                                           int& outStatusCode, std::string& outError);
+
     static std::string PerformHttpsPost(const std::string& host, const std::string& path,
                                         const std::string& postData, const std::string& contentType,
                                         int& outStatusCode, std::string& outError);
+
+    bool RefreshFirebaseIdToken(std::string& outIdToken, std::string& outError);
+
+    void CheckFirestoreUserPro(const std::string& localId,
+                               std::function<void(bool isPro, const std::string& msg)> onComplete);
+
+    void UpdateFirestoreProStatus(const std::string& localId, bool isPro,
+                                  const std::string& flowOrder, int64_t expiresAt);
 
     mutable std::recursive_mutex m_Mutex;
 
@@ -102,12 +144,28 @@ private:
     std::string m_AuthError;
     std::atomic<bool> m_AuthBusy{false};
 
-    // Estado de Licencia (Lemon Squeezy)
+    // Estado de Licencia (ProyecThor / Lemon Squeezy / Flow)
     LicenseInfo m_License;
     std::string m_LicenseError;
     std::atomic<bool> m_LicenseBusy{false};
 
-    const std::string m_CheckoutBaseUrl = "https://vixcho.lemonsqueezy.com/checkout/buy/e609efc0-4393-46fc-b6ed-d535cb9dd2dc";
+    // Pasarelas de Pago:
+    // Flow Chile (Plan PROPROYECTHOR - $9.990 CLP):
+    std::string m_FlowCheckoutBaseUrl = "https://www.flow.cl/suscripcion/plan/PROPROYECTHOR";
+
+    // Credenciales oficiales de Flow (Producción)
+    std::string m_FlowApiKey    = "3A5F02B4-7BB9-4260-81C4-76ED039L26C1";
+    std::string m_FlowSecretKey = "d5966133f9115e9d37067e4984aa4a32389929f2";
+    std::string m_FlowPlanId    = "PROPROYECTHOR";
+
+    // Seguimiento de orden de pago en progreso Flow
+    std::string m_PendingFlowToken;
+    std::string m_PendingCommerceOrder;
+    std::atomic<bool> m_IsPollingPayment{false};
+    std::atomic<bool> m_StopPollingRequested{false};
+
+    // Lemon Squeezy (guardado para venta internacional futura):
+    // const std::string m_LemonCheckoutBaseUrl = "https://vixcho.lemonsqueezy.com/checkout/buy/e609efc0-4393-46fc-b6ed-d535cb9dd2dc";
     const std::string m_LemonHost       = "api.lemonsqueezy.com";
     const std::string m_FirebaseHost    = "identitytoolkit.googleapis.com";
 };

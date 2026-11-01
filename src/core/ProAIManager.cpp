@@ -641,8 +641,8 @@ void ProAIManager::SendChatMessage(const std::vector<ProChatMessage>& history,
         std::string reqError;
 
         const std::string sysPrompt =
-            "Eres el Asistente Inteligente de ProyecThor for Professionals. Eres experto en música litúrgica, alabanza, "
-            "canciones eclesiásticas y dirección técnica audiovisual. "
+            "Eres el Asistente Inteligente de ProyecThor for Professionals. Eres experto en música para auditorios, alabanza, "
+            "canciones contemporáneas e himnos, y dirección técnica audiovisual. "
             "Cuando el usuario te pida escribir, adaptar o crear una canción, entrega la letra estructurada "
             "en estrofas, coro y puente, separando cada estrofa con UNA LÍNEA EN BLANCO para que ProyecThor "
             "pueda importarla directamente y convertirla en diapositivas de proyección legibles. Sé profesional y conciso.";

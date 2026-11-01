@@ -1,4 +1,17 @@
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <dbghelp.h>
+#include <crtdbg.h>
+#include <csignal>
+#include <exception>
+#include <sstream>
+#pragma comment(lib, "dbghelp.lib")
 #define GLFW_EXPOSE_NATIVE_WIN32
 #endif
 #define STB_IMAGE_IMPLEMENTATION
@@ -45,6 +58,7 @@
 #include "ui/panels/LibraryPanel.h"
 #include "ui/panels/biblio/LibraryMultimedia.h"
 #include "ui/panels/overlay/OverlayExportService.h"
+#include "media/audio/WindowsAudioSession.h"
 #include "ui/panels/HomePanel.h"
 #include "ui/panels/ViewPanel.h"
 #include "ui/panels/StylesHubPanel.h"
@@ -57,6 +71,7 @@
 #include "core/plugins/PluginManager.h"
 #include "core/AuthLicenseManager.h"
 #include "core/ProAIManager.h"
+#include "core/CanvaClient.h"
 #include "SplashScreen.h"
 
 #ifdef _WIN32
@@ -65,6 +80,133 @@
     #pragma comment(lib, "user32.lib")
     #pragma comment(lib, "shell32.lib")
     #include <shellapi.h>
+
+static void WriteCrashReport(const char* reason, const std::string& callstack) {
+    try {
+        std::ofstream f("crash_log.txt", std::ios::app);
+        if (f.is_open()) {
+            auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+            f << "==================== CRASH REPORT ====================\n";
+            f << "Reason: " << reason << "\n";
+            f << "Time: " << std::ctime(&now);
+            f << callstack << "\n";
+            f << "======================================================\n\n";
+            f.flush();
+        }
+    } catch (...) {}
+    std::string msg = std::string("ProyecThor ha detectado un fallo critico:\n\nMotivo: ") + reason + "\n\n" + callstack;
+    MessageBoxA(NULL, msg.c_str(), "ProyecThor Error Diagnostic", MB_OK | MB_ICONERROR);
+}
+
+static std::string CaptureCurrentCallstack() {
+    std::ostringstream ss;
+    HANDLE process = GetCurrentProcess();
+    SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
+    SymInitialize(process, NULL, TRUE);
+
+    void* stack[64];
+    WORD count = CaptureStackBackTrace(0, 64, stack, NULL);
+
+    char buffer[sizeof(SYMBOL_INFO) + MAX_SYM_NAME * sizeof(TCHAR)] = {};
+    PSYMBOL_INFO symbol = (PSYMBOL_INFO)buffer;
+    symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+    symbol->MaxNameLen = MAX_SYM_NAME;
+
+    IMAGEHLP_LINE64 line;
+    ZeroMemory(&line, sizeof(line));
+    line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+
+    ss << "Pila de llamadas (" << count << " frames):\n";
+    for (WORD i = 0; i < count; ++i) {
+        DWORD64 addr = (DWORD64)(stack[i]);
+        if (SymFromAddr(process, addr, 0, symbol)) {
+            DWORD disp = 0;
+            if (SymGetLineFromAddr64(process, addr, &disp, &line)) {
+                ss << "  [" << i << "] " << symbol->Name << " -> " << line.FileName << ":" << line.LineNumber << "\n";
+            } else {
+                ss << "  [" << i << "] " << symbol->Name << " (0x" << std::hex << addr << std::dec << ")\n";
+            }
+        } else {
+            ss << "  [" << i << "] 0x" << std::hex << addr << std::dec << "\n";
+        }
+    }
+    return ss.str();
+}
+
+static LONG WINAPI GlobalUnhandledExceptionFilter(EXCEPTION_POINTERS* ep) {
+    std::ostringstream ss;
+    ss << "Excepcion SEH codigo: 0x" << std::hex << (ep && ep->ExceptionRecord ? ep->ExceptionRecord->ExceptionCode : 0) << std::dec << "\n";
+    ss << CaptureCurrentCallstack();
+    WriteCrashReport("Unhandled SEH Exception", ss.str());
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+static void GlobalTerminateHandler() {
+    std::ostringstream ss;
+    ss << "std::terminate() invocado.\n";
+    if (auto ep = std::current_exception()) {
+        try {
+            std::rethrow_exception(ep);
+        } catch (const std::exception& e) {
+            ss << "Excepcion std::exception: " << e.what() << "\nTipo: " << typeid(e).name() << "\n";
+        } catch (...) {
+            ss << "Excepcion C++ no estandar atrapada.\n";
+        }
+    } else {
+        ss << "Sin excepcion C++ activa (posible abort() directo o thread destruido sin join/detach).\n";
+    }
+    ss << CaptureCurrentCallstack();
+    WriteCrashReport("std::terminate", ss.str());
+    _exit(1);
+}
+
+static void GlobalAbortHandler(int) {
+    std::ostringstream ss;
+    ss << "Senal SIGABRT capturada.\n";
+    ss << CaptureCurrentCallstack();
+    WriteCrashReport("SIGABRT", ss.str());
+    _exit(2);
+}
+
+static void GlobalInvalidParameterHandler(const wchar_t* expression, const wchar_t* function, const wchar_t* file, unsigned int line, uintptr_t) {
+    std::ostringstream ss;
+    ss << "Parametro invalido de CRT detectado.\n";
+    if (expression) {
+        char buf[256] = {};
+        WideCharToMultiByte(CP_UTF8, 0, expression, -1, buf, sizeof(buf), NULL, NULL);
+        ss << "Expresion: " << buf << "\n";
+    }
+    if (file) {
+        char buf[256] = {};
+        WideCharToMultiByte(CP_UTF8, 0, file, -1, buf, sizeof(buf), NULL, NULL);
+        ss << "Archivo: " << buf << ":" << line << "\n";
+    }
+    ss << CaptureCurrentCallstack();
+    WriteCrashReport("CRT Invalid Parameter", ss.str());
+    _exit(3);
+}
+
+static int GlobalCrtReportHookW(int reportType, wchar_t* message, int* returnValue) {
+    std::ostringstream ss;
+    ss << "Informe de depuracion CRT (tipo=" << reportType << "): ";
+    if (message) {
+        char buf[512] = {};
+        WideCharToMultiByte(CP_UTF8, 0, message, -1, buf, sizeof(buf), NULL, NULL);
+        ss << buf;
+    }
+    ss << "\n" << CaptureCurrentCallstack();
+    WriteCrashReport("CRT Debug Report (Hook)", ss.str());
+    if (returnValue) *returnValue = 0;
+    return FALSE;
+}
+
+static void InstallCrashDiagnostics() {
+    SetUnhandledExceptionFilter(GlobalUnhandledExceptionFilter);
+    std::set_terminate(GlobalTerminateHandler);
+    signal(SIGABRT, GlobalAbortHandler);
+    _set_invalid_parameter_handler(GlobalInvalidParameterHandler);
+    _CrtSetReportHookW2(_CRT_RPTHOOK_INSTALL, GlobalCrtReportHookW);
+}
 #endif
 
 namespace {
@@ -781,8 +923,13 @@ GLFWwindow* CreateMainWindow(GLFWwindow* splashWindow, int mainW, int mainH, con
     return window;
 }
 
-void InstallViewportRenderHook()
+static GLFWwindow* s_MainWindow = nullptr;
+
+void InstallViewportRenderHook(GLFWwindow* mainWindow = nullptr)
 {
+    if (mainWindow)
+        s_MainWindow = mainWindow;
+
     ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
     static void (*s_OrigCreateWindow)(ImGuiViewport*) = platform_io.Platform_CreateWindow;
 
@@ -797,7 +944,40 @@ void InstallViewportRenderHook()
             glfwMakeContextCurrent(w);
             glfwSwapInterval(0);
             glfwMakeContextCurrent(backup);
+#ifdef _WIN32
+            HWND hwnd = (HWND)viewport->PlatformHandleRaw;
+            if (!hwnd) hwnd = glfwGetWin32Window(w);
+            HWND mainHwnd = s_MainWindow ? glfwGetWin32Window(s_MainWindow) : NULL;
+            if (hwnd && mainHwnd && hwnd != mainHwnd)
+            {
+                ::SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, (LONG_PTR)mainHwnd);
+            }
+#endif
         }
+    };
+
+    static void (*s_OrigShowWindow)(ImGuiViewport*) = platform_io.Platform_ShowWindow;
+    platform_io.Platform_ShowWindow = [](ImGuiViewport* viewport)
+    {
+        if (s_OrigShowWindow)
+            s_OrigShowWindow(viewport);
+#ifdef _WIN32
+        HWND hwnd = (HWND)viewport->PlatformHandleRaw;
+        if (!hwnd) {
+            GLFWwindow* w = static_cast<GLFWwindow*>(viewport->PlatformHandle);
+            if (w) hwnd = glfwGetWin32Window(w);
+        }
+        HWND mainHwnd = s_MainWindow ? glfwGetWin32Window(s_MainWindow) : NULL;
+        if (hwnd && mainHwnd && hwnd != mainHwnd)
+        {
+            ::SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, (LONG_PTR)mainHwnd);
+        }
+        if (hwnd && !(viewport->Flags & ImGuiViewportFlags_NoFocusOnAppearing))
+        {
+            ::BringWindowToTop(hwnd);
+            ::SetForegroundWindow(hwnd);
+        }
+#endif
     };
 
     static void (*s_OrigRenderWindow)(ImGuiViewport*, void*) = platform_io.Renderer_RenderWindow;
@@ -920,8 +1100,11 @@ void RunMainLoop(GLFWwindow* window, ProyecThor::UI::UIManager& uiManager,
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         FrameProfiler::Add(FrameProfiler::s_ImGuiRender, FrameProfiler::ElapsedMs(t3));
 
-        uiManager.GetGlassRenderer().CaptureCurrentFrame();
-        uiManager.GetGlassRenderer().Blur(1.0f, 1);
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        if (!perf.performanceMode && !perf.disableGlassBlur) {
+            uiManager.GetGlassRenderer().CaptureCurrentFrame();
+            uiManager.GetGlassRenderer().Blur(1.0f, 1);
+        }
 
         auto t4 = Clock::now();
         {
@@ -935,6 +1118,21 @@ void RunMainLoop(GLFWwindow* window, ProyecThor::UI::UIManager& uiManager,
         auto t5 = Clock::now();
         glfwSwapBuffers(window);
         FrameProfiler::Add(FrameProfiler::s_SwapBuffers, FrameProfiler::ElapsedMs(t5));
+
+        int targetFps = perf.targetFPS;
+        if (perf.performanceMode && targetFps <= 0) {
+            targetFps = 60;
+        }
+        if (targetFps > 0) {
+            double targetMs = 1000.0 / static_cast<double>(targetFps);
+            double elapsedMs = FrameProfiler::ElapsedMs(frameStart);
+            if (elapsedMs < targetMs) {
+                long long sleepMs = static_cast<long long>(targetMs - elapsedMs);
+                if (sleepMs > 0) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(sleepMs));
+                }
+            }
+        }
 
         double frameTotalMs = FrameProfiler::ElapsedMs(frameStart);
         FrameProfiler::Add(FrameProfiler::s_FrameTotal, frameTotalMs);
@@ -984,11 +1182,17 @@ static void EnsureLinuxEnvironment(int argc, char** argv)
 
 int main(int argc, char** argv)
 {
+#ifdef _WIN32
+    InstallCrashDiagnostics();
+#endif
 #ifndef _WIN32
     EnsureLinuxEnvironment(argc, argv);
 #endif
     ChangeToExecutableDirectory();
     std::cerr << "[DIAG] Iniciando main()\n";
+#ifdef _WIN32
+    ProyecThor::Audio::EnsureProcessAudioUnmutedAndMaxVolume();
+#endif
     const std::string pendingOpenFilePath = GetPendingOpenFilePath(argc, argv);
 
     if (TryForwardToRunningInstance(pendingOpenFilePath))
@@ -1194,7 +1398,7 @@ int main(int argc, char** argv)
               ImGui::StyleColorsDark();
               ImGui::GetStyle().ScaleAllSizes(dpiScale);
 
-              InstallViewportRenderHook();
+              InstallViewportRenderHook(mainWindow);
 
               ProyecThor::Settings::SettingsManager::Get().ApplyTheme();
               {
@@ -1220,6 +1424,7 @@ int main(int argc, char** argv)
               ProyecThor::Core::PluginManager::Get().Initialize();
               ProyecThor::Core::AuthLicenseManager::Get().Initialize();
               ProyecThor::Core::ProAIManager::Get().Initialize();
+              ProyecThor::Core::CanvaClient::Get().Initialize();
               ProyecThor::Settings::SettingsManager::Get().ApplyProjection();
 
               report(0.45f, "Biblioteca, Canciones, Biblias y Modelos 3D");
