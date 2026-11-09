@@ -66,8 +66,11 @@ void NetworkStreamServer::SetChatStore(ChatMessageStore* store)
 // ── SetConfig / GetConfig ─────────────────────────────────────────────────────
 void NetworkStreamServer::SetConfig(const StreamConfig& cfg)
 {
-    std::lock_guard<std::mutex> lk(m_ConfigMutex);
-    m_Config = cfg;
+    {
+        std::lock_guard<std::mutex> lk(m_ConfigMutex);
+        m_Config = cfg;
+    }
+    ++m_ConfigVersion;
 }
 
 StreamConfig NetworkStreamServer::GetConfig() const
@@ -246,7 +249,8 @@ void NetworkStreamServer::ServerThreadFunc(int port, std::promise<bool> startedP
                 std::lock_guard<std::mutex> lk(m_ProviderMutex);
                 if (m_SnapshotProvider) snap = m_SnapshotProvider();
             }
-            if (snap.version != clientVersion) { changed = true; break; }
+            uint64_t currentVersion = snap.version + (m_ConfigVersion.load() << 32);
+            if (currentVersion != clientVersion) { changed = true; break; }
             if (waited >= maxWaitMs) break;
             std::this_thread::sleep_for(std::chrono::milliseconds(pollIntervalMs));
             waited += pollIntervalMs;
@@ -441,13 +445,18 @@ std::string NetworkStreamServer::SnapshotToJSON(const StreamSnapshot& s) const
 
   bool hiQ = (cfg.videoMode != StreamConfig::VideoMode::LowLatency);
   bool isPro = Core::AuthLicenseManager::Get().IsPro();
-  bool effectiveSendBg = isPro ? cfg.sendBackground : true;
+  // Transparencia es un botón aparte, sólo disponible para PRO
+  bool effectiveTransparent = isPro && cfg.transparentMode;
+  // Fondo se envía si sendBackground está activo y no hay transparencia
+  bool effectiveSendBg      = cfg.sendBackground && !effectiveTransparent;
+
+  uint64_t totalVersion = s.version + (m_ConfigVersion.load() << 32);
 
     std::ostringstream j;
     j << "{"
       << "\"isProjecting\":"  << B(s.isProjecting)            << ","
       << "\"showText\":"      << B(s.showText && cfg.sendText)<< ","
-      << "\"version\":"       << s.version                    << ","
+      << "\"version\":"       << totalVersion                 << ","
       << "\"fontVersion\":"   << s.fontVersion                << ","
       << "\"transitionTrigger\":"  << s.transitionTrigger  << ","
   << "\"transitionType\":"     << s.transitionType     << ","
@@ -463,7 +472,9 @@ std::string NetworkStreamServer::SnapshotToJSON(const StreamSnapshot& s) const
       << "\"refH\":"          << s.refH                       << ","
       << "\"isBgVideo\":"     << B(s.isBgVideo)                << ","
       << "\"hasFrame\":"      << B(s.hasFrame && effectiveSendBg) << ","
-      << "\"sendBackground\":"<< B(effectiveSendBg)           << ","
+      << "\"sendBackground\":"<< B(cfg.sendBackground)        << ","
+      << "\"transparent\":"   << B(effectiveTransparent)      << ","
+      << "\"isPro\":"         << B(isPro)                     << ","
       << "\"highQuality\":"   << B(hiQ)                        << ","
       << "\"currentText\":\"" << escapeJSON(s.currentText)     << "\","
       << "\"textColor\":["
@@ -545,10 +556,16 @@ std::string NetworkStreamServer::DetectLocalIP()
 }
 
 // ── BuildHTMLPage ─────────────────────────────────────────────────────────────
-std::string NetworkStreamServer::BuildHTMLPage()
+std::string NetworkStreamServer::BuildHTMLPage() const
 {
-    return R"html(<!DOCTYPE html>
-<html lang="es">
+    bool isPro = Core::AuthLicenseManager::Get().IsPro();
+    StreamConfig cfg = GetConfig();
+    bool initTransparent = isPro && cfg.transparentMode;
+    std::string rootClass = initTransparent ? " class=\"alpha-mode\"" : "";
+
+    std::ostringstream ss;
+    ss << R"html(<!DOCTYPE html>
+<html lang="es")html" << rootClass << R"html(>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -559,27 +576,48 @@ std::string NetworkStreamServer::BuildHTMLPage()
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
     width: 100%; height: 100%;
-    background: #000;
+    background: transparent !important;
+    background-color: transparent !important;
     overflow: hidden;
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
-  body.alpha-mode, body.alpha-mode #screen, body.alpha-mode #viewport {
+
+  /* Modo estándar (sin transparencia activa): fondo negro */
+  html:not(.alpha-mode) #screen,
+  body:not(.alpha-mode) #screen {
+    background: #000;
+  }
+  html:not(.alpha-mode) #viewport,
+  body:not(.alpha-mode) #viewport {
+    background: #000;
+  }
+
+  /* Modo Transparencia / Alpha-mode (PRO: OBS Studio / vMix) */
+  html.alpha-mode,
+  html.alpha-mode body,
+  html.alpha-mode #screen,
+  html.alpha-mode #viewport,
+  body.alpha-mode,
+  body.alpha-mode #screen,
+  body.alpha-mode #viewport {
     background: transparent !important;
     background-color: transparent !important;
   }
+  html.alpha-mode #idle-overlay,
   body.alpha-mode #idle-overlay {
     display: none !important;
   }
+  html.alpha-mode #status-bar,
   body.alpha-mode #status-bar {
     display: none !important;
   }
+
   #screen {
     position: relative;
     width: 100vw; height: 100vh;
     display: flex;
     align-items: center; justify-content: center;
-    background: #000;
     overflow: hidden;
   }
 
@@ -588,7 +626,6 @@ std::string NetworkStreamServer::BuildHTMLPage()
      (idéntico al algoritmo de ViewPanel::RenderContent en el cliente C++). */
   #viewport {
     position: relative;
-    background: #000;
     overflow: hidden;
     transition: background-color 0.4s ease;
   }
@@ -660,7 +697,7 @@ std::string NetworkStreamServer::BuildHTMLPage()
   #status-bar.error     .dot { background: rgba(220,60,60,0.7);  }
 </style>
 </head>
-<body>
+<body)html" << rootClass << R"html(>
 <div id="screen">
   <div id="viewport">
     <!-- Fondo capturado (JPEG polling o MJPEG) -->
@@ -778,14 +815,17 @@ function applyState(s) {
 
   ensureFontLoaded(s.fontVersion);
 
-  if (s.sendBackground === false) {
+  const isAlpha = (s.transparent === true);
+  if (isAlpha) {
+    document.documentElement.classList.add('alpha-mode');
     document.body.classList.add('alpha-mode');
   } else {
+    document.documentElement.classList.remove('alpha-mode');
     document.body.classList.remove('alpha-mode');
   }
 
-  // Modo de video
-  if (s.hasFrame) {
+  // Modo de video / fondo
+  if (s.hasFrame && s.sendBackground !== false && !isAlpha) {
     if (s.highQuality && !highQuality) {
       highQuality = true;
       if (framePollTimer) { clearTimeout(framePollTimer); framePollTimer = null; }
@@ -801,14 +841,13 @@ function applyState(s) {
     bgFrame.classList.add('visible');
     viewportEl.style.backgroundColor = 'transparent';
   } else {
-    // Sin frame: fondo de color sólido si sendBackground es true, o transparente si es false
+    // Sin frame, fondo desactivado, o modo transparente activo:
     bgFrame.classList.remove('visible');
-    if (s.sendBackground !== false && !s.isBgVideo) {
-      const r = Math.round(s.bgColor[0]*255);
-      const g = Math.round(s.bgColor[1]*255);
-      const b = Math.round(s.bgColor[2]*255);
-      viewportEl.style.backgroundColor = `rgb(${r},${g},${b})`;
+    if (!isAlpha) {
+      // Fondo desactivado o sin frame: se pone en negro (como antes)
+      viewportEl.style.backgroundColor = '#000';
     } else {
+      // Transparencia activada (botón aparte): 100% transparente para OBS
       viewportEl.style.backgroundColor = 'transparent';
     }
   }
@@ -897,6 +936,7 @@ poll();
 </body>
 </html>
 )html";
+    return ss.str();
 }
 
 // ── BuildChatHTMLPage ─────────────────────────────────────────────────────────

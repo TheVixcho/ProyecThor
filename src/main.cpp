@@ -49,16 +49,22 @@
 #endif
 #include "ui/framework/bin/StyleGeneralApp.h"
 #include "Version.h"
+#include "core/AppLog.h"
 #include "SettingsManager.h"
 #include "PresentationCore.h"
 #include "core/MediaImportManager.h"
+#include "core/MemoryOptimizer.h"
 #include "PerformanceGovernor.h"
 #include "SystemStats.h"
 #include "ui/framework/UIManager.h"
 #include "ui/panels/LibraryPanel.h"
 #include "ui/panels/biblio/LibraryMultimedia.h"
+#include "ui/panels/biblio/LibrarySongs.h"
+#include "core/io/BibleXmlIO.h"
+#include "core/MediaCollections.h"
 #include "ui/panels/overlay/OverlayExportService.h"
 #include "media/audio/WindowsAudioSession.h"
+#include "ui/views/Audio.h"
 #include "ui/panels/HomePanel.h"
 #include "ui/panels/ViewPanel.h"
 #include "ui/panels/StylesHubPanel.h"
@@ -261,6 +267,60 @@ static void ChangeToExecutableDirectory()
 #endif
 }
 
+#ifdef _WIN32
+#pragma comment(lib, "advapi32.lib")
+
+static void RegisterWindowsShellAssociation()
+{
+    wchar_t exePath[MAX_PATH] = {0};
+    DWORD len = GetModuleFileNameW(NULL, exePath, MAX_PATH);
+    if (len == 0 || len >= MAX_PATH) return;
+
+    std::wstring exeStr(exePath);
+    std::wstring openCmd = L"\"" + exeStr + L"\" \"%1\"";
+    std::wstring iconCmd = exeStr + L",0";
+
+    auto setRegString = [](HKEY root, const std::wstring& subkey, const wchar_t* valName, const std::wstring& valData) {
+        HKEY hKey = nullptr;
+        if (RegCreateKeyExW(root, subkey.c_str(), 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
+            RegSetValueExW(hKey, valName, 0, REG_SZ, reinterpret_cast<const BYTE*>(valData.c_str()), static_cast<DWORD>((valData.size() + 1) * sizeof(wchar_t)));
+            RegCloseKey(hKey);
+        }
+    };
+
+    // 1. Registro en Applications de Windows para "Abrir con..."
+    setRegString(HKEY_CURRENT_USER, L"Software\\Classes\\Applications\\ProyecThor.exe", L"FriendlyAppName", L"ProyecThor");
+    setRegString(HKEY_CURRENT_USER, L"Software\\Classes\\Applications\\ProyecThor.exe\\DefaultIcon", nullptr, iconCmd);
+    setRegString(HKEY_CURRENT_USER, L"Software\\Classes\\Applications\\ProyecThor.exe\\shell\\open\\command", nullptr, openCmd);
+
+    static const std::vector<std::wstring> kSupportedExts = {
+        L".mp3", L".wav", L".flac", L".ogg", L".aac", L".m4a", L".wma", L".opus", L".aiff",
+        L".mp4", L".mkv", L".avi", L".mov", L".webm",
+        L".jpg", L".jpeg", L".png", L".bmp", L".webp", L".gif",
+        L".txt", L".prosong"
+    };
+
+    for (const auto& ext : kSupportedExts) {
+        setRegString(HKEY_CURRENT_USER, L"Software\\Classes\\Applications\\ProyecThor.exe\\SupportedTypes", ext.c_str(), L"");
+        setRegString(HKEY_CURRENT_USER, L"Software\\Classes\\" + ext + L"\\OpenWithProgids", L"ProyecThor.exe", L"");
+    }
+
+    // 2. Menu contextual click derecho directo en Windows Explorer: "Abrir con ProyecThor"
+    setRegString(HKEY_CURRENT_USER, L"Software\\Classes\\*\\shell\\ProyecThor", nullptr, L"Abrir con ProyecThor");
+    setRegString(HKEY_CURRENT_USER, L"Software\\Classes\\*\\shell\\ProyecThor", L"Icon", iconCmd);
+    setRegString(HKEY_CURRENT_USER, L"Software\\Classes\\*\\shell\\ProyecThor\\command", nullptr, openCmd);
+
+    // 3. SystemFileAssociations para categorias de audio, video e imagen
+    static const wchar_t* kSysCats[] = { L"audio", L"video", L"image" };
+    for (const auto* cat : kSysCats) {
+        std::wstring base = std::wstring(L"Software\\Classes\\SystemFileAssociations\\") + cat + L"\\shell\\ProyecThor";
+        setRegString(HKEY_CURRENT_USER, base, nullptr, L"Abrir con ProyecThor");
+        setRegString(HKEY_CURRENT_USER, base, L"Icon", iconCmd);
+        setRegString(HKEY_CURRENT_USER, base + L"\\command", nullptr, openCmd);
+    }
+}
+#endif
+
 std::string GetAppDataFilePath(const std::string& filename)
 {
 #ifdef _WIN32
@@ -320,7 +380,7 @@ const std::string& GetAudioLibraryPath()
     return s_Path;
 }
 
-enum class PendingMediaKind { None, Audio, Video };
+enum class PendingMediaKind { None, Audio, Video, Image, Song };
 
 PendingMediaKind ClassifyMediaExtension(const std::string& path)
 {
@@ -333,8 +393,16 @@ PendingMediaKind ClassifyMediaExtension(const std::string& path)
     static const std::vector<std::string> kVideoExts = {
         ".mp4", ".mkv", ".avi", ".mov", ".webm"
     };
+    static const std::vector<std::string> kImageExts = {
+        ".jpg", ".jpeg", ".png", ".bmp", ".webp", ".gif"
+    };
+    static const std::vector<std::string> kSongExts = {
+        ".txt", ".prosong"
+    };
     if (std::find(kAudioExts.begin(), kAudioExts.end(), ext) != kAudioExts.end()) return PendingMediaKind::Audio;
     if (std::find(kVideoExts.begin(), kVideoExts.end(), ext) != kVideoExts.end()) return PendingMediaKind::Video;
+    if (std::find(kImageExts.begin(), kImageExts.end(), ext) != kImageExts.end()) return PendingMediaKind::Image;
+    if (std::find(kSongExts.begin(), kSongExts.end(), ext) != kSongExts.end()) return PendingMediaKind::Song;
     return PendingMediaKind::None;
 }
 
@@ -358,20 +426,65 @@ void ImportAndPreviewExternalFile(const std::string& externalPath)
             return;
         }
 
-        // Vincular directamente en su carpeta original (ej. Descargas) sin copiar el archivo
-        // a disco ni sobrescribir defaultMediaFolder (lo que antes duplicaba toda la carpeta).
-        ProyecThor::Core::MediaImportManager::Get().LinkSingleExternalFileDirect(
-            externalPath, ProyecThor::Core::MediaImportDest::Multimedia);
-        ProyecThor::Library::RefreshMultimediaLists();
+        auto& core = ProyecThor::Core::PresentationCore::Get();
+        // Abrir externamente como reproductor local: NUNCA proyectar en vivo directamente al monitor
+        core.SetProjecting(false);
+
+        if (kind == PendingMediaKind::Audio || kind == PendingMediaKind::Video || kind == PendingMediaKind::Image) {
+            // Vincular directamente en su carpeta original (ej. Descargas) sin copiar el archivo
+            // a disco ni duplicar contenidos.
+            ProyecThor::Core::MediaImportManager::Get().LinkSingleExternalFileDirect(
+                externalPath, ProyecThor::Core::MediaImportDest::Multimedia);
+            ProyecThor::Library::RefreshMultimediaLists();
+        }
 
         ProyecThor::Core::LibrarySelection sel;
         sel.title = externalPath;
-        sel.type  = (kind == PendingMediaKind::Audio)
-            ? ProyecThor::Core::ItemType::Audio
-            : ProyecThor::Core::ItemType::Video;
-        ProyecThor::Core::PresentationCore::Get().SetSelection(sel);
 
-        std::cerr << "[DIAG] Archivo abierto externamente vinculado (sin duplicar) y cargado en preview: "
+        if (kind == PendingMediaKind::Audio) {
+            sel.type  = ProyecThor::Core::ItemType::Audio;
+            sel.contentData = { externalPath };
+            core.SetSelection(sel);
+
+            // Iniciar reproduccion local en el reproductor de musica sin proyectar
+            if (auto* ap = ProyecThor::UI::AudioPanel::GetActiveInstance()) {
+                ap->PlayFile(externalPath, /*live=*/false);
+            }
+        } else if (kind == PendingMediaKind::Video) {
+            sel.type  = ProyecThor::Core::ItemType::Video;
+            sel.contentData = { externalPath };
+            core.SetSelection(sel);
+
+            // Iniciar reproduccion local en el reproductor de video (con audio para escuchar/ver como reproductor)
+            core.RequestPreviewLoad(externalPath, /*loop=*/false, /*startMuted=*/false);
+        } else if (kind == PendingMediaKind::Image) {
+            sel.type  = ProyecThor::Core::ItemType::Image;
+            sel.contentData = { externalPath };
+            core.SetSelection(sel);
+            core.RequestPreviewStop();
+        } else if (kind == PendingMediaKind::Song) {
+            sel.type = ProyecThor::Core::ItemType::Song;
+            std::ifstream f(src);
+            if (f.is_open()) {
+                std::string line;
+                std::string stanza;
+                while (std::getline(f, line)) {
+                    if (line.empty() || line == "\r") {
+                        if (!stanza.empty()) {
+                            sel.contentData.push_back(stanza);
+                            stanza.clear();
+                        }
+                    } else {
+                        if (!stanza.empty()) stanza += "\n";
+                        stanza += line;
+                    }
+                }
+                if (!stanza.empty()) sel.contentData.push_back(stanza);
+            }
+            core.SetSelection(sel);
+        }
+
+        std::cerr << "[DIAG] Archivo abierto externamente vinculado y cargado en reproductor (sin proyectar de una): "
                   << externalPath << "\n";
     } catch (const std::exception& e) {
         std::cerr << "[DIAG] Error importando archivo abierto externamente: " << e.what() << "\n";
@@ -702,7 +815,10 @@ ProyecThor::Splash::Fonts LoadSplashFonts(ImGuiIO& io, float dpiScale)
 static void LoadMainApplicationFonts(ImGuiIO& io, float dpiScale)
 {
     using namespace ProyecThor::Settings;
-    const std::string& customFontPath = SettingsManager::Get().GetSettings().theme.customFontPath;
+    const auto& settings = SettingsManager::Get().GetSettings();
+    const std::string& customFontPath = settings.theme.customFontPath;
+    const auto& perf = settings.performance;
+    const bool lightFonts = perf.performanceMode || perf.lowMemoryMode;
     const char* defaultFontPath = "bin/assets/fonts/OpenSans-Regular.ttf";
 
     std::string fontToLoad;
@@ -711,16 +827,22 @@ static void LoadMainApplicationFonts(ImGuiIO& io, float dpiScale)
     else if (IsValidFontFile(defaultFontPath))
         fontToLoad = defaultFontPath;
 
-    // 1. Rango extendido completo de símbolos, puntuación, flechas, geometrías y emojis
+    // 1. Rango de símbolos: completo en modo normal, compacto (sin bloques de emojis
+    //    masivos 0x1F000-0x1FAFF) en modo de RAM mínima para reducir el atlas GPU.
     static ImVector<ImWchar> s_FullGlyphRanges;
-    if (s_FullGlyphRanges.empty())
+    static ImVector<ImWchar> s_CompactGlyphRanges;
+    ImVector<ImWchar>& targetRanges = perf.lowMemoryMode ? s_CompactGlyphRanges : s_FullGlyphRanges;
+    if (targetRanges.empty())
     {
         ImFontGlyphRangesBuilder builder;
         builder.AddRanges(io.Fonts->GetGlyphRangesDefault());
-        builder.AddRanges(io.Fonts->GetGlyphRangesGreek());
-        builder.AddRanges(io.Fonts->GetGlyphRangesCyrillic());
+        if (!perf.lowMemoryMode)
+        {
+            builder.AddRanges(io.Fonts->GetGlyphRangesGreek());
+            builder.AddRanges(io.Fonts->GetGlyphRangesCyrillic());
+        }
 
-        static const ImWchar kExtraSymbolsAndEmojis[] = {
+        static const ImWchar kEssentialSymbols[] = {
             0x0100, 0x024F, // Latin Extended-A & B
             0x2000, 0x206F, // General Punctuation
             0x2070, 0x209F, // Superscripts and Subscripts
@@ -737,27 +859,32 @@ static void LoadMainApplicationFonts(ImGuiIO& io, float dpiScale)
             0x2600, 0x26FF, // Miscellaneous Symbols (☀, ☁, ⚡, ☕, ⛑, ⛪, ✝, ⚔, ⚙, ⚠)
             0x2700, 0x27BF, // Dingbats (✂, ✈, ✉, ✔, ✕, ✖, ✝, ✨, ✦, ✪, ✰, ➔)
             0x2B00, 0x2BFF, // Miscellaneous Symbols and Arrows (⬡, ⬢, ↺, ⟳, ⬅, ⬆, ⬇)
+            0
+        };
+        static const ImWchar kExtendedPictographs[] = {
             0x1F000, 0x1F02F, // Mahjong
             0x1F0A0, 0x1F0FF, // Playing Cards
-            0x1F300, 0x1F5FF, // Misc Symbols & Pictographs (🔍, 🎬, 📺, 💎, 🌊, 🍿, 🎵, 🎸, 🎹, 🎧, 🎨, 💡, 🏷, 🕹, 🚀)
-            0x1F600, 0x1F64F, // Emoticons (😀, 😂, 😍, 🤔, etc.)
+            0x1F300, 0x1F5FF, // Misc Symbols & Pictographs
+            0x1F600, 0x1F64F, // Emoticons
             0x1F680, 0x1F6FF, // Transport and Map
             0x1F900, 0x1F9FF, // Supplemental Symbols and Pictographs
             0x1FA70, 0x1FAFF, // Symbols and Pictographs Extended-A
             0
         };
-        builder.AddRanges(kExtraSymbolsAndEmojis);
-        builder.BuildRanges(&s_FullGlyphRanges);
+        builder.AddRanges(kEssentialSymbols);
+        if (!perf.lowMemoryMode)
+            builder.AddRanges(kExtendedPictographs);
+        builder.BuildRanges(&targetRanges);
     }
 
     ImFont* mainFont = nullptr;
     if (!fontToLoad.empty())
     {
         ImFontConfig cfg;
-        cfg.OversampleH = 2;
-        cfg.OversampleV = 2;
+        cfg.OversampleH = lightFonts ? 1 : 2;
+        cfg.OversampleV = lightFonts ? 1 : 2;
         cfg.PixelSnapH  = true;
-        mainFont = io.Fonts->AddFontFromFileTTF(fontToLoad.c_str(), 16.0f * dpiScale, &cfg, s_FullGlyphRanges.Data);
+        mainFont = io.Fonts->AddFontFromFileTTF(fontToLoad.c_str(), 16.0f * dpiScale, &cfg, targetRanges.Data);
     }
 
     // 2. Fusionar fuentes de emojis y símbolos del sistema (Windows / Linux)
@@ -780,8 +907,18 @@ static void LoadMainApplicationFonts(ImGuiIO& io, float dpiScale)
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
     };
 
+    int mergedFallbacks = 0;
     for (const char* fallbackPath : kFallbackFonts)
     {
+        if (perf.lowMemoryMode)
+        {
+            std::string fp(fallbackPath);
+            if (fp.find("Emoji") != std::string::npos || fp.find("seguiemj") != std::string::npos)
+                continue;
+            if (mergedFallbacks >= 2)
+                break;
+        }
+
         if (IsValidFontFile(fallbackPath))
         {
             ImFontConfig mergeCfg;
@@ -789,8 +926,9 @@ static void LoadMainApplicationFonts(ImGuiIO& io, float dpiScale)
             mergeCfg.OversampleH = 1;
             mergeCfg.OversampleV = 1;
             mergeCfg.PixelSnapH  = true;
-            if (io.Fonts->AddFontFromFileTTF(fallbackPath, 16.0f * dpiScale, &mergeCfg, s_FullGlyphRanges.Data))
+            if (io.Fonts->AddFontFromFileTTF(fallbackPath, 16.0f * dpiScale, &mergeCfg, targetRanges.Data))
             {
+                ++mergedFallbacks;
                 std::cout << "[Font] Símbolos/emojis cargados desde: " << fallbackPath << "\n";
             }
         }
@@ -1002,7 +1140,13 @@ void RenderWarmupMainFrame(GLFWwindow* window, ProyecThor::UI::UIManager& uiMana
     if (fw <= 0 || fh <= 0)
         return;
 
-    uiManager.GetGlassRenderer().Resize(fw, fh);
+    const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+    const bool skipBlur = perf.performanceMode || perf.disableGlassBlur;
+    if (skipBlur)
+        uiManager.GetGlassRenderer().ReleaseTargets();
+    else
+        uiManager.GetGlassRenderer().Resize(fw, fh);
+
     glViewport(0, 0, fw, fh);
     glClearColor(theme.base[0], theme.base[1], theme.base[2], 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -1017,8 +1161,10 @@ void RenderWarmupMainFrame(GLFWwindow* window, ProyecThor::UI::UIManager& uiMana
     ProyecThor::UI::OverlayExportService::Get().ProcessPending();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-    uiManager.GetGlassRenderer().CaptureCurrentFrame();
-    uiManager.GetGlassRenderer().Blur(1.0f, 1);
+    if (!skipBlur) {
+        uiManager.GetGlassRenderer().CaptureCurrentFrame();
+        uiManager.GetGlassRenderer().Blur(1.0f, 1);
+    }
 
     {
         GLFWwindow* ctxBackup = glfwGetCurrentContext();
@@ -1034,6 +1180,9 @@ void RenderWarmupMainFrame(GLFWwindow* window, ProyecThor::UI::UIManager& uiMana
 void RunMainLoop(GLFWwindow* window, ProyecThor::UI::UIManager& uiManager,
                   const ProyecThor::Settings::ThemeSettings& theme)
 {
+    int    currentSwapInterval = 1;
+    double lastLowMemTrimTime  = glfwGetTime();
+
     while (!glfwWindowShouldClose(window))
     {
         using Clock = FrameProfiler::Clock;
@@ -1049,6 +1198,8 @@ void RunMainLoop(GLFWwindow* window, ProyecThor::UI::UIManager& uiManager,
         if (ProyecThor::Settings::SettingsManager::Get().IsRestartRequested())
             glfwSetWindowShouldClose(window, GLFW_TRUE);
 
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+
         auto t1 = Clock::now();
         core.Update();
         FrameProfiler::Add(FrameProfiler::s_CoreUpdate, FrameProfiler::ElapsedMs(t1));
@@ -1056,13 +1207,18 @@ void RunMainLoop(GLFWwindow* window, ProyecThor::UI::UIManager& uiManager,
 
         int fw, fh;
         glfwGetFramebufferSize(window, &fw, &fh);
-        if (fw == 0 || fh == 0)
+        if (fw == 0 || fh == 0 || glfwGetWindowAttrib(window, GLFW_ICONIFIED))
         {
-            std::this_thread::sleep_for(std::chrono::milliseconds(16));
+            std::this_thread::sleep_for(std::chrono::milliseconds(core.IsProjecting() ? 16 : 50));
             continue;
         }
 
-        uiManager.GetGlassRenderer().Resize(fw, fh);
+        const bool skipBlur = perf.performanceMode || perf.disableGlassBlur;
+        if (skipBlur)
+            uiManager.GetGlassRenderer().ReleaseTargets();
+        else
+            uiManager.GetGlassRenderer().Resize(fw, fh);
+
         glViewport(0, 0, fw, fh);
         glClearColor(theme.base[0], theme.base[1], theme.base[2], 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
@@ -1100,8 +1256,7 @@ void RunMainLoop(GLFWwindow* window, ProyecThor::UI::UIManager& uiManager,
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         FrameProfiler::Add(FrameProfiler::s_ImGuiRender, FrameProfiler::ElapsedMs(t3));
 
-        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
-        if (!perf.performanceMode && !perf.disableGlassBlur) {
+        if (!skipBlur) {
             uiManager.GetGlassRenderer().CaptureCurrentFrame();
             uiManager.GetGlassRenderer().Blur(1.0f, 1);
         }
@@ -1115,22 +1270,38 @@ void RunMainLoop(GLFWwindow* window, ProyecThor::UI::UIManager& uiManager,
         }
         FrameProfiler::Add(FrameProfiler::s_PlatformWindows, FrameProfiler::ElapsedMs(t4));
 
+        int targetFps = perf.targetFPS;
+        if (perf.performanceMode && targetFps <= 0) {
+            targetFps = perf.lowMemoryMode ? 30 : 60;
+        }
+        const int desiredSwapInterval = (targetFps == 30) ? 2 : 1;
+        if (desiredSwapInterval != currentSwapInterval) {
+            glfwSwapInterval(desiredSwapInterval);
+            currentSwapInterval = desiredSwapInterval;
+        }
+
         auto t5 = Clock::now();
         glfwSwapBuffers(window);
         FrameProfiler::Add(FrameProfiler::s_SwapBuffers, FrameProfiler::ElapsedMs(t5));
 
-        int targetFps = perf.targetFPS;
-        if (perf.performanceMode && targetFps <= 0) {
-            targetFps = 60;
-        }
+        ProyecThor::Core::MemoryOptimizer::ProcessPending();
+
         if (targetFps > 0) {
             double targetMs = 1000.0 / static_cast<double>(targetFps);
             double elapsedMs = FrameProfiler::ElapsedMs(frameStart);
-            if (elapsedMs < targetMs) {
+            if (elapsedMs + 0.5 < targetMs) {
                 long long sleepMs = static_cast<long long>(targetMs - elapsedMs);
                 if (sleepMs > 0) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(sleepMs));
                 }
+            }
+        }
+
+        if (perf.lowMemoryMode) {
+            double now = glfwGetTime();
+            if ((now - lastLowMemTrimTime) >= 45.0) {
+                lastLowMemTrimTime = now;
+                ProyecThor::Core::MemoryOptimizer::TrimWorkingSet();
             }
         }
 
@@ -1189,9 +1360,11 @@ int main(int argc, char** argv)
     EnsureLinuxEnvironment(argc, argv);
 #endif
     ChangeToExecutableDirectory();
+    ProyecThor::Core::AppLog::Inf("Init", "Iniciando ProyecThor v" + std::string(PROYECTHOR_VERSION_STRING) + " (Build #" + std::to_string(PROYECTHOR_BUILD_NUMBER) + ")");
     std::cerr << "[DIAG] Iniciando main()\n";
 #ifdef _WIN32
     ProyecThor::Audio::EnsureProcessAudioUnmutedAndMaxVolume();
+    RegisterWindowsShellAssociation();
 #endif
     const std::string pendingOpenFilePath = GetPendingOpenFilePath(argc, argv);
 
@@ -1344,8 +1517,11 @@ int main(int argc, char** argv)
               glfwMakeContextCurrent(mainWindow);
               ProyecThor::Core::PresentationCore::Get().SetMainWindow(mainWindow);
 
-              report(0.85f, "Decodificador de miniaturas de video");
-              ProyecThor::Core::ThumbnailWorker::WarmupVlcEngine();
+              const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+              if (!perf.performanceMode && !perf.lowMemoryMode) {
+                  report(0.85f, "Decodificador de miniaturas de video");
+                  ProyecThor::Core::ThumbnailWorker::WarmupVlcEngine();
+              }
 
               glfwMakeContextCurrent(splashWindow);
               ImGui::SetCurrentContext(splashContext);
@@ -1475,6 +1651,11 @@ int main(int argc, char** argv)
         { "Precargando miniaturas de Props y Overlays...", 1.4f, nullptr,
           [&](ProyecThor::Splash::ProgressReporter report) {
               if (!mainWindow) return;
+              const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+              if (perf.performanceMode || perf.lowMemoryMode) {
+                  report(1.0f, "Carga diferida bajo demanda");
+                  return;
+              }
               glfwMakeContextCurrent(mainWindow);
               ProyecThor::UI::OverlayLibraryTab::PreloadAllThumbnails(
                   [&](int done, int total, const std::string& name) {
@@ -1489,6 +1670,11 @@ int main(int argc, char** argv)
         { "Precargando galería de fondos...", 1.8f, nullptr,
           [&](ProyecThor::Splash::ProgressReporter report) {
               if (!mainWindow || !stylesHub) return;
+              const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+              if (perf.performanceMode || perf.lowMemoryMode) {
+                  report(1.0f, "Carga diferida bajo demanda");
+                  return;
+              }
               glfwMakeContextCurrent(mainWindow);
               stylesHub->PreloadThumbnails(
                   [&](int done, int total, const std::string& name) {
@@ -1500,11 +1686,49 @@ int main(int argc, char** argv)
           }
         },
 
+        { "Precargando letras, canciones y textos bíblicos...", 1.6f, nullptr,
+          [&](ProyecThor::Splash::ProgressReporter report) {
+              if (!mainWindow) return;
+              report(0.05f, "Indexando cancionero y letras...");
+              glfwMakeContextCurrent(mainWindow);
+              ProyecThor::Library::PreloadAllSongs(
+                  [&](int done, int total, const std::string& name) {
+                      const float sub = (total > 0) ? (0.05f + 0.85f * ((float)done / (float)total)) : 0.90f;
+                      report(sub, formatItemProgress(done, total, name));
+                  });
+
+              report(0.92f, "Precargando textos bíblicos...");
+              std::string bibleDir = ProyecThor::GetAssetsPath() + "/bibles";
+              std::error_code bec;
+              if (std::filesystem::exists(bibleDir, bec)) {
+                  for (const auto& bEntry : std::filesystem::directory_iterator(bibleDir, bec)) {
+                      if (bec) break;
+                      if (!bEntry.is_regular_file()) continue;
+                      if (bEntry.path().extension() == ".xml") {
+                          ProyecThor::UI::BibleData dummyBible;
+                          ProyecThor::UI::XmlIO::LoadBible(bEntry.path().string(), dummyBible);
+                          break;
+                      }
+                  }
+              }
+              glfwMakeContextCurrent(splashWindow);
+              ImGui::SetCurrentContext(splashContext);
+              report(1.0f, "Textos y letras listos");
+          }
+        },
+
         { "Precargando contenido multimedia (video, audio e imagen)...", 2.4f, nullptr,
           [&](ProyecThor::Splash::ProgressReporter report) {
               if (!mainWindow) return;
-              report(0.02f, "Indexando carpetas de medios...");
+              report(0.02f, "Indexando carpetas de medios y colecciones...");
+              ProyecThor::Core::MediaCollectionManager::Get().Initialize();
               ProyecThor::Library::RefreshMultimediaLists();
+
+              const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+              if (perf.performanceMode || perf.lowMemoryMode) {
+                  report(1.0f, "Carga diferida bajo demanda");
+                  return;
+              }
 
               glfwMakeContextCurrent(mainWindow);
               ProyecThor::Library::PreloadMultimediaThumbnails(
@@ -1526,20 +1750,19 @@ int main(int argc, char** argv)
 
               // Precompila shaders de fondo (Blit + AMD FSR 1.0) en el contexto GL principal
               // para que el primer fondo aplicado aparezca al instante sin tirones de compilación.
-              report(0.08f, "Precompilando shaders de proyección y escalado FSR");
+              report(0.08f, "Precompilando shaders de proyección");
               ProyecThor::Core::PresentationCore::Get().WarmupGraphics(1920, 1080);
 
-              // Multiples pasadas completas de ImGui + Docking:
-              // - Pasada 1: construye el atlas tipográfico en GPU y crea los nodos de acoplamiento.
-              // - Pasada 2: renderiza todos los paneles visibles con sus dimensiones finales y texturas precargadas.
-              // - Pasada 3: estabiliza el desenfoque GlassRenderer y geometría final para evitar cualquier salto al mostrar.
-              report(0.15f, "Construyendo atlas tipográfico y layout de paneles");
+              const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+              report(0.25f, "Construyendo atlas tipográfico y layout de paneles");
               RenderWarmupMainFrame(mainWindow, uiManager, theme, false);
 
-              report(0.60f, "Renderizando vistas y galerías precargadas");
-              RenderWarmupMainFrame(mainWindow, uiManager, theme, false);
+              if (!perf.performanceMode && !perf.lowMemoryMode) {
+                  report(0.60f, "Renderizando vistas y galerías precargadas");
+                  RenderWarmupMainFrame(mainWindow, uiManager, theme, false);
+              }
 
-              report(0.90f, "Estabilizando composición y efectos de cristal");
+              report(0.90f, "Estabilizando composición");
               RenderWarmupMainFrame(mainWindow, uiManager, theme, true);
               glFinish();
 
@@ -1576,9 +1799,7 @@ int main(int argc, char** argv)
         if (!glfwWindowShouldClose(splashWindow)) {
             glfwMakeContextCurrent(splashWindow);
             ImGui::SetCurrentContext(splashContext);
-            ProyecThor::Splash::Render(splashWindow, splashSize, "Listo para iniciar.", 1.0f,
-                logoTex, bgTex, splashFonts, creditText, theme);
-            ProyecThor::Splash::WaitForUserConfirmation(splashWindow, splashSize,
+            ProyecThor::Splash::Render(splashWindow, splashSize, "Iniciando ProyecThor...", 1.0f,
                 logoTex, bgTex, splashFonts, creditText, theme);
         }
         if (glfwWindowShouldClose(splashWindow))
@@ -1654,6 +1875,13 @@ int main(int argc, char** argv)
     glfwMakeContextCurrent(mainWindow);
     ImGui::SetCurrentContext(mainContext);
     glfwFocusWindow(mainWindow);
+
+    {
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        if (perf.performanceMode || perf.lowMemoryMode) {
+            ProyecThor::Core::MemoryOptimizer::TrimWorkingSet();
+        }
+    }
 
     // Lo último una vez cargada la app: consultar la licencia en servidores
     ProyecThor::Core::AuthLicenseManager::Get().ValidateOnAppLoaded();

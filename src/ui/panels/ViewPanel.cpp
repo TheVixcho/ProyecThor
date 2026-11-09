@@ -27,7 +27,7 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <algorithm>
-#include <algorithm>
+#include <cstdio>
 #include <cmath>
 #include <ctime>
 #include <string>
@@ -43,10 +43,31 @@
 
 namespace ProyecThor::UI {
 
-static constexpr float kQuickActionsRailW = 40.0f;
-static constexpr float kConfigStripH = 34.0f;
-
 namespace {
+
+inline const char* TrVp(const char* es, const char* en, const char* pt) {
+    auto lang = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language;
+    if (lang == ProyecThor::Settings::Language::English) return en;
+    if (lang == ProyecThor::Settings::Language::Portuguese) return pt;
+    return es;
+}
+
+inline float SafeClamp(float v, float lo, float hi)
+{
+    if (std::isnan(v)) return lo;
+    if (hi < lo) std::swap(lo, hi);
+    return (v < lo) ? lo : ((v > hi) ? hi : v);
+}
+
+inline float CalcPanelPadX(float w)
+{
+    return w * 0.025f;
+}
+
+inline float CalcPanelGap(float w)
+{
+    return w * 0.016f;
+}
 
 struct StdStringCbData { std::string* str; };
 
@@ -64,6 +85,9 @@ static int StdStringResizeCallback(ImGuiInputTextCallbackData* data)
 
 static bool InputTextMultilineStd(const char* label, std::string* str, const ImVec2& size, ImGuiInputTextFlags flags = 0)
 {
+    if (str->capacity() == 0) {
+        str->reserve(64);
+    }
     flags |= ImGuiInputTextFlags_CallbackResize;
     StdStringCbData cb{ str };
     return ImGui::InputTextMultiline(label, str->data(), str->capacity() + 1, size, flags, StdStringResizeCallback, &cb);
@@ -106,107 +130,114 @@ ImVec4 Brighten(const ImVec4& c, float amount)
         c.w);
 }
 
-bool DrawPadButton(const char* iconName, float iconSize, ImVec4 padColor, ImVec2 btnSize, bool lit,
-                    DrawIconFn vectorIcon = nullptr)
+void DrawTransportGlyph(ImDrawList* dl, ImVec2 center, float sz, const std::string& key, ImU32 col)
 {
-    ImVec4 baseCol = padColor;
-    ImVec4 hovCol  = Brighten(baseCol, 0.12f);
-    ImVec4 actCol  = Brighten(padColor, -0.10f);
+    const float r = sz * 0.5f;
+    const float t = std::max(1.3f, sz * 0.11f);
+    if (key == "play") {
+        dl->AddTriangleFilled(
+            { center.x - r * 0.45f, center.y - r * 0.65f },
+            { center.x - r * 0.45f, center.y + r * 0.65f },
+            { center.x + r * 0.68f, center.y }, col);
+    } else if (key == "pause") {
+        const float bw = std::max(2.0f, r * 0.28f);
+        const float bh = r * 0.62f;
+        dl->AddRectFilled({ center.x - r * 0.48f, center.y - bh }, { center.x - r * 0.48f + bw, center.y + bh }, col, 1.0f);
+        dl->AddRectFilled({ center.x + r * 0.48f - bw, center.y - bh }, { center.x + r * 0.48f, center.y + bh }, col, 1.0f);
+    } else if (key == "stop") {
+        const float hs = r * 0.52f;
+        dl->AddRectFilled({ center.x - hs, center.y - hs }, { center.x + hs, center.y + hs }, col, 1.5f);
+    } else if (key == "replay_10") {
+        dl->PathArcTo(center, r * 0.68f, -2.2f, 3.3f, 16);
+        dl->PathStroke(col, 0, t);
+        ImVec2 tip = { center.x + std::cos(-2.2f) * r * 0.68f, center.y + std::sin(-2.2f) * r * 0.68f };
+        dl->AddTriangleFilled(
+            { tip.x - r * 0.30f, tip.y + r * 0.10f },
+            { tip.x + r * 0.22f, tip.y - r * 0.25f },
+            { tip.x + r * 0.18f, tip.y + r * 0.30f }, col);
+    } else if (key == "forward_10") {
+        dl->PathArcTo(center, r * 0.68f, -0.94f, 5.34f, 16);
+        dl->PathStroke(col, 0, t);
+        ImVec2 tip = { center.x + std::cos(-0.94f) * r * 0.68f, center.y + std::sin(-0.94f) * r * 0.68f };
+        dl->AddTriangleFilled(
+            { tip.x + r * 0.30f, tip.y + r * 0.10f },
+            { tip.x - r * 0.22f, tip.y - r * 0.25f },
+            { tip.x - r * 0.18f, tip.y + r * 0.30f }, col);
+    } else if (key == "skip_prev" || key == "arrow_back" || key == "arrow_left") {
+        dl->AddLine({ center.x - r * 0.56f, center.y - r * 0.56f },
+                    { center.x - r * 0.56f, center.y + r * 0.56f }, col, t);
+        dl->AddTriangleFilled(
+            { center.x + r * 0.56f, center.y - r * 0.56f },
+            { center.x + r * 0.56f, center.y + r * 0.56f },
+            { center.x - r * 0.38f, center.y }, col);
+    } else if (key == "skip_next" || key == "arrow_forward" || key == "arrow_right") {
+        dl->AddLine({ center.x + r * 0.56f, center.y - r * 0.56f },
+                    { center.x + r * 0.56f, center.y + r * 0.56f }, col, t);
+        dl->AddTriangleFilled(
+            { center.x - r * 0.56f, center.y - r * 0.56f },
+            { center.x - r * 0.56f, center.y + r * 0.56f },
+            { center.x + r * 0.38f, center.y }, col);
+    }
+}
 
-    ImGui::PushStyleColor(ImGuiCol_Button,        baseCol);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  hovCol);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,   actCol);
-    ImGui::PushStyleColor(ImGuiCol_Border,         ImVec4(1.0f, 1.0f, 1.0f, lit ? 0.40f : 0.10f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,   DS::RadiusMedium);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
-
+bool DrawPadButton(const char* iconName, float iconSize, ImVec4 /*padColor*/, ImVec2 btnSize, bool lit,
+                   DrawIconFn vectorIcon = nullptr)
+{
     ImVec2 p0      = ImGui::GetCursorScreenPos();
-    bool   pressed = ImGui::Button("", btnSize);
+    bool   pressed = ImGui::InvisibleButton("##tpBtn", btnSize);
+    bool   hovered = ImGui::IsItemHovered();
     bool   isHeld  = ImGui::IsItemActive();
     ImVec2 p1      = { p0.x + btnSize.x, p0.y + btnSize.y };
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    if (lit)
-    {
-        dl->AddRectFilled(p0, p1,
-            ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.12f)), DS::RadiusMedium);
+    ImU32 bgCol = DS::BtnDefaultFill;
+    if (isHeld) {
+        bgCol = IM_COL32(54, 56, 60, 255);
+    } else if (lit) {
+        ImVec4 ac = ToVec4(DS::AccentLight);
+        ImVec4 bf = ToVec4(DS::BtnDefaultFill);
+        float mix = hovered ? 0.22f : 0.14f;
+        bgCol = ImGui::ColorConvertFloat4ToU32({
+            bf.x + (ac.x - bf.x) * mix,
+            bf.y + (ac.y - bf.y) * mix,
+            bf.z + (ac.z - bf.z) * mix, 1.0f });
+    } else if (hovered) {
+        bgCol = DS::BtnHoverFill;
     }
+
+    ImU32 bordCol = lit
+        ? DS::AccentLight
+        : (hovered ? IM_COL32(255, 255, 255, 48) : IM_COL32(255, 255, 255, 22));
+
+    dl->AddRectFilled(p0, p1, bgCol, DS::RadiusMedium);
+    dl->AddRect(p0, p1, bordCol, DS::RadiusMedium, 0, lit ? 1.3f : 1.0f);
+
+    ImVec2 center = { (p0.x + p1.x) * 0.5f, (p0.y + p1.y) * 0.5f };
+    ImU32 iconTint = (lit || hovered) ? DS::TextPrimary : DS::TextSecondary;
 
     std::string key = iconName ? iconName : "";
     if (key == "arrow_left") key = "arrow_back";
     else if (key == "arrow_right") key = "arrow_forward";
     else if (key == "skip_previous") key = "skip_prev";
 
-    auto it = StyleGeneralApp::Icons.find(key);
-    if (it == StyleGeneralApp::Icons.end() && iconName)
-        it = StyleGeneralApp::Icons.find(iconName);
-    bool hasTexture = (it != StyleGeneralApp::Icons.end() && it->second.textureID != nullptr);
-
-    float  offsetY = isHeld ? 2.0f : 0.0f;
-    ImVec2 center  = { (p0.x + p1.x) * 0.5f, (p0.y + p1.y) * 0.5f + offsetY };
-
-    const float iconLuma = 0.299f * baseCol.x + 0.587f * baseCol.y + 0.114f * baseCol.z;
-    const ImU32 iconTint = (iconLuma > 0.55f) ? IM_COL32(20, 20, 24, 255) : IM_COL32(255, 255, 255, 255);
-
-    const char* symbolGlyph = nullptr;
-    std::string iName = key;
-    if (iName == "replay_10")            symbolGlyph = "\xE2\x8F\xAA";
-    else if (iName == "play")            symbolGlyph = "\xE2\x96\xB6";
-    else if (iName == "pause")           symbolGlyph = "\xE2\x8F\xB8";
-    else if (iName == "forward_10")      symbolGlyph = "\xE2\x8F\xA9";
-    else if (iName == "stop")            symbolGlyph = "\xE2\x8F\xB9";
-    else if (iName == "volume_up")       symbolGlyph = "\xF0\x9F\x94\x8A";
-    else if (iName == "no_sound")        symbolGlyph = "\xF0\x9F\x94\x87";
-    else if (iName == "arrow_back")      symbolGlyph = "\xE2\x8F\xAE";
-    else if (iName == "arrow_forward")   symbolGlyph = "\xE2\x8F\xAD";
-
-    if (hasTexture)
-    {
-        dl->AddImage((ImTextureID)(intptr_t)it->second.textureID,
-            { center.x - iconSize * 0.5f, center.y - iconSize * 0.5f },
-            { center.x + iconSize * 0.5f, center.y + iconSize * 0.5f },
-            ImVec2(0, 0), ImVec2(1, 1),
-            iconTint);
-    }
-    else if (vectorIcon)
-    {
+    if (vectorIcon) {
         ImVec2 origin = { center.x - iconSize * 0.5f, center.y - iconSize * 0.5f };
         vectorIcon(dl, origin, iconSize, iconTint);
-    }
-    else if (iName == "arrow_back" || iName == "arrow_left")
-    {
-        float chW = iconSize * 0.65f;
-        float chH = iconSize * 0.90f;
-        ImVec2 pts[3] = {
-            { center.x + chW * 0.25f, center.y - chH * 0.45f },
-            { center.x - chW * 0.35f, center.y },
-            { center.x + chW * 0.25f, center.y + chH * 0.45f }
-        };
-        dl->AddPolyline(pts, 3, iconTint, 0, 1.8f);
-    }
-    else if (iName == "arrow_forward" || iName == "arrow_right")
-    {
-        float chW = iconSize * 0.65f;
-        float chH = iconSize * 0.90f;
-        ImVec2 pts[3] = {
-            { center.x - chW * 0.25f, center.y - chH * 0.45f },
-            { center.x + chW * 0.35f, center.y },
-            { center.x - chW * 0.25f, center.y + chH * 0.45f }
-        };
-        dl->AddPolyline(pts, 3, iconTint, 0, 1.8f);
-    }
-    else if (symbolGlyph)
-    {
-        ImFont* font = ImGui::GetFont();
-        float fontSz = iconSize * 1.15f;
-        ImVec2 glyphSz = font->CalcTextSizeA(fontSz, FLT_MAX, 0.0f, symbolGlyph);
-        ImVec2 glyphPos = { center.x - glyphSz.x * 0.5f, center.y - glyphSz.y * 0.5f };
-        dl->AddText(font, fontSz, glyphPos, iconTint, symbolGlyph);
+    } else {
+        auto it = StyleGeneralApp::Icons.find(key);
+        if (it == StyleGeneralApp::Icons.end() && iconName)
+            it = StyleGeneralApp::Icons.find(iconName);
+        if (it != StyleGeneralApp::Icons.end() && it->second.textureID != nullptr) {
+            dl->AddImage((ImTextureID)(intptr_t)it->second.textureID,
+                { center.x - iconSize * 0.5f, center.y - iconSize * 0.5f },
+                { center.x + iconSize * 0.5f, center.y + iconSize * 0.5f },
+                ImVec2(0, 0), ImVec2(1, 1), iconTint);
+        } else {
+            DrawTransportGlyph(dl, center, iconSize, key, iconTint);
+        }
     }
 
-    ImGui::PopStyleVar(2);
-    ImGui::PopStyleColor(4);
     return pressed;
 }
 
@@ -262,6 +293,124 @@ bool HorizontalFader(const char* id, float* value, float lo, float hi, ImVec2 si
     dl->AddRectFilled(capMin, capMax, capBody, 3.0f);
     dl->AddRect(capMin, capMax, IM_COL32(0, 0, 0, 110), 3.0f, 0, 1.2f);
     dl->AddLine({ capX, capMin.y + 4.0f }, { capX, capMax.y - 4.0f }, IM_COL32(0, 0, 0, 130), 1.5f);
+
+    return changed;
+}
+
+bool HybridVolumeFader(const char* id, float* value, float lo, float hi, ImVec2 size,
+                       bool muted, bool enabled)
+{
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton(id, size);
+    const bool hovered = ImGui::IsItemHovered();
+    const bool active  = ImGui::IsItemActive();
+    bool changed = false;
+
+    const float capW       = size.y * 0.38f;
+    const float trackLeft  = pos.x + capW * 0.5f;
+    const float trackRight = pos.x + size.x - capW * 0.5f;
+    const float trackWpx   = std::max(1.0f, trackRight - trackLeft);
+
+    if (enabled && hi > lo)
+    {
+        if (hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+        {
+            float unity = SafeClamp(1.0f, lo, hi);
+            if (*value != unity) { *value = unity; changed = true; }
+        }
+        else if (active && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        {
+            float t = SafeClamp((ImGui::GetIO().MousePos.x - trackLeft) / trackWpx, 0.0f, 1.0f);
+            float newVal = lo + t * (hi - lo);
+            if (std::abs(newVal - 1.0f) < 0.022f) newVal = 1.0f;
+            if (newVal != *value) { *value = newVal; changed = true; }
+        }
+    }
+
+    const float shownVal  = enabled ? *value : 0.0f;
+    const float frac      = (hi > lo) ? SafeClamp((shownVal - lo) / (hi - lo), 0.0f, 1.0f) : 0.0f;
+    const float unityFrac = (hi > lo) ? SafeClamp((1.0f - lo) / (hi - lo), 0.0f, 1.0f) : 0.5f;
+    const float capX      = trackLeft + frac * trackWpx;
+    const float unityX    = trackLeft + unityFrac * trackWpx;
+
+    ImDrawList* dl     = ImGui::GetWindowDrawList();
+    const float trackH = size.y * 0.30f;
+    const float cy     = pos.y + size.y * 0.56f;
+    const float trkTop = cy - trackH * 0.5f;
+    const float trkBot = cy + trackH * 0.5f;
+    const float trkRad = trackH * 0.5f;
+
+    // Escala clásica de calibración proporcional a la altura del control
+    const float tickGap = size.y * 0.055f;
+    for (int i = 0; i <= 8; ++i)
+    {
+        const float mx      = trackLeft + trackWpx * static_cast<float>(i) / 8.0f;
+        const bool  isUnity = (i == 4);
+        const bool  isMajor = (i % 2 == 0);
+        const float tickLen = size.y * (isUnity ? 0.16f : (isMajor ? 0.11f : 0.065f));
+        const ImU32 tickCol = isUnity
+            ? IM_COL32(255, 255, 255, enabled ? 96 : 28)
+            : IM_COL32(255, 255, 255, enabled ? (isMajor ? 40 : 22) : 12);
+        dl->AddLine({ mx, trkTop - tickGap - tickLen }, { mx, trkTop - tickGap * 0.6f },
+                    tickCol, isUnity ? 1.4f : 1.0f);
+    }
+
+    // Riel hundido estilo consola + borde fino minimalista
+    dl->AddRectFilled({ trackLeft, trkTop }, { trackRight, trkBot },
+                      IM_COL32(16, 17, 20, 255), trkRad);
+    dl->AddRect({ trackLeft, trkTop }, { trackRight, trkBot },
+                IM_COL32(255, 255, 255, (hovered && enabled) ? 44 : 24), trkRad);
+
+    // Relleno de nivel: verde estudio hasta 100%, segmento coral de ganancia extra (>100%)
+    if (enabled && capX - trackLeft > 0.5f)
+    {
+        const bool  isBoost = (shownVal > 1.005f);
+        const float baseEnd = isBoost ? std::min(capX, unityX) : capX;
+        const ImU32 baseCol = muted
+            ? IM_COL32(92, 98, 108, 145)
+            : IM_COL32(64, 176, 126, 235);
+
+        if (baseEnd - trackLeft > 0.5f)
+        {
+            dl->AddRectFilled({ trackLeft, trkTop }, { baseEnd, trkBot }, baseCol, trkRad);
+        }
+        if (isBoost && capX - unityX > 0.5f)
+        {
+            const ImU32 boostCol = muted
+                ? IM_COL32(138, 80, 80, 155)
+                : IM_COL32(224, 84, 84, 240);
+            dl->AddRectFilled({ std::max(trackLeft, unityX - 1.0f), trkTop },
+                              { capX, trkBot }, boostCol, trkRad);
+        }
+    }
+
+    // Línea divisoria sutil en 100% dentro del riel
+    dl->AddLine({ unityX, trkTop + 1.0f }, { unityX, trkBot - 1.0f },
+                IM_COL32(255, 255, 255, enabled ? 36 : 14), 1.0f);
+
+    // Capuchón táctil híbrido proporcional (perfil de fader clásico con acabado mate minimalista)
+    const float capHalfH = size.y * 0.40f;
+    const float capRad   = capW * 0.22f;
+    const ImVec2 capMin  = { capX - capW * 0.5f, cy - capHalfH };
+    const ImVec2 capMax  = { capX + capW * 0.5f, cy + capHalfH };
+
+    ImU32 capBody = IM_COL32(82, 86, 94, 185);
+    if (enabled)
+    {
+        if (muted) {
+            capBody = (hovered || active) ? IM_COL32(160, 165, 174, 250) : IM_COL32(138, 143, 152, 245);
+        } else if (shownVal > 1.005f) {
+            capBody = (hovered || active) ? IM_COL32(250, 118, 118, 255) : IM_COL32(235, 96, 96, 255);
+        } else {
+            capBody = (hovered || active) ? IM_COL32(238, 241, 247, 255) : IM_COL32(212, 216, 224, 255);
+        }
+    }
+
+    dl->AddRectFilled(capMin, capMax, capBody, capRad);
+    dl->AddRect(capMin, capMax, IM_COL32(10, 11, 14, 195), capRad, 0, 1.1f);
+    const float gripInset = capHalfH * 0.34f;
+    dl->AddLine({ capX, capMin.y + gripInset }, { capX, capMax.y - gripInset },
+                IM_COL32(20, 22, 26, enabled ? 175 : 100), std::max(1.2f, capW * 0.09f));
 
     return changed;
 }
@@ -831,6 +980,156 @@ void ViewPanel::SetDetached(bool detached)
     }
 }
 
+bool ViewPanel::HasPlayableLiveMedia() const
+{
+    auto& core  = Core::PresentationCore::Get();
+    auto  state = core.GetState();
+
+    UI::AudioPanel* musicPanel = core.GetAudioPanelRef();
+    if (musicPanel && musicPanel->IsLiveBackground() &&
+        state.bgType == Core::PresentationState::BackgroundType::Audio)
+    {
+        return true;
+    }
+
+    if (state.bgType == Core::PresentationState::BackgroundType::Video &&
+        !state.bgPath.empty() &&
+        !core.IsBackgroundStaticImage() &&
+        core.GetBackgroundPlayer() != nullptr)
+    {
+        return true;
+    }
+
+    return false;
+}
+
+void ViewPanel::RenderMonitorHeader(float w, float h)
+{
+    if (w <= 0.0f || h <= 0.0f) return;
+
+    auto& core      = Core::PresentationCore::Get();
+    auto  state     = core.GetState();
+    const bool isPro = ProyecThor::Core::AuthLicenseManager::Get().IsPro();
+    if (!isPro && m_PreviewSource == PreviewSource::Stage) {
+        m_PreviewSource = PreviewSource::Publico;
+    }
+
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, MT::k_Bg1);
+    ImGui::BeginChild("##viewMonitorHeader", ImVec2(w, h), false,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+    ImDrawList*  dl       = ImGui::GetWindowDrawList();
+    ImFont*      font     = ImGui::GetFont();
+    const float  baseFont = ImGui::GetFontSize();
+    const ImVec2 org      = ImGui::GetWindowPos();
+    const float  padX     = CalcPanelPadX(w);
+    const float  gap      = CalcPanelGap(w) * 0.75f;
+    const float  midY     = org.y + h * 0.5f;
+
+    dl->AddLine({ org.x, org.y + h - 1.0f }, { org.x + w, org.y + h - 1.0f },
+                IM_COL32(255, 255, 255, 16), 1.0f);
+
+    // ── Indicador de estado en vivo a la izquierda ───────────────────────────
+    const ImU32 dotCol = state.isProjecting
+        ? IM_COL32(72, 208, 148, 255)
+        : IM_COL32(118, 122, 132, 180);
+    const float dotR = h * 0.12f;
+    dl->AddCircleFilled({ org.x + padX + dotR, midY }, dotR, dotCol, 12);
+
+    const char* statusTxt = state.isProjecting ? TrVp("EN VIVO", "LIVE", "EM DIRETO") : TrVp("EN ESPERA", "STANDBY", "EM ESPERA");
+    const float stFontSz  = SafeClamp(h * 0.38f, baseFont * 0.78f, baseFont * 0.96f);
+    ImVec2 stSz = font->CalcTextSizeA(stFontSz, FLT_MAX, 0.0f, statusTxt);
+    const float statusX = padX + dotR * 2.0f + h * 0.22f;
+    dl->AddText(font, stFontSz,
+                { org.x + statusX, midY - stSz.y * 0.5f },
+                state.isProjecting ? DS::TextPrimary : DS::TextSecondary,
+                statusTxt);
+
+    float leftEnd = statusX + stSz.x + gap;
+    if (state.isProjecting && state.isStreamingNet && (leftEnd + h * 1.4f < w * 0.55f)) {
+        const float lanH = h * 0.56f;
+        const float lanW = lanH * 2.0f;
+        ImVec2 lp0 = { org.x + leftEnd, midY - lanH * 0.5f };
+        ImVec2 lp1 = { lp0.x + lanW, midY + lanH * 0.5f };
+        dl->AddRectFilled(lp0, lp1, IM_COL32(72, 208, 148, 36), DS::RadiusSmall);
+        dl->AddRect(lp0, lp1, IM_COL32(72, 208, 148, 140), DS::RadiusSmall);
+        const float lanFontSz = stFontSz * 0.90f;
+        ImVec2 lts = font->CalcTextSizeA(lanFontSz, FLT_MAX, 0.0f, "LAN");
+        dl->AddText(font, lanFontSz, { lp0.x + (lanW - lts.x) * 0.5f, midY - lts.y * 0.5f },
+                    IM_COL32(140, 238, 192, 255), "LAN");
+    }
+
+    // ── Controles minimalistas proporcionales a la derecha ───────────────────
+    const float btnH   = h * 0.72f;
+    const float btnY   = (h - btnH) * 0.5f;
+    const float icBtnW = btnH * 1.15f;
+
+    auto DrawHdrIconBtn = [&](const char* id, float rx, DrawIconFn icFn, bool active, const char* tip) -> bool {
+        ImGui::SetCursorPos({ rx, btnY });
+        ImVec2 p0  = ImGui::GetCursorScreenPos();
+        ImVec2 p1  = { p0.x + icBtnW, p0.y + btnH };
+        bool   clk = ImGui::InvisibleButton(id, { icBtnW, btnH });
+        bool   hov = ImGui::IsItemHovered();
+
+        ImU32 bg = active ? IM_COL32(52, 54, 58, 255) : (hov ? DS::BtnHoverFill : DS::BtnDefaultFill);
+        ImU32 bd = active ? DS::AccentLight : (hov ? IM_COL32(255, 255, 255, 48) : IM_COL32(255, 255, 255, 20));
+        dl->AddRectFilled(p0, p1, bg, DS::RadiusSmall);
+        dl->AddRect(p0, p1, bd, DS::RadiusSmall);
+
+        const float icSz = btnH * 0.56f;
+        icFn(dl, { p0.x + (icBtnW - icSz) * 0.5f, p0.y + (btnH - icSz) * 0.5f },
+             icSz, (active || hov) ? DS::TextPrimary : DS::TextSecondary);
+        if (hov && tip) ImGui::SetTooltip("%s", tip);
+        return clk;
+    };
+
+    float rightX = w - padX - icBtnW;
+    if (DrawHdrIconBtn("##hdrDetach", rightX, AppIcons::DrawIcon_Popout, m_IsDetached,
+                       m_IsDetached ? "Acoplar panel (Ctrl+Shift+D)" : "Ventana flotante (Ctrl+Shift+D)"))
+    {
+        SetDetached(!m_IsDetached);
+    }
+
+    rightX -= (icBtnW + gap);
+    const bool stretchOn = core.GetStretchToFill();
+    if (DrawHdrIconBtn("##hdrAspect", rightX, AppIcons::DrawIcon_Monitor, stretchOn,
+                       stretchOn ? "Modo actual: Rellenar pantalla (clic para Ajustar)"
+                                 : "Modo actual: Ajustar proporción (clic para Rellenar)"))
+    {
+        core.SetStretchToFill(!stretchOn);
+    }
+
+    const float segW = btnH * 2.4f;
+    if (isPro && rightX > leftEnd + segW * 2.0f + gap * 3.0f) {
+        rightX -= (segW * 2.0f + gap * 1.5f);
+
+        auto DrawSrcTab = [&](const char* id, const char* lbl, float sx, PreviewSource src) {
+            ImGui::SetCursorPos({ sx, btnY });
+            ImVec2 p0  = ImGui::GetCursorScreenPos();
+            ImVec2 p1  = { p0.x + segW, p0.y + btnH };
+            bool   clk = ImGui::InvisibleButton(id, { segW, btnH });
+            bool   hov = ImGui::IsItemHovered();
+            bool   act = (m_PreviewSource == src);
+
+            ImU32 bg = act ? IM_COL32(52, 54, 58, 255) : (hov ? DS::BtnHoverFill : DS::BtnDefaultFill);
+            ImU32 bd = act ? DS::AccentLight : IM_COL32(255, 255, 255, hov ? 42 : 18);
+            dl->AddRectFilled(p0, p1, bg, DS::RadiusSmall);
+            dl->AddRect(p0, p1, bd, DS::RadiusSmall);
+
+            ImVec2 ts = font->CalcTextSizeA(stFontSz * 0.95f, FLT_MAX, 0.0f, lbl);
+            dl->AddText(font, stFontSz * 0.95f, { p0.x + (segW - ts.x) * 0.5f, p0.y + (btnH - ts.y) * 0.5f },
+                        act ? DS::TextPrimary : DS::TextSecondary, lbl);
+            if (clk) m_PreviewSource = src;
+        };
+
+        DrawSrcTab("##srcPub", "Público", rightX, PreviewSource::Publico);
+        DrawSrcTab("##srcStg", "Stage",   rightX + segW + gap * 0.5f, PreviewSource::Stage);
+    }
+
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+}
+
 void ViewPanel::Render()
 {
     if (m_UIManager && m_UIManager->IsPanelCollapsedForRender(GetName()) && !m_IsDetached)
@@ -857,7 +1156,10 @@ void ViewPanel::Render()
     }
     else
     {
-        visible = ImGui::Begin("Vista en Vivo");
+        auto langVp = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language;
+        const char* titleVp = (langVp == ProyecThor::Settings::Language::English) ? "Live View###Panel_LiveView"
+            : ((langVp == ProyecThor::Settings::Language::Portuguese) ? "Em Direto###Panel_LiveView" : "Vista en Vivo###Panel_LiveView");
+        visible = ImGui::Begin(titleVp);
     }
 
     ImGui::PopStyleColor(1);
@@ -866,32 +1168,38 @@ void ViewPanel::Render()
     if (visible)
     {
         ImVec2 avail = ImGui::GetContentRegionAvail();
-
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 
-        const bool wideShort = avail.x > avail.y * 1.8f && avail.y > 8.0f;
+        // Loop de Carpeta de Videos en Fondo si está activa
+        if (!m_FolderPlaylistVideos.empty()) {
+            auto& core = Core::PresentationCore::Get();
+            if (Core::VLCBasePlayer* bg = core.GetBackgroundPlayer()) {
+                if (bg->ConsumeEndReached()) {
+                    m_FolderPlaylistIndex = (m_FolderPlaylistIndex + 1) % m_FolderPlaylistVideos.size();
+                    core.SetBackgroundMedia(m_FolderPlaylistVideos[m_FolderPlaylistIndex], true, false);
+                }
+            }
+        }
+
+        const bool showQuickActions = ProyecThor::Settings::SettingsManager::Get()
+                                          .GetSettings().general.showViewQuickActions;
+        const bool wideShort = avail.x > avail.y * 1.85f && avail.y > 8.0f;
 
         if (wideShort)
         {
-            const bool showQuickActionsCompact = ProyecThor::Settings::SettingsManager::Get()
-                                                        .GetSettings().general.showViewQuickActions;
-            RenderCompactWide(avail, showQuickActionsCompact);
+            RenderCompactWide(avail, showQuickActions);
             RenderPadEditorModal();
             ImGui::PopStyleVar();
             ImGui::End();
             return;
         }
 
-        const bool  showQuickActions = ProyecThor::Settings::SettingsManager::Get()
-                                            .GetSettings().general.showViewQuickActions;
-        const bool  narrowColumn = avail.x < 340.0f;
-        const bool  showClearRail = false; // Rail derecho movido hacia abajo reemplazando la barra inferior
-        const float railW      = 0.0f;
-        const float stripH     = showQuickActions ? kConfigStripH : 0.0f;
-        const float topAreaH   = avail.y;
-        const float contentW   = avail.x;
+        const float contentW  = avail.x;
+        const float topAreaH  = avail.y;
+        const float baseFont  = ImGui::GetFontSize();
+        const bool  mediaLive = HasPlayableLiveMedia();
 
-        if (contentW > 8.0f && topAreaH > 8.0f)
+        if (contentW > baseFont && topAreaH > baseFont)
         {
             ImGui::BeginChild("##viewVideoArea", ImVec2(contentW, topAreaH), false,
                               ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
@@ -910,47 +1218,57 @@ void ViewPanel::Render()
                 }
             }
 
-            const float dotsH = 0.0f;
+            // Distribución vertical proporcional con límite superior estricto (no mayor a la toolbar izquierda: <= 32px)
+            const float hdrH          = (topAreaH > baseFont * 5.0f) ? SafeClamp(topAreaH * 0.045f, 22.0f, 28.0f) : 0.0f;
+            const float availBelowHdr = std::max(0.0f, topAreaH - hdrH);
 
-            const float topReservedH = dotsH;
+            // Tiras de control con altura máxima acotada para que los botones nunca superen 32px
+            const float stripH        = showQuickActions ? SafeClamp(availBelowHdr * 0.065f, 28.0f, 36.0f) : 0.0f;
+            const float transportH    = mediaLive        ? SafeClamp(availBelowHdr * 0.160f, 72.0f, 92.0f) : 0.0f;
 
-            const float remain2   = std::max(0.0f, topAreaH - topReservedH - stripH);
-            const float minVideoH = 40.0f;
+            // Espacio disponible para el monitor de video y la consola inferior (Pads / Live)
+            const float remainForVideoAndPads = std::max(0.0f, availBelowHdr - stripH - transportH);
+            const float minVideoH             = baseFont * 3.5f;
+            const float naturalVideoH         = contentW / std::max(0.1f, srcAspect);
+            const float idealPadsH            = SafeClamp(remainForVideoAndPads * 0.38f, 130.0f, 220.0f);
+            const float maxAllowedVideoH      = std::max(minVideoH, remainForVideoAndPads - idealPadsH);
+            const float videoH                = SafeClamp(naturalVideoH, minVideoH, maxAllowedVideoH);
 
-            float naturalVideoH = contentW / std::max(0.1f, srcAspect);
-            float videoH     = std::clamp(naturalVideoH, minVideoH, std::max(minVideoH, remain2 * 0.65f));
-            const bool  toolActive   = (m_ActiveTool != InlineTool::None);
-            const float sobrante     = std::max(0.0f, remain2 - videoH);
-            float transportH = std::min(kLiveTransportMinH, sobrante);
-            float inlineToolH = toolActive ? std::max(0.0f, sobrante - transportH) : 0.0f;
+            const float bottomAreaH           = std::max(0.0f, remainForVideoAndPads - videoH);
 
-            ImGui::SetCursorPosY(topReservedH);
+            float curY = 0.0f;
+            if (hdrH > 0.0f) {
+                ImGui::SetCursorPosY(curY);
+                RenderMonitorHeader(contentW, hdrH);
+                curY += hdrH;
+            }
+
+            ImGui::SetCursorPosY(curY);
             RenderContent(contentW, videoH);
+            curY += videoH;
 
-            ImGui::SetCursorPosY(topReservedH + videoH);
-            RenderLiveTransport(contentW, transportH);
-
-            if (showQuickActions)
-            {
-                ImGui::SetCursorPosY(topReservedH + videoH + transportH);
+            if (showQuickActions && stripH > baseFont * 1.4f) {
+                ImGui::SetCursorPosY(curY);
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, MT::k_Bg1);
                 ImGui::BeginChild("##viewQuickActionsConfigStrip", ImVec2(contentW, stripH), false,
                                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
                 RenderQuickActionsConfig(stripH);
                 ImGui::EndChild();
                 ImGui::PopStyleColor();
+                curY += stripH;
             }
 
-            const float bottomAreaH = std::max(0.0f, sobrante - transportH);
-            if (bottomAreaH > 15.0f)
-            {
-                ImGui::SetCursorPosY(topReservedH + videoH + transportH + stripH);
-                if (m_ActiveTool != InlineTool::None && inlineToolH > 8.0f)
-                {
+            if (mediaLive && transportH > baseFont * 2.0f) {
+                ImGui::SetCursorPosY(curY);
+                RenderLiveTransport(contentW, transportH);
+                curY += transportH;
+            }
+
+            if (bottomAreaH > baseFont * 2.0f) {
+                ImGui::SetCursorPosY(curY);
+                if (m_ActiveTool != InlineTool::None) {
                     RenderInlineTool(contentW, bottomAreaH);
-                }
-                else
-                {
+                } else {
                     RenderPadsContent(contentW, bottomAreaH);
                 }
             }
@@ -958,32 +1276,7 @@ void ViewPanel::Render()
             ImGui::EndChild();
         }
 
-        if (showClearRail)
-        {
-            ImGui::SameLine(0.0f, 0.0f);
-
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, MT::k_Bg1);
-            ImGui::BeginChild("##viewQuickActions", ImVec2(railW, topAreaH), false,
-                              ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-            RenderQuickActionsClear(railW);
-            ImGui::EndChild();
-            ImGui::PopStyleColor();
-        }
-
-        // ── Loop de Carpeta de Videos en Fondo si está activa ──
-        if (!m_FolderPlaylistVideos.empty()) {
-            auto& core = Core::PresentationCore::Get();
-            if (Core::VLCBasePlayer* bg = core.GetBackgroundPlayer()) {
-                if (bg->ConsumeEndReached()) {
-                    m_FolderPlaylistIndex = (m_FolderPlaylistIndex + 1) % m_FolderPlaylistVideos.size();
-                    core.SetBackgroundMedia(m_FolderPlaylistVideos[m_FolderPlaylistIndex], true, false);
-                }
-            }
-        }
-
-        // ── Modal de Edición de Escenas ──
         RenderPadEditorModal();
-
         ImGui::PopStyleVar();
     }
 
@@ -992,260 +1285,364 @@ void ViewPanel::Render()
 
 void ViewPanel::RenderQuickActionsClear(float railW)
 {
-    auto& core = Core::PresentationCore::Get();
-
-    auto* announcements= core.GetAnnouncementsRef();
-    auto* oclock       = core.GetOClockRef();
-    auto* capturePanel = core.GetCapturePanelRef();
-
-    bool showText  = core.GetState().showText;
-    bool discLive  = core.GetState().bgType == Core::PresentationState::BackgroundType::Audio;
-    bool bgLive    = core.GetState().bgType != Core::PresentationState::BackgroundType::SolidColor;
-    bool annLive   = announcements && announcements->IsLive();
-    bool clockLive = oclock && oclock->IsLive();
-    bool capLive   = capturePanel && capturePanel->IsLive();
-    bool overlayLive = core.HasOverlay() || core.HasOverlayClockLayer();
-
-    ImVec4 hoverClear   = ToVec4(DS::AccentColorDim);
-    ImVec4 activeContent= Design::k_EQ_Yellow;
-    ImVec4 textPrimary  = ToVec4(DS::TextPrimary);
-    ImVec4 tintOnYellow = ImVec4(0.10f, 0.09f, 0.06f, 1.0f);
-    ImVec4 baseFill     = ToVec4(DS::BtnDefaultFill);
-
-    struct ActionDef {
-        const char* id;
-        const char* icon;
-        DrawIconFn  vectorIcon;
-        const char* fallbackGlyph;
-        const char* tooltip;
-        ImVec4      hoverColor;
-        ImVec4      activeColor;
-        bool        toggledOn;
-        ImVec4      tint;
-    };
-
-    ActionDef actions[7] = {
-        { "vaClearText", "cleaning_services", nullptr, "\xF0\x9F\x93\x9D", "Limpiar texto",
-          hoverClear, activeContent, showText,  showText  ? tintOnYellow : textPrimary },
-        { "vaClearDisc", "stop", nullptr, "\xF0\x9F\x92\xBF", "Detener disco en vivo",
-          hoverClear, activeContent, discLive,  discLive  ? tintOnYellow : textPrimary },
-        { "vaClearBg",   "original_screen", nullptr, "\xF0\x9F\x96\xBC", "Quitar fondo",
-          hoverClear, activeContent, bgLive,    bgLive    ? tintOnYellow : textPrimary },
-        { "vaClearOverlay", "fit_screen", nullptr, "\xF0\x9F\x93\x91", "Quitar overlay",
-          hoverClear, activeContent, overlayLive, overlayLive ? tintOnYellow : textPrimary },
-        { "vaClearAnn",  "volume_up", nullptr, "\xF0\x9F\x93\xA2", "Detener anuncios",
-          hoverClear, activeContent, annLive,   annLive   ? tintOnYellow : textPrimary },
-        { "vaClearClock","", nullptr, "\xE2\x8F\xB0", "Quitar reloj",
-          hoverClear, activeContent, clockLive, clockLive ? tintOnYellow : textPrimary },
-        { "vaClearCap",  "motion_play", nullptr, "\xF0\x9F\x93\xB9", "Detener captura",
-          hoverClear, activeContent, capLive,   capLive   ? tintOnYellow : textPrimary },
-    };
-
-    const float  cellPad = 4.0f;
-    const ImVec2 cellSize(railW - cellPad * 2.0f, railW - cellPad * 2.0f);
-
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 6.0f));
-    ImGui::Dummy(ImVec2(railW, 4.0f));
-
-    for (int i = 0; i < 7; i++)
-    {
-        ImGui::SetCursorPosX(cellPad);
-        if (QuickActionButton(actions[i].id, actions[i].icon, actions[i].vectorIcon, actions[i].fallbackGlyph,
-                               actions[i].tooltip, cellSize, baseFill, actions[i].hoverColor,
-                               actions[i].activeColor, actions[i].tint, actions[i].toggledOn))
-        {
-            if (i == 0)      core.ClearLayer2();
-            else if (i == 1) core.StopBackgroundMedia();
-            else if (i == 2) {
-                core.StopBackgroundMedia();
-                if (!core.GetState().currentText.empty())
-                    core.SetProjecting(true);
-            }
-            else if (i == 3) core.ClearOverlay();
-            else if (i == 4 && announcements) announcements->SetLive(false);
-            else if (i == 5 && oclock)        oclock->StopTransmitting();
-            else if (i == 6 && capturePanel)  capturePanel->Stop();
-        }
-    }
-
-    ImGui::PopStyleVar();
+    RenderQuickActionsConfig(railW);
 }
 
 void ViewPanel::RenderQuickActionsConfig(float stripH)
 {
-    auto& core = Core::PresentationCore::Get();
-    bool stretchOn = core.GetStretchToFill();
+    auto& core  = Core::PresentationCore::Get();
+    auto  state = core.GetState();
+    auto  sel   = core.PeekSelection();
 
-    auto* announcements= core.GetAnnouncementsRef();
-    auto* oclock       = core.GetOClockRef();
-    auto* capturePanel = core.GetCapturePanelRef();
+    auto* announcements = core.GetAnnouncementsRef();
+    auto* oclock        = core.GetOClockRef();
+    auto* capturePanel  = core.GetCapturePanelRef();
 
-    bool showText    = core.GetState().showText;
-    bool discLive    = core.GetState().bgType == Core::PresentationState::BackgroundType::Audio;
-    bool bgLive      = core.GetState().bgType != Core::PresentationState::BackgroundType::SolidColor;
-    bool annLive     = announcements && announcements->IsLive();
-    bool clockLive   = oclock && oclock->IsLive();
-    bool capLive     = capturePanel && capturePanel->IsLive();
-    bool overlayLive = core.HasOverlay() || core.HasOverlayClockLayer();
+    const bool textLive    = (state.showText && !state.currentText.empty()) || state.tiles.enabled;
+    const bool audioBg     = state.bgType == Core::PresentationState::BackgroundType::Audio;
+    const bool bgLive      = (state.bgType != Core::PresentationState::BackgroundType::SolidColor) || !state.bgPath.empty();
+    const bool overlayLive = core.HasOverlay() || core.HasOverlayClockLayer();
+    const bool annLive     = announcements && announcements->IsLive();
+    const bool clockLive   = oclock && oclock->IsLive();
+    const bool capLive     = capturePanel && capturePanel->IsLive();
+    const bool model3DLive = core.IsLive3DModelActive();
+    const bool labLive     = core.IsLiveLabActive();
 
-    ImVec4 baseFill      = ToVec4(DS::BtnDefaultFill);
-    ImVec4 hoverClear    = ToVec4(DS::AccentColorDim);
-    ImVec4 activeContent = Design::k_EQ_Yellow;
-    ImVec4 activeStretch = ToVec4((DS::AccentColor & 0x00FFFFFFu) | (140u << 24));
-    ImVec4 textPrimary   = ToVec4(DS::TextPrimary);
-    ImVec4 tintOnYellow  = ImVec4(0.10f, 0.09f, 0.06f, 1.0f);
+    ImDrawList*  dl       = ImGui::GetWindowDrawList();
+    ImFont*      font     = ImGui::GetFont();
+    const float  baseFont = ImGui::GetFontSize();
+    const ImVec2 winPos   = ImGui::GetWindowPos();
+    const float  totalW   = ImGui::GetWindowWidth();
 
-    struct ActionDef {
+    dl->AddLine({ winPos.x, winPos.y }, { winPos.x + totalW, winPos.y },
+                IM_COL32(255, 255, 255, 16), 1.0f);
+    dl->AddLine({ winPos.x, winPos.y + stripH - 1.0f }, { winPos.x + totalW, winPos.y + stripH - 1.0f },
+                IM_COL32(255, 255, 255, 14), 1.0f);
+
+    const float padX    = CalcPanelPadX(totalW);
+    const float gap     = SafeClamp(CalcPanelGap(totalW), 3.0f, 6.0f);
+    const float innerW  = std::max(1.0f, totalW - padX * 2.0f);
+
+    // Límite máximo estricto: no mayor a los botones de la toolbar izquierda (32.0f)
+    const float btnH    = SafeClamp(stripH - 6.0f, 22.0f, 30.0f);
+    const float btnY    = (stripH - btnH) * 0.5f;
+    const float icSz    = SafeClamp(btnH * 0.48f, 13.0f, 15.0f);
+    const float fontSz  = SafeClamp(btnH * 0.38f, baseFont * 0.78f, baseFont * 0.94f);
+    const float closeSz = icSz * 0.65f;
+
+    struct ActiveLayerChip {
         const char* id;
-        const char* icon;
-        DrawIconFn  vectorIcon;
-        const char* fallbackGlyph;
+        const char* label;
         const char* tooltip;
-        ImVec4      hoverColor;
-        ImVec4      activeColor;
-        bool        toggledOn;
-        ImVec4      tint;
+        DrawIconFn  icon;
+        int         kind;
     };
 
-    const bool isPro = ProyecThor::Core::AuthLicenseManager::Get().IsPro();
-    if (!isPro && m_PreviewSource == PreviewSource::Stage) {
-        m_PreviewSource = PreviewSource::Publico;
-    }
+    std::vector<ActiveLayerChip> liveChips;
+    liveChips.reserve(8);
+    if (textLive)
+        liveChips.push_back({ "##clrTxt", "Texto", "Quitar texto en pantalla (Ctrl+L)", AppIcons::DrawIcon_TextAa, 0 });
+    if (bgLive)
+        liveChips.push_back({ "##clrBg", audioBg ? "Audio" : "Fondo",
+                              audioBg ? "Detener audio de fondo" : "Quitar fondo activo",
+                              audioBg ? AppIcons::DrawIcon_Disc : AppIcons::DrawIcon_Image, 1 });
+    if (overlayLive)
+        liveChips.push_back({ "##clrOvl", "Overlay", "Quitar overlay en pantalla", AppIcons::DrawIcon_Overlay, 2 });
+    if (annLive)
+        liveChips.push_back({ "##clrAnn", "Anuncio", "Detener anuncio en pantalla", HomeIcons::DrawIcon_Megaphone, 3 });
+    if (clockLive)
+        liveChips.push_back({ "##clrClk", "Reloj", "Ocultar reloj en pantalla", HomeIcons::DrawIcon_Clock, 4 });
+    if (capLive)
+        liveChips.push_back({ "##clrCap", "Cámara", "Detener cámara en pantalla", HomeIcons::DrawIcon_Camera, 5 });
+    if (model3DLive)
+        liveChips.push_back({ "##clr3D", "3D", "Ocultar modelo 3D", AppIcons::DrawIcon_Cube3D, 6 });
+    if (labLive)
+        liveChips.push_back({ "##clrLab", "Lab", "Ocultar vista Lab", AppIcons::DrawIcon_Formula, 7 });
 
-    std::vector<PreviewSource> availableSources;
-    availableSources.push_back(PreviewSource::Publico);
-    if (isPro) {
-        availableSources.push_back(PreviewSource::Stage);
-    }
-    availableSources.push_back(PreviewSource::Transmision);
-    availableSources.push_back(PreviewSource::Lan);
-
-    auto getPreviewSourceLabel = [](PreviewSource s) -> const char* {
-        switch (s) {
-            case PreviewSource::Publico:     return "Público";
-            case PreviewSource::Stage:       return "Stage";
-            case PreviewSource::Transmision: return "Transmisión";
-            case PreviewSource::Lan:         return "Inalámbrica";
-            default:                         return "Público";
+    auto ClearSingleLayer = [&](int kind) {
+        switch (kind) {
+            case 0:
+                core.ClearLayer2();
+                if (state.tiles.enabled) core.ClearAllTiles();
+                break;
+            case 1:
+                ClearFolderPlaylist();
+                core.StopBackgroundMedia();
+                if (state.showText && !state.currentText.empty())
+                    core.SetProjecting(true);
+                break;
+            case 2: core.ClearOverlay(); break;
+            case 3: if (announcements) announcements->SetLive(false); break;
+            case 4: if (oclock)        oclock->StopTransmitting();    break;
+            case 5: if (capturePanel)  capturePanel->Stop();          break;
+            case 6: core.SetLive3DModelActive(false);                 break;
+            case 7: core.SetLiveLabActive(false);                     break;
         }
     };
 
-    int curSourceIdx = 0;
-    for (size_t idx = 0; idx < availableSources.size(); ++idx) {
-        if (availableSources[idx] == m_PreviewSource) {
-            curSourceIdx = (int)idx;
+    auto ClearAllLiveLayers = [&]() {
+        ClearFolderPlaylist();
+        m_LastActivatedPadIndex = -1;
+        core.ClearLayer2();
+        if (state.tiles.enabled) core.ClearAllTiles();
+        core.StopBackgroundMedia();
+        core.ClearOverlay();
+        if (announcements && announcements->IsLive()) announcements->SetLive(false);
+        if (oclock && oclock->IsLive())               oclock->StopTransmitting();
+        if (capturePanel && capturePanel->IsLive())   capturePanel->Stop();
+        if (model3DLive) core.SetLive3DModelActive(false);
+        if (labLive)     core.SetLiveLabActive(false);
+    };
+
+    const bool isMultiSlideType  = (sel.type == Core::ItemType::Song ||
+                                    sel.type == Core::ItemType::Bible ||
+                                    sel.type == Core::ItemType::Documents);
+    const bool showSlideStepper  = isMultiSlideType && sel.contentData.size() > 1 && state.showText;
+    const bool hasClearAll       = !liveChips.empty();
+
+    // ── Cálculo del clúster derecho (Limpiar + Cortar/Proyectar) ───────────────
+    const char* outLbl = state.isProjecting ? TrVp("Cortar", "Cut", "Cortar") : TrVp("Proyectar", "Project", "Projetar");
+    ImVec2 outTextSz   = font->CalcTextSizeA(fontSz, FLT_MAX, 0.0f, outLbl);
+    const float outBtnW = SafeClamp(icSz + outTextSz.x + 18.0f, 32.0f, 76.0f);
+
+    const char* clrLbl = TrVp("Limpiar", "Clear", "Limpar");
+    ImVec2 clrTextSz   = font->CalcTextSizeA(fontSz, FLT_MAX, 0.0f, clrLbl);
+    const float clearBtnW = hasClearAll ? SafeClamp(icSz + clrTextSz.x + 18.0f, 32.0f, 74.0f) : 0.0f;
+
+    const float rightClusterW = outBtnW + (hasClearAll ? (clearBtnW + gap) : 0.0f);
+    const float rightTargetX  = totalW - padX - rightClusterW;
+
+    // ── Clúster izquierdo: Stepper de diapositivas + Chips de capas activas ────
+    float curX = padX;
+
+    if (showSlideStepper) {
+        int slideIdx = core.GetActiveSlideIndex();
+        char cntBuf[24];
+        if (slideIdx >= 0)
+            std::snprintf(cntBuf, sizeof(cntBuf), "%d/%zu", slideIdx + 1, sel.contentData.size());
+        else
+            std::snprintf(cntBuf, sizeof(cntBuf), "%zu", sel.contentData.size());
+
+        ImVec2 cSz       = font->CalcTextSizeA(fontSz * 0.94f, FLT_MAX, 0.0f, cntBuf);
+        const float navW = SafeClamp(btnH * 0.82f, 20.0f, 26.0f);
+        const float midW = cSz.x + 8.0f;
+        const float stepGap = 2.0f;
+        const float stepperTotalW = navW * 2.0f + midW + stepGap * 2.0f;
+
+        auto DrawSlideStepBtn = [&](const char* id, float bx, bool isNext) -> bool {
+            ImGui::SetCursorPos({ bx, btnY });
+            ImVec2 p0  = ImGui::GetCursorScreenPos();
+            ImVec2 p1  = { p0.x + navW, p0.y + btnH };
+            bool   clk = ImGui::InvisibleButton(id, { navW, btnH });
+            bool   hov = ImGui::IsItemHovered();
+
+            dl->AddRectFilled(p0, p1, hov ? DS::BtnHoverFill : DS::BtnDefaultFill, DS::RadiusSmall);
+            dl->AddRect(p0, p1, IM_COL32(255, 255, 255, hov ? 48 : 22), DS::RadiusSmall);
+
+            ImVec2 c  = { (p0.x + p1.x) * 0.5f, (p0.y + p1.y) * 0.5f };
+            float  ay = btnH * 0.16f;
+            float  dx = (isNext ? 1.0f : -1.0f) * (ay * 0.55f);
+            ImVec2 pts[3] = {
+                { c.x - dx, c.y - ay },
+                { c.x + dx, c.y },
+                { c.x - dx, c.y + ay }
+            };
+            dl->AddPolyline(pts, 3, hov ? DS::TextPrimary : DS::TextSecondary, 0, 1.5f);
+            if (hov) ImGui::SetTooltip(isNext ? "Siguiente diapositiva" : "Diapositiva anterior");
+            return clk;
+        };
+
+        if (DrawSlideStepBtn("##vpSlidePrev", curX, false)) core.RequestNavigate(-1);
+
+        dl->AddText(font, fontSz * 0.94f,
+                    { winPos.x + curX + navW + stepGap + (midW - cSz.x) * 0.5f,
+                      winPos.y + (stripH - cSz.y) * 0.5f },
+                    DS::TextSecondary, cntBuf);
+
+        if (DrawSlideStepBtn("##vpSlideNext", curX + navW + stepGap + midW + stepGap, true))
+            core.RequestNavigate(1);
+
+        curX += stepperTotalW + gap;
+    }
+
+    // Si no hay capas activas ni stepper, texto sutil en el lado izquierdo
+    if (liveChips.empty() && !showSlideStepper) {
+        const char* cleanTxt = TrVp("Pantalla limpia", "Clear screen", "Tela limpa");
+        ImVec2 ts = font->CalcTextSizeA(fontSz, FLT_MAX, 0.0f, cleanTxt);
+        dl->AddText(font, fontSz,
+                    { winPos.x + curX + 2.0f, winPos.y + (stripH - ts.y) * 0.5f },
+                    DS::TextHint, cleanTxt);
+        curX += ts.x + gap * 2.0f;
+    }
+
+    // Renderizado de chips de capas activas
+    const float availForChips = std::max(0.0f, rightTargetX - gap - curX);
+    const bool  compactChips  = (availForChips < static_cast<float>(liveChips.size()) * 56.0f);
+
+    for (const auto& chip : liveChips) {
+        ImVec2 lblSz = font->CalcTextSizeA(fontSz, FLT_MAX, 0.0f, chip.label);
+        const float fullNeed  = icSz + 6.0f + lblSz.x + 6.0f + closeSz + 10.0f;
+        const float chipW     = compactChips
+            ? SafeClamp(icSz + closeSz + 12.0f, 28.0f, 40.0f)
+            : SafeClamp(fullNeed, 32.0f, 74.0f);
+
+        if (curX + chipW > rightTargetX - gap * 0.5f && curX > padX + 30.0f) {
+            // Evitar solapamiento con los botones de la derecha si el ancho es muy reducido
             break;
         }
-    }
-    int nextSourceIdx = (curSourceIdx + 1) % (int)availableSources.size();
 
-    const bool previewingAlt = (m_PreviewSource != PreviewSource::Publico);
-    char previewSourceTooltip[96];
-    snprintf(previewSourceTooltip, sizeof(previewSourceTooltip), "Viendo: %s (click para ver %s)",
-             getPreviewSourceLabel(availableSources[curSourceIdx]),
-             getPreviewSourceLabel(availableSources[nextSourceIdx]));
+        ImGui::SetCursorPos({ curX, btnY });
+        ImVec2 p0  = ImGui::GetCursorScreenPos();
+        ImVec2 p1  = { p0.x + chipW, p0.y + btnH };
+        bool   clk = ImGui::InvisibleButton(chip.id, { chipW, btnH });
+        bool   hov = ImGui::IsItemHovered();
 
-    const bool detachedOn = m_IsDetached;
-    const char* detachTip = m_IsDetached ? "Acoplar panel al entorno (Ctrl+Shift+D)" : "Poner en ventana aparte (Ctrl+Shift+D)";
+        ImU32 bg = hov ? IM_COL32(58, 38, 42, 255) : DS::BtnDefaultFill;
+        ImU32 bd = hov ? DS::DangerColor : DS::AccentColorDim;
+        dl->AddRectFilled(p0, p1, bg, DS::RadiusSmall);
+        dl->AddRect(p0, p1, bd, DS::RadiusSmall);
 
-    ActionDef actions[10] = {
-        { "vaClearText", "cleaning_services", AppIcons::DrawIcon_Broom, "\xF0\x9F\x93\x9D", "Limpiar texto (Ctrl+L)",
-          hoverClear, activeContent, showText, showText ? tintOnYellow : textPrimary },
-        { "vaClearDisc", "stop", AppIcons::DrawIcon_Disc, "\xF0\x9F\x92\xBF", "Detener disco en vivo",
-          hoverClear, activeContent, discLive, discLive ? tintOnYellow : textPrimary },
-        { "vaClearBg",   "original_screen", AppIcons::DrawIcon_Image, "\xF0\x9F\x96\xBC", "Quitar fondo",
-          hoverClear, activeContent, bgLive, bgLive ? tintOnYellow : textPrimary },
-        { "vaClearOverlay", "fit_screen", AppIcons::DrawIcon_Overlay, "\xF0\x9F\x93\x91", "Quitar overlay",
-          hoverClear, activeContent, overlayLive, overlayLive ? tintOnYellow : textPrimary },
-        { "vaClearAnn",  "volume_up", HomeIcons::DrawIcon_Megaphone, "\xF0\x9F\x93\xA2", "Detener anuncios",
-          hoverClear, activeContent, annLive, annLive ? tintOnYellow : textPrimary },
-        { "vaClearClock","", HomeIcons::DrawIcon_Clock, "\xE2\x8F\xB0", "Quitar reloj",
-          hoverClear, activeContent, clockLive, clockLive ? tintOnYellow : textPrimary },
-        { "vaClearCap",  "motion_play", HomeIcons::DrawIcon_Camera, "\xF0\x9F\x93\xB9", "Detener captura",
-          hoverClear, activeContent, capLive, capLive ? tintOnYellow : textPrimary },
-        { "vaPreviewSource", "repeat", AppIcons::DrawIcon_Swap, "\xF0\x9F\x94\x84", previewSourceTooltip,
-          hoverClear, activeStretch, previewingAlt, textPrimary },
-        { "vaStretch",   "fit_screen", AppIcons::DrawIcon_Monitor, "\xF0\x9F\x93\x90", "Alternar proporción",
-          hoverClear, activeStretch, stretchOn, textPrimary },
-        { "vaDetach",    "", AppIcons::DrawIcon_Popout, m_IsDetached ? "\xE2\x87\xB1" : "\xE2\x87\xB2", detachTip,
-          hoverClear, activeStretch, detachedOn, textPrimary },
-    };
-
-    constexpr int kCount = 10;
-    constexpr float kGap = 4.0f;
-    const float   btnH   = std::min(stripH - 4.0f, 30.0f);
-    const float   totalW = ImGui::GetContentRegionAvail().x;
-    const float   cellW  = (totalW - kGap * (kCount - 1) - 8.0f) / (float)kCount;
-    const ImVec2  cellSize(cellW, btnH);
-
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
-    ImGui::SetCursorPosX(4.0f);
-    ImGui::SetCursorPosY((stripH - btnH) * 0.5f);
-
-    for (int i = 0; i < kCount; i++)
-    {
-        if (i > 0) ImGui::SameLine(0.0f, kGap);
-
-        bool clicked = QuickActionButton(actions[i].id, actions[i].icon, actions[i].vectorIcon, actions[i].fallbackGlyph,
-                               actions[i].tooltip, cellSize, baseFill, actions[i].hoverColor,
-                               actions[i].activeColor, actions[i].tint, actions[i].toggledOn);
-
-        if (clicked)
-        {
-            if (i == 0)      core.ClearLayer2();
-            else if (i == 1) core.StopBackgroundMedia();
-            else if (i == 2) {
-                core.StopBackgroundMedia();
-                if (!core.GetState().currentText.empty())
-                    core.SetProjecting(true);
+        if (!compactChips && chipW >= fullNeed * 0.90f) {
+            const float contentWChip = icSz + 5.0f + lblSz.x + 6.0f + closeSz;
+            const float sx           = p0.x + (chipW - contentWChip) * 0.5f;
+            chip.icon(dl, { sx, p0.y + (btnH - icSz) * 0.5f }, icSz, DS::TextPrimary);
+            dl->AddText(font, fontSz,
+                        { sx + icSz + 5.0f, p0.y + (btnH - lblSz.y) * 0.5f },
+                        DS::TextPrimary, chip.label);
+            DrawIcon_CloseX(dl,
+                            { sx + contentWChip - closeSz, p0.y + (btnH - closeSz) * 0.5f },
+                            closeSz, hov ? DS::DangerColor : DS::TextSecondary);
+        } else {
+            if (hov) {
+                DrawIcon_CloseX(dl, { p0.x + (chipW - icSz) * 0.5f, p0.y + (btnH - icSz) * 0.5f }, icSz, DS::DangerColor);
+            } else {
+                chip.icon(dl, { p0.x + (chipW - icSz) * 0.5f, p0.y + (btnH - icSz) * 0.5f }, icSz, DS::TextPrimary);
             }
-            else if (i == 3) core.ClearOverlay();
-            else if (i == 4 && announcements) announcements->SetLive(false);
-            else if (i == 5 && oclock)        oclock->StopTransmitting();
-            else if (i == 6 && capturePanel)  capturePanel->Stop();
-            else if (i == 7) m_PreviewSource = availableSources[nextSourceIdx];
-            else if (i == 8) core.SetStretchToFill(!stretchOn);
-            else if (i == 9) SetDetached(!m_IsDetached);
+        }
+
+        if (hov && chip.tooltip) ImGui::SetTooltip("%s", chip.tooltip);
+        if (clk) ClearSingleLayer(chip.kind);
+
+        curX += chipW + gap;
+    }
+
+    // ── Renderizado del clúster derecho alineado a la derecha ─────────────────
+    float rx = std::max(curX, rightTargetX);
+
+    // Botón Limpiar Todo
+    if (hasClearAll) {
+        ImGui::SetCursorPos({ rx, btnY });
+        ImVec2 p0  = ImGui::GetCursorScreenPos();
+        ImVec2 p1  = { p0.x + clearBtnW, p0.y + btnH };
+        bool   clk = ImGui::InvisibleButton("##masterClearAll", { clearBtnW, btnH });
+        bool   hov = ImGui::IsItemHovered();
+
+        ImU32 bg = hov ? IM_COL32(62, 36, 40, 255) : DS::BtnDefaultFill;
+        ImU32 bd = hov ? DS::DangerColor : IM_COL32(255, 255, 255, 24);
+        dl->AddRectFilled(p0, p1, bg, DS::RadiusSmall);
+        dl->AddRect(p0, p1, bd, DS::RadiusSmall);
+
+        const ImU32 icCol = hov ? DS::DangerColor : DS::TextSecondary;
+        const char* lbl   = clrLbl;
+        ImVec2 ts         = font->CalcTextSizeA(fontSz, FLT_MAX, 0.0f, lbl);
+        const float cw    = icSz + 5.0f + ts.x;
+
+        if (clearBtnW >= cw + 8.0f) {
+            const float sx = p0.x + (clearBtnW - cw) * 0.5f;
+            AppIcons::DrawIcon_Broom(dl, { sx, p0.y + (btnH - icSz) * 0.5f }, icSz, icCol);
+            dl->AddText(font, fontSz, { sx + icSz + 5.0f, p0.y + (btnH - ts.y) * 0.5f },
+                        hov ? DS::TextPrimary : DS::TextSecondary, lbl);
+        } else {
+            AppIcons::DrawIcon_Broom(dl, { p0.x + (clearBtnW - icSz) * 0.5f, p0.y + (btnH - icSz) * 0.5f }, icSz, icCol);
+        }
+        if (hov) ImGui::SetTooltip("%s", TrVp("Limpiar todas las capas activas en pantalla", "Clear all active on-screen layers", "Limpar todas as camadas ativas no ecrã"));
+        if (clk) ClearAllLiveLayers();
+
+        rx += clearBtnW + gap;
+    }
+
+    // Botón Salida (Cortar / Proyectar)
+    {
+        ImGui::SetCursorPos({ rx, btnY });
+        ImVec2 p0  = ImGui::GetCursorScreenPos();
+        ImVec2 p1  = { p0.x + outBtnW, p0.y + btnH };
+        bool   clk = ImGui::InvisibleButton("##masterOutToggle", { outBtnW, btnH });
+        bool   hov = ImGui::IsItemHovered();
+
+        const ImU32 liveGreen = IM_COL32(72, 208, 148, 255);
+        ImU32 bg = DS::BtnDefaultFill;
+        if (state.isProjecting) {
+            bg = hov ? IM_COL32(36, 62, 50, 255) : IM_COL32(28, 48, 39, 255);
+        } else if (hov) {
+            bg = DS::BtnHoverFill;
+        }
+        ImU32 bd = state.isProjecting ? liveGreen : IM_COL32(255, 255, 255, hov ? 48 : 22);
+        dl->AddRectFilled(p0, p1, bg, DS::RadiusSmall);
+        dl->AddRect(p0, p1, bd, DS::RadiusSmall, 0, state.isProjecting ? 1.5f : 1.0f);
+
+        const float cw = icSz + 5.0f + outTextSz.x;
+        if (outBtnW >= cw + 8.0f) {
+            const float sx = p0.x + (outBtnW - cw) * 0.5f;
+            AppIcons::DrawIcon_Projector(dl, { sx, p0.y + (btnH - icSz) * 0.5f },
+                                         icSz, state.isProjecting ? liveGreen : DS::TextSecondary);
+            dl->AddText(font, fontSz, { sx + icSz + 5.0f, p0.y + (btnH - outTextSz.y) * 0.5f },
+                        state.isProjecting ? liveGreen : DS::TextPrimary, outLbl);
+        } else {
+            AppIcons::DrawIcon_Projector(dl, { p0.x + (outBtnW - icSz) * 0.5f, p0.y + (btnH - icSz) * 0.5f },
+                                         icSz, state.isProjecting ? liveGreen : DS::TextSecondary);
+        }
+        if (hov) {
+            ImGui::SetTooltip("%s", state.isProjecting
+                ? TrVp("Detener salida al proyector", "Stop output to projector", "Parar saída para o projetor")
+                : TrVp("Activar salida al proyector", "Activate output to projector", "Ativar saída para o projetor"));
+        }
+        if (clk) {
+            core.SetProjecting(!state.isProjecting);
         }
     }
-
-    ImGui::PopStyleVar();
 }
 
 void ViewPanel::RenderCompactWide(ImVec2 avail, bool showQuickActions)
 {
-    const float leftW  = showQuickActions ? 220.0f : 0.0f;
-    const float videoW = std::max(0.0f, avail.x - leftW);
+    const float baseFont  = ImGui::GetFontSize();
+    const float leftW     = showQuickActions ? avail.x * 0.34f : 0.0f;
+    const float videoW    = std::max(0.0f, avail.x - leftW);
+    const bool  mediaLive = HasPlayableLiveMedia();
 
-    if (showQuickActions && leftW > 8.0f && avail.x > leftW + 40.0f)
+    if (showQuickActions && leftW > baseFont * 4.0f && avail.x > leftW + baseFont * 3.0f)
     {
         ImGui::PushStyleColor(ImGuiCol_ChildBg, MT::k_Bg1);
         ImGui::BeginChild("##viewCompactToolbar", ImVec2(leftW, avail.y), false,
-                          ImGuiWindowFlags_AlwaysVerticalScrollbar);
-
-        const float transportH = std::min(kLiveTransportMinH, std::max(60.0f, avail.y));
-        RenderLiveTransport(leftW, transportH);
-
-        ImGui::SetCursorPosY(transportH);
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, MT::k_Bg1);
-        ImGui::BeginChild("##viewCompactConfig", ImVec2(leftW, kConfigStripH), false,
                           ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-        RenderQuickActionsConfig(kConfigStripH);
-        ImGui::EndChild();
-        ImGui::PopStyleColor();
 
-        ImGui::SetCursorPosY(transportH + kConfigStripH + 6.0f);
-        float compactRemainH = std::max(0.0f, avail.y - transportH - kConfigStripH - 8.0f);
-        if (compactRemainH > 40.0f)
-        {
-            RenderPadsContent(leftW, compactRemainH);
+        const float hdrH     = SafeClamp(avail.y * 0.06f, 22.0f, 28.0f);
+        const float remainH  = std::max(0.0f, avail.y - hdrH);
+        const float stripH   = showQuickActions ? SafeClamp(remainH * 0.12f, 28.0f, 36.0f) : 0.0f;
+        const float transpH  = mediaLive        ? SafeClamp(remainH * 0.28f, 72.0f, 92.0f) : 0.0f;
+        const float padsH    = std::max(0.0f, remainH - stripH - transpH);
+
+        float curY = 0.0f;
+        RenderMonitorHeader(leftW, hdrH);
+        curY += hdrH;
+
+        if (stripH > baseFont * 1.4f) {
+            ImGui::SetCursorPosY(curY);
+            ImGui::BeginChild("##viewCompactConfig", ImVec2(leftW, stripH), false,
+                              ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+            RenderQuickActionsConfig(stripH);
+            ImGui::EndChild();
+            curY += stripH;
         }
-        else
-        {
-            ImGui::SetCursorPosX(std::max(0.0f, (leftW - kQuickActionsRailW) * 0.5f));
-            ImGui::BeginGroup();
-            RenderQuickActionsClear(kQuickActionsRailW);
-            ImGui::EndGroup();
+
+        if (mediaLive && transpH > baseFont * 2.0f) {
+            ImGui::SetCursorPosY(curY);
+            RenderLiveTransport(leftW, transpH);
+            curY += transpH;
+        }
+
+        if (padsH > baseFont * 2.0f) {
+            ImGui::SetCursorPosY(curY);
+            RenderPadsContent(leftW, padsH);
         }
 
         ImGui::EndChild();
@@ -1719,11 +2116,13 @@ void ViewPanel::RenderPadsContent(float w, float h)
                                 (capPanel && capPanel->IsLive());
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    const ImVec2 secOrigin = ImGui::GetWindowPos();
-    const float padX = MT::k_PadLg;
-    const float padInnerW = std::max(20.0f, availW - padX * 2.0f);
-    const double nowTime = ImGui::GetTime();
     ImFont* font = ImGui::GetFont();
+    const float baseFont = ImGui::GetFontSize();
+    const ImVec2 secOrigin = ImGui::GetWindowPos();
+    const float padX = CalcPanelPadX(availW);
+    const float gap  = CalcPanelGap(availW);
+    const float padInnerW = std::max(baseFont, availW - padX * 2.0f);
+    const double nowTime = ImGui::GetTime();
 
     // Línea divisoria sutil integrada con la consola superior
     dl->AddLine(
@@ -1731,16 +2130,21 @@ void ViewPanel::RenderPadsContent(float w, float h)
         { secOrigin.x + availW - padX, secOrigin.y + 1.0f },
         ImGui::GetColorU32(MT::k_BorderSubtle), 1.0f);
 
-    // ── Barra superior minimalista estilo hardware ──
-    const float topBarY = 5.0f;
-    const float topBtnH = 20.0f;
-    const float topBtnW = 22.0f;
+    // ── Barra superior minimalista proporcional ──
+    const float topBarY  = SafeClamp(availH * 0.020f, 2.0f, 8.0f);
+    const float topBtnH  = SafeClamp(availH * 0.065f, 22.0f, 28.0f);
+    const float topBtnW  = topBtnH;
+    const float hdrFont  = SafeClamp(topBtnH * 0.48f, baseFont * 0.78f, baseFont * 0.94f);
+    const float hdrIcSz  = topBtnH * 0.56f;
 
     // Ícono + sello sutil "PADS"
-    AppIcons::DrawIcon_Pads(dl, { secOrigin.x + padX, secOrigin.y + topBarY + 3.5f }, 13.0f,
-                            IM_COL32(155, 165, 190, 210));
-    dl->AddText(font, 11.0f,
-                { secOrigin.x + padX + 17.0f, secOrigin.y + topBarY + 4.0f },
+    AppIcons::DrawIcon_Pads(dl,
+                            { secOrigin.x + padX, secOrigin.y + topBarY + (topBtnH - hdrIcSz) * 0.5f },
+                            hdrIcSz, IM_COL32(155, 165, 190, 210));
+    ImVec2 padsLblSz = font->CalcTextSizeA(hdrFont, FLT_MAX, 0.0f, "PADS");
+    const float padsLblX = padX + hdrIcSz + topBtnH * 0.25f;
+    dl->AddText(font, hdrFont,
+                { secOrigin.x + padsLblX, secOrigin.y + topBarY + (topBtnH - padsLblSz.y) * 0.5f },
                 ImGui::GetColorU32(MT::k_TextSecondary), "PADS");
 
     // Indicador compacto si hay bucle de carpeta activo
@@ -1749,19 +2153,24 @@ void ViewPanel::RenderPadsContent(float w, float h)
         snprintf(loopTxt, sizeof(loopTxt), "%zu/%zu",
                  (m_FolderPlaylistIndex % m_FolderPlaylistVideos.size()) + 1,
                  m_FolderPlaylistVideos.size());
-        ImVec2 lSz = font->CalcTextSizeA(10.5f, FLT_MAX, 0.0f, loopTxt);
-        float pillX = secOrigin.x + padX + 54.0f;
-        float pillY = secOrigin.y + topBarY + 2.0f;
-        float pillW = 16.0f + lSz.x + 7.0f;
-        if (pillX + pillW < secOrigin.x + availW - padX - (topBtnW * 2.0f + 10.0f)) {
-            dl->AddRectFilled({ pillX, pillY }, { pillX + pillW, pillY + 16.0f },
-                              IM_COL32(36, 115, 185, 55), 4.0f);
-            DrawIcon_FolderLoop(dl, { pillX + 3.0f, pillY + 2.5f }, 11.0f, IM_COL32(110, 195, 255, 230));
-            dl->AddText(font, 10.5f, { pillX + 16.0f, pillY + 2.5f }, IM_COL32(160, 215, 255, 230), loopTxt);
+        ImVec2 lSz = font->CalcTextSizeA(hdrFont * 0.92f, FLT_MAX, 0.0f, loopTxt);
+        const float pillH = topBtnH * 0.78f;
+        const float pillX = secOrigin.x + padsLblX + padsLblSz.x + gap;
+        const float pillY = secOrigin.y + topBarY + (topBtnH - pillH) * 0.5f;
+        const float loopIcSz = pillH * 0.65f;
+        const float pillW = loopIcSz + lSz.x + pillH * 0.65f;
+        if (pillX + pillW < secOrigin.x + availW - padX - (topBtnW * 2.0f + gap * 2.0f)) {
+            dl->AddRectFilled({ pillX, pillY }, { pillX + pillW, pillY + pillH },
+                              IM_COL32(36, 115, 185, 55), DS::RadiusSmall);
+            DrawIcon_FolderLoop(dl, { pillX + pillH * 0.20f, pillY + (pillH - loopIcSz) * 0.5f },
+                                loopIcSz, IM_COL32(110, 195, 255, 230));
+            dl->AddText(font, hdrFont * 0.92f,
+                        { pillX + pillH * 0.30f + loopIcSz, pillY + (pillH - lSz.y) * 0.5f },
+                        IM_COL32(160, 215, 255, 230), loopTxt);
         }
     }
 
-    // Dos micro-botones de consola a la derecha (sin texto, nunca se cortan)
+    // Dos botones minimalistas a la derecha
     auto DrawMicroActionBtn = [&](const char* id, ImVec2 pos, PadIconDrawFn icFn, const char* tip) -> bool {
         ImGui::SetCursorPos(pos);
         ImVec2 sMin = ImGui::GetCursorScreenPos();
@@ -1772,16 +2181,17 @@ void ViewPanel::RenderPadsContent(float w, float h)
 
         ImU32 bgC = ac ? ImGui::GetColorU32(MT::k_NeutBtnAct)
                        : (hv ? ImGui::GetColorU32(MT::k_NeutBtnHov) : ImGui::GetColorU32(MT::k_NeutBtn));
-        dl->AddRectFilled(sMin, sMax, bgC, 5.0f);
-        dl->AddRect(sMin, sMax, IM_COL32(255, 255, 255, hv ? 40 : 18), 5.0f);
-        float icS = 12.0f;
+        dl->AddRectFilled(sMin, sMax, bgC, DS::RadiusSmall);
+        dl->AddRect(sMin, sMax, IM_COL32(255, 255, 255, hv ? 40 : 18), DS::RadiusSmall);
+        const float icS = topBtnH * 0.56f;
         icFn(dl, { sMin.x + (topBtnW - icS) * 0.5f, sMin.y + (topBtnH - icS) * 0.5f },
              icS, hv ? IM_COL32(245, 248, 255, 255) : IM_COL32(165, 175, 198, 225));
         if (hv && tip) ImGui::SetTooltip("%s", tip);
         return pr;
     };
 
-    const float rightClusterX = availW - padX - (topBtnW * 2.0f + 4.0f);
+    const float hdrBtnGap = gap * 0.65f;
+    const float rightClusterX = availW - padX - (topBtnW * 2.0f + hdrBtnGap);
     if (DrawMicroActionBtn("##padQuickCap", { rightClusterX, topBarY }, DrawIcon_CaptureSnap, "Capturar escena actual"))
     {
         int targetSlot = 0;
@@ -1798,7 +2208,7 @@ void ViewPanel::RenderPadsContent(float w, float h)
         m_ActiveFeedbackName = padsArr[targetSlot].name;
     }
 
-    if (DrawMicroActionBtn("##padQuickCfg", { rightClusterX + topBtnW + 4.0f, topBarY }, AppIcons::DrawIcon_Settings, "Editar escenas"))
+    if (DrawMicroActionBtn("##padQuickCfg", { rightClusterX + topBtnW + hdrBtnGap, topBarY }, AppIcons::DrawIcon_Settings, "Editar escenas"))
     {
         int editIdx = (m_LastActivatedPadIndex >= 0 && m_LastActivatedPadIndex < ProyecThor::Settings::kPadCount)
                         ? m_LastActivatedPadIndex : 0;
@@ -1811,21 +2221,22 @@ void ViewPanel::RenderPadsContent(float w, float h)
         m_ShowPadEditModal = true;
     }
 
-    // ── Grilla de Pads estilo Stream Deck / Launchpad ──
-    const float gridStartY = topBarY + topBtnH + 6.0f;
-    const float remainH = std::max(28.0f, availH - gridStartY - 6.0f);
+    // ── Grilla de Pads proporcional aprovechando todo el alto y ancho disponible ──
+    const float vPad = availH * 0.03f;
+    const float gridStartY = topBarY + topBtnH + vPad;
+    const float remainH = std::max(baseFont * 1.5f, availH - gridStartY - vPad);
 
     const int totalPads = ProyecThor::Settings::kPadCount;
     int cols = 4;
-    if (padInnerW >= 500.0f && remainH < 105.0f) cols = 8;
-    else if (padInnerW < 175.0f)                 cols = 2;
-    else                                         cols = 4;
+    if (padInnerW > remainH * 4.5f)           cols = 8;
+    else if (padInnerW < baseFont * 12.0f)    cols = 2;
+    else                                      cols = 4;
 
     const int   rows = (totalPads + cols - 1) / cols;
-    const float gap  = 6.5f;
-    const float padCellW = std::max(26.0f, (padInnerW - gap * (float)(cols - 1)) / (float)cols);
-    const float idealMaxH = std::clamp(padCellW * 0.92f, 44.0f, 76.0f);
-    const float padCellH = std::clamp((remainH - gap * (float)(rows - 1)) / (float)rows, 28.0f, idealMaxH);
+    const float padCellW = std::max(baseFont, (padInnerW - gap * static_cast<float>(cols - 1)) / static_cast<float>(cols));
+    const float maxPadH  = 64.0f;
+    const float padCellH = SafeClamp((remainH - gap * static_cast<float>(rows - 1)) / static_cast<float>(rows),
+                                     28.0f, maxPadH);
 
     auto OpenEditorFor = [&](int idx) {
         m_EditingPadIndex = idx;
@@ -1856,155 +2267,103 @@ void ViewPanel::RenderPadsContent(float w, float h)
         bool hovered = ImGui::IsItemHovered();
         bool held    = ImGui::IsItemActive();
 
-        // Zona de engranaje en la esquina superior derecha al pasar el cursor
-        ImRect gearRect({ pMax.x - 19.0f, pMin.y + 2.0f }, { pMax.x - 2.0f, pMin.y + 19.0f });
-        bool gearHovered = hovered && (padCellW >= 42.0f) && gearRect.Contains(ImGui::GetIO().MousePos);
-
-        const float rounding = 8.0f;
-        char idxStr[8];
-        snprintf(idxStr, sizeof(idxStr), "%d", i + 1);
+        // Zona de engranaje proporcional en la esquina superior derecha al pasar el cursor
+        const float cellMinDim = std::min(padCellW, padCellH);
+        const float gearBoxSz  = cellMinDim * 0.28f;
+        const float gearInset  = cellMinDim * 0.04f;
+        ImRect gearRect({ pMax.x - gearBoxSz - gearInset, pMin.y + gearInset },
+                        { pMax.x - gearInset, pMin.y + gearBoxSz + gearInset });
+        bool gearHovered = hovered && (padCellW >= baseFont * 2.8f) && gearRect.Contains(ImGui::GetIO().MousePos);
+        const float gearIcSz = gearBoxSz * 0.65f;
 
         if (!pad.assigned)
         {
-            // ── Pad vacío: tecla oscura empotrada, sin texto, glifo '+' central ──
-            ImU32 bgCol = (hovered && !gearHovered)
-                ? IM_COL32(28, 32, 42, 255)
-                : IM_COL32(13, 15, 20, 235);
-            dl->AddRectFilled(pMin, pMax, bgCol, rounding);
-            dl->AddRect(pMin, pMax, IM_COL32(255, 255, 255, hovered ? 42 : 16), rounding, 0, 1.0f);
+            // ── Pad vacío: botón plano minimalista igual al resto de la app ──
+            ImU32 bgCol = (held && !gearHovered)
+                ? IM_COL32(48, 50, 54, 255)
+                : ((hovered && !gearHovered) ? DS::BtnHoverFill : DS::BtnDefaultFill);
+            ImU32 bdCol = IM_COL32(255, 255, 255, hovered ? 44 : 18);
 
-            // Índice discreto en esquina superior izquierda
-            dl->AddText(font, 10.0f, { pMin.x + 6.0f, pMin.y + 4.0f },
-                        IM_COL32(255, 255, 255, hovered ? 85 : 36), idxStr);
+            dl->AddRectFilled(pMin, pMax, bgCol, DS::RadiusMedium);
+            dl->AddRect(pMin, pMax, bdCol, DS::RadiusMedium, 0, 1.0f);
 
-            // Símbolo '+' limpio en el centro
-            ImVec2 center = { (pMin.x + pMax.x) * 0.5f, (pMin.y + pMax.y) * 0.5f + (held && !gearHovered ? 1.0f : 0.0f) };
-            if (hovered && !gearHovered) {
-                dl->AddCircleFilled(center, std::min(padCellH, padCellW) * 0.22f, IM_COL32(255, 255, 255, 14), 16);
-            }
-            float plusSz = std::clamp(std::min(padCellW, padCellH) * 0.24f, 10.0f, 15.0f);
+            ImVec2 center = { (pMin.x + pMax.x) * 0.5f, (pMin.y + pMax.y) * 0.5f };
+            float plusSz = cellMinDim * 0.22f;
             DrawIcon_PlusKey(dl, { center.x - plusSz * 0.5f, center.y - plusSz * 0.5f }, plusSz,
-                             IM_COL32(255, 255, 255, (hovered && !gearHovered) ? 195 : 42));
+                             (hovered && !gearHovered) ? DS::TextSecondary : DS::TextHint);
 
-            // Engranaje sutil en hover para abrir el configurador
-            if (hovered && padCellW >= 42.0f) {
+            if (hovered && padCellW >= baseFont * 2.8f) {
                 if (gearHovered) {
-                    dl->AddRectFilled(gearRect.Min, gearRect.Max, IM_COL32(255, 255, 255, 28), 4.0f);
+                    dl->AddRectFilled(gearRect.Min, gearRect.Max, IM_COL32(255, 255, 255, 24), DS::RadiusSmall);
                 }
-                AppIcons::DrawIcon_Settings(dl, { gearRect.Min.x + 3.0f, gearRect.Min.y + 3.0f }, 11.0f,
-                                            IM_COL32(255, 255, 255, gearHovered ? 240 : 115));
+                AppIcons::DrawIcon_Settings(
+                    dl,
+                    { gearRect.Min.x + (gearBoxSz - gearIcSz) * 0.5f, gearRect.Min.y + (gearBoxSz - gearIcSz) * 0.5f },
+                    gearIcSz, gearHovered ? DS::TextPrimary : DS::TextSecondary);
             }
         }
         else
         {
-            // ── Pad asignado: tecla táctil iluminada estilo consola broadcast ──
-            const ImVec4 accent(pad.color[0], pad.color[1], pad.color[2], 1.0f);
-            const bool   isLivePad = (i == m_LastActivatedPadIndex && state.isProjecting);
-            const double sinceTrig = nowTime - m_LastPadActivatedFeedbackTime;
-            const float  trigFlash = (i == m_LastActivatedPadIndex && sinceTrig >= 0.0 && sinceTrig < 0.45)
-                                        ? (float)(1.0 - sinceTrig / 0.45) : 0.0f;
+            // ── Pad asignado: botón plano minimalista, sin degradados ni efectos ──
+            const bool isLivePad = (i == m_LastActivatedPadIndex && state.isProjecting);
 
-            const float tintAmt = (isLivePad ? 0.28f : (hovered && !gearHovered ? 0.24f : 0.15f)) + trigFlash * 0.18f;
-            ImVec4 keyBg = {
-                Lerp(MT::k_NeutBtn.x, accent.x, tintAmt),
-                Lerp(MT::k_NeutBtn.y, accent.y, tintAmt),
-                Lerp(MT::k_NeutBtn.z, accent.z, tintAmt),
-                1.0f
-            };
-            if (held && !gearHovered) keyBg = Brighten(keyBg, -0.05f);
-
-            // Resplandor exterior si es la escena activa
-            if (isLivePad || trigFlash > 0.01f) {
-                float glowA = (isLivePad ? 0.26f : 0.0f) + trigFlash * 0.35f;
-                dl->AddRect({ pMin.x - 1.0f, pMin.y - 1.0f }, { pMax.x + 1.0f, pMax.y + 1.0f },
-                            ImGui::ColorConvertFloat4ToU32(ImVec4(accent.x, accent.y, accent.z, glowA)),
-                            rounding + 1.0f, 0, 2.0f);
+            ImU32 bgCol = DS::BtnDefaultFill;
+            if (held && !gearHovered) {
+                bgCol = IM_COL32(54, 56, 60, 255);
+            } else if (isLivePad) {
+                ImVec4 ac = ToVec4(DS::AccentLight);
+                ImVec4 bf = ToVec4(DS::BtnDefaultFill);
+                const float mix = (hovered && !gearHovered) ? 0.20f : 0.14f;
+                bgCol = ImGui::ColorConvertFloat4ToU32({
+                    bf.x + (ac.x - bf.x) * mix,
+                    bf.y + (ac.y - bf.y) * mix,
+                    bf.z + (ac.z - bf.z) * mix, 1.0f });
+            } else if (hovered && !gearHovered) {
+                bgCol = DS::BtnHoverFill;
             }
 
-            dl->AddRectFilled(pMin, pMax, ImGui::ColorConvertFloat4ToU32(keyBg), rounding);
+            const ImU32 bdCol = isLivePad
+                ? DS::AccentLight
+                : IM_COL32(255, 255, 255, hovered ? 48 : 22);
 
-            // Bisel superior táctil
-            dl->AddRectFilled(pMin, { pMax.x, pMin.y + padCellH * 0.48f },
-                              IM_COL32(255, 255, 255, hovered ? 16 : 9),
-                              rounding, ImDrawFlags_RoundCornersTop);
-            dl->AddLine({ pMin.x + 6.0f, pMin.y + 1.0f }, { pMax.x - 6.0f, pMin.y + 1.0f },
-                        IM_COL32(255, 255, 255, hovered ? 42 : 22), 1.0f);
+            dl->AddRectFilled(pMin, pMax, bgCol, DS::RadiusMedium);
+            dl->AddRect(pMin, pMax, bdCol, DS::RadiusMedium, 0, isLivePad ? 1.3f : 1.0f);
 
-            // Borde nítido
-            float bordAlpha = isLivePad ? 0.92f : (hovered ? 0.65f : 0.34f);
-            dl->AddRect(pMin, pMax,
-                        ImGui::ColorConvertFloat4ToU32(ImVec4(accent.x, accent.y, accent.z, bordAlpha)),
-                        rounding, 0, isLivePad ? 1.5f : 1.0f);
+            if (isLivePad) {
+                const float dotOff = cellMinDim * 0.11f;
+                dl->AddCircleFilled({ pMin.x + dotOff, pMin.y + dotOff }, cellMinDim * 0.04f, DS::AccentLight, 10);
+            }
 
-            // Barra LED inferior
-            float ledInset = std::min(10.0f, padCellW * 0.20f);
-            dl->AddRectFilled(
-                { pMin.x + ledInset, pMax.y - 3.5f },
-                { pMax.x - ledInset, pMax.y - 1.0f },
-                ImGui::ColorConvertFloat4ToU32(ImVec4(accent.x, accent.y, accent.z, isLivePad ? 1.0f : 0.72f)),
-                1.5f);
-
-            // Índice en esquina superior izquierda
-            dl->AddText(font, 10.0f, { pMin.x + 6.0f, pMin.y + 4.0f },
-                        IM_COL32(255, 255, 255, isLivePad ? 155 : 75), idxStr);
-
-            // Esquina superior derecha: engranaje al pasar el cursor, o micro-iconos de capas activas
-            if (hovered && padCellW >= 42.0f) {
+            if (hovered && padCellW >= baseFont * 2.8f) {
                 if (gearHovered) {
-                    dl->AddRectFilled(gearRect.Min, gearRect.Max, IM_COL32(0, 0, 0, 110), 4.0f);
+                    dl->AddRectFilled(gearRect.Min, gearRect.Max, IM_COL32(255, 255, 255, 24), DS::RadiusSmall);
                 }
-                AppIcons::DrawIcon_Settings(dl, { gearRect.Min.x + 3.0f, gearRect.Min.y + 3.0f }, 11.0f,
-                                            IM_COL32(255, 255, 255, gearHovered ? 250 : 155));
-            } else if (padCellW >= 54.0f) {
-                float miX = pMax.x - 5.0f;
-                const float miY = pMin.y + 5.0f;
-                const float miSz = 9.0f;
-                const ImU32 miCol = IM_COL32(235, 240, 252, 125);
-                if (pad.applyCapture && pad.hasCapture) {
-                    miX -= miSz;
-                    HomeIcons::DrawIcon_Camera(dl, { miX, miY }, miSz, miCol);
-                    miX -= 2.5f;
-                }
-                if (pad.applyText && pad.hasText) {
-                    miX -= miSz;
-                    AppIcons::DrawIcon_TextAa(dl, { miX, miY }, miSz, miCol);
-                    miX -= 2.5f;
-                }
-                if (pad.applyBackground && pad.hasBackground) {
-                    miX -= miSz;
-                    if (pad.bgType == 4) DrawIcon_FolderLoop(dl, { miX, miY }, miSz, miCol);
-                    else                 AppIcons::DrawIcon_Image(dl, { miX, miY }, miSz, miCol);
-                }
+                AppIcons::DrawIcon_Settings(
+                    dl,
+                    { gearRect.Min.x + (gearBoxSz - gearIcSz) * 0.5f, gearRect.Min.y + (gearBoxSz - gearIcSz) * 0.5f },
+                    gearIcSz, gearHovered ? DS::TextPrimary : DS::TextSecondary);
             }
 
-            // Ícono central + etiqueta corta opcional
-            const float pressY = (held && !gearHovered) ? 1.5f : 0.0f;
-            const bool  showLabel = !pad.name.empty() && padCellH >= 44.0f;
-            const float icSz = std::clamp(padCellH * (showLabel ? 0.35f : 0.44f), 14.0f, 25.0f);
+            const bool  showLabel = !pad.name.empty() && padCellH >= baseFont * 3.0f;
+            const float icSz      = cellMinDim * (showLabel ? 0.30f : 0.38f);
+            const float lblFontSz = SafeClamp(padCellH * 0.15f, baseFont * 0.76f, baseFont * 0.98f);
             const float icCenterY = showLabel
-                ? (pMin.y + (padCellH - 15.0f) * 0.50f + 2.0f + pressY)
-                : (pMin.y + padCellH * 0.50f - 1.0f + pressY);
+                ? (pMin.y + padCellH * 0.41f)
+                : (pMin.y + padCellH * 0.50f);
 
-            ImVec4 icTintF = {
-                Lerp(accent.x, 1.0f, isLivePad ? 0.82f : 0.68f),
-                Lerp(accent.y, 1.0f, isLivePad ? 0.82f : 0.68f),
-                Lerp(accent.z, 1.0f, isLivePad ? 0.82f : 0.68f),
-                isLivePad ? 1.0f : 0.94f
-            };
+            const ImU32 icCol = (isLivePad || (hovered && !gearHovered)) ? DS::TextPrimary : DS::TextSecondary;
             const auto& iconEntry = PadIconFor(pad.iconIndex);
             iconEntry.draw(dl,
                            { (pMin.x + pMax.x - icSz) * 0.5f, icCenterY - icSz * 0.5f },
-                           icSz,
-                           ImGui::ColorConvertFloat4ToU32(icTintF));
+                           icSz, icCol);
 
             if (showLabel) {
-                const float lblFontSz = 11.0f;
-                std::string fitLbl = TruncateUTF8ToWidth(font, lblFontSz, pad.name, padCellW - 10.0f);
+                std::string fitLbl = TruncateUTF8ToWidth(font, lblFontSz, pad.name, padCellW * 0.86f);
                 if (!fitLbl.empty()) {
                     ImVec2 tSz = font->CalcTextSizeA(lblFontSz, FLT_MAX, 0.0f, fitLbl.c_str());
                     dl->AddText(font, lblFontSz,
-                                { pMin.x + (padCellW - tSz.x) * 0.5f, pMax.y - 16.5f + pressY },
-                                IM_COL32(236, 240, 250, isLivePad ? 255 : 225),
+                                { pMin.x + (padCellW - tSz.x) * 0.5f, pMax.y - tSz.y - padCellH * 0.10f },
+                                isLivePad ? DS::TextPrimary : DS::TextSecondary,
                                 fitLbl.c_str());
                 }
             }
@@ -2083,29 +2442,7 @@ void ViewPanel::RenderPadsContent(float w, float h)
             if (ImGui::MenuItem("Editar...")) {
                 OpenEditorFor(i);
             }
-            if (ImGui::BeginMenu("Icono y color")) {
-                // Puntos rápidos de color
-                for (int cIdx = 0; cIdx < 8; cIdx++) {
-                    if (cIdx > 0) ImGui::SameLine(0.0f, 6.0f);
-                    ImGui::PushID(cIdx);
-                    ImVec2 cp = ImGui::GetCursorScreenPos();
-                    if (ImGui::InvisibleButton("##colDot", ImVec2(16.0f, 16.0f))) {
-                        for (int k = 0; k < 4; k++) pad.color[k] = kPadPalette[cIdx][k];
-                        ProyecThor::Settings::SettingsManager::Get().Save();
-                    }
-                    ImDrawList* pdl = ImGui::GetWindowDrawList();
-                    ImVec2 cc = { cp.x + 8.0f, cp.y + 8.0f };
-                    pdl->AddCircleFilled(cc, 6.5f, ImGui::ColorConvertFloat4ToU32(
-                        ImVec4(kPadPalette[cIdx][0], kPadPalette[cIdx][1], kPadPalette[cIdx][2], 1.0f)), 16);
-                    bool sameCol = std::fabs(pad.color[0] - kPadPalette[cIdx][0]) < 0.03f &&
-                                   std::fabs(pad.color[1] - kPadPalette[cIdx][1]) < 0.03f &&
-                                   std::fabs(pad.color[2] - kPadPalette[cIdx][2]) < 0.03f;
-                    if (sameCol) pdl->AddCircle(cc, 8.0f, IM_COL32(255, 255, 255, 230), 16, 1.5f);
-                    ImGui::PopID();
-                }
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::Spacing();
+            if (ImGui::BeginMenu("Cambiar icono")) {
                 if (RenderPadIconGrid(pad.iconIndex)) {
                     ProyecThor::Settings::SettingsManager::Get().Save();
                 }
@@ -2168,14 +2505,14 @@ void ViewPanel::RenderPadEditorModal()
         auto  state = core.GetState();
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ImFont* font = ImGui::GetFont();
-        const ImVec4 accent(m_TempPadEdit.color[0], m_TempPadEdit.color[1], m_TempPadEdit.color[2], 1.0f);
+        const ImVec4 accent = ToVec4(DS::AccentLight);
 
-        // ── Selector rápido de Pad 1..8 ──
+        // ── Selector minimalista de Pad 1..8 ──
         {
             const float stripW = ImGui::GetContentRegionAvail().x;
-            const float sGap = 5.0f;
-            const float pillW = (stripW - sGap * 7.0f) / 8.0f;
-            const float pillH = 22.0f;
+            const float sGap   = 5.0f;
+            const float pillW  = (stripW - sGap * 7.0f) / 8.0f;
+            const float pillH  = 22.0f;
             for (int pIdx = 0; pIdx < ProyecThor::Settings::kPadCount; pIdx++) {
                 if (pIdx > 0) ImGui::SameLine(0.0f, sGap);
                 ImGui::PushID(1000 + pIdx);
@@ -2185,39 +2522,28 @@ void ViewPanel::RenderPadEditorModal()
                 bool pHov = ImGui::IsItemHovered();
                 const bool isCur = (pIdx == m_EditingPadIndex);
                 const auto& slotRef = padsArr[pIdx];
-                const ImVec4 slotCol(slotRef.color[0], slotRef.color[1], slotRef.color[2], 1.0f);
 
-                if (isCur) {
-                    dl->AddRectFilled(sMin, sMax,
-                        ImGui::ColorConvertFloat4ToU32(ImVec4(accent.x, accent.y, accent.z, 0.28f)), 5.0f);
-                    dl->AddRect(sMin, sMax,
-                        ImGui::ColorConvertFloat4ToU32(ImVec4(accent.x, accent.y, accent.z, 0.85f)), 5.0f, 0, 1.2f);
-                } else {
-                    dl->AddRectFilled(sMin, sMax,
-                        pHov ? IM_COL32(36, 40, 52, 255) : IM_COL32(18, 20, 27, 230), 5.0f);
-                    dl->AddRect(sMin, sMax, IM_COL32(255, 255, 255, pHov ? 36 : 14), 5.0f);
-                }
+                ImU32 bg = isCur ? IM_COL32(52, 54, 58, 255) : (pHov ? DS::BtnHoverFill : DS::BtnDefaultFill);
+                ImU32 bd = isCur ? DS::AccentLight : IM_COL32(255, 255, 255, pHov ? 44 : 18);
+                dl->AddRectFilled(sMin, sMax, bg, DS::RadiusSmall);
+                dl->AddRect(sMin, sMax, bd, DS::RadiusSmall, 0, isCur ? 1.2f : 1.0f);
 
                 char slotLbl[8];
                 snprintf(slotLbl, sizeof(slotLbl), "%d", pIdx + 1);
                 ImVec2 lSz = font->CalcTextSizeA(11.0f, FLT_MAX, 0.0f, slotLbl);
                 dl->AddText(font, 11.0f,
-                            { sMin.x + (pillW - lSz.x) * 0.5f, sMin.y + (pillH - lSz.y) * 0.5f - (slotRef.assigned ? 1.0f : 0.0f) },
-                            isCur ? IM_COL32(255, 255, 255, 255) : IM_COL32(165, 175, 195, 215),
+                            { sMin.x + (pillW - lSz.x) * 0.5f, sMin.y + (pillH - lSz.y) * 0.5f },
+                            isCur ? DS::TextPrimary : DS::TextSecondary,
                             slotLbl);
 
                 if (slotRef.assigned) {
-                    dl->AddRectFilled({ sMin.x + pillW * 0.28f, sMax.y - 3.0f },
-                                      { sMax.x - pillW * 0.28f, sMax.y - 1.2f },
-                                      ImGui::ColorConvertFloat4ToU32(slotCol), 1.0f);
+                    dl->AddCircleFilled({ sMax.x - 5.0f, sMin.y + 5.0f }, 2.0f, DS::AccentLight, 8);
                 }
 
                 if (pClk && !isCur) {
                     m_EditingPadIndex = pIdx;
                     m_TempPadEdit = padsArr[pIdx];
                     if (!m_TempPadEdit.assigned) {
-                        const float* pal = kPadPalette[pIdx % 8];
-                        for (int c = 0; c < 4; c++) m_TempPadEdit.color[c] = pal[c];
                         m_TempPadEdit.iconIndex = 2;
                     }
                 }
@@ -2226,37 +2552,21 @@ void ViewPanel::RenderPadEditorModal()
             ImGui::Dummy(ImVec2(0.0f, 4.0f));
         }
 
-        // ── Cabecera Visual: Vista previa de tecla + Nombre + Colores + Captura rápida ──
+        // ── Cabecera minimalista: Icono + Nombre + Capturar + Cerrar ──
         ImVec2 previewPos = ImGui::GetCursorScreenPos();
-        const float keyPreviewSz = 48.0f;
+        const float keyPreviewSz = 32.0f;
         bool openIconPicker = ImGui::InvisibleButton("##padPreviewKeyBtn", ImVec2(keyPreviewSz, keyPreviewSz));
         bool prevHov = ImGui::IsItemHovered();
         {
             ImVec2 kMax = { previewPos.x + keyPreviewSz, previewPos.y + keyPreviewSz };
-            ImVec4 kBg = {
-                Lerp(MT::k_NeutBtn.x, accent.x, prevHov ? 0.30f : 0.22f),
-                Lerp(MT::k_NeutBtn.y, accent.y, prevHov ? 0.30f : 0.22f),
-                Lerp(MT::k_NeutBtn.z, accent.z, prevHov ? 0.30f : 0.22f),
-                1.0f
-            };
-            dl->AddRectFilled(previewPos, kMax, ImGui::ColorConvertFloat4ToU32(kBg), 9.0f);
-            dl->AddRectFilled(previewPos, { kMax.x, previewPos.y + keyPreviewSz * 0.48f },
-                              IM_COL32(255, 255, 255, 14), 9.0f, ImDrawFlags_RoundCornersTop);
-            dl->AddRect(previewPos, kMax,
-                        ImGui::ColorConvertFloat4ToU32(ImVec4(accent.x, accent.y, accent.z, prevHov ? 0.90f : 0.60f)),
-                        9.0f, 0, 1.3f);
-            dl->AddRectFilled({ previewPos.x + 9.0f, kMax.y - 3.5f }, { kMax.x - 9.0f, kMax.y - 1.2f },
-                              ImGui::ColorConvertFloat4ToU32(accent), 1.5f);
+            dl->AddRectFilled(previewPos, kMax, prevHov ? DS::BtnHoverFill : DS::BtnDefaultFill, DS::RadiusMedium);
+            dl->AddRect(previewPos, kMax, prevHov ? DS::AccentLight : IM_COL32(255, 255, 255, 28), DS::RadiusMedium);
 
-            const float icSz = 22.0f;
+            const float icSz = 16.0f;
             PadIconFor(m_TempPadEdit.iconIndex).draw(
                 dl,
-                { previewPos.x + (keyPreviewSz - icSz) * 0.5f, previewPos.y + (keyPreviewSz - icSz) * 0.5f - 1.0f },
-                icSz, IM_COL32(250, 252, 255, 250));
-
-            char pNum[8];
-            snprintf(pNum, sizeof(pNum), "%d", m_EditingPadIndex + 1);
-            dl->AddText(font, 9.5f, { previewPos.x + 5.0f, previewPos.y + 3.0f }, IM_COL32(255, 255, 255, 120), pNum);
+                { previewPos.x + (keyPreviewSz - icSz) * 0.5f, previewPos.y + (keyPreviewSz - icSz) * 0.5f },
+                icSz, DS::TextPrimary);
         }
         if (prevHov) ImGui::SetTooltip("Cambiar icono");
         if (openIconPicker) ImGui::OpenPopup("##padIconPickerPop");
@@ -2271,41 +2581,38 @@ void ViewPanel::RenderPadEditorModal()
         }
         ImGui::PopStyleVar(2);
 
-        // Columna derecha de la cabecera (2 filas compactas)
-        ImGui::SameLine(0.0f, 10.0f);
+        ImGui::SameLine(0.0f, 8.0f);
         ImGui::BeginGroup();
         {
             const float rightAvail = ImGui::GetContentRegionAvail().x;
-            const float snapBtnW = 94.0f;
-            const float closeBtnW = 24.0f;
-            const float nameW = std::max(100.0f, rightAvail - snapBtnW - closeBtnW - 12.0f);
+            const float snapBtnW   = 94.0f;
+            const float closeBtnW  = 28.0f;
+            const float nameW      = std::max(100.0f, rightAvail - snapBtnW - closeBtnW - 12.0f);
 
             char nameBuf[64];
             strncpy(nameBuf, m_TempPadEdit.name.c_str(), sizeof(nameBuf) - 1);
             nameBuf[sizeof(nameBuf) - 1] = '\0';
 
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 4.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 7.0f));
             ImGui::PushStyleColor(ImGuiCol_FrameBg, MT::k_Bg3);
             ImGui::SetNextItemWidth(nameW);
-            if (ImGui::InputTextWithHint("##padNameInp", "Nombre (opcional)...", nameBuf, sizeof(nameBuf))) {
+            if (ImGui::InputTextWithHint("##padNameInp", "Nombre del botón...", nameBuf, sizeof(nameBuf))) {
                 m_TempPadEdit.name = nameBuf;
             }
             ImGui::PopStyleColor();
             ImGui::PopStyleVar(2);
 
-            // Botón Capturar actual (icono vectorial + etiqueta breve)
             ImGui::SameLine(0.0f, 6.0f);
             {
                 ImVec2 bMin = ImGui::GetCursorScreenPos();
-                ImVec2 bMax = { bMin.x + snapBtnW, bMin.y + 24.0f };
-                bool snapClk = ImGui::InvisibleButton("##snapLiveAll", ImVec2(snapBtnW, 24.0f));
+                ImVec2 bMax = { bMin.x + snapBtnW, bMin.y + 32.0f };
+                bool snapClk = ImGui::InvisibleButton("##snapLiveAll", ImVec2(snapBtnW, 32.0f));
                 bool snapHov = ImGui::IsItemHovered();
-                dl->AddRectFilled(bMin, bMax,
-                                  ImGui::ColorConvertFloat4ToU32(snapHov ? MT::k_PrevBtnHov : MT::k_PrevBtn), 6.0f);
-                dl->AddRect(bMin, bMax, IM_COL32(120, 185, 255, snapHov ? 140 : 70), 6.0f);
-                DrawIcon_CaptureSnap(dl, { bMin.x + 7.0f, bMin.y + 5.0f }, 14.0f, IM_COL32(235, 245, 255, 255));
-                dl->AddText(font, 11.5f, { bMin.x + 25.0f, bMin.y + 5.0f }, IM_COL32(235, 245, 255, 255), "Capturar");
+                dl->AddRectFilled(bMin, bMax, snapHov ? DS::BtnHoverFill : DS::BtnDefaultFill, DS::RadiusMedium);
+                dl->AddRect(bMin, bMax, IM_COL32(255, 255, 255, snapHov ? 52 : 24), DS::RadiusMedium);
+                DrawIcon_CaptureSnap(dl, { bMin.x + 8.0f, bMin.y + 9.0f }, 14.0f, DS::TextPrimary);
+                dl->AddText(font, 11.5f, { bMin.x + 26.0f, bMin.y + 9.0f }, DS::TextPrimary, "Capturar");
                 if (snapHov) ImGui::SetTooltip("Tomar fondo, texto, estilo y cámara actuales");
                 if (snapClk) {
                     m_TempPadEdit.hasBackground   = true;
@@ -2348,44 +2655,20 @@ void ViewPanel::RenderPadEditorModal()
                 }
             }
 
-            // Botón cerrar 'X'
             ImGui::SameLine(0.0f, 6.0f);
             {
                 ImVec2 xMin = ImGui::GetCursorScreenPos();
-                ImVec2 xMax = { xMin.x + closeBtnW, xMin.y + 24.0f };
-                bool xClk = ImGui::InvisibleButton("##closePadModal", ImVec2(closeBtnW, 24.0f));
+                ImVec2 xMax = { xMin.x + closeBtnW, xMin.y + 32.0f };
+                bool xClk = ImGui::InvisibleButton("##closePadModal", ImVec2(closeBtnW, 32.0f));
                 bool xHov = ImGui::IsItemHovered();
-                if (xHov) dl->AddRectFilled(xMin, xMax, IM_COL32(255, 255, 255, 22), 6.0f);
-                DrawIcon_CloseX(dl, { xMin.x + 5.0f, xMin.y + 5.0f }, 14.0f,
-                                xHov ? IM_COL32(255, 255, 255, 240) : IM_COL32(165, 172, 190, 200));
+                if (xHov) dl->AddRectFilled(xMin, xMax, DS::BtnHoverFill, DS::RadiusMedium);
+                DrawIcon_CloseX(dl, { xMin.x + 7.0f, xMin.y + 9.0f }, 14.0f,
+                                xHov ? DS::TextPrimary : DS::TextSecondary);
                 if (xClk) {
                     m_ShowPadEditModal = false;
                     ImGui::CloseCurrentPopup();
                 }
             }
-
-            // Fila 2: Swatches de color LED en 1 clic + selector libre
-            ImGui::Dummy(ImVec2(0.0f, 1.0f));
-            for (int cIdx = 0; cIdx < 8; cIdx++) {
-                if (cIdx > 0) ImGui::SameLine(0.0f, 6.0f);
-                ImGui::PushID(cIdx);
-                ImVec2 cp = ImGui::GetCursorScreenPos();
-                if (ImGui::InvisibleButton("##palDot", ImVec2(16.0f, 16.0f))) {
-                    for (int k = 0; k < 4; k++) m_TempPadEdit.color[k] = kPadPalette[cIdx][k];
-                }
-                bool cHov = ImGui::IsItemHovered();
-                ImVec2 cc = { cp.x + 8.0f, cp.y + 8.0f };
-                dl->AddCircleFilled(cc, cHov ? 7.0f : 6.0f,
-                    ImGui::ColorConvertFloat4ToU32(ImVec4(kPadPalette[cIdx][0], kPadPalette[cIdx][1], kPadPalette[cIdx][2], 1.0f)), 16);
-                bool selCol = std::fabs(m_TempPadEdit.color[0] - kPadPalette[cIdx][0]) < 0.03f &&
-                              std::fabs(m_TempPadEdit.color[1] - kPadPalette[cIdx][1]) < 0.03f &&
-                              std::fabs(m_TempPadEdit.color[2] - kPadPalette[cIdx][2]) < 0.03f;
-                if (selCol) dl->AddCircle(cc, 8.0f, IM_COL32(255, 255, 255, 235), 16, 1.4f);
-                ImGui::PopID();
-            }
-            ImGui::SameLine(0.0f, 8.0f);
-            ImGui::ColorEdit4("##customPadCol", m_TempPadEdit.color,
-                              ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_NoBorder);
         }
         ImGui::EndGroup();
 
@@ -2832,15 +3115,17 @@ void ViewPanel::RenderPadEditorModal()
 
 void ViewPanel::RenderLiveTransport(float w, float h)
 {
-    auto& core = Core::PresentationCore::Get();
+    if (w < 40.0f || h < 28.0f) return;
+
+    auto& core  = Core::PresentationCore::Get();
+    const auto& state = core.GetState();
     Core::VLCBasePlayer* bg = core.GetBackgroundPlayer();
 
-    // Si el fondo en vivo es MUSICA (AudioPanel), el transporte controla esa
-    // misma reproduccion (play/pausa, seek, anterior/siguiente, volumen) en vez
-    // del reproductor de video de fondo: una sola fuente de verdad.
     UI::AudioPanel* musicPanel = core.GetAudioPanelRef();
     const bool audioLive = musicPanel && musicPanel->IsLiveBackground() &&
-                           core.GetState().bgType == Core::PresentationState::BackgroundType::Audio;
+                           state.bgType == Core::PresentationState::BackgroundType::Audio;
+    const bool hasAudibleAudio = audioLive || core.GetContentAllowsAudio();
+    const bool hasPlaylistNav  = audioLive || (m_FolderPlaylistVideos.size() > 1);
 
     if (audioLive) {
         m_LiveMuted   = musicPanel->IsMusicMuted();
@@ -2852,15 +3137,12 @@ void ViewPanel::RenderLiveTransport(float w, float h)
         m_LivePlaying = bg && !bg->IsPaused();
     }
 
-    int64_t liveLenMs = audioLive ? musicPanel->GetMusicLengthMs() : (bg ? bg->GetLength() : 0);
+    int64_t liveCurMs = audioLive ? musicPanel->GetMusicTimeMs()   : (bg ? bg->GetTime()   : 0);
+    int64_t liveLen   = audioLive ? musicPanel->GetMusicLengthMs() : (bg ? bg->GetLength() : 0);
 
-    if (!audioLive && m_LivePlaying && bg && liveLenMs > 0)
+    if (!audioLive && m_LivePlaying && bg && liveLen > 0)
     {
-        int64_t curMs = bg->GetTime();
-        float   fpos  = (liveLenMs > 0)
-            ? static_cast<float>(curMs) / static_cast<float>(liveLenMs)
-            : 0.0f;
-
+        float fpos = static_cast<float>(liveCurMs) / static_cast<float>(liveLen);
         if (fpos >= 0.995f && core.GetLiveLoop())
         {
             bg->SetPosition(0.0f);
@@ -2868,157 +3150,127 @@ void ViewPanel::RenderLiveTransport(float w, float h)
         }
     }
 
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { MT::k_PadLg, MT::k_Pad });
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, MT::k_Bg1);
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 0.0f);
-
-    ImGui::BeginChild("##viewLiveTransport", { w, h }, false, ImGuiWindowFlags_NoScrollbar);
-
-    const float innerW = w - MT::k_PadLg * 2.0f;
-
-    ImGui::Spacing();
-
-    int64_t liveCurMs = audioLive ? musicPanel->GetMusicTimeMs()   : (bg ? bg->GetTime()   : 0);
-    int64_t liveLen   = audioLive ? musicPanel->GetMusicLengthMs() : (bg ? bg->GetLength() : 0);
-    float   livePos   = (liveLen > 0)
+    float livePos = (liveLen > 0)
         ? std::clamp(static_cast<float>(liveCurMs) / static_cast<float>(liveLen), 0.0f, 1.0f)
         : 0.0f;
 
-    ImGui::SetCursorPosX(MT::k_PadLg);
-    float displayPos = livePos;
-    if (BMSlider("##vp_tl_live", &displayPos, 0.0f, 1.0f, "",
-                 MT::k_LiveTrack, MT::k_LiveGrab,
-                 { MT::k_LiveGrab.x * 1.1f, MT::k_LiveGrab.y * 1.1f, MT::k_LiveGrab.z * 1.1f, 1.0f },
-                 innerW))
-    {
-        if (audioLive) musicPanel->SeekNormalized(displayPos);
-        else           core.SetLivePosition(displayPos);
-        liveCurMs = static_cast<int64_t>(displayPos * static_cast<float>(liveLen));
-    }
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 0.0f, 0.0f });
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, MT::k_Bg1);
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 0.0f);
 
-    DrawTimeRow(innerW, MT::k_PadLg, liveCurMs, liveLen);
-    ImGui::Spacing();
+    ImGui::BeginChild("##viewLiveTransport", { w, h }, false,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
-    const float rowH      = std::clamp(ImGui::GetContentRegionAvail().y, 24.0f, 36.0f);
-    const float gap       = MT::k_Gap * 1.5f;
-    const float padSize   = std::clamp((innerW - gap * 5.0f) / 6.0f, 26.0f, 38.0f);
+    ImDrawList*  dl       = ImGui::GetWindowDrawList();
+    ImFont*      font     = ImGui::GetFont();
+    const float  baseFont = ImGui::GetFontSize();
+    const ImVec2 org      = ImGui::GetWindowPos();
+    dl->AddLine({ org.x, org.y }, { org.x + w, org.y }, IM_COL32(255, 255, 255, 16), 1.0f);
 
+    const float padX   = CalcPanelPadX(w);
+    const float gap    = CalcPanelGap(w);
+    const float innerW = std::max(baseFont, w - padX * 2.0f);
     const ImVec4 kNeutral = MT::k_NeutBtn;
     const ImVec4 kLive    = MT::k_LiveBtn;
 
-    ImGui::SetCursorPosX(MT::k_PadLg);
+    auto DrawInlineScrubber = [&](float x, float y, float scrubW, float scrubH) {
+        if (scrubW < baseFont) return;
+        ImGui::SetCursorPos({ x, y });
+        ImVec2 s0 = ImGui::GetCursorScreenPos();
+        ImGui::InvisibleButton("##vp_tl_live", { scrubW, scrubH });
+        bool sHov = ImGui::IsItemHovered();
+        bool sAct = ImGui::IsItemActive();
 
-    ImGui::PushID("vp_pad_nav_prev");
-    if (DrawPadButton("arrow_back", padSize * 0.44f, kNeutral, { padSize, padSize }, false)) {
+        const float trkH   = scrubH * 0.36f;
+        const float thumbR = trkH * ((sHov || sAct) ? 0.80f : 0.66f);
+        const float trkL   = s0.x + thumbR;
+        const float trkR   = s0.x + scrubW - thumbR;
+        const float trkW   = std::max(1.0f, trkR - trkL);
+        const float cy     = s0.y + scrubH * 0.5f;
+        const float trkRad = trkH * 0.5f;
+
+        if (sAct && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            float newPos = SafeClamp((ImGui::GetIO().MousePos.x - trkL) / trkW, 0.0f, 1.0f);
+            if (audioLive) musicPanel->SeekNormalized(newPos);
+            else           core.SetLivePosition(newPos);
+            livePos   = newPos;
+            liveCurMs = static_cast<int64_t>(newPos * static_cast<float>(liveLen));
+        }
+
+        // Riel hundido proporcional + relleno en vivo + cabezal táctil
+        dl->AddRectFilled({ trkL, cy - trkH * 0.5f }, { trkR, cy + trkH * 0.5f },
+                          IM_COL32(16, 17, 20, 255), trkRad);
+        dl->AddRect({ trkL, cy - trkH * 0.5f }, { trkR, cy + trkH * 0.5f },
+                    IM_COL32(255, 255, 255, (sHov || sAct) ? 44 : 24), trkRad);
+
+        float fillX = trkL + livePos * trkW;
+        if (fillX > trkL + 0.5f) {
+            dl->AddRectFilled({ trkL, cy - trkH * 0.5f }, { fillX, cy + trkH * 0.5f },
+                              DS::AccentLight, trkRad);
+        }
+
+        const ImU32 thumbCol = (sHov || sAct) ? IM_COL32(242, 245, 250, 255) : IM_COL32(216, 220, 228, 255);
+        dl->AddCircleFilled({ fillX, cy }, thumbR, thumbCol, 16);
+        dl->AddCircle({ fillX, cy }, thumbR, IM_COL32(10, 11, 14, 185), 16, 1.1f);
+    };
+
+    const std::string curStr = FormatTime(liveCurMs);
+    const std::string lenStr = FormatTime(liveLen);
+
+    auto TriggerPrev = [&]() {
         if (audioLive) {
             musicPanel->Previous();
-        } else {
-            core.RequestNavigate(-1);
-            auto sel = core.PeekSelection();
-            if (sel.type != Core::ItemType::Song &&
-                sel.type != Core::ItemType::Bible &&
-                sel.type != Core::ItemType::Documents && bg && liveLen > 0)
-            {
-                float np = livePos - (liveLen > 0 ? 10000.0f / static_cast<float>(liveLen) : 0.0f);
-                core.SetLivePosition(std::max(0.0f, np));
-            }
+        } else if (!m_FolderPlaylistVideos.empty()) {
+            m_FolderPlaylistIndex = (m_FolderPlaylistIndex + m_FolderPlaylistVideos.size() - 1) % m_FolderPlaylistVideos.size();
+            core.SetBackgroundMedia(m_FolderPlaylistVideos[m_FolderPlaylistIndex], true, false);
         }
-    }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip(audioLive ? "Pista anterior (reinicia si pasaron 3 s)" : "Retroceder / Anterior (Flecha Izquierda)");
-    ImGui::PopID();
-    ImGui::SameLine(0.0f, gap);
+    };
 
-    ImGui::PushID("vp_pad_replay");
-    if (DrawPadButton("replay_10", padSize * 0.34f, kNeutral, { padSize, padSize }, false)) {
+    auto TriggerNext = [&]() {
         if (audioLive) {
-            musicPanel->SkipBy(-10);
-        } else {
-            float np = livePos - (liveLen > 0 ? 10000.0f / static_cast<float>(liveLen) : 0.0f);
-            core.SetLivePosition(std::max(0.0f, np));
+            musicPanel->Next();
+        } else if (!m_FolderPlaylistVideos.empty()) {
+            m_FolderPlaylistIndex = (m_FolderPlaylistIndex + 1) % m_FolderPlaylistVideos.size();
+            core.SetBackgroundMedia(m_FolderPlaylistVideos[m_FolderPlaylistIndex], true, false);
         }
-    }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Atrasar 10 segundos");
-    ImGui::PopID();
-    ImGui::SameLine(0.0f, gap);
+    };
 
-    const char* mainIcon = m_LivePlaying ? "pause" : "play";
-    ImGui::PushID("vp_pad_main");
-    if (DrawPadButton(mainIcon, padSize * 0.40f, m_LivePlaying ? kLive : kNeutral, { padSize, padSize }, m_LivePlaying)) {
+    auto TriggerSkip = [&](int deltaSec) {
+        if (audioLive) {
+            musicPanel->SkipBy(deltaSec);
+        } else if (liveLen > 0) {
+            float np = livePos + (static_cast<float>(deltaSec) * 1000.0f / static_cast<float>(liveLen));
+            core.SetLivePosition(SafeClamp(np, 0.0f, 1.0f));
+        }
+    };
+
+    auto TriggerPlayPause = [&]() {
         if (audioLive) {
             musicPanel->TogglePlayPause();
         } else if (bg) {
             if (m_LivePlaying) {
                 bg->SetPause(true);
             } else {
-                core.SetLiveMute(m_LiveMuted);
-                core.SetLiveVolume(m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
+                if (hasAudibleAudio) {
+                    core.SetLiveMute(m_LiveMuted);
+                    core.SetLiveVolume(m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
+                }
                 bg->SetPause(false);
             }
         }
-    }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip(m_LivePlaying ? "Pausar" : "Reproducir");
-    ImGui::PopID();
-    ImGui::SameLine(0.0f, gap);
+    };
 
-    ImGui::PushID("vp_pad_fwd");
-    if (DrawPadButton("forward_10", padSize * 0.34f, kNeutral, { padSize, padSize }, false)) {
-        if (audioLive) {
-            musicPanel->SkipBy(10);
-        } else {
-            float np = livePos + (liveLen > 0 ? 10000.0f / static_cast<float>(liveLen) : 0.0f);
-            core.SetLivePosition(std::min(1.0f, np));
-        }
-    }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Adelantar 10 segundos");
-    ImGui::PopID();
-    ImGui::SameLine(0.0f, gap);
-
-    ImGui::PushID("vp_pad_stop");
-    if (DrawPadButton("stop", padSize * 0.34f, kNeutral, { padSize, padSize }, false)) {
+    auto TriggerStop = [&]() {
         if (audioLive) {
             musicPanel->Stop();
         } else {
             core.SetLivePosition(0.0f);
             if (bg) { bg->SetPosition(0.0f); bg->SetPause(true); }
         }
-    }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip(audioLive ? "Detener música" : "Detener video");
-    ImGui::PopID();
-    ImGui::SameLine(0.0f, gap);
+    };
 
-    ImGui::PushID("vp_pad_nav_next");
-    if (DrawPadButton("arrow_forward", padSize * 0.44f, kNeutral, { padSize, padSize }, false)) {
-        if (audioLive) {
-            musicPanel->Next();
-        } else {
-            core.RequestNavigate(1);
-            auto sel = core.PeekSelection();
-            if (sel.type != Core::ItemType::Song &&
-                sel.type != Core::ItemType::Bible &&
-                sel.type != Core::ItemType::Documents && bg && liveLen > 0)
-            {
-                float np = livePos + (liveLen > 0 ? 10000.0f / static_cast<float>(liveLen) : 0.0f);
-                core.SetLivePosition(std::min(1.0f, np));
-            }
-        }
-    }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip(audioLive ? "Pista siguiente" : "Avanzar / Siguiente (Flecha Derecha)");
-    ImGui::PopID();
-    ImGui::Spacing();
-
-    const float volRowH   = std::clamp(padSize * 0.85f, 26.0f, 32.0f);
-    const float muteW     = volRowH;
-    const float pctW      = 44.0f;
-    const float faderW    = std::max(50.0f, innerW - muteW - pctW - gap * 2.0f);
-
-    bool        isDanger  = (m_LiveVolume > 1.0f);
-    DrawIconFn  speakerFn = m_LiveMuted ? DrawIcon_SpeakerMuted : DrawIcon_SpeakerOn;
-
-    ImGui::SetCursorPosX(MT::k_PadLg);
-
-    ImGui::PushID("vp_pad_mute");
-    if (DrawPadButton(m_LiveMuted ? "no_sound" : "volume_up", muteW * 0.44f, m_LiveMuted ? kLive : kNeutral,
-                      { muteW, volRowH }, m_LiveMuted, speakerFn)) {
+    auto ToggleMute = [&]() {
+        if (!hasAudibleAudio) return;
         m_LiveMuted = !m_LiveMuted;
         if (audioLive) {
             musicPanel->SetMusicMuted(m_LiveMuted);
@@ -3026,29 +3278,214 @@ void ViewPanel::RenderLiveTransport(float w, float h)
             core.SetLiveMute(m_LiveMuted);
             core.SetLiveVolume(m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
         }
+    };
+
+    auto ApplyVolume = [&]() {
+        if (!hasAudibleAudio) return;
+        const int volPct = static_cast<int>(std::round(m_LiveVolume * 100.0f));
+        if (audioLive) musicPanel->SetMusicVolume(volPct);
+        else           core.SetLiveVolume(m_LiveMuted ? 0 : volPct);
+    };
+
+    if (h >= baseFont * 4.8f)
+    {
+        // Distribución vertical 100% proporcional (mismo alto de control que la barra superior)
+        const float vPad         = SafeClamp(h * 0.045f, 3.0f, 6.0f);
+        const float vGap         = SafeClamp(h * 0.040f, 3.0f, 5.0f);
+        const float usableH      = std::max(baseFont, h - vPad * 2.0f - vGap * 2.0f);
+        const float timelineRowH = SafeClamp(usableH * (0.65f / 2.65f), 14.0f, 18.0f);
+        const float controlRowH  = SafeClamp(usableH * (1.00f / 2.65f), 22.0f, 30.0f);
+        const float timeFontSz   = SafeClamp(timelineRowH * 0.42f, baseFont * 0.78f, baseFont * 1.00f);
+
+        // ── Fila 1: Tiempo actual + línea de tiempo grande + duración total ───
+        const float row1Y = vPad;
+        ImVec2 curSz = font->CalcTextSizeA(timeFontSz, FLT_MAX, 0.0f, curStr.c_str());
+        ImVec2 lenSz = font->CalcTextSizeA(timeFontSz, FLT_MAX, 0.0f, lenStr.c_str());
+        const float timeColW = std::max(curSz.x, lenSz.x) + gap * 0.5f;
+
+        dl->AddText(font, timeFontSz,
+                    { org.x + padX, org.y + row1Y + (timelineRowH - curSz.y) * 0.5f },
+                    DS::TextSecondary, curStr.c_str());
+
+        dl->AddText(font, timeFontSz,
+                    { org.x + w - padX - lenSz.x, org.y + row1Y + (timelineRowH - lenSz.y) * 0.5f },
+                    DS::TextHint, lenStr.c_str());
+
+        const float scrubX = padX + timeColW + gap * 0.5f;
+        const float scrubW = w - scrubX * 2.0f;
+        DrawInlineScrubber(scrubX, row1Y, scrubW, timelineRowH);
+
+        // ── Fila 2: Botones de transporte TODOS del mismo tamaño (btnW × controlRowH) ──
+        const float row2Y    = row1Y + timelineRowH + vGap;
+        const int   btnCount = hasPlaylistNav ? 6 : 4;
+        const float rawBtnW  = (innerW - gap * static_cast<float>(btnCount - 1)) / static_cast<float>(btnCount);
+        const float btnW     = SafeClamp(rawBtnW, 26.0f, 44.0f);
+        const float iconSz   = std::min(btnW, controlRowH) * 0.44f;
+        const float totalBtnsW = static_cast<float>(btnCount) * btnW + gap * static_cast<float>(btnCount - 1);
+        float curX           = (totalBtnsW <= innerW) ? (padX + (innerW - totalBtnsW) * 0.5f) : padX;
+
+        if (hasPlaylistNav) {
+            ImGui::SetCursorPos({ curX, row2Y });
+            ImGui::PushID("vp_pad_nav_prev");
+            if (DrawPadButton("skip_prev", iconSz, kNeutral, { btnW, controlRowH }, false)) {
+                TriggerPrev();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip(audioLive ? "Pista anterior" : "Video anterior");
+            ImGui::PopID();
+            curX += btnW + gap;
+        }
+
+        ImGui::SetCursorPos({ curX, row2Y });
+        ImGui::PushID("vp_pad_replay");
+        if (DrawPadButton("replay_10", iconSz, kNeutral, { btnW, controlRowH }, false)) {
+            TriggerSkip(-10);
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Retroceder 10 s");
+        ImGui::PopID();
+        curX += btnW + gap;
+
+        ImGui::SetCursorPos({ curX, row2Y });
+        ImGui::PushID("vp_pad_main");
+        const char* mainIcon = m_LivePlaying ? "pause" : "play";
+        if (DrawPadButton(mainIcon, iconSz, m_LivePlaying ? kLive : kNeutral, { btnW, controlRowH }, m_LivePlaying)) {
+            TriggerPlayPause();
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip(m_LivePlaying ? "Pausar" : "Reproducir");
+        ImGui::PopID();
+        curX += btnW + gap;
+
+        ImGui::SetCursorPos({ curX, row2Y });
+        ImGui::PushID("vp_pad_fwd");
+        if (DrawPadButton("forward_10", iconSz, kNeutral, { btnW, controlRowH }, false)) {
+            TriggerSkip(10);
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Adelantar 10 s");
+        ImGui::PopID();
+        curX += btnW + gap;
+
+        ImGui::SetCursorPos({ curX, row2Y });
+        ImGui::PushID("vp_pad_stop");
+        if (DrawPadButton("stop", iconSz * 0.94f, kNeutral, { btnW, controlRowH }, false)) {
+            TriggerStop();
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Detener");
+        ImGui::PopID();
+        curX += btnW + gap;
+
+        if (hasPlaylistNav) {
+            ImGui::SetCursorPos({ curX, row2Y });
+            ImGui::PushID("vp_pad_nav_next");
+            if (DrawPadButton("skip_next", iconSz, kNeutral, { btnW, controlRowH }, false)) {
+                TriggerNext();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip(audioLive ? "Pista siguiente" : "Video siguiente");
+            ImGui::PopID();
+        }
+
+        // ── Fila 3 (debajo): Botón Mute del mismo tamaño + Barra de volumen híbrida grande ──
+        const float row3Y     = row2Y + controlRowH + vGap;
+        const bool  effMuted  = !hasAudibleAudio || m_LiveMuted;
+        const bool  isDanger  = hasAudibleAudio && !m_LiveMuted && (m_LiveVolume > 1.005f);
+        DrawIconFn  speakerFn = effMuted ? DrawIcon_SpeakerMuted : DrawIcon_SpeakerOn;
+
+        char pctBuf[16];
+        if (!hasAudibleAudio) {
+            std::snprintf(pctBuf, sizeof(pctBuf), "Mudo");
+        } else {
+            std::snprintf(pctBuf, sizeof(pctBuf), "%d%%", static_cast<int>(std::round(m_LiveVolume * 100.0f)));
+        }
+        const float pctFontSz = SafeClamp(controlRowH * 0.30f, baseFont * 0.80f, baseFont * 1.05f);
+        ImVec2 samplePts      = font->CalcTextSizeA(pctFontSz, FLT_MAX, 0.0f, "200%");
+        ImVec2 pts            = font->CalcTextSizeA(pctFontSz, FLT_MAX, 0.0f, pctBuf);
+        const float pctW      = std::max(samplePts.x, pts.x) + gap * 0.5f;
+        const float muteW     = btnW;
+        const float faderW    = std::max(baseFont * 2.0f, innerW - muteW - pctW - gap * 2.0f);
+
+        ImGui::SetCursorPos({ padX, row3Y });
+        ImGui::PushID("vp_pad_mute");
+        if (!hasAudibleAudio) ImGui::BeginDisabled(true);
+        if (DrawPadButton(effMuted ? "no_sound" : "volume_up", iconSz,
+                          (hasAudibleAudio && m_LiveMuted) ? kLive : kNeutral,
+                          { muteW, controlRowH }, hasAudibleAudio && m_LiveMuted, speakerFn)) {
+            ToggleMute();
+        }
+        if (!hasAudibleAudio) ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            if (!hasAudibleAudio) ImGui::SetTooltip("Fondo silencioso (sin pista de audio activa)");
+            else                  ImGui::SetTooltip(m_LiveMuted ? "Activar audio" : "Silenciar audio");
+        }
+        ImGui::PopID();
+
+        ImGui::SetCursorPos({ padX + muteW + gap, row3Y });
+        if (HybridVolumeFader("##vp_vol_fader", &m_LiveVolume, 0.0f, 2.0f,
+                              { faderW, controlRowH }, effMuted, hasAudibleAudio)) {
+            ApplyVolume();
+        }
+        if (ImGui::IsItemHovered()) {
+            if (!hasAudibleAudio)
+                ImGui::SetTooltip("Fondo silencioso — reproduce desde Multimedia o Audio para sonido");
+            else
+                ImGui::SetTooltip("Volumen en vivo: %d%% (doble clic = 100%%)",
+                                  static_cast<int>(std::round(m_LiveVolume * 100.0f)));
+        }
+
+        ImU32 pctCol = !hasAudibleAudio
+            ? DS::TextHint
+            : (isDanger ? IM_COL32(245, 110, 110, 255) : DS::TextSecondary);
+        dl->AddText(font, pctFontSz,
+                    { org.x + w - padX - pts.x, org.y + row3Y + (controlRowH - pts.y) * 0.5f },
+                    pctCol, pctBuf);
     }
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip(m_LiveMuted ? "Audio silenciado — click para activar" : "Silenciar audio");
-    ImGui::PopID();
-    ImGui::SameLine(0.0f, gap);
+    else
+    {
+        // Modo compacto proporcional cuando la ventana se reduce al mínimo vertical
+        const float rowH      = h * 0.76f;
+        const float rowY      = (h - rowH) * 0.5f;
+        const float btnW      = rowH * 1.15f;
+        const float iconSz    = rowH * 0.44f;
+        const float timeFont  = SafeClamp(rowH * 0.36f, baseFont * 0.75f, baseFont);
+        float curX            = padX;
 
-    ImU32 trackCol = ImGui::GetColorU32(MT::k_NeutBtn);
-    ImU32 fillCol  = isDanger ? IM_COL32(235, 70, 70, 255) : ImGui::GetColorU32(MT::k_LiveGrab);
-    ImU32 capCol   = isDanger ? IM_COL32(255, 90, 90, 255) : IM_COL32(225, 228, 235, 255);
+        ImGui::SetCursorPos({ curX, rowY });
+        ImGui::PushID("vp_compact_main");
+        if (DrawPadButton(m_LivePlaying ? "pause" : "play", iconSz,
+                          m_LivePlaying ? kLive : kNeutral, { btnW, rowH }, m_LivePlaying)) {
+            TriggerPlayPause();
+        }
+        ImGui::PopID();
+        curX += btnW + gap;
 
-    if (HorizontalFader("##vp_vol_fader", &m_LiveVolume, 0.0f, 2.0f, { faderW, volRowH },
-                         trackCol, fillCol, capCol)) {
-        if (audioLive) musicPanel->SetMusicVolume(static_cast<int>(m_LiveVolume * 100.0f));
-        else           core.SetLiveVolume(m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
+        ImGui::SetCursorPos({ curX, rowY });
+        ImGui::PushID("vp_compact_stop");
+        if (DrawPadButton("stop", iconSz * 0.94f, kNeutral, { btnW, rowH }, false)) {
+            TriggerStop();
+        }
+        ImGui::PopID();
+        curX += btnW + gap;
+
+        float rightEnd = w - padX;
+        if (hasAudibleAudio && (rightEnd - curX) > btnW * 3.5f) {
+            rightEnd -= (btnW + gap);
+            ImGui::SetCursorPos({ rightEnd + gap, rowY });
+            ImGui::PushID("vp_compact_mute");
+            DrawIconFn speakerFn = m_LiveMuted ? DrawIcon_SpeakerMuted : DrawIcon_SpeakerOn;
+            if (DrawPadButton(m_LiveMuted ? "no_sound" : "volume_up", iconSz,
+                              m_LiveMuted ? kLive : kNeutral, { btnW, rowH }, m_LiveMuted, speakerFn)) {
+                ToggleMute();
+            }
+            ImGui::PopID();
+        }
+
+        ImVec2 curSz = font->CalcTextSizeA(timeFont, FLT_MAX, 0.0f, curStr.c_str());
+        if (rightEnd - curX > curSz.x + btnW * 2.0f) {
+            rightEnd -= (curSz.x + gap);
+            dl->AddText(font, timeFont,
+                        { org.x + rightEnd + gap * 0.5f, org.y + (h - curSz.y) * 0.5f },
+                        DS::TextSecondary, curStr.c_str());
+        }
+
+        DrawInlineScrubber(curX, rowY, std::max(baseFont, rightEnd - curX), rowH);
     }
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Volumen en vivo: %d%%", static_cast<int>(m_LiveVolume * 100.0f));
-
-    ImGui::SameLine(0.0f, gap);
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (volRowH - ImGui::GetTextLineHeight()) * 0.5f);
-    ImGui::PushStyleColor(ImGuiCol_Text, isDanger ? IM_COL32(255, 100, 100, 255) : ImGui::GetColorU32(MT::k_TextDim));
-    ImGui::Text("%d%%", static_cast<int>(m_LiveVolume * 100.0f));
-    ImGui::PopStyleColor();
 
     ImGui::EndChild();
     ImGui::PopStyleVar(2);
@@ -3057,8 +3494,11 @@ void ViewPanel::RenderLiveTransport(float w, float h)
 
 void ViewPanel::RenderContent(float panelW, float panelH)
 {
+    if (panelW < 4.0f || panelH < 4.0f) return;
+
     auto& core  = ProyecThor::Core::PresentationCore::Get();
     auto  state = core.GetState();
+    const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
@@ -3102,11 +3542,7 @@ void ViewPanel::RenderContent(float panelW, float panelH)
     ImVec2 p0 = ImGui::GetCursorScreenPos();
     ImVec2 p1 = ImVec2(p0.x + drawW, p0.y + drawH);
 
-    if (m_PreviewSource == PreviewSource::Publico)
-    {
-        UI::DrawPublicContent(dl, p0, p1, drawW, drawH, m_IsEditingLiveLyrics, true);
-    }
-    else if (m_PreviewSource == PreviewSource::Stage)
+    if (m_PreviewSource == PreviewSource::Stage)
     {
         const bool isPro = ProyecThor::Core::AuthLicenseManager::Get().IsPro();
         if (!isPro)
@@ -3119,90 +3555,23 @@ void ViewPanel::RenderContent(float panelW, float panelH)
             UI::DrawStageContent(dl, p0, p1);
         }
     }
-    else if (m_PreviewSource == PreviewSource::Lan)
-    {
-        auto lanMode = core.GetLanContentMode();
-        if (lanMode == Core::OutputContentMode::Live)
-        {
-            UI::DrawPublicContent(dl, p0, p1, drawW, drawH, false, true);
-        }
-        else
-        {
-            dl->AddRectFilled(p0, p1, IM_COL32(10, 10, 12, 255));
-            if (lanMode == Core::OutputContentMode::ClockOnly)
-            {
-                std::time_t now = std::time(nullptr);
-                std::tm lt{};
-#ifdef _WIN32
-                localtime_s(&lt, &now);
-#else
-                localtime_r(&now, &lt);
-#endif
-                char buf[16];
-                std::strftime(buf, sizeof(buf), "%H:%M:%S", &lt);
-                float fontSize = std::clamp(drawH * 0.20f, 24.0f, 160.0f);
-                ImFont* f  = ImGui::GetFont();
-                ImVec2  ts = f->CalcTextSizeA(fontSize, FLT_MAX, FLT_MAX, buf);
-                dl->AddText(f, fontSize, { p0.x + (drawW - ts.x) * 0.5f, p0.y + (drawH - ts.y) * 0.5f },
-                            IM_COL32(235, 235, 240, 255), buf);
-            }
-            else
-            {
-                const char* msg = "En blanco";
-                ImVec2 ts = ImGui::CalcTextSize(msg);
-                dl->AddText({ p0.x + (drawW - ts.x) * 0.5f, p0.y + (drawH - ts.y) * 0.5f },
-                            IM_COL32(110, 110, 118, 255), msg);
-            }
-            dl->AddRect(p0, p1, IM_COL32(50, 55, 80, 180), 0.0f, 0, 1.0f);
-        }
-
-        {
-            const char* pillLabel[3] = { "En vivo", "Solo reloj", "En blanco" };
-            const float pillH = 24.0f, pillGap = 4.0f, pillPad = 8.0f;
-            float pillY = p1.y - pillH - pillPad;
-            float pillTotalW = drawW - pillPad * 2.0f;
-            float pillW = (pillTotalW - pillGap * 2.0f) / 3.0f;
-            for (int pi = 0; pi < 3; pi++)
-            {
-                bool active = (static_cast<int>(lanMode) == pi);
-                ImVec2 pillPos = { p0.x + pillPad + pi * (pillW + pillGap), pillY };
-                ImGui::SetCursorScreenPos(pillPos);
-                ImGui::PushStyleColor(ImGuiCol_Button, active
-                    ? ImVec4(0.35f, 0.55f, 0.95f, 0.85f) : ImVec4(0.0f, 0.0f, 0.0f, 0.55f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, active
-                    ? ImVec4(0.40f, 0.60f, 1.00f, 0.90f) : ImVec4(0.0f, 0.0f, 0.0f, 0.70f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.30f, 0.50f, 0.90f, 0.95f));
-                ImGui::PushStyleColor(ImGuiCol_Text, active
-                    ? ImVec4(1, 1, 1, 1) : ImVec4(0.75f, 0.76f, 0.80f, 1.0f));
-                ImGui::PushID(pi);
-                if (ImGui::Button(pillLabel[pi], { pillW, pillH }))
-                    core.SetLanContentMode(static_cast<Core::OutputContentMode>(pi));
-                ImGui::PopID();
-                ImGui::PopStyleColor(4);
-            }
-        }
-    }
     else
     {
-        dl->AddRectFilled(p0, p1, IM_COL32(10, 10, 12, 255));
-        const char* msg = "La Transmisión (RTMP) se controla desde su espacio de trabajo";
-        ImVec2 ts = ImGui::CalcTextSize(msg);
-        ImVec2 msgPos = { p0.x + (drawW - ts.x) * 0.5f, p0.y + drawH * 0.44f - ts.y * 0.5f };
-        dl->AddText(msgPos, IM_COL32(160, 160, 170, 255), msg);
-        dl->AddRect(p0, p1, IM_COL32(50, 55, 80, 180), 0.0f, 0, 1.0f);
-
-        const char* btnLabel = "Ir a Transmisión";
-        ImVec2 btnSize = { 180.0f, 30.0f };
-        ImGui::SetCursorScreenPos({ p0.x + (drawW - btnSize.x) * 0.5f, msgPos.y + ts.y + 14.0f });
-        if (ImGui::Button(btnLabel, btnSize))
-        {
-            auto& workspace = ProyecThor::Settings::SettingsManager::Get().GetSettings().workspace;
-            workspace.layoutPreset = ProyecThor::Settings::WorkspaceLayoutPreset::Broadcast;
-            ProyecThor::Settings::SettingsManager::Get().Save();
-        }
+        UI::DrawPublicContent(dl, p0, p1, drawW, drawH, m_IsEditingLiveLyrics, true);
     }
 
-    if (m_PreviewSource == PreviewSource::Publico && state.isProjecting)
+    // Marco sutil de monitor de estudio
+    dl->AddRect(p0, p1, IM_COL32(255, 255, 255, 24), 0.0f, 0, 1.0f);
+
+    // Vúmetro de audio: solo cuando se proyecta video con audio real y fuera de Modo Rendimiento
+    const bool showMeters = !perf.performanceMode &&
+                            !perf.lowMemoryMode &&
+                            m_PreviewSource == PreviewSource::Publico &&
+                            state.isProjecting &&
+                            state.bgType == Core::PresentationState::BackgroundType::Video &&
+                            core.GetContentAllowsAudio() &&
+                            core.GetBackgroundPlayer() != nullptr;
+    if (showMeters)
     {
         Core::VLCBasePlayer* liveBg = core.GetBackgroundPlayer();
         bool liveMuted   = core.GetLiveMute();
@@ -3211,9 +3580,9 @@ void ViewPanel::RenderContent(float panelW, float panelH)
 
         m_AudioMeters.Update(liveBg, true, livePlaying, liveMuted, liveVolume);
 
-        const float meterW = 22.0f;
+        const float meterW   = 20.0f;
         const float meterPad = 6.0f;
-        float meterH = std::min(drawH - meterPad * 2.0f, 110.0f);
+        float meterH = std::min(drawH - meterPad * 2.0f, 104.0f);
         if (meterH > 20.0f)
         {
             ImVec2 meterPos = { p0.x + meterPad, p0.y + meterPad };
@@ -3223,8 +3592,8 @@ void ViewPanel::RenderContent(float panelW, float panelH)
 
     if (m_PreviewSource == PreviewSource::Publico && core.IsBackgroundSwapPending())
     {
-        const float spinR = 11.0f;
-        ImVec2 spinCenter = { p1.x - spinR - 14.0f, p1.y - spinR - 14.0f };
+        const float spinR = 10.0f;
+        ImVec2 spinCenter = { p1.x - spinR - 12.0f, p1.y - spinR - 12.0f };
         DrawLoadingSpinner(dl, spinCenter, spinR);
 
         char etaBuf[32];
@@ -3232,52 +3601,8 @@ void ViewPanel::RenderContent(float panelW, float panelH)
         ImVec2 etaSz = ImGui::CalcTextSize(etaBuf);
         ImVec2 etaPos = { spinCenter.x - spinR - 6.0f - etaSz.x, spinCenter.y - etaSz.y * 0.5f };
         dl->AddRectFilled({ etaPos.x - 5.0f, etaPos.y - 3.0f }, { etaPos.x + etaSz.x + 5.0f, etaPos.y + etaSz.y + 3.0f },
-                          IM_COL32(0, 0, 0, 150), 4.0f);
+                          IM_COL32(0, 0, 0, 165), 4.0f);
         dl->AddText(etaPos, IM_COL32(230, 230, 235, 230), etaBuf);
-    }
-
-    if (m_PreviewSource == PreviewSource::Publico && state.isProjecting && state.isStreamingNet)
-    {
-        const char* wifiStr = "online";
-        ImVec2 wifiSize = ImGui::CalcTextSize(wifiStr);
-
-        ImVec2 wifiPos = ImVec2(p1.x - wifiSize.x - 12.0f, p0.y + 8.0f);
-
-        dl->AddRectFilled(
-            ImVec2(wifiPos.x - 6.0f, wifiPos.y - 4.0f),
-            ImVec2(wifiPos.x + wifiSize.x + 6.0f, wifiPos.y + wifiSize.y + 4.0f),
-            IM_COL32(0, 0, 0, 160), 4.0f);
-
-        dl->AddText(wifiPos, IM_COL32(0, 255, 100, 255), wifiStr);
-    }
-
-    // ── Botón flotante para alternar ventana aparte / acoplada ──
-    {
-        const char* popBtnLabel = m_IsDetached ? "[-] Acoplar" : "[+] Ventana aparte";
-        ImVec2 popSz = ImGui::CalcTextSize(popBtnLabel);
-        popSz.x += 16.0f;
-        popSz.y += 8.0f;
-        float rightMargin = (m_PreviewSource == PreviewSource::Publico && state.isProjecting && state.isStreamingNet) ? 75.0f : 8.0f;
-        ImVec2 popPos = ImVec2(p1.x - popSz.x - rightMargin, p0.y + 6.0f);
-
-        ImGui::SetCursorScreenPos(popPos);
-        ImGui::PushStyleColor(ImGuiCol_Button,        IM_COL32(20, 24, 32, 200));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(40, 52, 75, 240));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  IM_COL32(30, 42, 65, 255));
-        ImGui::PushStyleColor(ImGuiCol_Text,          IM_COL32(215, 225, 240, 240));
-        ImGui::PushStyleColor(ImGuiCol_Border,        IM_COL32(80, 110, 160, 150));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 2.0f));
-
-        if (ImGui::Button(popBtnLabel)) {
-            SetDetached(!m_IsDetached);
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("%s (Ctrl+Shift+D)", m_IsDetached ? "Volver a acoplar al panel principal" : "Separar Vista en Vivo en ventana independiente");
-        }
-        ImGui::PopStyleVar(3);
-        ImGui::PopStyleColor(5);
     }
 
     // ── Edición en vivo de letras al hacer clic ─────────────────────────────
@@ -3309,17 +3634,19 @@ void ViewPanel::RenderContent(float panelW, float panelH)
                     if (isHovered)
                     {
                         ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
-                        dl->AddRect(clickMin, clickMax, IM_COL32(99, 130, 255, 180), 6.0f, 0, 1.5f);
+                        dl->AddRect(clickMin, clickMax, DS::AccentLight, 5.0f, 0, 1.2f);
 
-                        const char* editBadge = "✏️ Clic para editar";
+                        const char* editBadge = "Clic para editar";
                         ImVec2 bSz = ImGui::CalcTextSize(editBadge);
-                        ImVec2 bPos(clickMax.x - bSz.x - 10.0f, clickMin.y - bSz.y - 6.0f);
-                        if (bPos.y < p0.y + 4.0f) bPos.y = clickMin.y + 4.0f;
+                        float bx = SafeClamp(clickMax.x - bSz.x - 10.0f, p0.x + 8.0f, p1.x - bSz.x - 8.0f);
+                        float by = clickMin.y - bSz.y - 6.0f;
+                        if (by < p0.y + 4.0f) by = SafeClamp(clickMin.y + 4.0f, p0.y + 4.0f, p1.y - bSz.y - 4.0f);
+                        ImVec2 bPos(bx, by);
                         dl->AddRectFilled(ImVec2(bPos.x - 6.0f, bPos.y - 3.0f), ImVec2(bPos.x + bSz.x + 6.0f, bPos.y + bSz.y + 3.0f),
-                                          IM_COL32(20, 24, 36, 230), 4.0f);
+                                          IM_COL32(22, 24, 28, 235), 4.0f);
                         dl->AddRect(ImVec2(bPos.x - 6.0f, bPos.y - 3.0f), ImVec2(bPos.x + bSz.x + 6.0f, bPos.y + bSz.y + 3.0f),
-                                    IM_COL32(99, 130, 255, 200), 4.0f, 0, 1.0f);
-                        dl->AddText(bPos, IM_COL32(220, 230, 255, 255), editBadge);
+                                    DS::AccentLight, 4.0f, 0, 1.0f);
+                        dl->AddText(bPos, DS::TextPrimary, editBadge);
 
                         if (isSong)
                             ImGui::SetTooltip("Editar letra en tiempo real (se guardará en el .txt al terminar)");
@@ -3331,6 +3658,7 @@ void ViewPanel::RenderContent(float panelW, float panelH)
                     {
                         m_IsEditingLiveLyrics = true;
                         m_LiveLyricsEditBuf = state.currentText;
+                        m_LiveLyricsEditBuf.reserve(std::max<size_t>(256, m_LiveLyricsEditBuf.size() + 64));
                         m_LastLiveLyricsEditBuf = state.currentText;
                         m_LiveLyricsOriginalText = state.currentText;
                         m_EditingSongFilename = isSong ? sel.title : "";
@@ -3351,62 +3679,72 @@ void ViewPanel::RenderContent(float panelW, float panelH)
                 }
                 else
                 {
-                    float editW = std::clamp(clickSize.x + 100.0f, 340.0f, drawW - 24.0f);
-                    float editH = std::clamp(clickSize.y + 85.0f, 140.0f, drawH - 24.0f);
+                    const float margin   = 6.0f;
+                    const float maxEditW = std::max(120.0f, drawW - margin * 2.0f);
+                    const float minEditW = std::min(250.0f, maxEditW);
+                    const float editW    = SafeClamp(clickSize.x + 80.0f, minEditW, maxEditW);
+
+                    const float maxEditH = std::max(84.0f, drawH - margin * 2.0f);
+                    const float minEditH = std::min(126.0f, maxEditH);
+                    const float editH    = SafeClamp(clickSize.y + 68.0f, minEditH, maxEditH);
+
                     float editX = clickMin.x + clickSize.x * 0.5f - editW * 0.5f;
                     float editY = clickMin.y + clickSize.y * 0.5f - editH * 0.5f;
-                    editX = std::clamp(editX, p0.x + 12.0f, p1.x - editW - 12.0f);
-                    editY = std::clamp(editY, p0.y + 12.0f, p1.y - editH - 12.0f);
+                    editX = SafeClamp(editX, p0.x + margin, p1.x - editW - margin);
+                    editY = SafeClamp(editY, p0.y + margin, p1.y - editH - margin);
 
                     ImVec2 cardP0(editX, editY);
                     ImVec2 cardP1(editX + editW, editY + editH);
 
-                    dl->AddRectFilled(ImVec2(cardP0.x - 3.0f, cardP0.y - 3.0f), ImVec2(cardP1.x + 3.0f, cardP1.y + 3.0f), IM_COL32(0, 0, 0, 90), 12.0f);
-                    dl->AddRectFilled(cardP0, cardP1, IM_COL32(14, 16, 22, 245), 10.0f);
-                    dl->AddRect(cardP0, cardP1, IM_COL32(99, 102, 241, 230), 10.0f, 0, 1.5f);
+                    dl->AddRectFilled(ImVec2(cardP0.x - 3.0f, cardP0.y - 3.0f), ImVec2(cardP1.x + 3.0f, cardP1.y + 3.0f), IM_COL32(0, 0, 0, 90), 8.0f);
+                    dl->AddRectFilled(cardP0, cardP1, IM_COL32(20, 21, 24, 248), 6.0f);
+                    dl->AddRect(cardP0, cardP1, DS::AccentLight, 6.0f, 0, 1.2f);
 
-                    float headerH = 28.0f;
-                    ImGui::SetCursorScreenPos(ImVec2(cardP0.x + 10.0f, cardP0.y + 6.0f));
-                    ImGui::BeginGroup();
+                    const float headerH   = 28.0f;
+                    const float btnW      = (editW < 260.0f) ? 54.0f : 64.0f;
+                    const float btnH      = 22.0f;
+                    const float btnsStart = std::max(cardP0.x + 8.0f, cardP1.x - 8.0f - btnW * 2.0f - 6.0f);
 
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.72f, 1.0f, 1.0f));
-                    ImGui::TextUnformatted("✏️ EDICIÓN EN VIVO");
-                    ImGui::PopStyleColor();
+                    const char* hdrTitle = "EDICIÓN EN VIVO";
+                    ImVec2 hdrSz = ImGui::CalcTextSize(hdrTitle);
+                    if (btnsStart - (cardP0.x + 10.0f) > hdrSz.x + 6.0f)
+                    {
+                        dl->AddText(ImVec2(cardP0.x + 10.0f, cardP0.y + (headerH - hdrSz.y) * 0.5f + 1.0f),
+                                    DS::TextPrimary, hdrTitle);
 
-                    ImGui::SameLine(0.0f, 10.0f);
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.70f, 0.72f, 0.78f, 0.85f));
-                    ImGui::TextUnformatted("Enter: Guardar | Shift+Enter: Línea | Esc: Cancelar");
-                    ImGui::PopStyleColor();
+                        const char* hdrHint = "Enter: Guardar · Ctrl+Enter: Línea · Esc: Cancelar";
+                        ImVec2 hintSz = ImGui::CalcTextSize(hdrHint);
+                        const float hintX = cardP0.x + 10.0f + hdrSz.x + 10.0f;
+                        if (btnsStart - hintX > hintSz.x + 8.0f)
+                        {
+                            dl->AddText(ImVec2(hintX, cardP0.y + (headerH - hintSz.y) * 0.5f + 1.0f),
+                                        DS::TextHint, hdrHint);
+                        }
+                    }
 
-                    float btnW = 68.0f;
-                    float btnH = 22.0f;
-                    float btnsRight = cardP1.x - 10.0f;
-
-                    ImGui::SameLine();
-                    ImGui::SetCursorScreenPos(ImVec2(btnsRight - btnW * 2.0f - 6.0f, cardP0.y + 4.0f));
-
+                    ImGui::SetCursorScreenPos(ImVec2(btnsStart, cardP0.y + 4.0f));
                     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-                    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6.0f, 2.0f));
+                    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 2.0f));
 
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.60f, 0.35f, 0.85f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.70f, 0.40f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.18f, 0.55f, 0.30f, 1.0f));
-                    bool wantsSave = ImGui::Button("Guardar", ImVec2(btnW, btnH));
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.24f, 0.26f, 0.30f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.32f, 0.34f, 0.38f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.20f, 0.22f, 0.26f, 1.0f));
+                    bool wantsSave = ImGui::Button("Guardar##liveEditSave", ImVec2(btnW, btnH));
                     ImGui::PopStyleColor(3);
 
                     ImGui::SameLine(0.0f, 6.0f);
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.28f, 0.30f, 0.36f, 0.80f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.38f, 0.40f, 0.48f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.22f, 0.24f, 0.30f, 1.0f));
-                    bool wantsCancel = ImGui::Button("Cancelar", ImVec2(btnW, btnH));
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16f, 0.17f, 0.20f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.24f, 0.25f, 0.28f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.14f, 0.15f, 0.18f, 1.0f));
+                    bool wantsCancel = ImGui::Button("Cancelar##liveEditCancel", ImVec2(btnW, btnH));
                     ImGui::PopStyleColor(3);
 
                     ImGui::PopStyleVar(2);
-                    ImGui::EndGroup();
 
-                    float inputY = cardP0.y + headerH + 6.0f;
-                    float inputH = editH - headerH - 14.0f;
-                    ImGui::SetCursorScreenPos(ImVec2(cardP0.x + 10.0f, inputY));
+                    const float inputY = cardP0.y + headerH + 4.0f;
+                    const float inputW = std::max(80.0f, editW - 16.0f);
+                    const float inputH = std::max(36.0f, editH - headerH - 12.0f);
+                    ImGui::SetCursorScreenPos(ImVec2(cardP0.x + 8.0f, inputY));
 
                     if (m_FocusLiveEditInput)
                     {
@@ -3414,18 +3752,18 @@ void ViewPanel::RenderContent(float panelW, float panelH)
                         m_FocusLiveEditInput = false;
                     }
 
-                    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.06f, 0.07f, 0.10f, 0.90f));
-                    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.08f, 0.09f, 0.13f, 0.95f));
-                    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.09f, 0.10f, 0.15f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.40f, 0.50f, 0.85f, 0.70f));
-                    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+                    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.10f, 0.11f, 0.12f, 0.96f));
+                    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.12f, 0.13f, 0.15f, 0.98f));
+                    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.13f, 0.14f, 0.16f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.45f, 0.48f, 0.54f, 0.65f));
+                    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
                     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
                     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 6.0f));
 
                     ImGuiInputTextFlags editFlags = ImGuiInputTextFlags_EnterReturnsTrue |
                                                     ImGuiInputTextFlags_CtrlEnterForNewLine;
                     bool committed = InputTextMultilineStd("##liveLyricsEditInput", &m_LiveLyricsEditBuf,
-                                                          ImVec2(editW - 20.0f, inputH), editFlags);
+                                                          ImVec2(inputW, inputH), editFlags);
 
                     ImGui::PopStyleVar(3);
                     ImGui::PopStyleColor(4);
@@ -3459,16 +3797,16 @@ void ViewPanel::RenderContent(float panelW, float panelH)
             m_IsEditingLiveLyrics = false;
         }
 
-        if (ImGui::GetTime() - m_LiveLyricsSavedFeedbackTime < 2.5)
+        if (ImGui::GetTime() - m_LiveLyricsSavedFeedbackTime < 2.2)
         {
-            std::string toast = "✔ Letra guardada en " + (!m_EditingSongFilename.empty() ? m_EditingSongFilename : "archivo");
+            std::string toast = "Guardado: " + (!m_EditingSongFilename.empty() ? m_EditingSongFilename : "texto");
             ImVec2 tSz = ImGui::CalcTextSize(toast.c_str());
-            ImVec2 tPos(p0.x + (drawW - tSz.x) * 0.5f, p0.y + 12.0f);
-            dl->AddRectFilled(ImVec2(tPos.x - 12.0f, tPos.y - 6.0f), ImVec2(tPos.x + tSz.x + 12.0f, tPos.y + tSz.y + 6.0f),
-                              IM_COL32(18, 50, 28, 235), 6.0f);
-            dl->AddRect(ImVec2(tPos.x - 12.0f, tPos.y - 6.0f), ImVec2(tPos.x + tSz.x + 12.0f, tPos.y + tSz.y + 6.0f),
-                        IM_COL32(45, 180, 80, 220), 6.0f, 0, 1.0f);
-            dl->AddText(tPos, IM_COL32(220, 255, 230, 255), toast.c_str());
+            ImVec2 tPos(p0.x + (drawW - tSz.x) * 0.5f, p0.y + 10.0f);
+            dl->AddRectFilled(ImVec2(tPos.x - 10.0f, tPos.y - 5.0f), ImVec2(tPos.x + tSz.x + 10.0f, tPos.y + tSz.y + 5.0f),
+                              IM_COL32(22, 36, 28, 235), 5.0f);
+            dl->AddRect(ImVec2(tPos.x - 10.0f, tPos.y - 5.0f), ImVec2(tPos.x + tSz.x + 10.0f, tPos.y + tSz.y + 5.0f),
+                        IM_COL32(72, 208, 148, 180), 5.0f, 0, 1.0f);
+            dl->AddText(tPos, IM_COL32(225, 245, 232, 255), toast.c_str());
         }
     }
 

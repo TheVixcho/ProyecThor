@@ -353,11 +353,12 @@ namespace ProyecThor::Settings {
 
     // ── Actualizaciones ──────────────────────────────────────────────────
     struct UpdatesSettings {
-        std::string currentVersion = "1.1.3";
+        std::string currentVersion = "1.1.4";
         std::string lastChecked    = "";
         std::string updateChannel  = "beta";
         bool        checkOnStartup = true;
         bool        autoDownload   = false;
+        std::string cloudflareBaseUrl = "https://pub-4aad3f4e54404d6ab3c299176fa4fd65.r2.dev";
     };
 
     // ── Stage Display (monitor de control) ──────────────────────────────

@@ -41,9 +41,11 @@ void MediaCollectionManager::Initialize()
 std::vector<MediaCollection>& MediaCollectionManager::GetListForType(CollectionMediaType type)
 {
     switch (type) {
-        case CollectionMediaType::Video: return m_VideoCollections;
-        case CollectionMediaType::Image: return m_ImageCollections;
-        case CollectionMediaType::Audio: return m_AudioCollections;
+        case CollectionMediaType::Video:    return m_VideoCollections;
+        case CollectionMediaType::Image:    return m_ImageCollections;
+        case CollectionMediaType::Audio:    return m_AudioCollections;
+        case CollectionMediaType::Song:     return m_SongCollections;
+        case CollectionMediaType::Document: return m_DocumentCollections;
     }
     return m_VideoCollections;
 }
@@ -51,9 +53,11 @@ std::vector<MediaCollection>& MediaCollectionManager::GetListForType(CollectionM
 const std::vector<MediaCollection>& MediaCollectionManager::GetListForType(CollectionMediaType type) const
 {
     switch (type) {
-        case CollectionMediaType::Video: return m_VideoCollections;
-        case CollectionMediaType::Image: return m_ImageCollections;
-        case CollectionMediaType::Audio: return m_AudioCollections;
+        case CollectionMediaType::Video:    return m_VideoCollections;
+        case CollectionMediaType::Image:    return m_ImageCollections;
+        case CollectionMediaType::Audio:    return m_AudioCollections;
+        case CollectionMediaType::Song:     return m_SongCollections;
+        case CollectionMediaType::Document: return m_DocumentCollections;
     }
     return m_VideoCollections;
 }
@@ -87,7 +91,7 @@ MediaCollection* MediaCollectionManager::GetCollectionMutable(CollectionMediaTyp
     return nullptr;
 }
 
-bool MediaCollectionManager::CreateCollection(CollectionMediaType type, const std::string& name)
+bool MediaCollectionManager::CreateCollection(CollectionMediaType type, const std::string& name, const std::string& targetRoot)
 {
     if (name.empty()) return false;
     auto& list = GetListForType(type);
@@ -98,9 +102,16 @@ bool MediaCollectionManager::CreateCollection(CollectionMediaType type, const st
     newCol.name = name;
     newCol.slideDuration = 5.0f;
     newCol.loop = true;
+    newCol.targetRoot = targetRoot.empty() ? "ProyecThor" : targetRoot;
     list.push_back(newCol);
     Save();
     return true;
+}
+
+std::string MediaCollectionManager::GetTargetRoot(CollectionMediaType type, const std::string& name) const
+{
+    const auto* col = GetCollection(type, name);
+    return col ? col->targetRoot : "ProyecThor";
 }
 
 bool MediaCollectionManager::DeleteCollection(CollectionMediaType type, const std::string& name)
@@ -240,6 +251,15 @@ bool MediaCollectionManager::MoveItemInCollection(CollectionMediaType type, cons
     return true;
 }
 
+bool MediaCollectionManager::MoveItemBetweenCollections(CollectionMediaType type, const std::string& fromCol, const std::string& toCol, const std::string& filename)
+{
+    if (fromCol == toCol) return true;
+    if (!fromCol.empty()) {
+        RemoveItemFromCollectionByPath(type, fromCol, filename);
+    }
+    return AddItemToCollection(type, toCol, filename);
+}
+
 float MediaCollectionManager::GetSlideDuration(const std::string& collName) const
 {
     if (collName.empty()) return m_DefaultSlideDuration;
@@ -309,6 +329,10 @@ std::string MediaCollectionManager::ResolveFullPath(CollectionMediaType type, co
             if (it.filename == filename) return Library::GetMMItemFullPath(it);
         }
         return GetAssetsPath() + "/audio/" + filename;
+    } else if (type == CollectionMediaType::Song) {
+        return GetAssetsPath() + "/songs/" + filename;
+    } else if (type == CollectionMediaType::Document) {
+        return GetAssetsPath() + "/documents/" + filename;
     }
     return filename;
 }
@@ -560,6 +584,7 @@ void MediaCollectionManager::Load()
                 if (c.name.empty()) continue;
                 c.slideDuration = item.value("slideDuration", 5.0f);
                 c.loop          = item.value("loop", true);
+                c.targetRoot    = item.value("targetRoot", "ProyecThor");
                 if (item.contains("items") && item["items"].is_array()) {
                     for (const auto& strItem : item["items"]) {
                         if (strItem.is_string()) c.itemFilenames.push_back(strItem.get<std::string>());
@@ -569,9 +594,11 @@ void MediaCollectionManager::Load()
             }
         };
 
-        LoadCategory("videos", m_VideoCollections);
-        LoadCategory("images", m_ImageCollections);
-        LoadCategory("audio",  m_AudioCollections);
+        LoadCategory("videos",    m_VideoCollections);
+        LoadCategory("images",    m_ImageCollections);
+        LoadCategory("audio",     m_AudioCollections);
+        LoadCategory("songs",     m_SongCollections);
+        LoadCategory("documents", m_DocumentCollections);
 
         m_DefaultSlideDuration = j.value("defaultSlideDuration", 5.0f);
     } catch (const std::exception& e) {
@@ -595,14 +622,17 @@ void MediaCollectionManager::Save()
                 item["name"]          = c.name;
                 item["slideDuration"] = c.slideDuration;
                 item["loop"]          = c.loop;
+                item["targetRoot"]    = c.targetRoot;
                 item["items"]         = c.itemFilenames;
                 j[catKey].push_back(item);
             }
         };
 
-        SaveCategory("videos", m_VideoCollections);
-        SaveCategory("images", m_ImageCollections);
-        SaveCategory("audio",  m_AudioCollections);
+        SaveCategory("videos",    m_VideoCollections);
+        SaveCategory("images",    m_ImageCollections);
+        SaveCategory("audio",     m_AudioCollections);
+        SaveCategory("songs",     m_SongCollections);
+        SaveCategory("documents", m_DocumentCollections);
         j["defaultSlideDuration"] = m_DefaultSlideDuration;
 
         std::ofstream f(p);

@@ -371,6 +371,8 @@ namespace ProyecThor::Core {
         void SetVLCNativeForFondos(bool enable) { m_VLCNativeForFondos = enable; }
         bool GetVLCNativeForFondos() const { return m_VLCNativeForFondos; }
         void ReloadPlayers();
+        bool IsStaticImage() const { return m_IsStaticImage; }
+        void PurgeIdleResources();
         bool IsActiveNative() const { return m_ActiveIsNative && m_IsLiveToPublic && !m_NativeRevealPending; }
         void* GetProcessedTexture(int targetW, int targetH);
         void* GetTextureID();

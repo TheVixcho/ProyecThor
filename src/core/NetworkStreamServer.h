@@ -39,9 +39,10 @@ uint64_t    version        = 0;
 // ── StreamConfig ──────────────────────────────────────────────────────────────
 // Qué capas transmitir y en qué calidad
 struct StreamConfig {
-    bool sendBackground = true;
-    bool sendText       = true;
-    bool sendOverlay    = true;
+    bool transparentMode = false; // Transparencia / Canal Alpha para OBS (PRO)
+    bool sendBackground  = true;  // true = emite fondo / color sólido; false = transparente
+    bool sendText        = true;
+    bool sendOverlay     = true;
 
     enum class VideoMode {
         HighQuality,   // MJPEG continuo ~30fps, prioriza latencia baja
@@ -118,7 +119,7 @@ public:
 
 private:
     static std::string DetectLocalIP();
-    static std::string BuildHTMLPage();
+    std::string        BuildHTMLPage() const;
     static std::string BuildChatHTMLPage();
     std::string SnapshotToJSON(const StreamSnapshot& snap) const;
     std::string ChatMessagesToJSON(const std::vector<ChatMessage>& msgs) const;
@@ -136,8 +137,9 @@ double m_LastCaptureTime = 0.0;
     FontPathProvider    m_FontPathProvider;
     ChatMessageStore*   m_ChatStore { nullptr };
 
-    mutable std::mutex  m_ConfigMutex;
-    StreamConfig        m_Config;
+    std::atomic<uint64_t> m_ConfigVersion { 1 };
+    mutable std::mutex    m_ConfigMutex;
+    StreamConfig          m_Config;
 };
 
 } // namespace ProyecThor::Core

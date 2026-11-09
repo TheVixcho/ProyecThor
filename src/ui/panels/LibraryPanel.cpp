@@ -2,6 +2,7 @@
 
 #include "core/CanvaClient.h"
 #include "core/AuthLicenseManager.h"
+#include "core/settings/SettingsManager.h"
 #include "ui/panels/capture/CapturePanel.h"
 #include "ui/panels/layers/LayersBgTab.h"
 #include "biblio/LibraryHelpers.h"
@@ -466,21 +467,92 @@ void LibraryPanel::RefreshList()
         std::unordered_set<std::string> seenNames;
         fs::path fsPath = U8Path(path);
         if (fs::exists(fsPath)) {
-            for (const auto& entry : fs::directory_iterator(fsPath)) {
-#ifdef _WIN32
-                std::string name = WideToUtf8(entry.path().filename().wstring());
-#else
-                std::string name = entry.path().filename().string();
-#endif
-                std::string nameKey = Core::MediaImportManager::NormalizeFilenameKey(name);
-                if (nameKey.empty() || seenNames.count(nameKey) > 0) continue;
+            if (m_CurrentCategory == LibraryCategory::Songs) {
+                // Escaneo recursivo para soportar canciones dentro de carpetas (subdirectorios)
+                std::error_code recEc;
+                for (const auto& entry : fs::recursive_directory_iterator(fsPath, fs::directory_options::skip_permission_denied, recEc)) {
+                    if (recEc) break;
+                    if (!entry.is_regular_file()) continue;
 
-                if (m_CurrentCategory == LibraryCategory::Documents) {
+                    std::string ext = entry.path().extension().string();
+                    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+                    if (ext != ".txt") continue;
+
+                    std::string rel = PathToUtf8Generic(fs::relative(entry.path(), fsPath));
+                    std::string nameKey = Core::MediaImportManager::NormalizeFilenameKey(rel);
+                    if (nameKey.empty() || seenNames.count(nameKey) > 0) continue;
+                    seenNames.insert(nameKey);
+                    m_Items.push_back(NormalizeToUtf8(rel));
+                }
+
+                // ProyecThor for Professionals: Escanear canciones (.txt) en carpetas externas de escaneo
+                if (Core::AuthLicenseManager::Get().IsPro()) {
+                    const auto& watched = ::ProyecThor::Settings::SettingsManager::Get().GetSettings().storage.watchedFolders;
+                    for (const auto& wf : watched) {
+                        if (!wf.enabled || wf.path.empty()) continue;
+                        std::error_code ec;
+                        fs::path wfp = U8Path(wf.path);
+                        if (!fs::exists(wfp, ec) || !fs::is_directory(wfp, ec)) continue;
+
+                        for (const auto& entry : fs::recursive_directory_iterator(wfp, fs::directory_options::skip_permission_denied, ec)) {
+                            if (ec) break;
+                            if (!entry.is_regular_file()) continue;
+
+                            std::string ext = entry.path().extension().string();
+                            std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+                            if (ext != ".txt") continue;
+
+                            std::string full = PathToUtf8(entry.path());
+                            std::string nameKey = Core::MediaImportManager::NormalizePathKey(full);
+                            if (nameKey.empty() || seenNames.count(nameKey) > 0) continue;
+                            seenNames.insert(nameKey);
+                            m_Items.push_back(full);
+                        }
+                    }
+                }
+            } else if (m_CurrentCategory == LibraryCategory::Documents) {
+                for (const auto& entry : fs::directory_iterator(fsPath)) {
+#ifdef _WIN32
+                    std::string name = WideToUtf8(entry.path().filename().wstring());
+#else
+                    std::string name = entry.path().filename().string();
+#endif
+                    std::string nameKey = Core::MediaImportManager::NormalizeFilenameKey(name);
+                    if (nameKey.empty() || seenNames.count(nameKey) > 0) continue;
                     if (entry.is_directory()) {
                         seenNames.insert(nameKey);
                         m_Items.push_back(name);
                     }
-                } else {
+                }
+
+                if (Core::AuthLicenseManager::Get().IsPro()) {
+                    const auto& watched = ::ProyecThor::Settings::SettingsManager::Get().GetSettings().storage.watchedFolders;
+                    for (const auto& wf : watched) {
+                        if (!wf.enabled || wf.path.empty()) continue;
+                        std::error_code ec;
+                        fs::path wfp = U8Path(wf.path);
+                        if (!fs::exists(wfp, ec) || !fs::is_directory(wfp, ec)) continue;
+                        for (const auto& entry : fs::directory_iterator(wfp, ec)) {
+                            if (ec) break;
+                            if (!entry.is_directory()) continue;
+                            std::string full = PathToUtf8(entry.path());
+                            std::string nameKey = Core::MediaImportManager::NormalizePathKey(full);
+                            if (nameKey.empty() || seenNames.count(nameKey) > 0) continue;
+                            seenNames.insert(nameKey);
+                            m_Items.push_back(full);
+                        }
+                    }
+                }
+            } else {
+                for (const auto& entry : fs::directory_iterator(fsPath)) {
+#ifdef _WIN32
+                    std::string name = WideToUtf8(entry.path().filename().wstring());
+#else
+                    std::string name = entry.path().filename().string();
+#endif
+                    std::string nameKey = Core::MediaImportManager::NormalizeFilenameKey(name);
+                    if (nameKey.empty() || seenNames.count(nameKey) > 0) continue;
+
                     if (entry.is_regular_file()) {
                         seenNames.insert(nameKey);
                         m_Items.push_back(name);
@@ -571,7 +643,7 @@ void LibraryPanel::DeleteSelectedItem()
     }
 
     const std::string itemName = m_Items[m_SelectedIndex];
-    const std::string fullPath = folder + itemName;
+    const std::string fullPath = fs::path(itemName).is_absolute() ? itemName : (folder + itemName);
 
     auto& core = Core::PresentationCore::Get();
     auto  currentSelection = core.PeekSelection();
@@ -770,16 +842,18 @@ void LibraryPanel::Render()
     const auto& str = ProyecThor::UI::GetUIStrings();
     
     bool visible = false;
+    char panelTitle[128];
+    std::snprintf(panelTitle, sizeof(panelTitle), "%s###Panel_Library", str.library);
 
     if (m_UIManagerRef)
     {
-        visible = DS::BeginGlassPanel(str.library, m_UIManagerRef->GetGlassRenderer(),
+        visible = DS::BeginGlassPanel(panelTitle, m_UIManagerRef->GetGlassRenderer(),
                                       nullptr, 0, ImVec2(0.0f, 0.0f));
     }
     else
     {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
-        visible = ImGui::Begin(str.library);
+        visible = ImGui::Begin(panelTitle);
         ImGui::PopStyleVar();
     }
 

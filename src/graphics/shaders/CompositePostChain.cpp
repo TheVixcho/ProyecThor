@@ -285,64 +285,108 @@ void CompositePostChain::RenderViewport(ImGuiViewport* viewport,
     BlitToCurrentFramebuffer(tex, m_W, m_H);
 }
 
-void CompositePostChain::Destroy() {
-    DestroyCaptureFBO();
-    if (m_BlitProgram) { glDeleteProgram(m_BlitProgram); m_BlitProgram = 0; }
-    if (m_BlitVAO)     { glDeleteVertexArrays(1, &m_BlitVAO); m_BlitVAO = 0; }
-    if (m_BlitVBO)     { glDeleteBuffers(1, &m_BlitVBO); m_BlitVBO = 0; }
-    m_CRT.Destroy();
-    m_Grain.Destroy();
-    m_FXAA.Destroy();
-    m_Saturation.Destroy();
-    m_Vignette.Destroy();
-    m_Blur.Destroy();
-    m_Sharpen.Destroy();
-    m_Bloom.Destroy();
-    m_ChromaticAberration.Destroy();
-    m_VHS.Destroy();
-    m_Cine.Destroy();
-    m_Contrast.Destroy();
-    m_Luminosity.Destroy();
-    m_TAA.Destroy();
-    m_Glitch.Destroy();
-    m_ColorGrading.Destroy();
-    m_Pixelate.Destroy();
-    m_RadialBlur.Destroy();
-    m_Waves.Destroy();
-    m_Mirror.Destroy();
-    m_Thermal.Destroy();
-    m_Halftone.Destroy();
-    m_VolumetricFog.Destroy();
-    m_VolumetricClouds.Destroy();
-    m_ZonedDistortion.Destroy();
-    m_SubEffectsInitialized = false;
+void CompositePostChain::DestroyViewportOnly() {
+    if (!m_SubEffectsInitialized && !m_CaptureFBO && !m_BlitProgram) return;
 
-    m_PreviewCRT.Destroy();
-    m_PreviewGrain.Destroy();
-    m_PreviewFXAA.Destroy();
-    m_PreviewSaturation.Destroy();
-    m_PreviewVignette.Destroy();
-    m_PreviewBlur.Destroy();
-    m_PreviewSharpen.Destroy();
-    m_PreviewBloom.Destroy();
-    m_PreviewChromaticAberration.Destroy();
-    m_PreviewVHS.Destroy();
-    m_PreviewCine.Destroy();
-    m_PreviewContrast.Destroy();
-    m_PreviewLuminosity.Destroy();
-    m_PreviewTAA.Destroy();
-    m_PreviewGlitch.Destroy();
-    m_PreviewColorGrading.Destroy();
-    m_PreviewPixelate.Destroy();
-    m_PreviewRadialBlur.Destroy();
-    m_PreviewWaves.Destroy();
-    m_PreviewMirror.Destroy();
-    m_PreviewThermal.Destroy();
-    m_PreviewHalftone.Destroy();
-    m_PreviewVolumetricFog.Destroy();
-    m_PreviewVolumetricClouds.Destroy();
-    m_PreviewZonedDistortion.Destroy();
+    if (m_LastPlatformHandle != nullptr && glfwGetCurrentContext() == m_LastPlatformHandle) {
+        DestroyCaptureFBO();
+        if (m_BlitProgram) { glDeleteProgram(m_BlitProgram); m_BlitProgram = 0; }
+        if (m_BlitVAO)     { glDeleteVertexArrays(1, &m_BlitVAO); m_BlitVAO = 0; }
+        if (m_BlitVBO)     { glDeleteBuffers(1, &m_BlitVBO); m_BlitVBO = 0; }
+        m_CRT.Destroy();
+        m_Grain.Destroy();
+        m_FXAA.Destroy();
+        m_Saturation.Destroy();
+        m_Vignette.Destroy();
+        m_Blur.Destroy();
+        m_Sharpen.Destroy();
+        m_Bloom.Destroy();
+        m_ChromaticAberration.Destroy();
+        m_VHS.Destroy();
+        m_Cine.Destroy();
+        m_Contrast.Destroy();
+        m_Luminosity.Destroy();
+        m_TAA.Destroy();
+        m_Glitch.Destroy();
+        m_ColorGrading.Destroy();
+        m_Pixelate.Destroy();
+        m_RadialBlur.Destroy();
+        m_Waves.Destroy();
+        m_Mirror.Destroy();
+        m_Thermal.Destroy();
+        m_Halftone.Destroy();
+        m_VolumetricFog.Destroy();
+        m_VolumetricClouds.Destroy();
+        m_ZonedDistortion.Destroy();
+    } else {
+        m_CaptureFBO = m_CaptureTex = 0;
+        m_BlitProgram = m_BlitVAO = m_BlitVBO = 0;
+        m_CRT.ForgetGLResources();
+        m_Grain.ForgetGLResources();
+        m_FXAA.ForgetGLResources();
+        m_Saturation.ForgetGLResources();
+        m_Vignette.ForgetGLResources();
+        m_Blur.ForgetGLResources();
+        m_Sharpen.ForgetGLResources();
+        m_Bloom.ForgetGLResources();
+        m_ChromaticAberration.ForgetGLResources();
+        m_VHS.ForgetGLResources();
+        m_Cine.ForgetGLResources();
+        m_Contrast.ForgetGLResources();
+        m_Luminosity.ForgetGLResources();
+        m_TAA.ForgetGLResources();
+        m_Glitch.ForgetGLResources();
+        m_ColorGrading.ForgetGLResources();
+        m_Pixelate.ForgetGLResources();
+        m_RadialBlur.ForgetGLResources();
+        m_Waves.ForgetGLResources();
+        m_Mirror.ForgetGLResources();
+        m_Thermal.ForgetGLResources();
+        m_Halftone.ForgetGLResources();
+    }
+    m_W = 0;
+    m_H = 0;
+    m_LastPlatformHandle = nullptr;
+    m_SubEffectsInitialized = false;
+}
+
+void CompositePostChain::DestroyPreviewOnly() {
+    if (!m_PreviewInitialized) return;
+    if (glfwGetCurrentContext() != nullptr) {
+        m_PreviewCRT.Destroy();
+        m_PreviewGrain.Destroy();
+        m_PreviewFXAA.Destroy();
+        m_PreviewSaturation.Destroy();
+        m_PreviewVignette.Destroy();
+        m_PreviewBlur.Destroy();
+        m_PreviewSharpen.Destroy();
+        m_PreviewBloom.Destroy();
+        m_PreviewChromaticAberration.Destroy();
+        m_PreviewVHS.Destroy();
+        m_PreviewCine.Destroy();
+        m_PreviewContrast.Destroy();
+        m_PreviewLuminosity.Destroy();
+        m_PreviewTAA.Destroy();
+        m_PreviewGlitch.Destroy();
+        m_PreviewColorGrading.Destroy();
+        m_PreviewPixelate.Destroy();
+        m_PreviewRadialBlur.Destroy();
+        m_PreviewWaves.Destroy();
+        m_PreviewMirror.Destroy();
+        m_PreviewThermal.Destroy();
+        m_PreviewHalftone.Destroy();
+        m_PreviewVolumetricFog.Destroy();
+        m_PreviewVolumetricClouds.Destroy();
+        m_PreviewZonedDistortion.Destroy();
+    }
+    m_PreviewW = 0;
+    m_PreviewH = 0;
     m_PreviewInitialized = false;
+}
+
+void CompositePostChain::Destroy() {
+    DestroyViewportOnly();
+    DestroyPreviewOnly();
 }
 
 GLuint CompositePostChain::ProcessBackgroundForPreview(GLuint srcTex, int w, int h) {

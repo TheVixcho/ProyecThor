@@ -435,6 +435,36 @@ inline void DrawIcon_Help(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
     dl->AddCircleFilled(IcPt(o, sz, 0.50f, 0.73f), sz * 0.045f, col, 8);
 }
 
+inline void DrawIcon_Debug(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = std::max(1.2f, sz * 0.08f);
+
+    // Cuerpo redondeado de bicho/chip
+    ImVec2 bodyMin = IcPt(o, sz, 0.35f, 0.38f);
+    ImVec2 bodyMax = IcPt(o, sz, 0.65f, 0.74f);
+    dl->AddRectFilled(bodyMin, bodyMax, col, sz * 0.12f);
+
+    // Cabeza
+    ImVec2 headC = IcPt(o, sz, 0.50f, 0.28f);
+    dl->AddCircleFilled(headC, sz * 0.11f, col, 14);
+
+    // Antenas
+    dl->AddLine(IcPt(o, sz, 0.44f, 0.22f), IcPt(o, sz, 0.30f, 0.12f), col, thick);
+    dl->AddLine(IcPt(o, sz, 0.56f, 0.22f), IcPt(o, sz, 0.70f, 0.12f), col, thick);
+    dl->AddCircleFilled(IcPt(o, sz, 0.30f, 0.12f), sz * 0.035f, col, 8);
+    dl->AddCircleFilled(IcPt(o, sz, 0.70f, 0.12f), sz * 0.035f, col, 8);
+
+    // Patas laterales (3 pares)
+    dl->AddLine(IcPt(o, sz, 0.35f, 0.44f), IcPt(o, sz, 0.18f, 0.38f), col, thick);
+    dl->AddLine(IcPt(o, sz, 0.65f, 0.44f), IcPt(o, sz, 0.82f, 0.38f), col, thick);
+
+    dl->AddLine(IcPt(o, sz, 0.35f, 0.56f), IcPt(o, sz, 0.16f, 0.56f), col, thick);
+    dl->AddLine(IcPt(o, sz, 0.65f, 0.56f), IcPt(o, sz, 0.84f, 0.56f), col, thick);
+
+    dl->AddLine(IcPt(o, sz, 0.35f, 0.68f), IcPt(o, sz, 0.20f, 0.76f), col, thick);
+    dl->AddLine(IcPt(o, sz, 0.65f, 0.68f), IcPt(o, sz, 0.80f, 0.76f), col, thick);
+}
+
 inline void DrawIcon_Account(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 {
     float thick = std::max(1.2f, sz * 0.075f);

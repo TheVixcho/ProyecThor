@@ -39,6 +39,7 @@ namespace ProyecThor::Core {
 
         void Play(const std::string& path, bool loop = false, bool startMuted = false);
         void Stop();
+        void ReleaseIdleResources();
 
         void BlockPath(const std::string& path);
         void UnblockPath();

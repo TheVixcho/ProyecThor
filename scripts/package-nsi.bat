@@ -39,7 +39,7 @@ if not exist "build-win\ProyecThor.exe" (
 
 if not exist "packaging\windows\dist" mkdir "packaging\windows\dist"
 
-set "VERSION=1.1.3"
+set "VERSION=1.1.4"
 "%MAKENSIS%" -DVERSION="%VERSION%" "-DBUILD_DIR=%CD%\build-win" "-DOUT_DIR=%CD%\packaging\windows\dist" "packaging\windows\ProyecThor.nsi"
 
 if errorlevel 1 (
@@ -50,6 +50,8 @@ if errorlevel 1 (
 echo.
 echo [OK] Instalador generado exitosamente en:
 echo      packaging\windows\dist\ProyecThor_Setup.exe
+copy /y "packaging\windows\dist\ProyecThor_Setup.exe" "packaging\windows\dist\ProyecThor_Setup_%VERSION%.exe" >nul
+echo      packaging\windows\dist\ProyecThor_Setup_%VERSION%.exe
 if not exist "web\public\downloads" mkdir "web\public\downloads"
-powershell -NoProfile -Command "$json = @{ tag_name = 'v%VERSION%'; version = '%VERSION%'; name = 'ProyecThor_Setup.exe' } | ConvertTo-Json; Set-Content -Path 'web\public\downloads\version.json' -Value $json -Encoding UTF8" >nul
+powershell -NoProfile -Command "$json = @{ tag_name = 'v%VERSION%'; version = '%VERSION%'; name = 'ProyecThor_Setup_%VERSION%.exe'; download_url = 'https://pub-4aad3f4e54404d6ab3c299176fa4fd65.r2.dev/ProyecThor_Setup_%VERSION%.exe'; r2_base_url = 'https://pub-4aad3f4e54404d6ab3c299176fa4fd65.r2.dev' } | ConvertTo-Json; Set-Content -Path 'web\public\downloads\version.json' -Value $json -Encoding UTF8" >nul
 echo ========================================================

@@ -3,6 +3,7 @@
 #include "media/player/VLCBasePlayer.h"
 #include "core/AppPaths.h"
 #include "UIStrings.h"
+#include "ui/panels/biblio/LibraryHelpers.h"
 #include <imgui.h>
 #include <iomanip>
 #include <sstream>
@@ -80,7 +81,7 @@ namespace ProyecThor::UI {
             }
             ImGui::EndChild();
         } else if (selection.type == Core::ItemType::Image) {
-            std::string dispTitle = std::filesystem::path(selection.title).filename().string();
+            std::string dispTitle = ProyecThor::Library::PathToUtf8(std::filesystem::path(selection.title).filename());
             ImGui::TextDisabled("%s", dispTitle.c_str());
             ImGui::Spacing();
 

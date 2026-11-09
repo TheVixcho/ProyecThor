@@ -1,5 +1,6 @@
 #include "VLCBasePlayer.h"
 #include "core/plugins/PluginManager.h"
+#include "core/settings/SettingsManager.h"
 #include "media/audio/WindowsAudioSession.h"
 
 #ifdef _WIN32
@@ -183,6 +184,27 @@ static unsigned vlc_format(void** opaque, char* chroma, unsigned* width, unsigne
     std::memcpy(chroma, "RV32", 4);
 #endif
 
+    // En Modo Rendimiento o Baja Memoria, limitamos la resolución de salida del
+    // callback vmem para que libVLC escale directamente en su decodificador/swscale
+    // interno, reduciendo de 2.25x a 20x la memoria RAM de frontBuf/backBuf y el
+    // ancho de banda de subida a textura OpenGL por fotograma.
+    const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+    unsigned maxW = 0, maxH = 0;
+    if (perf.lowMemoryMode) {
+        maxW = 854u;
+        maxH = 480u;
+    } else if (perf.performanceMode) {
+        maxW = 1280u;
+        maxH = 720u;
+    }
+    if (maxW > 0 && maxH > 0 && *width > 0 && *height > 0 && (*width > maxW || *height > maxH)) {
+        const double sx = static_cast<double>(maxW) / static_cast<double>(*width);
+        const double sy = static_cast<double>(maxH) / static_cast<double>(*height);
+        const double scale = std::min(sx, sy);
+        *width  = std::max(16u, (static_cast<unsigned>(*width  * scale + 0.5) + 1u) & ~1u);
+        *height = std::max(16u, (static_cast<unsigned>(*height * scale + 0.5) + 1u) & ~1u);
+    }
+
     const unsigned alignedW = (*width  + 7u)  & ~7u;
     const unsigned alignedH = (*height + 31u) & ~31u;
 
@@ -204,12 +226,37 @@ static unsigned vlc_format(void** opaque, char* chroma, unsigned* width, unsigne
     return 1;
 }
 
-static void vlc_cleanup(void* ) {}
+static void vlc_cleanup(void* opaque)
+{
+    auto* ctx = static_cast<VLCVideoCtx*>(opaque);
+    if (!ctx) return;
+    const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+    if (perf.lowMemoryMode || perf.performanceMode)
+    {
+        std::lock_guard<std::mutex> lock(ctx->mutex);
+        delete[] static_cast<uint8_t*>(ctx->frontBuf);
+        delete[] static_cast<uint8_t*>(ctx->backBuf);
+        ctx->frontBuf     = nullptr;
+        ctx->backBuf      = nullptr;
+        ctx->width        = 0;
+        ctx->height       = 0;
+        ctx->pitch        = 0;
+        ctx->dirty        = false;
+        ctx->everHadFrame = false;
+    }
+}
 
 static void* vlc_lock(void* opaque, void** planes)
 {
     auto* ctx = static_cast<VLCVideoCtx*>(opaque);
     ctx->mutex.lock();
+    if (!ctx->backBuf)
+    {
+        const unsigned alignedH = (ctx->height + 31u) & ~31u;
+        const size_t sz = std::max<size_t>(64u * 64u * 4u, static_cast<size_t>(ctx->pitch) * alignedH);
+        ctx->frontBuf = new uint8_t[sz]();
+        ctx->backBuf  = new uint8_t[sz]();
+    }
     *planes = ctx->backBuf;
     return nullptr;
 }
@@ -306,47 +353,75 @@ VLCBasePlayer::~VLCBasePlayer()
 
 void VLCBasePlayer::InitVLC()
 {
-    std::vector<std::string> argStorage;
-    argStorage.push_back("--no-xlib");
-    argStorage.push_back("--quiet");
-    argStorage.push_back("--no-osd");
-    argStorage.push_back("--no-video-title-show");
-    argStorage.push_back("--file-caching=300");
-    argStorage.push_back("--network-caching=1000");
-    argStorage.push_back("--app-name=ProyecThor");
-    argStorage.push_back("--app-id=ProyecThor");
-    argStorage.push_back("--no-mmdevice-volume-save");
+    const bool forceSilent = m_ForceSilent.load(std::memory_order_relaxed);
+    const bool hasCustomNativeVout = m_NativeWindowOutput &&
+                                     !s_VideoOutput.empty() &&
+                                     s_VideoOutput != "auto" &&
+                                     s_VideoOutput != "any";
 
-    if (m_ForceSilent.load(std::memory_order_relaxed)) {
-        argStorage.push_back("--no-audio");
-    }
+    // Reutilizamos una única instancia base de libVLC (una con audio y otra muda)
+    // mediante libvlc_retain, evitando duplicar el banco completo de plugins y
+    // estructuras internas de libVLC (~25-35 MB de RAM por instancia extra).
+    static std::mutex         s_SharedVlcMutex;
+    static libvlc_instance_t* s_SharedNormalInstance = nullptr;
+    static libvlc_instance_t* s_SharedSilentInstance = nullptr;
 
-    if (m_NativeWindowOutput) {
-        std::string vout = s_VideoOutput;
-        if (!vout.empty() && vout != "auto" && vout != "any") {
-            argStorage.push_back("--vout=" + vout);
+    auto CreateInstanceWithArgs = [](bool silent, const std::string& customVout) -> libvlc_instance_t* {
+        std::vector<std::string> argStorage;
+        argStorage.push_back("--no-xlib");
+        argStorage.push_back("--quiet");
+        argStorage.push_back("--no-osd");
+        argStorage.push_back("--no-video-title-show");
+        argStorage.push_back("--file-caching=250");
+        argStorage.push_back("--network-caching=800");
+        argStorage.push_back("--app-name=ProyecThor");
+        argStorage.push_back("--app-id=ProyecThor");
+        argStorage.push_back("--no-mmdevice-volume-save");
+        argStorage.push_back("--no-stats");
+        argStorage.push_back("--no-sub-autodetect-file");
+
+        if (silent) {
+            argStorage.push_back("--no-audio");
         }
+        if (!customVout.empty()) {
+            argStorage.push_back("--vout=" + customVout);
+        }
+
+        std::vector<const char*> args;
+        args.reserve(argStorage.size());
+        for (const auto& a : argStorage) {
+            args.push_back(a.c_str());
+        }
+
+        libvlc_instance_t* inst = libvlc_new(static_cast<int>(args.size()), args.data());
+        if (!inst) {
+            const char* fallbackArgs[] = {
+                "--no-xlib",
+                "--quiet",
+                "--no-osd",
+                "--no-video-title-show",
+                "--file-caching=250",
+                "--network-caching=800",
+            };
+            inst = libvlc_new(sizeof(fallbackArgs) / sizeof(fallbackArgs[0]), fallbackArgs);
+        }
+        return inst;
+    };
+
+    if (!hasCustomNativeVout) {
+        std::lock_guard<std::mutex> lk(s_SharedVlcMutex);
+        libvlc_instance_t*& sharedSlot = forceSilent ? s_SharedSilentInstance : s_SharedNormalInstance;
+        if (!sharedSlot) {
+            sharedSlot = CreateInstanceWithArgs(forceSilent, "");
+        }
+        if (sharedSlot) {
+            libvlc_retain(sharedSlot);
+            m_Instance = sharedSlot;
+        }
+    } else {
+        m_Instance = CreateInstanceWithArgs(forceSilent, s_VideoOutput);
     }
 
-    std::vector<const char*> args;
-    args.reserve(argStorage.size());
-    for (const auto& a : argStorage) {
-        args.push_back(a.c_str());
-    }
-
-    m_Instance = libvlc_new(static_cast<int>(args.size()), args.data());
-    if (!m_Instance)
-    {
-        const char* fallbackArgs[] = {
-            "--no-xlib",
-            "--quiet",
-            "--no-osd",
-            "--no-video-title-show",
-            "--file-caching=300",
-            "--network-caching=1000",
-        };
-        m_Instance = libvlc_new(sizeof(fallbackArgs) / sizeof(fallbackArgs[0]), fallbackArgs);
-    }
     if (!m_Instance)
         std::cerr << "[VLC] Error al crear instancia libVLC.\n";
 }
@@ -548,6 +623,8 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool , uint6
     if (m_ForceSilent.load(std::memory_order_relaxed))
         libvlc_media_add_option(media, ":no-audio");
 
+    const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+
     std::string hw = s_HwDecoder.empty() ? "any" : s_HwDecoder;
     if (!m_UseHardwareDecode || hw == "none") {
         hw = "none";
@@ -560,8 +637,22 @@ void VLCBasePlayer::LoadAndPlay(const std::string& path, bool loop, bool , uint6
     std::string hwOpt = ":avcodec-hw=" + hw;
     libvlc_media_add_option(media, hwOpt.c_str());
 
-    if (m_DecodeThreads > 0) {
-        std::string thrOpt = ":avcodec-threads=" + std::to_string(m_DecodeThreads);
+    int effectiveThreads = m_DecodeThreads;
+    if (perf.lowMemoryMode) {
+        effectiveThreads = (m_DecodeThreads == 1) ? 1 : 2;
+        libvlc_media_add_option(media, ":file-caching=120");
+        libvlc_media_add_option(media, ":network-caching=400");
+        libvlc_media_add_option(media, ":avcodec-fast");
+        libvlc_media_add_option(media, ":avcodec-skiploopfilter=nonref");
+    } else if (perf.performanceMode) {
+        if (effectiveThreads <= 0 || effectiveThreads > 2) effectiveThreads = 2;
+        libvlc_media_add_option(media, ":file-caching=180");
+        libvlc_media_add_option(media, ":network-caching=600");
+        libvlc_media_add_option(media, ":avcodec-fast");
+    }
+
+    if (effectiveThreads > 0) {
+        std::string thrOpt = ":avcodec-threads=" + std::to_string(effectiveThreads);
         libvlc_media_add_option(media, thrOpt.c_str());
     }
 
@@ -631,6 +722,35 @@ void VLCBasePlayer::Stop()
     {
         libvlc_media_player_stop(m_MediaPlayer);
         libvlc_media_player_set_media(m_MediaPlayer, nullptr);
+    }
+}
+
+void VLCBasePlayer::ReleaseIdleResources()
+{
+    if (m_VlcIsPlaying.load(std::memory_order_relaxed) || !m_CurrentPath.empty())
+        return;
+
+    if (m_VideoCtx)
+    {
+        auto* ctx = static_cast<VLCVideoCtx*>(m_VideoCtx);
+        std::lock_guard<std::mutex> ctxLock(ctx->mutex);
+        delete[] static_cast<uint8_t*>(ctx->frontBuf);
+        delete[] static_cast<uint8_t*>(ctx->backBuf);
+        ctx->frontBuf     = nullptr;
+        ctx->backBuf      = nullptr;
+        ctx->width        = 0;
+        ctx->height       = 0;
+        ctx->pitch        = 0;
+        ctx->dirty        = false;
+        ctx->everHadFrame = false;
+    }
+
+    if (m_TextureID)
+    {
+        glDeleteTextures(1, &m_TextureID);
+        m_TextureID = 0;
+        m_VideoW    = 0;
+        m_VideoH    = 0;
     }
 }
 
@@ -943,6 +1063,8 @@ void VLCBasePlayer::GetAudioLevels(float& left, float& right)
 {
     left = right = 0.0f;
 #ifdef _WIN32
+    if (ProyecThor::Settings::SettingsManager::Get().GetSettings().performance.performanceMode)
+        return;
     const bool audible = m_MediaPlayer && !m_Paused.load(std::memory_order_relaxed) &&
                          !m_Muted.load(std::memory_order_relaxed) &&
                          m_AudioActive.load(std::memory_order_relaxed) &&

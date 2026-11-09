@@ -11,6 +11,7 @@ namespace ProyecThor::UI {
 
 void     BumpBackgroundsListRevision();
 uint64_t GetBackgroundsListRevision();
+void     ClearSharedBgThumbnailCache();
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  LayersBgTab — toda la lógica del tab "Fondos"
@@ -58,6 +59,7 @@ private:
     Core::ThumbnailWorker                        m_ThumbWorker;
     ImTextureID GetThumbnail(const std::string& path, bool isVideo);
     void        DrainThumbnailResults(); // llamar una vez por frame desde Render()
+    uint64_t    m_SeenPurgeEpoch = 0;
 
     // ── Preview al mantener presionado ───────────────────────────────────────
     // Mientras el usuario mantiene el click sobre una tarjeta/fila, se

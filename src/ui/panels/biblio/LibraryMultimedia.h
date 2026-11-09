@@ -12,6 +12,7 @@ struct MMItem {
     std::string    filename;
     Core::ItemType type;
     std::string    customFullPath = "";
+    std::string    rootLabel      = ""; // "ProyecThor" o nombre de carpeta externa (ej: "Mi Música")
 };
 
 const std::vector<MMItem>& GetVideoList();
@@ -22,6 +23,8 @@ ImTextureID GetMMVideoThumbnail(const std::string& path);
 ImTextureID GetMMImageThumbnail(const std::string& path);
 ImTextureID GetMMAudioThumbnail(const std::string& path);
 std::string GetMMItemFullPath(const MMItem& it);
+std::string GetMMItemRootLabel(const MMItem& it);
+std::vector<std::string> GetAvailableRootLabels(Core::ItemType type);
 
 // Filtro de tipo dentro de la seccion Multimedia (ver RenderMultimediaSection).
 enum class MultimediaFilter { All = 0, Video, Audio, Image };
@@ -47,5 +50,8 @@ ImTextureID QuerySharedVideoThumbnail(const std::string& path);
 
 // Diálogo de importación para archivos multimedia (videos, audios, imágenes).
 void ImportMultimediaFile();
+
+// Libera todas las cachés en GPU de miniaturas multimedia (video, imagen, carátulas)
+void ClearMultimediaThumbnailCaches();
 
 } // namespace ProyecThor::Library

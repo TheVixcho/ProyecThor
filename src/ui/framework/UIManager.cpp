@@ -77,6 +77,8 @@ static float s_ToolbarScale = 1.0f;
 UIManager::UIManager()
     : m_Window(nullptr)
     , m_ShowConfig(false)
+    , m_ShowHelp(false)
+    , m_ShowDebug(false)
     , m_MuninCloudPanel(std::make_unique<MuninCloudPanel>())
     , m_HuginStatsPanel(std::make_unique<HuginStatsPanel>())
 {}
@@ -218,7 +220,7 @@ void UIManager::OpenHub()
 
 void UIManager::OpenPatchNotes()
 {
-    m_ShowPatchNotesModal = true;
+    RequestSettings(12);
 }
 
 // Ver comentario en UIManager.h. Cambia el preset SOLO en memoria (nunca
@@ -237,6 +239,21 @@ void UIManager::RequestSettings(int initialCategory)
     if (initialCategory >= 0)
         m_SettingsPanel.SetInitialCategory(initialCategory);
     m_ShowConfig = true;
+}
+
+void UIManager::RequestHelp(int initialCategory)
+{
+    CloseAllToolWindows();
+    if (initialCategory >= 0)
+        m_HelpPanel.SetCategory(initialCategory);
+    m_ShowHelp = true;
+}
+
+void UIManager::ToggleHelp()
+{
+    bool wasOpen = m_ShowHelp;
+    CloseAllToolWindows();
+    m_ShowHelp = !wasOpen;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -973,7 +990,7 @@ void UIManager::RenderAll()
         const bool bibleSearchActive = IsBibleSearchActive();
 
         if (ImGui::IsKeyPressed(ImGuiKey_F1, false))
-            ProyecThor::External::OpenURL("https://proyecthor.web.app/");
+            ToggleHelp();
 
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_P, false))
             m_ShowConfig = true;
@@ -1103,11 +1120,14 @@ void UIManager::RenderAll()
         RenderPatchNotesModal();
     if (m_ShowProFeatureModal)
         RenderProFeatureModal();
+
+    RenderSessionKickedModal();
+    ProyecThor::Core::AuthLicenseManager::Get().CheckSessionHeartbeat();
     {
         ImGuiIO& io = ImGui::GetIO();
         if (!io.WantTextInput && io.KeyCtrl && io.KeyAlt && !io.KeyShift &&
             !ImGui::IsKeyDown(ImGuiKey_RightAlt) && ImGui::IsKeyPressed(ImGuiKey_N, false))
-            m_ShowPatchNotesModal = !m_ShowPatchNotesModal;
+            OpenPatchNotes();
     }
 
     // Editor a pantalla completa (Overlay/Estilos) activo -- ver EnterFullscreenEditor.
@@ -1194,142 +1214,18 @@ if (m_FocusViewNextFrame) {
         }
     }
 
-    if (g_ShowAbout)
-        ImGui::OpenPopup(str.menuAbout);
-
-    ImGuiViewport* viewport = ImGui::GetWindowViewport();
-    ImVec2 work_pos  = viewport->WorkPos;
-    ImVec2 work_size = viewport->WorkSize;
-    ImVec2 center    = ImVec2(work_pos.x + work_size.x * 0.5f,
-                              work_pos.y + work_size.y * 0.5f);
-    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-
-    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.060f, 0.065f, 0.088f, 0.99f));
-    ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(0.250f, 0.210f, 0.090f, 0.80f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,  ImVec2(24.0f, 20.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, DS::RadiusLarge);
-
-    if (ImGui::BeginPopupModal(str.menuAbout, &g_ShowAbout,
-        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
-    {
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.886f, 0.753f, 0.408f, 1.0f));
-        ImGui::SetWindowFontScale(1.20f);
-        ImGui::Text("%s", str.appTitle);
-        ImGui::SetWindowFontScale(1.0f);
-        ImGui::PopStyleColor();
-
-        ImGui::SameLine();
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.420f, 0.420f, 0.420f, 1.0f));
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 3.0f);
-        ImGui::Text("v0.1.6");
-        ImGui::PopStyleColor();
-
-        ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.250f, 0.210f, 0.090f, 0.60f));
-        ImGui::Separator();
-        ImGui::PopStyleColor();
-        ImGui::Spacing();
-
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.780f, 0.770f, 0.740f, 1.0f));
-        ImGui::Text("%s", str.aboutDesc);
-        ImGui::Spacing();
-        ImGui::TextWrapped("%s", str.aboutNonProfit);
-        ImGui::Spacing();
-        ImGui::PopStyleColor();
-
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.500f, 0.500f, 0.490f, 1.0f));
-        ImGui::Text("Creado por TheVixcho y la comunidad de ProyecThor");
-        ImGui::Spacing();
-        ImGui::TextUnformatted("Colaboradores: Oscar Farias, Victor Farias, Fabiola Fernandez");
-        ImGui::Spacing();
-        ImGui::TextDisabled("2026");
-        ImGui::PopStyleColor();
-
-        ImGui::Spacing();
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.650f, 0.650f, 0.650f, 1.0f));
-        ImGui::TextUnformatted("Formato y datos bíblicos (XML):");
-        ImGui::PopStyleColor();
-
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.350f, 0.650f, 0.950f, 1.0f));
-        if (ImGui::Selectable("Beblia (Holy-Bible-XML-Format)##bible_credit", false, ImGuiSelectableFlags_DontClosePopups)) {
-            ProyecThor::External::OpenURL("https://github.com/Beblia/Holy-Bible-XML-Format");
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Abrir https://github.com/Beblia/Holy-Bible-XML-Format en el navegador");
-        }
-        ImGui::PopStyleColor();
-
-        ImGui::Spacing();
-        ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.180f, 0.185f, 0.230f, 1.0f));
-        ImGui::Separator();
-        ImGui::PopStyleColor();
-        ImGui::Spacing();
-
-        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.240f, 0.200f, 0.085f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.500f, 0.415f, 0.180f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.650f, 0.530f, 0.220f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.920f, 0.820f, 0.560f, 1.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(16.0f, 6.0f));
-
-        if (ImGui::Button(str.close)) {
-            ImGui::CloseCurrentPopup();
-            g_ShowAbout = false;
-        }
-
-        ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor(4);
-        ImGui::SetItemDefaultFocus();
-        ImGui::EndPopup();
+    if (g_ShowAbout) {
+        RequestHelp(1); // Categoría 1 = Acerca de y Créditos
+        g_ShowAbout = false;
     }
 
-    ImGui::PopStyleVar(2);
-    ImGui::PopStyleColor(2);
+    if (m_ShowHelp)
+        m_HelpPanel.Render(&m_ShowHelp);
+
+    if (m_ShowDebug && ProyecThor::Core::AuthLicenseManager::Get().IsAdmin())
+        m_DebugPanel.Render(&m_ShowDebug);
 
    EndDockspace();
-}
-
-static void RenderSocialQrMenu(const char* url)
-{
-    ImGui::Text("Escanea con tu celular:");
-    ImGui::Spacing();
-
-    static const char* s_CachedUrl = nullptr;
-    static qrcodegen::QrCode s_CachedQr = qrcodegen::QrCode::encodeText(" ", qrcodegen::QrCode::Ecc::MEDIUM);
-
-    if (s_CachedUrl != url)
-    {
-        s_CachedQr = qrcodegen::QrCode::encodeText(url, qrcodegen::QrCode::Ecc::MEDIUM);
-        s_CachedUrl = url;
-    }
-
-    int qrSize = s_CachedQr.getSize();
-    float cellSize = 5.0f;
-    float margin = cellSize * 2.0f;
-    float totalSize = (qrSize * cellSize) + (margin * 2.0f);
-
-    ImVec2 pos = ImGui::GetCursorScreenPos();
-    ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-    drawList->AddRectFilled(pos, ImVec2(pos.x + totalSize, pos.y + totalSize), IM_COL32(255, 255, 255, 255));
-
-    for (int y = 0; y < qrSize; y++) {
-        for (int x = 0; x < qrSize; x++) {
-            if (s_CachedQr.getModule(x, y)) {
-                ImVec2 minP(pos.x + margin + (x * cellSize), pos.y + margin + (y * cellSize));
-                ImVec2 maxP(pos.x + margin + ((x + 1) * cellSize), pos.y + margin + ((y + 1) * cellSize));
-                drawList->AddRectFilled(minP, maxP, IM_COL32(0, 0, 0, 255));
-            }
-        }
-    }
-
-    ImGui::Dummy(ImVec2(totalSize, totalSize));
-
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
-
-    if (ImGui::Button("Abrir en el navegador", ImVec2(totalSize, 0)))
-        ProyecThor::External::OpenURL(url);
 }
 
 void UIManager::ToggleFullscreen()
@@ -1356,6 +1252,11 @@ void UIManager::RenderModeToolbar()
 
     auto& general = ProyecThor::Settings::SettingsManager::Get().GetSettings().general;
     const auto& str = ProyecThor::UI::GetUIStrings();
+    const bool isEnTb = (general.language == ProyecThor::Settings::Language::English);
+    const bool isPtTb = (general.language == ProyecThor::Settings::Language::Portuguese);
+    auto trTb = [isEnTb, isPtTb](const char* es, const char* en, const char* pt) -> const char* {
+        return isEnTb ? en : (isPtTb ? pt : es);
+    };
 
     ImGuiViewport* vp     = ImGui::GetMainViewport();
     const bool     showLbl = false; // Barra superior en modo compacto solo iconos (sin titulos debajo)
@@ -1627,7 +1528,7 @@ void UIManager::RenderModeToolbar()
         // ── Isla 1: Contenido (Librería, Overlays, Biblia, Canva, Reloj) ───
         std::vector<IslandItem> island1 = {
             {
-                "Librería",
+                trTb("Biblioteca", "Library", "Biblioteca"),
                 AppIcons::DrawIcon_Layers,
                 [this]() {
                     return !IsPanelCollapsed(0) && !IsAnyToolWindowOpen() &&
@@ -1669,7 +1570,7 @@ void UIManager::RenderModeToolbar()
                 IM_COL32(249, 115, 22, 255) // Naranja brillante
             },
             {
-                "Biblia",
+                trTb("Biblia", "Bible", "Bíblia"),
                 Library::DrawIcon_Cross,
                 [this]() {
                     return !IsAnyToolWindowOpen() &&
@@ -1714,7 +1615,7 @@ void UIManager::RenderModeToolbar()
         }
 
         island1.push_back({
-            "Captura",
+            trTb("Captura", "Capture", "Captura"),
             HomeIcons::DrawIcon_Camera,
             [this]() {
                 return !IsAnyToolWindowOpen() &&
@@ -1736,7 +1637,7 @@ void UIManager::RenderModeToolbar()
         // ── Isla Diseño: Estilos, Shaders, Transiciones, Pads, Tiles ───
         std::vector<IslandItem> islandDesign = {
             {
-                "Estilos",
+                trTb("Estilos", "Styles", "Estilos"),
                 AppIcons::DrawIcon_TextAa,
                 [this]() { return m_ShowStylesWindow; },
                 [this]() {
@@ -1747,7 +1648,7 @@ void UIManager::RenderModeToolbar()
                 IM_COL32(168, 85, 247, 255) // Púrpura vibrante
             },
             {
-                "Shaders",
+                trTb("Shaders", "Shaders", "Shaders"),
                 AppIcons::DrawIcon_Shader,
                 [this]() { return m_ShowShadersWindow; },
                 [this]() {
@@ -1758,7 +1659,7 @@ void UIManager::RenderModeToolbar()
                 IM_COL32(56, 189, 248, 255) // Cyan celeste
             },
             {
-                "Transiciones",
+                trTb("Transiciones", "Transitions", "Transições"),
                 AppIcons::DrawIcon_Swap,
                 [this]() { return m_ShowTransitionsWindow; },
                 [this]() {
@@ -1769,7 +1670,7 @@ void UIManager::RenderModeToolbar()
                 IM_COL32(244, 63, 94, 255) // Rojo coral
             },
             {
-                "Tiles",
+                trTb("Tiles", "Tiles", "Mosaicos"),
                 AppIcons::DrawIcon_Tiles,
                 [this]() { return m_ShowTilesWindow; },
                 [this]() {
@@ -1784,7 +1685,7 @@ void UIManager::RenderModeToolbar()
         // ── Isla 2: Utilidades (Notas, Voz, Chat, Anuncios) ──
         std::vector<IslandItem> island2 = {
             {
-                "Notas",
+                trTb("Notas", "Notes", "Notas"),
                 HomeIcons::DrawIcon_Notepad,
                 [this]() { return m_ShowNotes; },
                 [this]() {
@@ -1795,7 +1696,7 @@ void UIManager::RenderModeToolbar()
                 IM_COL32(250, 204, 21, 255) // Amarillo sol
             },
             {
-                "Voz",
+                trTb("Voz", "Voice", "Voz"),
                 HomeIcons::DrawIcon_Microphone,
                 [this]() { return m_ShowVoiceAssistant || Core::VoiceAssistant::Get().IsRunning(); },
                 [this]() {
@@ -1806,7 +1707,7 @@ void UIManager::RenderModeToolbar()
                 IM_COL32(244, 63, 94, 255) // Rojo coral
             },
             {
-                "Chat",
+                trTb("Chat", "Chat", "Conversa"),
                 HomeIcons::DrawIcon_Chat,
                 [this]() { return m_ShowChatWindow; },
                 [this]() {
@@ -1817,7 +1718,7 @@ void UIManager::RenderModeToolbar()
                 IM_COL32(16, 185, 129, 255) // Verde esmeralda Chat
             },
             {
-                "Anuncios",
+                trTb("Anuncios", "Announcements", "Anúncios"),
                 HomeIcons::DrawIcon_Megaphone,
                 [this]() { return m_ShowAnnouncementsWindow; },
                 [this]() {
@@ -1832,7 +1733,7 @@ void UIManager::RenderModeToolbar()
         // ── Isla 3: Cuenta/Pro - Configuración - Ayuda ────────────
         auto& authMgr = ProyecThor::Core::AuthLicenseManager::Get();
         const bool isProActive = authMgr.IsPro();
-        const char* accountLabel = isProActive ? "Pro" : (authMgr.IsLoggedIn() ? "Cuenta" : "Cuenta");
+        const char* accountLabel = isProActive ? "Pro" : trTb("Cuenta", "Account", "Conta");
         ImU32 accountCol = isProActive
             ? IM_COL32(245, 180, 50, 255)  // Dorado Pro
             : IM_COL32(70, 195, 220, 255);  // Cyan
@@ -1849,7 +1750,7 @@ void UIManager::RenderModeToolbar()
                 accountCol
             },
             {
-                "Configuración",
+                trTb("Configuración", "Settings", "Definições"),
                 AppIcons::DrawIcon_Settings,
                 [this]() { return m_ShowConfig && m_SettingsPanel.GetSelectedCategory() != 10; },
                 [this]() {
@@ -1860,16 +1761,29 @@ void UIManager::RenderModeToolbar()
                 IM_COL32(99, 102, 241, 255) // Índigo elegante
             },
             {
-                "Ayuda",
+                trTb("Ayuda", "Help", "Ajuda"),
                 AppIcons::DrawIcon_Help,
-                []() { return ImGui::IsPopupOpen("##modeTbHelpPopup"); },
+                [this]() { return m_ShowHelp; },
                 [this]() {
-                    CloseAllToolWindows();
-                    ImGui::OpenPopup("##modeTbHelpPopup");
+                    ToggleHelp();
                 },
                 IM_COL32(45, 212, 191, 255) // Verde turquesa / menta
             }
         };
+
+        if (authMgr.IsAdmin()) {
+            island3.push_back({
+                trTb("Debug", "Debug", "Debug"),
+                AppIcons::DrawIcon_Debug,
+                [this]() { return m_ShowDebug; },
+                [this]() {
+                    bool wasOpen = m_ShowDebug;
+                    CloseAllToolWindows();
+                    m_ShowDebug = !wasOpen;
+                },
+                IM_COL32(239, 68, 68, 255) // Carmesí vibrante de Debug Admin
+            });
+        }
 
         // ── Medir ancho de la isla de estado en vivo (Preview / Conexiones / Público / Stage / Borrar Todo) ──
         const int statusCount = isProActive ? 5 : 4;
@@ -1938,7 +1852,7 @@ void UIManager::RenderModeToolbar()
                 IM_COL32(245, 158, 11, 255) // Dorado / Estadísticas
             },
             {
-                "Cancionero Nube",
+                trTb("Cancionero Nube", "Cloud Songs", "Canções na Nuvem"),
                 AppIcons::DrawIcon_CloudDocument,
                 [this]() { return m_ShowProCloudSongs; },
                 [this, isProActive]() {
@@ -1956,7 +1870,7 @@ void UIManager::RenderModeToolbar()
                 IM_COL32(56, 189, 248, 255) // Azul cielo / Cancionero Nube
             },
             {
-                "Chat IA",
+                trTb("Chat IA", "AI Chat", "Chat IA"),
                 AppIcons::DrawIcon_Sparkle,
                 [this]() { return m_ShowProAIChat; },
                 [this, isProActive]() {
@@ -2037,67 +1951,6 @@ void UIManager::RenderModeToolbar()
         RenderIsland("island2", island2, island2X);
         RenderIsland("islandPro", islandPro, islandProX);
         RenderIsland("island3", island3, island3X);
-
-        // ── Menú desplegable Ayuda ───────────────────────────────────────
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(8.0f, 4.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 8.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,   ImVec2(8.0f, 6.0f));
-        ImGui::PushStyleColor(ImGuiCol_PopupBg,          ImGui::ColorConvertU32ToFloat4(DS::GlassFillTop));
-        ImGui::PushStyleColor(ImGuiCol_Header,           ImVec4(0.20f, 0.40f, 0.85f, 0.45f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered,    ImVec4(0.25f, 0.48f, 0.95f, 0.65f));
-
-        if (ImGui::BeginPopup("##modeTbHelpPopup"))
-        {
-            ImGui::Spacing();
-            if (ImGui::MenuItem("Notas de versión (PatchNotes)", "Ctrl+Alt+N"))
-                m_ShowPatchNotesModal = true;
-
-            if (ImGui::MenuItem(str.menuDocs, "F1"))
-                ProyecThor::External::OpenURL("https://proyecthor.web.app/");
-
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.345f, 0.403f, 0.941f, 1.0f));
-            if (ImGui::MenuItem("Reporte de bugs"))
-                ProyecThor::External::OpenURL("https://github.com/TheVixcho/ProyecThor/issues");
-            ImGui::PopStyleColor();
-
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.145f, 0.827f, 0.400f, 1.0f));
-            bool whatsappOpen = ImGui::BeginMenu("Canal de WhatsApp");
-            ImGui::PopStyleColor();
-            if (whatsappOpen)
-            {
-                const char* whatsappUrl = "https://whatsapp.com/channel/0029Vb7e9tj3WHTdNivIxR19";
-                RenderSocialQrMenu(whatsappUrl);
-                ImGui::EndMenu();
-            }
-
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.290f, 0.780f, 0.490f, 1.0f));
-            bool mobileAppOpen = ImGui::BeginMenu("App móvil (control remoto)");
-            ImGui::PopStyleColor();
-            if (mobileAppOpen)
-            {
-                const char* mobileAppUrl = "https://play.google.com/store/apps/details?id=the.proyecthor.mobile";
-                RenderSocialQrMenu(mobileAppUrl);
-                ImGui::EndMenu();
-            }
-
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.886f, 0.753f, 0.408f, 1.0f));
-            if (ImGui::MenuItem(str.menuDonations))
-                ProyecThor::External::OpenURL("https://ko-fi.com/vixcho");
-            ImGui::PopStyleColor();
-
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-
-            if (ImGui::MenuItem(str.menuAbout))
-                g_ShowAbout = true;
-
-            ImGui::Spacing();
-            ImGui::EndPopup();
-        }
-
-        ImGui::PopStyleColor(3);
-        ImGui::PopStyleVar(3);
     }
 
     RenderModeToolbarStatusActions(statusPosScreenX, railH);
@@ -2112,6 +1965,12 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
 {
     auto& core = Core::PresentationCore::Get();
     auto& sd   = ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay;
+    auto langSt = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language;
+    const bool isEnSt = (langSt == ProyecThor::Settings::Language::English);
+    const bool isPtSt = (langSt == ProyecThor::Settings::Language::Portuguese);
+    auto trSt = [isEnSt, isPtSt](const char* es, const char* en, const char* pt) -> const char* {
+        return isEnSt ? en : (isPtSt ? pt : es);
+    };
     auto& authMgr = ProyecThor::Core::AuthLicenseManager::Get();
     const bool isPro = authMgr.IsPro();
 
@@ -2204,7 +2063,7 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
             }
 
             if (hovered && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
-                ImGui::SetTooltip(m_ShowMediaPreviewWindow ? "Vista Previa Abierta (Clic para cerrar)" : "Abrir Vista Previa de Multimedia");
+                ImGui::SetTooltip("%s", m_ShowMediaPreviewWindow ? trSt("Vista Previa Abierta (Clic para cerrar)", "Preview Open (Click to close)", "Pré-visualização aberta (Clique para fechar)") : trSt("Abrir Vista Previa de Multimedia", "Open Media Preview", "Abrir Pré-visualização de Multimédia"));
             }
         }
         else if (itemIdx == 1) {
@@ -2251,7 +2110,7 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
             }
 
             if (hovered && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
-                ImGui::SetTooltip(m_ShowConnectionsWindow ? "Centro de Conexiones y Reloj (Clic para cerrar)" : "Centro de Conexiones y Reloj (Red, Móvil, Streaming, OSC, Reloj, Chat)");
+                ImGui::SetTooltip("%s", m_ShowConnectionsWindow ? trSt("Centro de Conexiones y Reloj (Clic para cerrar)", "Connections & Clock Center (Click to close)", "Centro de Conexões e Relógio (Clique para fechar)") : trSt("Centro de Conexiones y Reloj (Red, Móvil, Streaming, OSC, Reloj, Chat)", "Connections & Clock Center (Network, Mobile, Streaming, OSC, Clock, Chat)", "Centro de Conexões e Relógio (Rede, Móvel, Streaming, OSC, Relógio, Conversa)"));
             }
         }
         else if (itemIdx == 2) {
@@ -2283,7 +2142,7 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
             }
 
             if (hovered && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
-                ImGui::SetTooltip(audienceOn ? "Público en Vivo (Clic para detener)" : "Proyectar a Pantalla de Público");
+                ImGui::SetTooltip("%s", audienceOn ? trSt("Público en Vivo (Clic para detener)", "Audience Live (Click to stop)", "Público em Direto (Clique para parar)") : trSt("Proyectar a Pantalla de Público", "Project to Audience Display", "Projetar para Ecrã do Público"));
             }
         }
         else if (isPro && itemIdx == 3) {
@@ -2315,7 +2174,7 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
             }
 
             if (hovered && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
-                ImGui::SetTooltip(stageOn ? "Monitor de Escenario Activo (Clic para detener)" : "Transmitir a Monitor de Escenario (Stage Display)");
+                ImGui::SetTooltip("%s", stageOn ? trSt("Monitor de Escenario Activo (Clic para detener)", "Stage Display Active (Click to stop)", "Monitor de Palco Ativo (Clique para parar)") : trSt("Transmitir a Monitor de Escenario (Stage Display)", "Cast to Stage Display", "Transmitir para Monitor de Palco (Stage Display)"));
             }
         }
         else {
@@ -2353,7 +2212,7 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
             }
 
             if (hovered && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
-                ImGui::SetTooltip("Borrar Todo (Limpiar proyecciones en vivo)");
+                ImGui::SetTooltip("%s", trSt("Borrar Todo (Limpiar proyecciones en vivo)", "Clear All (Clear live projections)", "Limpar Tudo (Limpar projeções em direto)"));
             }
         }
     }
@@ -2432,7 +2291,7 @@ void UIManager::ToggleStageQuick(bool active)
 
 bool UIManager::IsAnyToolWindowOpen() const
 {
-    return m_ShowNotes || m_ShowConnectionsWindow || m_ShowConfig || m_ShowVoiceAssistant || m_ShowAIAssistant ||
+    return m_ShowNotes || m_ShowConnectionsWindow || m_ShowConfig || m_ShowHelp || m_ShowDebug || m_ShowVoiceAssistant || m_ShowAIAssistant ||
            m_ShowProCloudSongs || m_ShowProAIChat || m_ShowProImageGen ||
            m_ShowStylesWindow || m_ShowShadersWindow || m_ShowTransitionsWindow || m_ShowAnnouncementsWindow ||
            m_ShowPadsWindow || m_ShowTilesWindow || m_ShowChatWindow;
@@ -2445,6 +2304,8 @@ void UIManager::CloseAllToolWindows()
     m_ShowNotes               = false;
     m_ShowConnectionsWindow   = false;
     m_ShowConfig              = false;
+    m_ShowHelp                = false;
+    m_ShowDebug               = false;
     m_ShowVoiceAssistant      = false;
     m_ShowAIAssistant         = false;
     m_ShowProCloudSongs       = false;
@@ -2491,7 +2352,9 @@ void UIManager::RenderNotesWindow()
     floatingClass.DockingAllowUnclassed = false;
     ImGui::SetNextWindowClass(&floatingClass);
 
-    bool open = DS::BeginGlassPanel("Notas", m_GlassRenderer, &m_ShowNotes,
+    auto langNw = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language;
+    const char* notesTitle = (langNw == ProyecThor::Settings::Language::English) ? "Notes###NotesWin" : "Notas###NotesWin";
+    bool open = DS::BeginGlassPanel(notesTitle, m_GlassRenderer, &m_ShowNotes,
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking,
         ImVec2(16.0f, 14.0f));
 
@@ -2621,7 +2484,15 @@ void UIManager::RenderConnectionsWindow()
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,   theme.windowRounding);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 
-    bool open = ImGui::Begin("Centro de Conexiones", &m_ShowConnectionsWindow,
+    auto langCw = mgr.GetSettings().general.language;
+    const bool isEnCw = (langCw == ProyecThor::Settings::Language::English);
+    const bool isPtCw = (langCw == ProyecThor::Settings::Language::Portuguese);
+    auto trCw = [isEnCw, isPtCw](const char* es, const char* en, const char* pt) -> const char* {
+        return isEnCw ? en : (isPtCw ? pt : es);
+    };
+
+    const char* connWinTitle = trCw("Centro de Conexiones###ConnHub", "Connections Center###ConnHub", "Centro de Conexões###ConnHub");
+    bool open = ImGui::Begin(connWinTitle, &m_ShowConnectionsWindow,
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking);
 
@@ -2646,21 +2517,21 @@ void UIManager::RenderConnectionsWindow()
 
         ConnTabDef tabsDef[6] = {
             {
-                "Red (LAN)",
-                "Control remoto en navegadores web y dispositivos en la red local WiFi",
+                trCw("Red (LAN)", "Network (LAN)", "Rede (LAN)"),
+                trCw("Control remoto en navegadores web y dispositivos en la red local WiFi", "Remote control in web browsers and devices on the local WiFi network", "Controlo remoto em navegadores web e dispositivos na rede local WiFi"),
                 IM_COL32(56, 189, 248, 255), // Azul cielo
                 lanActive,
-                lanActive ? "En línea :8080" : "Detenido",
+                lanActive ? trCw("En línea :8080", "Online :8080", "Ligado :8080") : trCw("Detenido", "Stopped", "Parado"),
                 [](ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
                     HomeIcons::DrawIcon_Broadcast(dl, ImVec2(c.x - r, c.y - r), r * 2.0f, col);
                 }
             },
             {
-                "App Móvil",
-                "Sincronización en vivo con la app complementaria ProyecThor Mobile",
+                trCw("App Móvil", "Mobile App", "App Móvel"),
+                trCw("Sincronización en vivo con la app complementaria ProyecThor Mobile", "Live sync with companion app ProyecThor Mobile", "Sincronização em direto com a app complementar ProyecThor Mobile"),
                 IM_COL32(168, 85, 247, 255), // Púrpura
                 syncActive,
-                syncActive ? "Sincronizado" : "Inactivo",
+                syncActive ? trCw("Sincronizado", "Synced", "Sincronizado") : trCw("Inactivo", "Inactive", "Inativo"),
                 [](ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
                     float pw = r * 1.15f;
                     float ph = r * 1.75f;
@@ -2670,11 +2541,11 @@ void UIManager::RenderConnectionsWindow()
                 }
             },
             {
-                "Transmisión",
-                "Emisión en directo RTMP para OBS, YouTube, Facebook y Twitch",
+                trCw("Transmisión", "Streaming", "Transmissão"),
+                trCw("Emisión en directo RTMP para OBS, YouTube, Facebook y Twitch", "Live RTMP broadcast for OBS, YouTube, Facebook and Twitch", "Emissão em direto RTMP para OBS, YouTube, Facebook e Twitch"),
                 IM_COL32(239, 68, 68, 255), // Rojo coral
                 bcastActive,
-                bcastActive ? "Emitiendo en vivo" : "En espera",
+                bcastActive ? trCw("Emitiendo en vivo", "Broadcasting live", "A emitir em direto") : trCw("En espera", "Standby", "Em espera"),
                 [](ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
                     dl->AddLine(ImVec2(c.x, c.y - r * 0.8f), ImVec2(c.x, c.y + r * 0.8f), col, 1.4f);
                     dl->AddCircleFilled(ImVec2(c.x, c.y - r * 0.8f), 2.2f, col);
@@ -2687,8 +2558,8 @@ void UIManager::RenderConnectionsWindow()
                 }
             },
             {
-                "Control OSC",
-                "Control mediante consolas digitales de audio, iluminación y Stream Deck",
+                trCw("Control OSC", "OSC Control", "Controlo OSC"),
+                trCw("Control mediante consolas digitales de audio, iluminación y Stream Deck", "Control via digital audio consoles, lighting and Stream Deck", "Controlo através de mesas de som digitais, iluminação e Stream Deck"),
                 IM_COL32(34, 197, 94, 255), // Verde esmeralda
                 oscActive,
                 ":8000 / :9000",
@@ -2703,21 +2574,21 @@ void UIManager::RenderConnectionsWindow()
                 }
             },
             {
-                "Reloj y Contadores",
-                "Reloj en vivo, cronómetro y cuenta regresiva transmitidos a red y pantalla",
+                trCw("Reloj y Contadores", "Clock & Timers", "Relógio e Contadores"),
+                trCw("Reloj en vivo, cronómetro y cuenta regresiva transmitidos a red y pantalla", "Live clock, stopwatch and countdown streamed to network and screen", "Relógio em direto, cronómetro e contagem decrescente transmitidos para a rede e ecrã"),
                 IM_COL32(245, 158, 11, 255), // Ámbar reloj
                 clockLive,
-                clockLive ? "Transmitiendo" : "Listo",
+                clockLive ? trCw("Transmitiendo", "Transmitting", "A transmitir") : trCw("Listo", "Ready", "Pronto"),
                 [](ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
                     HomeIcons::DrawIcon_Clock(dl, ImVec2(c.x - r, c.y - r), r * 2.0f, col);
                 }
             },
             {
-                "Chat de Equipo",
-                "Mensajería instantánea interna para el equipo técnico en red local",
+                trCw("Chat de Equipo", "Team Chat", "Conversa de Equipa"),
+                trCw("Mensajería instantánea interna para el equipo técnico en red local", "Internal instant messaging for technical crew on local network", "Mensagens instantâneas internas para a equipa técnica em rede local"),
                 IM_COL32(16, 185, 129, 255), // Verde menta
                 chatActive,
-                "Red local",
+                trCw("Red local", "Local network", "Rede local"),
                 [](ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
                     HomeIcons::DrawIcon_Chat(dl, ImVec2(c.x - r, c.y - r), r * 2.0f, col);
                 }
@@ -2788,7 +2659,7 @@ void UIManager::RenderConnectionsWindow()
 
             // Badge / Chip de estado a la derecha
             bool curActive = tabsDef[m_ConnectionsActiveTab].isActive;
-            const char* statusBadgeText = curActive ? "● EN VIVO / CONECTADO" : "○ DETENIDO / EN ESPERA";
+            const char* statusBadgeText = curActive ? trCw("● EN VIVO / CONECTADO", "● LIVE / CONNECTED", "● EM DIRETO / LIGADO") : trCw("○ DETENIDO / EN ESPERA", "○ STOPPED / STANDBY", "○ PARADO / EM ESPERA");
             ImVec2 badgeTxtSz = ImGui::CalcTextSize(statusBadgeText);
             float chipW = badgeTxtSz.x + 20.0f;
             float chipH = 26.0f;
@@ -2809,8 +2680,9 @@ void UIManager::RenderConnectionsWindow()
 
         // Área de contenido scrollable
         float scrollH = islandH - headerH - footerH;
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28.0f, 20.0f));
-        ImGui::BeginChild("##conn_content_scroll", ImVec2(contentW, scrollH), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(28.0f, 22.0f));
+        ImGui::BeginChild("##conn_content_scroll", ImVec2(contentW, scrollH), ImGuiChildFlags_AlwaysUseWindowPadding);
+        ImGui::PopStyleVar();
 
         switch (m_ConnectionsActiveTab) {
             case 0: // Red LAN
@@ -2844,7 +2716,6 @@ void UIManager::RenderConnectionsWindow()
         }
 
         ImGui::EndChild();
-        ImGui::PopStyleVar();
 
         // Barra inferior (chips de estado + botón cerrar)
         {
@@ -2871,7 +2742,7 @@ void UIManager::RenderConnectionsWindow()
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ConnThemeCol(theme.surface3, 0.9f));
             ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ConnThemeCol(theme.accent, 0.9f));
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, theme.frameRounding);
-            if (ImGui::Button("Cerrar", ImVec2(btnW, btnH))) {
+            if (ImGui::Button(trCw("Cerrar", "Close", "Fechar"), ImVec2(btnW, btnH))) {
                 m_ShowConnectionsWindow = false;
             }
             ImGui::PopStyleVar();
@@ -3123,7 +2994,10 @@ void UIManager::RenderStylesWindow()
     floatingClass.DockingAllowUnclassed = false;
     ImGui::SetNextWindowClass(&floatingClass);
 
-    bool open = DS::BeginGlassPanel("Estilos de Diapositiva", m_GlassRenderer, &m_ShowStylesWindow,
+    auto langSw = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language;
+    const char* stylesTitle = (langSw == ProyecThor::Settings::Language::English) ? "Slide Styles###StylesWin" :
+                             ((langSw == ProyecThor::Settings::Language::Portuguese) ? "Estilos de Diapositivo###StylesWin" : "Estilos de Diapositiva###StylesWin");
+    bool open = DS::BeginGlassPanel(stylesTitle, m_GlassRenderer, &m_ShowStylesWindow,
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking,
         ImVec2(16.0f, 14.0f));
 
@@ -3162,7 +3036,10 @@ void UIManager::RenderShadersWindow()
     floatingClass.DockingAllowUnclassed = false;
     ImGui::SetNextWindowClass(&floatingClass);
 
-    bool open = DS::BeginGlassPanel("Efectos y Shaders", m_GlassRenderer, &m_ShowShadersWindow,
+    auto langSh = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language;
+    const char* shadersTitle = (langSh == ProyecThor::Settings::Language::English) ? "Effects & Shaders###ShadersWin" :
+                              ((langSh == ProyecThor::Settings::Language::Portuguese) ? "Efeitos e Shaders###ShadersWin" : "Efectos y Shaders###ShadersWin");
+    bool open = DS::BeginGlassPanel(shadersTitle, m_GlassRenderer, &m_ShowShadersWindow,
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking,
         ImVec2(16.0f, 14.0f));
 
@@ -3201,7 +3078,10 @@ void UIManager::RenderTransitionsWindow()
     floatingClass.DockingAllowUnclassed = false;
     ImGui::SetNextWindowClass(&floatingClass);
 
-    bool open = DS::BeginGlassPanel("Transiciones", m_GlassRenderer, &m_ShowTransitionsWindow,
+    auto langTr = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language;
+    const char* transTitle = (langTr == ProyecThor::Settings::Language::English) ? "Transitions###TransitionsWin" :
+                            ((langTr == ProyecThor::Settings::Language::Portuguese) ? "Transições###TransitionsWin" : "Transiciones###TransitionsWin");
+    bool open = DS::BeginGlassPanel(transTitle, m_GlassRenderer, &m_ShowTransitionsWindow,
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking,
         ImVec2(16.0f, 14.0f));
 
@@ -3242,7 +3122,10 @@ void UIManager::RenderAnnouncementsWindow()
     floatingClass.DockingAllowUnclassed = false;
     ImGui::SetNextWindowClass(&floatingClass);
 
-    bool open = DS::BeginGlassPanel("Anuncios y Mensajes en Pantalla", m_GlassRenderer, &m_ShowAnnouncementsWindow,
+    auto langAn = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language;
+    const char* annTitle = (langAn == ProyecThor::Settings::Language::English) ? "Screen Announcements###AnnounceWin" :
+                           ((langAn == ProyecThor::Settings::Language::Portuguese) ? "Anúncios no Ecrã###AnnounceWin" : "Anuncios y Mensajes en Pantalla###AnnounceWin");
+    bool open = DS::BeginGlassPanel(annTitle, m_GlassRenderer, &m_ShowAnnouncementsWindow,
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking,
         ImVec2(16.0f, 14.0f));
 
@@ -3281,7 +3164,10 @@ void UIManager::RenderPadsWindow()
     floatingClass.DockingAllowUnclassed = false;
     ImGui::SetNextWindowClass(&floatingClass);
 
-    bool open = DS::BeginGlassPanel("Pads de Escena y Estilo", m_GlassRenderer, &m_ShowPadsWindow,
+    auto langPd = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language;
+    const char* padsTitle = (langPd == ProyecThor::Settings::Language::English) ? "Scene & Style Pads###PadsWin" :
+                            ((langPd == ProyecThor::Settings::Language::Portuguese) ? "Pads de Cena e Estilo###PadsWin" : "Pads de Escena y Estilo###PadsWin");
+    bool open = DS::BeginGlassPanel(padsTitle, m_GlassRenderer, &m_ShowPadsWindow,
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking,
         ImVec2(16.0f, 14.0f));
 
@@ -3319,7 +3205,10 @@ void UIManager::RenderTilesWindow()
     floatingClass.DockingAllowUnclassed = false;
     ImGui::SetNextWindowClass(&floatingClass);
 
-    bool open = DS::BeginGlassPanel("Tiles (Pantalla Dividida)", m_GlassRenderer, &m_ShowTilesWindow,
+    auto langTl = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language;
+    const char* tilesTitle = (langTl == ProyecThor::Settings::Language::English) ? "Tiles (Split Screen)###TilesWin" :
+                            ((langTl == ProyecThor::Settings::Language::Portuguese) ? "Mosaicos (Ecrã Dividido)###TilesWin" : "Tiles (Pantalla Dividida)###TilesWin");
+    bool open = DS::BeginGlassPanel(tilesTitle, m_GlassRenderer, &m_ShowTilesWindow,
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking,
         ImVec2(16.0f, 14.0f));
 
@@ -3357,7 +3246,10 @@ void UIManager::RenderChatWindow()
     floatingClass.DockingAllowUnclassed = false;
     ImGui::SetNextWindowClass(&floatingClass);
 
-    bool open = DS::BeginGlassPanel("Chat de Equipo", m_GlassRenderer, &m_ShowChatWindow,
+    auto langCh = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language;
+    const char* chatTitle = (langCh == ProyecThor::Settings::Language::English) ? "Team Chat###ChatWin" :
+                           ((langCh == ProyecThor::Settings::Language::Portuguese) ? "Conversa de Equipa###ChatWin" : "Chat de Equipo###ChatWin");
+    bool open = DS::BeginGlassPanel(chatTitle, m_GlassRenderer, &m_ShowChatWindow,
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking,
         ImVec2(16.0f, 14.0f));
 
@@ -3492,9 +3384,11 @@ void UIManager::BeginDockspace()
     // conocer a UIManager (solo escribe el setting, esto lo detecta solo).
     {
         int currentPreset = (int)ProyecThor::Settings::SettingsManager::Get().GetSettings().workspace.layoutPreset;
-        if (currentPreset != m_LastWorkspacePreset)
+        int currentLang   = (int)ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language;
+        if (currentPreset != m_LastWorkspacePreset || currentLang != m_LastLanguage)
         {
             m_LastWorkspacePreset = currentPreset;
+            m_LastLanguage        = currentLang;
             m_ResetLayout         = true;
         }
     }
@@ -3550,9 +3444,16 @@ void UIManager::BuildWorkspaceLayoutClassic(ImGuiID dockspace_id)
     ImGuiID dock_left, dock_main_area;
     ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Left, 0.347f, &dock_left, &dock_main_area);
 
-    ImGui::DockBuilderDockWindow(str.library,        dock_left);
-    ImGui::DockBuilderDockWindow("Home",             dock_main_area);
-    ImGui::DockBuilderDockWindow("Vista en Vivo",    dock_right);
+    ImGui::DockBuilderDockWindow("###Panel_Library", dock_left);
+    ImGui::DockBuilderDockWindow("Library",          dock_left);
+    ImGui::DockBuilderDockWindow("Biblioteca",       dock_left);
+    if (str.library && str.library[0] != '\0')
+        ImGui::DockBuilderDockWindow(str.library,    dock_left);
+    ImGui::DockBuilderDockWindow("Home",              dock_main_area);
+    ImGui::DockBuilderDockWindow("###Panel_LiveView", dock_right);
+    ImGui::DockBuilderDockWindow("Vista en Vivo",     dock_right);
+    ImGui::DockBuilderDockWindow("Live View",         dock_right);
+    ImGui::DockBuilderDockWindow("Em Direto",         dock_right);
 
     ImGuiID leafNodes[] = { dock_left, dock_main_area, dock_right };
     for (ImGuiID nodeId : leafNodes)
@@ -3581,9 +3482,16 @@ void UIManager::BuildWorkspaceLayoutSimple(ImGuiID dockspace_id)
     ImGuiID dock_right;
     ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.32f, &dock_right, &dock_main);
 
-    ImGui::DockBuilderDockWindow(str.library,        dock_left_top);
-    ImGui::DockBuilderDockWindow("Home",             dock_main);
-    ImGui::DockBuilderDockWindow("Vista en Vivo",    dock_right);
+    ImGui::DockBuilderDockWindow("###Panel_Library", dock_left_top);
+    ImGui::DockBuilderDockWindow("Library",          dock_left_top);
+    ImGui::DockBuilderDockWindow("Biblioteca",       dock_left_top);
+    if (str.library && str.library[0] != '\0')
+        ImGui::DockBuilderDockWindow(str.library,    dock_left_top);
+    ImGui::DockBuilderDockWindow("Home",              dock_main);
+    ImGui::DockBuilderDockWindow("###Panel_LiveView", dock_right);
+    ImGui::DockBuilderDockWindow("Vista en Vivo",     dock_right);
+    ImGui::DockBuilderDockWindow("Live View",         dock_right);
+    ImGui::DockBuilderDockWindow("Em Direto",         dock_right);
 
     ImGuiID leafNodes[] = { dock_left_top, dock_left_bottom, dock_main, dock_right };
     for (ImGuiID nodeId : leafNodes)
@@ -3631,8 +3539,12 @@ void UIManager::BuildWorkspaceLayoutLibrary(ImGuiID dockspace_id)
     ImGuiID dock_left;
     ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Left, 0.30f, &dock_left, &dock_main);
 
-    ImGui::DockBuilderDockWindow(str.library, dock_left);
-    ImGui::DockBuilderDockWindow("Home",      dock_main);
+    ImGui::DockBuilderDockWindow("###Panel_Library", dock_left);
+    ImGui::DockBuilderDockWindow("Library",          dock_left);
+    ImGui::DockBuilderDockWindow("Biblioteca",       dock_left);
+    if (str.library && str.library[0] != '\0')
+        ImGui::DockBuilderDockWindow(str.library,    dock_left);
+    ImGui::DockBuilderDockWindow("Home",             dock_main);
 
     ImGuiID leafNodes[] = { dock_left, dock_main };
     for (ImGuiID nodeId : leafNodes)
@@ -3666,9 +3578,9 @@ void UIManager::BuildWorkspaceLayoutVideo(ImGuiID dockspace_id)
 bool UIManager::IsPanelCollapsedForRender(const std::string& name) const
 {
     int idx = -1;
-    if      (name == "Library")        idx = 0; // Biblioteca
+    if      (name == "Library" || name == "Biblioteca" || name == "Panel_Library") idx = 0; // Biblioteca
     else if (name == "Diseño")          idx = 1;
-    else if (name == "Vista en Vivo")   idx = 2;
+    else if (name == "Vista en Vivo" || name == "Live View" || name == "Em Direto" || name == "Panel_LiveView")   idx = 2;
     else if (name == "Home")            idx = 3;
 
     if (idx < 0) return false;
@@ -3907,9 +3819,9 @@ void UIManager::RenderProFeatureModal()
             dl->AddRectFilled(cardP0, ImVec2(cardP0.x + cardInnerW, cardP0.y + cardInnerH), IM_COL32(245, 158, 11, 24), 6.0f);
             dl->AddRect(cardP0, ImVec2(cardP0.x + cardInnerW, cardP0.y + cardInnerH), IM_COL32(245, 158, 11, 140), 6.0f);
 
-            dl->AddText(ImVec2(cardP0.x + 12.0f, cardP0.y + 10.0f), IM_COL32(255, 215, 0, 255), "Suscripción ProyecThor PRO: $9.990 CLP / mes");
+            dl->AddText(ImVec2(cardP0.x + 12.0f, cardP0.y + 10.0f), IM_COL32(255, 215, 0, 255), "Suscripción ProyecThor PRO: $9.990 CLP / mes (1 dispositivo a la vez)");
             dl->AddText(ImVec2(cardP0.x + 12.0f, cardP0.y + 32.0f), IM_COL32(185, 205, 235, 255),
-                        "Incluye: MuninCloud (descargas R2 ilimitadas), Hugin Estadísticas,\nChat IA, Monitor Stage Display y Sincronización Multi-Sala.");
+                        "Incluye: Transparencias por LAN (OBS/vMix), Stage Display, Chat IA Gemini,\nCloud Storage 5,000+ canciones, Canva Connect y Sincronización Multi-Sala.");
             ImGui::Dummy(ImVec2(cardInnerW, cardInnerH));
         }
 
@@ -3929,6 +3841,73 @@ void UIManager::RenderProFeatureModal()
         ImGui::SameLine(0.0f, 12.0f);
         if (DS::GlassButton("Cerrar", ImVec2(100.0f, 32.0f))) {
             m_ShowProFeatureModal = false;
+        }
+    }
+    ImGui::End();
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(2);
+}
+
+void UIManager::RenderSessionKickedModal()
+{
+    auto& authMgr = ProyecThor::Core::AuthLicenseManager::Get();
+    if (!authMgr.IsSessionKicked()) return;
+
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float modalW = 540.0f;
+    const float modalH = 260.0f;
+
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(modalW, modalH), ImGuiCond_Always);
+
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.10f, 0.08f, 0.12f, 0.98f));
+    ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(0.95f, 0.35f, 0.35f, 0.95f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.8f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(24.0f, 20.0f));
+
+    bool open = true;
+    if (ImGui::Begin("Sesión Iniciada en Otro Equipo##KickedModal", &open,
+                     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize))
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.35f, 0.35f, 1.0f));
+        ImGui::TextUnformatted("⚠️  Sesión Activa en Otro Dispositivo");
+        ImGui::PopStyleColor();
+
+        ImGui::Separator();
+        ImGui::Dummy(ImVec2(0.0f, 6.0f));
+
+        std::string kickedDevice = authMgr.GetKickedByDevice();
+        if (kickedDevice.empty()) kickedDevice = "Otro equipo";
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.92f, 0.96f, 1.0f));
+        ImGui::TextWrapped("Se ha iniciado sesión con tu cuenta ProyecThor en otra computadora:");
+        ImGui::PopStyleColor();
+
+        ImGui::Dummy(ImVec2(0.0f, 4.0f));
+        ImGui::TextColored(ImVec4(0.35f, 0.80f, 1.0f, 1.0f), "💻 Equipo activo: %s", kickedDevice.c_str());
+
+        ImGui::Dummy(ImVec2(0.0f, 4.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.70f, 0.75f, 0.85f, 0.95f));
+        ImGui::TextWrapped("Tu suscripción ProyecThor for Professionals permite el uso en 1 PC a la vez. Por seguridad, las funciones Pro en este equipo han vuelto temporalmente a la Edición Base.");
+        ImGui::PopStyleColor();
+
+        ImGui::Dummy(ImVec2(0.0f, 14.0f));
+
+        // Botón 1: Reclamar sesión en este equipo
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.20f, 0.50f, 0.90f, 0.95f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.30f, 0.60f, 1.00f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+        if (ImGui::Button("Reactivar y usar en este PC", ImVec2(240.0f, 34.0f))) {
+            authMgr.ReclaimActiveSession();
+        }
+        ImGui::PopStyleColor(3);
+
+        ImGui::SameLine(0.0f, 12.0f);
+
+        // Botón 2: Continuar en Edición Base
+        if (DS::GlassButton("Continuar en Modo Base", ImVec2(180.0f, 34.0f))) {
+            authMgr.AcknowledgeSessionKicked();
         }
     }
     ImGui::End();

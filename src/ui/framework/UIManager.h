@@ -29,6 +29,8 @@
 #include "panels/CanvaPanel.h"
 #include "panels/MuninCloudPanel.h"
 #include "panels/HuginStatsPanel.h"
+#include "panels/HelpPanel.h"
+#include "panels/DebugPanel.h"
 #include "ui/views/QuickNotes.h"
 #include "core/SubtitleImporter.h"
 #include "core/PresentationCore.h"
@@ -170,6 +172,9 @@ uint64_t m_LastTransitionTrigger = 0;
     OSCPanel&       GetOSCPanel()       { return m_OSC; }
 
     void ToggleNotesWindow();
+    void ToggleHelp();
+    void RequestHelp(int initialCategory = 0);
+    bool IsHelpOpen() const { return m_ShowHelp; }
     void ToggleAIAssistant() { m_ShowAIAssistant = !m_ShowAIAssistant; }
     void ToggleVoiceAssistant() { m_ShowVoiceAssistant = !m_ShowVoiceAssistant; }
     void ToggleConnectionsWindow() { m_ShowConnectionsWindow = !m_ShowConnectionsWindow; }
@@ -323,6 +328,10 @@ private:
     std::vector<std::shared_ptr<IPanel>> m_Panels;
     bool                                 m_ShowConfig           = false;
     Settings::SettingsPanel              m_SettingsPanel;
+    bool                                 m_ShowHelp             = false;
+    HelpPanel                            m_HelpPanel;
+    bool                                 m_ShowDebug            = false;
+    DebugPanel                           m_DebugPanel;
     PerformancePanel                     m_PerformancePanel;
     ActiveLeftPanel                      m_ActiveLeftPanel      = ActiveLeftPanel::Library;
     std::shared_ptr<TransitionPanel>     m_TransitionPanelOwned;
@@ -338,6 +347,7 @@ private:
     // cambio, sin que la pagina de Ajustes necesite conocer a UIManager.
     // -1 = todavia no se aplico ninguno (fuerza el reset en el primer frame).
     int                                  m_LastWorkspacePreset  = -1;
+    int                                  m_LastLanguage         = -1;
     GlassRenderer                        m_GlassRenderer;
 
     // ── Pantalla completa (menu Ventana) ────────────────────────────────────
@@ -351,6 +361,7 @@ private:
     std::string   m_ProFeatureModalTitle;
     std::string   m_ProFeatureModalDesc;
     void          RenderProFeatureModal();
+    void          RenderSessionKickedModal();
     WorkspaceMode m_Mode = WorkspaceMode::Projector;
 
     // Ver LibraryPanel::SetMediaOnlyMode -- se sincroniza cada frame en

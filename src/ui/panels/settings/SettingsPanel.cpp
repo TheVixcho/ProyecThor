@@ -4,6 +4,7 @@
 #include "core/AuthLicenseManager.h"
 #include "ui/framework/DesignSystem.h"
 #include "ui/framework/AppIcons.h"
+#include "ui/framework/PatchNotesRenderer.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <GLFW/glfw3.h>
@@ -25,7 +26,7 @@ namespace ProyecThor::UI::Settings {
 
 // Icono mínimo por categoría, dibujado a mano con primitivas de ImDrawList
 // (sin depender de ningún PNG/asset externo) -- ver DrawCategoryIcon.
-enum class CatIcon { Palette, Sliders, Monitor, Cast, Speaker, MusicNote, Keyboard, Globe, Download, Storage, Account, Performance };
+enum class CatIcon { Palette, Sliders, Monitor, Cast, Speaker, MusicNote, Keyboard, Globe, Download, Storage, Account, Performance, Document };
 
 struct Category {
     const char* tag;
@@ -36,20 +37,21 @@ struct Category {
 };
 
 static const Category k_Categories[] = {
-    { "UI",  "Apariencia",      "Colores, fuentes y efectos visuales",     CatIcon::Palette,   IM_COL32(185, 130, 245, 255) }, // 0
-    { "PRY", "Proyección",      "Monitor, texto y márgenes",               CatIcon::Monitor,   IM_COL32( 70, 195, 220, 255) }, // 1
-    { "CNX", "Conexiones",      "Red, app móvil, streaming, OSC y reloj",  CatIcon::Cast,      IM_COL32(120, 160, 235, 255) }, // 2
-    { "STG", "Pantallas",       "Monitor de confianza para el equipo",     CatIcon::Sliders,   IM_COL32( 80, 205, 165, 255) }, // 3
-    { "SOU", "Audio",           "Volumen, dispositivo y fade",             CatIcon::Speaker,   IM_COL32(245, 165,  75, 255) }, // 4
-    { "SNG", "Canciones",       "Etiquetas y opciones de canciones",       CatIcon::MusicNote, IM_COL32(235, 105, 165, 255) }, // 5
-    { "KEY", "Teclas rápidas",  "Atajos de teclado disponibles",           CatIcon::Keyboard,  IM_COL32(230, 190,  70, 255) }, // 6
-    { "LNG", "Idioma",          "Idioma de la interfaz",                   CatIcon::Globe,     IM_COL32(100, 205, 110, 255) }, // 7
-    { "UPD", "Actualizaciones", "Versión instalada y canales",             CatIcon::Download,  IM_COL32(230, 100,  95, 255) }, // 8
-    { "DAT", "Datos",           "Ubicación de archivos y carpetas vinculadas", CatIcon::Storage, IM_COL32(245, 185,  65, 255) }, // 9
-    { "ACC", "Cuenta y Suscripción", "Inicio de sesión, suscripción Pro y licencias", CatIcon::Account, IM_COL32(245, 180,  50, 255) }, // 10
-    { "PRF", "Rendimiento",     "Modo bajo consumo, subprocesos y diagnóstico", CatIcon::Performance, IM_COL32( 50, 205, 140, 255) }, // 11
+    { "UI",  "Apariencia",            "Colores, fuentes y efectos visuales",            CatIcon::Palette,     IM_COL32(185, 130, 245, 255) }, // 0
+    { "PRY", "Proyección",            "Monitor, texto y márgenes",                      CatIcon::Monitor,     IM_COL32( 70, 195, 220, 255) }, // 1
+    { "CNX", "Conexiones",            "Red, app móvil, streaming, OSC y reloj",         CatIcon::Cast,        IM_COL32(120, 160, 235, 255) }, // 2
+    { "STG", "Pantallas",             "Monitor de confianza para el equipo",            CatIcon::Sliders,     IM_COL32( 80, 205, 165, 255) }, // 3
+    { "SOU", "Audio",                 "Volumen, dispositivo y fade",                    CatIcon::Speaker,     IM_COL32(245, 165,  75, 255) }, // 4
+    { "SNG", "Canciones",             "Etiquetas y opciones de canciones",              CatIcon::MusicNote,   IM_COL32(235, 105, 165, 255) }, // 5
+    { "KEY", "Teclas rápidas",        "Atajos de teclado disponibles",                  CatIcon::Keyboard,    IM_COL32(230, 190,  70, 255) }, // 6
+    { "LNG", "Idioma",                "Idioma de la interfaz",                          CatIcon::Globe,       IM_COL32(100, 205, 110, 255) }, // 7
+    { "UPD", "Actualizaciones",       "Comprobar e instalar actualizaciones",           CatIcon::Download,    IM_COL32(230, 100,  95, 255) }, // 8
+    { "DAT", "Datos",                 "Ubicación de archivos y carpetas vinculadas",    CatIcon::Storage,     IM_COL32(245, 185,  65, 255) }, // 9
+    { "ACC", "Cuenta y Suscripción",  "Inicio de sesión, suscripción Pro y licencias",  CatIcon::Account,     IM_COL32(245, 180,  50, 255) }, // 10
+    { "PRF", "Ahorro de energía",     "Modo ahorro de energía y memoria mínima",        CatIcon::Performance, IM_COL32( 50, 205, 140, 255) }, // 11
+    { "NOT", "Notas de versión",      "Historial completo de novedades y mejoras",      CatIcon::Document,    IM_COL32( 56, 189, 248, 255) }, // 12
 };
-static constexpr int k_CategoryCount = 12;
+static constexpr int k_CategoryCount = 13;
 
 // Dibuja un glifo simple y reconocible para 'icon', centrado en 'c', con
 // radio aproximado 'r' -- pensado para verse bien a ~8-9px de radio (18px
@@ -171,21 +173,144 @@ static void DrawCategoryIcon(ImDrawList* dl, CatIcon icon, ImVec2 c, float r, Im
             dl->AddLine(c, tip, color, 1.6f);
             break;
         }
+        case CatIcon::Document: {
+            ImVec2 mn(c.x - r * 0.65f, c.y - r * 0.80f), mx(c.x + r * 0.65f, c.y + r * 0.80f);
+            dl->AddRect(mn, mx, color, 2.0f, 0, 1.3f);
+            float ly1 = c.y - r * 0.35f;
+            float ly2 = c.y;
+            float ly3 = c.y + r * 0.35f;
+            dl->AddLine(ImVec2(mn.x + r * 0.28f, ly1), ImVec2(mx.x - r * 0.28f, ly1), color, 1.2f);
+            dl->AddLine(ImVec2(mn.x + r * 0.28f, ly2), ImVec2(mx.x - r * 0.28f, ly2), color, 1.2f);
+            dl->AddLine(ImVec2(mn.x + r * 0.28f, ly3), ImVec2(mx.x - r * 0.45f, ly3), color, 1.2f);
+            break;
+        }
     }
 }
 
 // Orden y agrupación visual del sidebar (por índice real de k_Categories).
-// Reagrupa temas relacionados (p.ej. Stage/Canciones junto a Proyección)
-// sin tocar los índices reales, así ningún QuickBtn/m_ActiveTab se rompe.
 struct NavGroup { const char* label; const int items[6]; int count; };
 static const NavGroup k_NavGroups[] = {
-    { "CUENTA",          { 10             }, 1 },
-    { "APARIENCIA",      { 0              }, 1 },
-    { "PANTALLAS",       { 1, 2, 3        }, 3 }, // Proyección + Conexiones + Pantallas (Stage)
-    { "AUDIO",           { 4, 5           }, 2 },
-    { "SISTEMA Y DATOS", { 6, 7, 8, 9, 11 }, 5 }, // Teclas + Idioma + Actualizaciones + Datos + Rendimiento
+    { "SISTEMA Y DATOS", { 7, 8, 12, 9, 11, 6 }, 6 }, // Idioma + Actualizaciones + Notas de versión + Datos + Rendimiento + Teclas
+    { "CUENTA",          { 10                 }, 1 },
+    { "APARIENCIA",      { 0                  }, 1 },
+    { "PANTALLAS",       { 1, 2, 3            }, 3 }, // Proyección + Conexiones + Pantallas (Stage)
+    { "AUDIO",           { 4, 5               }, 2 },
 };
 static constexpr int k_NavGroupCount = 5;
+
+// Soporte completo de idioma para la barra lateral y descripciones de Ajustes
+static inline bool IsEnglishActive() {
+    return ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language == ProyecThor::Settings::Language::English;
+}
+static inline bool IsPortugueseActive() {
+    return ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language == ProyecThor::Settings::Language::Portuguese;
+}
+static inline const char* Tr(const char* es, const char* en, const char* pt) {
+    if (IsEnglishActive()) return en;
+    if (IsPortugueseActive()) return pt;
+    return es;
+}
+
+static const char* GetCatLabel(int idx) {
+    if (IsEnglishActive()) {
+        switch (idx) {
+            case 0:  return "Appearance";
+            case 1:  return "Projection";
+            case 2:  return "Connections";
+            case 3:  return "Stage Display";
+            case 4:  return "Audio";
+            case 5:  return "Songs";
+            case 6:  return "Shortcuts";
+            case 7:  return "Language";
+            case 8:  return "Updates";
+            case 9:  return "Data & Storage";
+            case 10: return "Account & License";
+            case 11: return "Energy Saver";
+            case 12: return "Release Notes";
+            default: return k_Categories[idx].label;
+        }
+    } else if (IsPortugueseActive()) {
+        switch (idx) {
+            case 0:  return "Aparência";
+            case 1:  return "Projeção";
+            case 2:  return "Conexões";
+            case 3:  return "Ecrã de Palco";
+            case 4:  return "Áudio";
+            case 5:  return "Canções";
+            case 6:  return "Teclas de Atalho";
+            case 7:  return "Idioma";
+            case 8:  return "Atualizações";
+            case 9:  return "Dados e Armazenamento";
+            case 10: return "Conta e Licenças";
+            case 11: return "Poupança de Energia";
+            case 12: return "Notas de Versão";
+            default: return k_Categories[idx].label;
+        }
+    }
+    return k_Categories[idx].label;
+}
+
+static const char* GetCatDesc(int idx) {
+    if (IsEnglishActive()) {
+        switch (idx) {
+            case 0:  return "Colors, fonts and visual theme";
+            case 1:  return "Monitor, text alignment and margins";
+            case 2:  return "Network, mobile app, streaming and OSC";
+            case 3:  return "Confidence monitor for the team";
+            case 4:  return "Volume, device and fade effects";
+            case 5:  return "Tags and song library options";
+            case 6:  return "Available keyboard shortcuts";
+            case 7:  return "User interface language";
+            case 8:  return "Check and install updates";
+            case 9:  return "File locations and linked folders";
+            case 10: return "Sign in, Pro subscription and licenses";
+            case 11: return "Energy saver and memory optimization";
+            case 12: return "Full changelog and feature history";
+            default: return k_Categories[idx].description;
+        }
+    } else if (IsPortugueseActive()) {
+        switch (idx) {
+            case 0:  return "Cores, fontes e temas visuais";
+            case 1:  return "Monitor, alinhamento de texto e margens";
+            case 2:  return "Rede, aplicação móvel, transmissão e OSC";
+            case 3:  return "Monitor de retorno para a equipa";
+            case 4:  return "Volume, dispositivo e efeitos de transição";
+            case 5:  return "Etiquetas e opções do repertório";
+            case 6:  return "Atalhos de teclado disponíveis";
+            case 7:  return "Idioma da interface";
+            case 8:  return "Verificar e instalar atualizações";
+            case 9:  return "Localização de ficheiros e pastas vinculadas";
+            case 10: return "Iniciar sessão, subscrição Pro e licenças";
+            case 11: return "Modo de poupança de energia e memória";
+            case 12: return "Histórico completo de novidades e melhorias";
+            default: return k_Categories[idx].description;
+        }
+    }
+    return k_Categories[idx].description;
+}
+
+static const char* GetNavGroupTitle(int gIdx) {
+    if (IsEnglishActive()) {
+        switch (gIdx) {
+            case 0:  return "SYSTEM & DATA";
+            case 1:  return "ACCOUNT";
+            case 2:  return "APPEARANCE";
+            case 3:  return "DISPLAYS";
+            case 4:  return "AUDIO";
+            default: return k_NavGroups[gIdx].label;
+        }
+    } else if (IsPortugueseActive()) {
+        switch (gIdx) {
+            case 0:  return "SISTEMA E DADOS";
+            case 1:  return "CONTA";
+            case 2:  return "APARÊNCIA";
+            case 3:  return "ECRÃS";
+            case 4:  return "ÁUDIO";
+            default: return k_NavGroups[gIdx].label;
+        }
+    }
+    return k_NavGroups[gIdx].label;
+}
 
 // Pequeño helper local: convierte un token de color del tema (float[4]) en
 // ImVec4, con un multiplicador opcional de alpha.
@@ -216,7 +341,7 @@ static inline void DrawFloatingIslandShadow(ImDrawList* dl, ImVec2 pos, ImVec2 s
 // ─────────────────────────────────────────────────────────────────────────────
 
 SettingsPanel::SettingsPanel()
-    : m_SelectedCategory(0), m_PrevCategory(-1),
+    : m_SelectedCategory(7), m_PrevCategory(-1),
       m_SaveTimer(0.0f), m_CheckingAnim(0.0f) {}
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -339,7 +464,7 @@ void SettingsPanel::Render(bool* isOpen) {
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
 
         ImGui::SetNextItemWidth(searchW);
-        ImGui::InputTextWithHint("##settingsSearchTop", "Buscar en configuraciones...", m_SearchBuffer, sizeof(m_SearchBuffer));
+        ImGui::InputTextWithHint("##settingsSearchTop", Tr("Buscar en configuraciones...", "Search settings...", "Pesquisar nas definições..."), m_SearchBuffer, sizeof(m_SearchBuffer));
         ImVec2 fMin = ImGui::GetItemRectMin();
         ImVec2 fMax = ImGui::GetItemRectMax();
 
@@ -376,11 +501,11 @@ void SettingsPanel::Render(bool* isOpen) {
         float closeBtnY = topBarMin.y + (topBarH - closeBtnH) * 0.5f;
 
         ImGui::SetCursorScreenPos(ImVec2(closeBtnX, closeBtnY));
-        if (ProyecThor::UI::DS::GlassButton("✕ Cerrar", ImVec2(closeBtnW, closeBtnH))) {
+        if (ProyecThor::UI::DS::GlassButton(Tr("✕ Cerrar", "✕ Close", "✕ Fechar"), ImVec2(closeBtnW, closeBtnH))) {
             *isOpen = false;
         }
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Cerrar configuraciones (Esc)");
+            ImGui::SetTooltip("%s", Tr("Cerrar configuraciones (Esc)", "Close settings (Esc)", "Fechar definições (Esc)"));
         }
     }
 
@@ -568,7 +693,7 @@ void SettingsPanel::RenderSidebar() {
         float labelY = p.y + (itemH - ImGui::GetTextLineHeight()) * 0.5f;
         float labelX = p.x + 42.0f;
         ImVec4 labelColV = selected ? ThemeCol(theme.textPrimary) : ThemeCol(theme.textDim, hovered ? 1.0f : 0.85f);
-        dl->AddText(ImVec2(labelX, labelY), ImGui::ColorConvertFloat4ToU32(labelColV), k_Categories[i].label);
+        dl->AddText(ImVec2(labelX, labelY), ImGui::ColorConvertFloat4ToU32(labelColV), GetCatLabel(i));
 
         ImGui::PopStyleColor(3);
 
@@ -611,14 +736,12 @@ void SettingsPanel::RenderSidebar() {
     const bool searching = m_SearchBuffer[0] != '\0';
 
     if (searching) {
-        // Lista plana de resultados, sin encabezados de grupo -- el usuario
-        // ya escribió lo que busca, agrupar por tema solo estorbaría.
         std::string query = ToLowerAscii(m_SearchBuffer);
         int matches = 0;
         for (int i = 0; i < k_CategoryCount; i++) {
             if (i == 3 && !isPro) continue;
-            std::string label = ToLowerAscii(k_Categories[i].label);
-            std::string desc  = ToLowerAscii(k_Categories[i].description);
+            std::string label = ToLowerAscii(GetCatLabel(i));
+            std::string desc  = ToLowerAscii(GetCatDesc(i));
             if (label.find(query) == std::string::npos && desc.find(query) == std::string::npos)
                 continue;
             matches++;
@@ -627,14 +750,10 @@ void SettingsPanel::RenderSidebar() {
         if (matches == 0) {
             ImGui::SetCursorPosX(25.0f);
             ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textFaint));
-            ImGui::TextUnformatted("Sin resultados.");
+            ImGui::TextUnformatted(Tr("Sin resultados.", "No results found.", "Sem resultados."));
             ImGui::PopStyleColor();
         }
     } else {
-        // Navegación agrupada por tema (ver k_NavGroups): en vez de una lista
-        // plana de categorías, se muestran en bloques con un encabezado
-        // pequeño ("GENERAL", "PANTALLAS", "AUDIO", "SISTEMA", "CONEXIONES"),
-        // más fácil de escanear visualmente.
         for (int g = 0; g < k_NavGroupCount; g++) {
             const NavGroup& group = k_NavGroups[g];
 
@@ -642,7 +761,7 @@ void SettingsPanel::RenderSidebar() {
             ImGui::SetCursorPosX(25.0f);
             ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textFaint));
             ImGui::SetWindowFontScale(0.82f);
-            ImGui::TextUnformatted(group.label);
+            ImGui::TextUnformatted(GetNavGroupTitle(g));
             ImGui::SetWindowFontScale(1.0f);
             ImGui::PopStyleColor();
             ImGui::Dummy(ImVec2(0.0f, 4.0f));
@@ -714,7 +833,7 @@ void SettingsPanel::RenderContent() {
     // sidebar ya dicen dónde está parado el usuario).
     ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textPrimary));
     ImGui::SetWindowFontScale(1.6f);
-    ImGui::TextUnformatted(k_Categories[m_SelectedCategory].label);
+    ImGui::TextUnformatted(GetCatLabel(m_SelectedCategory));
     ImGui::SetWindowFontScale(1.0f);
     ImGui::PopStyleColor();
 
@@ -751,7 +870,8 @@ void SettingsPanel::RenderContent() {
         case 9: RenderCategoryData();        break;
         case 10: RenderCategoryAccount();    break;
         case 11: RenderCategoryPerformance(); break;
-        default: ImGui::TextDisabled("Categoría no implementada."); break;
+        case 12: RenderCategoryPatchNotes();  break;
+        default: ImGui::TextDisabled("%s", Tr("Categoría no implementada.", "Category not implemented.", "Categoria não implementada.")); break;
     }
 
     ImGui::PopStyleVar(2);
@@ -797,11 +917,11 @@ void SettingsPanel::RenderSaveBar() {
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ThemeCol(theme.accentDim));
     ImGui::PushStyleColor(ImGuiCol_Text,          ThemeCol(theme.textPrimary));
 
-    if (ImGui::Button("Guardar ajustes", ImVec2(160.0f, 36.0f))) {
+    if (ImGui::Button(Tr("Guardar ajustes", "Save settings", "Guardar definições"), ImVec2(160.0f, 36.0f))) {
         mgr.SaveSettings();
         mgr.ApplyTheme();
         mgr.ApplyProjection();
-        m_SaveStatusMsg = "Cambios guardados";
+        m_SaveStatusMsg = Tr("Cambios guardados", "Changes saved", "Alterações guardadas");
         m_SaveTimer     = 3.0f;
     }
     ImGui::PopStyleColor(4);
@@ -813,9 +933,9 @@ void SettingsPanel::RenderSaveBar() {
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ThemeCol(theme.surface1, 0.8f));
     ImGui::PushStyleColor(ImGuiCol_Text,          ThemeCol(theme.textDim));
 
-    if (ImGui::Button("Restablecer", ImVec2(130.0f, 36.0f))) {
+    if (ImGui::Button(Tr("Restablecer", "Reset defaults", "Repor predefinições"), ImVec2(130.0f, 36.0f))) {
         mgr.ResetToDefaults();
-        m_SaveStatusMsg = "Ajustes restablecidos";
+        m_SaveStatusMsg = Tr("Ajustes restablecidos", "Settings reset to defaults", "Definições repostas");
         m_SaveTimer     = 3.0f;
     }
     ImGui::PopStyleColor(4);
@@ -998,6 +1118,27 @@ void SettingsPanel::HelpTooltip(const char* desc) {
 
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor(2);
+    }
+}
+
+void SettingsPanel::RenderCategoryPatchNotes() {
+    if (SectionTitle(Tr("Historial de cambios", "Changelog", "Histórico de alterações"),
+                     Tr("Notas de versión", "Release Notes", "Notas de versão"))) {
+        PatchNotesStyleConfig cfg;
+        auto& mgr = ProyecThor::Settings::SettingsManager::Get();
+        const auto& theme = mgr.GetSettings().theme;
+        cfg.accent        = ThemeCol(theme.accent);
+        cfg.accentLight   = ThemeCol(theme.accentLight);
+        cfg.textPrimary   = ThemeCol(theme.textPrimary);
+        cfg.textSecondary = ThemeCol(theme.textDim);
+        cfg.cardBg        = ThemeCol(theme.surface1, 0.65f);
+        cfg.cardBorder    = ThemeCol(theme.border, 0.45f);
+        cfg.windowBg      = ThemeCol(theme.base);
+        cfg.border        = ThemeCol(theme.border);
+        cfg.scale         = 1.0f;
+
+        static PatchNotesViewState s_SettingsNotesState;
+        RenderPatchNotesViewContent(s_SettingsNotesState, cfg, 0.0f);
     }
 }
 

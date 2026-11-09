@@ -739,7 +739,7 @@ void SettingsPanel::RenderCategoryAccount() {
             ImGui::Dummy(ImVec2(0.0f, 2.0f));
             ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + textW);
             ImGui::TextColored(ImVec4(0.82f, 0.86f, 0.92f, 1.0f),
-                "Potencia tu auditorio con Inteligencia Artificial avanzada, retorno Stage Display sin latencia y sincronización distribuida en la nube.");
+                "Potencia tu auditorio con Inteligencia Artificial avanzada, retorno Stage Display sin latencia, integración de transparencias por LAN y uso en 1 dispositivo a la vez.");
             ImGui::PopTextWrapPos();
             ImGui::EndGroup();
 
@@ -749,6 +749,7 @@ void SettingsPanel::RenderCategoryAccount() {
             ImGui::Dummy(ImVec2(0.0f, 4.0f));
             ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "$9.990 CLP");
             ImGui::TextColored(ImVec4(0.35f, 0.85f, 1.0f, 1.0f), "Suscripción mensual");
+            ImGui::TextColored(ImVec4(0.80f, 0.85f, 0.95f, 0.75f), "1 dispositivo a la vez");
             ImGui::EndGroup();
         }
         ImGui::EndChild();
@@ -761,11 +762,11 @@ void SettingsPanel::RenderCategoryAccount() {
         struct FeatureItem { const char* tag; const char* title; const char* desc; ImVec4 tagCol; };
         FeatureItem items[6] = {
             { "STAGE DISPLAY", "Retorno Multi-Pantalla", "Monitor de retorno con reloj de cuenta regresiva, estrofa actual, próxima y mensajes para el escenario.", ImVec4(0.0f, 0.80f, 1.0f, 1.0f) },
+            { "TRANSPARENCIAS LAN", "Transparencias por Red LAN", "Integración nativa para transmitir overlays y transparencias por LAN hacia OBS Studio, vMix y encoders.", ImVec4(0.0f, 0.85f, 0.88f, 1.0f) },
+            { "1 DISPOSITIVO", "1 Dispositivo a la Vez", "Sesión única concurrente. Conéctate desde tu PC de cabina o laptop personal con protección total de cuenta.", ImVec4(1.0f, 0.68f, 0.22f, 1.0f) },
             { "IA GEMINI", "Inteligencia Artificial Avanzada", "Corrección métrica, estructuración de versos y búsqueda bíblica impulsada por Google Gemini.", ImVec4(0.82f, 0.45f, 1.0f, 1.0f) },
-            { "CANVA & APIS", "APIs de Terceros y Canva Connect", "Conexión directa con Canva API para explorar tus diseños e importar diapositivas en alta resolución a Fondos y Multimedia.", ImVec4(0.0f, 0.85f, 0.88f, 1.0f) },
-            { "CLOUD SYNC", "Cloud Storage 5,000+ Canciones", "Respaldo y sincronización en Google Firebase con redundancia automática ante fallos de hardware.", ImVec4(0.28f, 0.90f, 0.55f, 1.0f) },
-            { "MULTI-SALA", "Sincronización Multi-Sala", "Edita en tu equipo principal y propaga al instante a salas cuna, auditorios auxiliares y sedes filiales.", ImVec4(1.0f, 0.68f, 0.22f, 1.0f) },
-            { "INTEGRACIONES", "Ecosistema en Expansión", "Acceso continuo e ilimitado a nuevas integraciones API en la nube y servicios profesionales para tu iglesia.", ImVec4(0.95f, 0.45f, 0.75f, 1.0f) }
+            { "CLOUD & CANVA", "Cloud Storage y Canva Connect", "Sincronización en la nube de 5,000+ canciones e importación directa de diapositivas en alta resolución desde Canva.", ImVec4(0.28f, 0.90f, 0.55f, 1.0f) },
+            { "MULTI-SALA", "Sincronización Multi-Sala", "Edita en tu equipo principal y propaga al instante a salas cuna, auditorios auxiliares y sedes filiales.", ImVec4(0.95f, 0.45f, 0.75f, 1.0f) }
         };
 
         float halfW = (contentW - 14.0f) * 0.5f;

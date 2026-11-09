@@ -66,6 +66,7 @@ public:
     bool IsLiveBackground()      const { return m_IsLiveBackground; }
     void SetLiveBackground(bool v);
 
+    bool PlayFile(const std::string& filename, bool live = false);
     bool PlayFileLive(const std::string& filename);
 
     void RenderLiveBackground(float x, float y, float w, float h);

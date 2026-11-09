@@ -1160,6 +1160,7 @@ void SettingsManager::SaveSettings() {
     j["updates"]["autoDownload"]   = m_Settings.updates.autoDownload;
     j["updates"]["updateChannel"]  = m_Settings.updates.updateChannel;
     j["updates"]["lastChecked"]    = m_Settings.updates.lastChecked;
+    j["updates"]["cloudflareBaseUrl"] = m_Settings.updates.cloudflareBaseUrl;
 
     j["workspace"]["layoutPreset"] = WorkspaceLayoutPresetToKey(m_Settings.workspace.layoutPreset);
 
@@ -1577,6 +1578,10 @@ void SettingsManager::LoadSettings() {
             m_Settings.updates.autoDownload   = ju.value("autoDownload",   false);
             m_Settings.updates.updateChannel  = ju.value("updateChannel",  "stable");
             m_Settings.updates.lastChecked    = ju.value("lastChecked",    "");
+            m_Settings.updates.cloudflareBaseUrl = ju.value("cloudflareBaseUrl", "https://pub-4aad3f4e54404d6ab3c299176fa4fd65.r2.dev");
+            if (m_Settings.updates.cloudflareBaseUrl.empty()) {
+                m_Settings.updates.cloudflareBaseUrl = "https://pub-4aad3f4e54404d6ab3c299176fa4fd65.r2.dev";
+            }
         }
         m_Settings.updates.currentVersion = PROYECTHOR_VERSION_STRING;
 

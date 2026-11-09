@@ -50,8 +50,4 @@ void RunSteps(const std::vector<Step>& steps, GLFWwindow* window, ImVec2 size,
               GLuint logoTex, GLuint bgTex, const Fonts& fonts,
               const std::string& creditText, const ProyecThor::Settings::ThemeSettings& theme);
 
-void WaitForUserConfirmation(GLFWwindow* window, ImVec2 size,
-                             GLuint logoTex, GLuint bgTex, const Fonts& fonts,
-                             const std::string& creditText, const ProyecThor::Settings::ThemeSettings& theme);
-
 } // namespace ProyecThor::Splash

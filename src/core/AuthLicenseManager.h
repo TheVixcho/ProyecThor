@@ -87,6 +87,8 @@ public:
 
     // ── Licencia ProyecThor (ProyecThor for Professionals) ─────────────────────
     bool IsPro() const;
+    bool IsAdmin() const;
+    void SetAdmin(bool admin);
     bool IsLicenseExpired() const;
     int64_t GetDaysRemaining() const;
     const LicenseInfo& GetLicenseInfo() const;
@@ -95,6 +97,15 @@ public:
 
     // Sincronización directa con Firebase Firestore (Servidor)
     void RefreshProStatus(std::function<void(bool isPro, const std::string& msg)> onComplete = nullptr);
+
+    // ── Control de Sesión Concurrente (1 PC a la vez) ────────────────────────
+    bool IsSessionKicked() const;
+    std::string GetKickedByDevice() const;
+    std::string GetKickedMessage() const;
+    void AcknowledgeSessionKicked();
+    void ReclaimActiveSession(std::function<void(bool success, const std::string& msg)> onComplete = nullptr);
+    void CheckSessionHeartbeat();
+    void ClaimActiveSession(const std::string& localId);
 
     void ActivateLicense(const std::string& licenseKey, const std::string& instanceName = "",
                          std::function<void(bool success, const std::string& msg)> onComplete = nullptr);
@@ -140,6 +151,7 @@ private:
     // Estado de Firebase
     std::string m_FirebaseApiKey;
     bool        m_IsLoggedIn  = false;
+    bool        m_IsAdmin     = false;
     UserProfile m_User;
     std::string m_AuthError;
     std::atomic<bool> m_AuthBusy{false};
@@ -163,6 +175,15 @@ private:
     std::string m_PendingCommerceOrder;
     std::atomic<bool> m_IsPollingPayment{false};
     std::atomic<bool> m_StopPollingRequested{false};
+
+    // Control de Sesión Concurrente (1 PC a la vez)
+    std::string m_SessionId;
+    std::string m_DeviceName;
+    std::atomic<bool> m_SessionKicked{false};
+    std::string m_KickedByDevice;
+    std::string m_KickedMessage;
+    int64_t     m_LastHeartbeatAt = 0;
+    std::atomic<bool> m_HeartbeatBusy{false};
 
     // Lemon Squeezy (guardado para venta internacional futura):
     // const std::string m_LemonCheckoutBaseUrl = "https://vixcho.lemonsqueezy.com/checkout/buy/e609efc0-4393-46fc-b6ed-d535cb9dd2dc";

@@ -17,21 +17,39 @@ struct UpdateVersionInfo {
 inline const std::vector<UpdateVersionInfo>& GetPatchNotesRegistry() {
     static const std::vector<UpdateVersionInfo> s_Registry = {
         {
-            26, "1.1.3",
-            "VERSIÓN 1.1.3 - PADS DE CONSOLA, MODO RENDIMIENTO & TRANSMISIÓN LAN", "ACTUALIZACIÓN OFICIAL",
+            27, "1.1.4",
+            "VERSIÓN 1.1.4 - HOTFIX MENORES Y MEJORAS DE RENDIMIENTO GENERAL", "HOTFIX OFICIAL",
             "splash_bg7.jpg",
-            "### Consola de Pads de Escena en Vista en Vivo\n"
-            "• [NUEVO] Pads Integrados estilo Launchpad: Los 8 Pads de escenas rápidas ahora residen directamente en la consola inferior de Vista en Vivo con estética táctil, indicadores LED de color e iconografía vectorial limpia.\n"
-            "• [NUEVO] Constructor Modular de Escenas: Guarda y dispara en un clic combinaciones opcionales o completas de fondos, reproducción en bucle de carpetas de video, letras o palabras fijas, estilos tipográficos y cámara.\n"
+            "### Hotfixes de Rendimiento y Mejoras Generales\n"
+            "• [RENDIMIENTO] Optimizaciones del Motor Gráfico: Hotfix con mejoras de rendimiento general en la tasa de cuadros y reducción de uso de memoria GPU.\n"
+            "• [RENDIMIENTO] Sondeo Asíncrono Eficiente: Optimizado el sistema de comprobación de actualizaciones y sincronización en segundo plano con solicitudes HTTP ultraligeras sin bloqueos de interfaz.\n"
+            "• [LICENCIAMIENTO] Sesión Única Concurrente (1 PC a la vez): Protección de cuenta institucional con detección y transferencia transparente de sesión activa entre equipos.\n"
+            "• [ESTABILIDAD] Hotfixes Menores: Correcciones menores de rendimiento y estabilidad en la carga de bibliotecas, overlays y cambio de escenas.",
+            false
+        },
+        {
+            26, "1.1.3",
+            "VERSIÓN 1.1.3 - MULTI-CARPETAS PRO, NOTAS EN AJUSTES, UTF-8 & ACTUALIZACIONES EN UN CLIC", "ACTUALIZACIÓN OFICIAL",
+            "splash_bg7.jpg",
+            "### Gestión Multi-Carpeta Externa (ProyecThor for Professionals)\n"
+            "• [NUEVO] Importación y Escaneo Externo sin Duplicar: Los usuarios Pro pueden vincular carpetas completas de música, videos, descargas o imágenes externas sin duplicar archivos en AppData.\n"
+            "• [NUEVO] Ramas de Carpetas Independientes: En la biblioteca multimedia y de música, cada carpeta externa se visualiza como una rama independiente junto a la carpeta personal de ProyecThor.\n"
+            "• [NUEVO] Creación de Colas y Diálogo 'Mover o Duplicar': Al crear subcarpetas o arrastrar archivos, el sistema permite elegir la ubicación de destino y decidir si mover o duplicar el elemento en la nueva cola.\n"
             "\n"
-            "### Optimización Extrema y Modo Rendimiento\n"
-            "• [NUEVO] Modo Rendimiento en Ajustes: Optimizado para equipos de bajos recursos (Pentium Gold / Celeron / 8 GB RAM), reduciendo hilos de trabajo, escaneo en segundo plano y efectos pesados en GPU.\n"
-            "• [MEJORA] Búsqueda Instantánea de Canciones: Indexación en caché de alta velocidad para bibliotecas con más de 300 canciones TXT sin bloqueos ni lecturas repetitivas en disco.\n"
+            "### Experiencia de Usuario, UTF-8 y Diseño Visual\n"
+            "• [CORRECCIÓN] Soporte Nativo UTF-8 y Letra 'ñ': Corregida la lectura y renderizado de caracteres especiales, tildes y la letra 'ñ' en títulos de canciones, fondos y menús en Windows.\n"
+            "• [MEJORA] Botones de Menú y Barra Superior sin Cortes: Rediseñado el botón de detener cola en el panel lateral con padding armónico; barra superior de búsqueda y controles de reproducción adaptados dinámicamente para no cortarse en resoluciones compactas.\n"
+            "• [MEJORA] Modal de Importación Profesional: Simplificado el mensaje del modal de importación a 'Copiar archivo dentro de la carpeta del programa'.\n"
             "\n"
-            "### Transmisión LAN e Interfaz Renovada\n"
-            "• [MEJORA] Transmisión LAN Gratuita + Canal Alpha Pro: El envío de pantalla por red local es gratuito para todos los usuarios; la salida transparente (Canal Alpha para overlays en OBS) se incorpora como función Pro.\n"
-            "• [CORRECCIÓN] Orientación y Arranque LAN: Solucionado el inicio del servidor LAN y corregida la inversión vertical/espejo de los fondos al visualizar desde otros dispositivos.\n"
-            "• [MEJORA] Ajustes a Pantalla Completa: Ventana de Configuraciones integrada a pantalla completa con barra de búsqueda unificada en el encabezado y márgenes pulidos en la barra de fondos.",
+            "### Notas de Versión en Ajustes y Actualizaciones en 1 Clic\n"
+            "• [NUEVO] Sección 'Notas de versión' en Ajustes: Historial completo de versiones trasladado de la pantalla de bienvenida a una sección dedicada dentro de Ajustes, con buscador y navegación por categorías.\n"
+            "• [MEJORA] Actualización Automática Simplificada: Canal único oficial y estable sin configuraciones complejas; botón 'Comprobar Actualizaciones' que descarga e instala automáticamente con un solo clic.\n"
+            "• [MEJORA] Soporte Extendido de Idioma Inglés: Traducción de categorías de ajustes, grupos de navegación y mensajes del sistema al inglés.\n"
+            "\n"
+            "### Consola de Pads de Escena, Modo Rendimiento y LAN\n"
+            "• [NUEVO] Pads Integrados estilo Launchpad: 8 Pads de escenas rápidas en la consola inferior de Vista en Vivo con indicadores LED e iconografía vectorial limpia.\n"
+            "• [NUEVO] Modo Rendimiento en Ajustes: Optimizado para equipos de bajos recursos, reduciendo hilos de trabajo y escaneo innecesario.\n"
+            "• [MEJORA] Transmisión LAN Gratuita + Canal Alpha Pro: Envío de pantalla por red local para todos los usuarios con salida transparente en versión Pro.",
             false
         },
         {
@@ -166,7 +184,16 @@ inline const std::vector<UpdateVersionInfo>& GetPatchNotesRegistry() {
             21, "1.0.3",
             "VERSION 1.0.3 ESTABLE", "ACTUALIZACION ESTABLE",
             "bin/assets/ui/textures/iniciarpro.jpg",
-            "### Correcciones y Estabilidad\n"
+            "### ProyecThor for Professionals & Carpetas de Escaneo\n"
+            "• [PRO] Carpetas de Escaneo Externas sin Duplicación: Función exclusiva para usuarios PRO que permite añadir bibliotecas y carpetas de medios (ej. Descargas, Mi Música, Videos) para escaneo directo sin copiar ni duplicar archivos en AppData.\n"
+            "• [GRATUITO] Almacenamiento Estricto en Assets: Los usuarios gratuitos almacenan sus datos exclusivamente en AppData/proyecthor/assets mediante importación estándar sin duplicación descontrolada ni auto-importaciones en segundo plano.\n"
+            "• [NUEVO] Separación de Ramas en Biblioteca: La biblioteca de Videos, Imágenes, Texto (Documentos) y Música ahora presenta la carpeta principal de ProyecThor junto a ramas independientes para cada carpeta externa (ej. 'ProyecThor' y 'Mi Música').\n"
+            "• [NUEVO] Creación de Carpetas y Colas con Selector de Ubicación: Al crear una nueva carpeta o cola, los usuarios PRO pueden elegir si crearla dentro de ProyecThor o en una carpeta externa (para usuarios gratuitos se crea de forma directa en ProyecThor sin pasos innecesarios).\n"
+            "• [NUEVO] Mover o Duplicar (Copiar y Pegar) en Carpetas: Al agregar o arrastrar archivos hacia carpetas y colas de reproducción, el sistema ofrece ambas opciones: mover el archivo entre listas o duplicarlo/copiarlo.\n"
+            "• [NUEVO] Canciones en Carpetas y Subdirectorios: Soporte total para organizar archivos de canciones (.txt) dentro de carpetas y subcarpetas, con detección recursiva, visualización limpia de títulos y asignación a listas.\n"
+            "\n"
+            "### Sistema de Etiquetas Reparado & Correcciones\n"
+            "• [CORRECCIÓN] Sistema de Etiquetas Renovado en Ajustes > Canciones: Reparada la creación, edición y persistencia de etiquetas. Soporte completo de acentos y caracteres especiales, selector interactivo de color, previsualización en vivo estilo chip y eliminación segura sin dejar etiquetas huérfanas.\n"
             "• [CORRECCIÓN] Salida en Vivo Protegida: Solucionado el problema donde presionar la tecla Escape bloqueaba irreversiblemente la salida en vivo e impedía volver a proyectar.\n"
             "• [CORRECCIÓN] Biblioteca de Letras Limpia: Eliminadas canciones de prueba inexistentes y estandarizado el archivo de bienvenida multilingüe por estrofa (welcome.txt) sin errores de lectura.\n"
             "• [MEJORA] Estabilidad General en Linux: Mejoras de estabilidad en la reproducción multimedia y corrección de bloqueos menores.",

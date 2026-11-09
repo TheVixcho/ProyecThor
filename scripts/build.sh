@@ -14,7 +14,7 @@ if [ -f "$BUILD_FILE" ]; then
 fi
 BUILD_NUM=$((BUILD_NUM + 1))
 echo -n "$BUILD_NUM" > "$BUILD_FILE"
-echo -e "\033[36m[BUILD] Compilando ProyecThor v1.1.3 - Build #$BUILD_NUM\033[0m"
+echo -e "\033[36m[BUILD] Compilando ProyecThor v1.1.4 - Build #$BUILD_NUM\033[0m"
 
 for vdir in "$PROJECT_ROOT/build-win/generated" "$PROJECT_ROOT/build-linux/generated"; do
     if [ -d "$vdir" ]; then
@@ -23,8 +23,8 @@ for vdir in "$PROJECT_ROOT/build-win/generated" "$PROJECT_ROOT/build-linux/gener
 
 #define PROYECTHOR_VERSION_MAJOR 1
 #define PROYECTHOR_VERSION_MINOR 1
-#define PROYECTHOR_VERSION_PATCH 3
-#define PROYECTHOR_VERSION_STRING "1.1.3"
+#define PROYECTHOR_VERSION_PATCH 4
+#define PROYECTHOR_VERSION_STRING "1.1.4"
 #define PROYECTHOR_BUILD_NUMBER $BUILD_NUM
 EOF
     fi

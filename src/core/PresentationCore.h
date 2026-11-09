@@ -311,6 +311,8 @@ void SetGlobalMute(bool mute);
 
         VLCBasePlayer* GetBackgroundPlayer();
         void           GetBackgroundVideoSize(int& width, int& height);
+        bool           IsBackgroundStaticImage() const;
+        void           PurgeMemoryCaches();
 
         void  SetFSREnabled(bool enabled);
         bool  GetFSREnabled() const;
@@ -642,7 +644,7 @@ void SetGlobalMute(bool mute);
         void        LoadCategoryStyles();
         void        SaveCategoryStyles() const;
 
-        bool ToggleNetworkStream(bool enable, int port = 8080);
+        bool ToggleNetworkStream(bool enable, int port = 8080, const StreamConfig* config = nullptr);
         bool IsStreamingNet() const;
         bool RenderProjectorToFBO(int w, int h, std::vector<uint8_t>& outRGB);
 

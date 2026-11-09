@@ -10,6 +10,7 @@
 #include "ui/panels/layers/LayersBgTab.h"
 #include "core/ThumbnailWorker.h"
 #include "core/MediaImportManager.h"
+#include "core/settings/SettingsManager.h"
 #include "ui/framework/FilePicker.h"
 
 #include <imgui.h>
@@ -20,6 +21,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <algorithm>
 #include <cstring>
 #include <cmath>
@@ -115,9 +117,13 @@ static std::string ThumbCachePathFor(const std::string& absVideoPath) {
 }
 
 static ImTextureID LoadImageThumb(const char* path) {
+    const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+    const unsigned maxW = perf.lowMemoryMode ? 256u : (perf.performanceMode ? 320u : 512u);
+    const unsigned maxH = perf.lowMemoryMode ? 144u : (perf.performanceMode ? 180u : 288u);
+
     std::vector<uint8_t> pixels;
     unsigned w = 0, h = 0;
-    if (!ProyecThor::Core::ThumbnailWorker::LoadThumbnailPixelsFromDisk(path ? path : "", pixels, w, h, 512, 288))
+    if (!ProyecThor::Core::ThumbnailWorker::LoadThumbnailPixelsFromDisk(path ? path : "", pixels, w, h, maxW, maxH))
         return 0;
 
     GLuint tex = 0;
@@ -136,6 +142,22 @@ static std::unordered_map<std::string, ImTextureID> s_ThumbnailCache;
 static ProyecThor::Core::ThumbnailWorker            s_ThumbWorker;
 static bool  s_GridMode  = true;
 static float s_ThumbZoom = 1.0f;
+
+void ClearLocalVideoThumbnailCache() {
+    std::unordered_set<GLuint> uniqueTex;
+    for (const auto& kv : s_ThumbnailCache) {
+        if (!kv.second) continue;
+        // No eliminar texturas compartidas que pertenecen a LibraryMultimedia
+        if (QuerySharedVideoThumbnail(kv.first) == kv.second) continue;
+        GLuint tex = static_cast<GLuint>(static_cast<uintptr_t>(kv.second));
+        if (tex != 0) uniqueTex.insert(tex);
+    }
+    for (GLuint tex : uniqueTex) {
+        glDeleteTextures(1, &tex);
+    }
+    s_ThumbnailCache.clear();
+    s_ThumbWorker.ResetSeen();
+}
 
 static ImTextureID GetVideoThumbnail(const std::string& path) {
     if (ImTextureID shared = QuerySharedVideoThumbnail(path)) {
@@ -781,13 +803,8 @@ void RenderStreamURLSection(LibraryContext& ctx)
                 Core::PresentationCore::Get().SetSelection(s);
 
                 if (ImGui::IsMouseDoubleClicked(0)) {
-                    // FIX: sin Stop() previo (corte a negro) — SetVideo()
-                    // ya maneja carga en frio o crossfade, y el guard de
-                    // reentrancia en Play() necesita que no se le limpie
-                    // la ruta actual en cada click repetido.
                     auto& core = Core::PresentationCore::Get();
-                    core.SetProjecting(true);
-                    core.SetBackgroundMedia(ctx.streamURLs[i], true, /*allowAudio=*/true);
+                    core.RequestPreviewLoad(ctx.streamURLs[i], /*loop=*/false, /*startMuted=*/false);
                 }
             }
 

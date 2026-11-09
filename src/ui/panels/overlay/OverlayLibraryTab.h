@@ -32,6 +32,7 @@ public:
     // instancias (LibraryPanel, StylesHubPanel, VideoEditorPanel y ViewPanel).
     static ImTextureID GetSharedThumbnail(const std::string& path);
     static void        InvalidateSharedThumbnail(const std::string& path);
+    static void        ClearSharedThumbnailCache();
     static void        PreloadAllThumbnails(const std::function<void(int done, int total, const std::string& name)>& onProgress = nullptr);
 
 private:

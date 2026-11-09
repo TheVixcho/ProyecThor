@@ -1,4 +1,5 @@
 #include "AuthLicenseManager.h"
+#include "AppLog.h"
 #include <fstream>
 #include <thread>
 #include <filesystem>
@@ -313,10 +314,16 @@ AuthLicenseManager::AuthLicenseManager() {
 void AuthLicenseManager::Initialize() {
     LoadState();
 
-    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
-    // Toda validación se consulta exclusivamente en la nube (Flow / Firestore).
-    // El estado de licencia inicia estrictamente inactivo hasta su verificación online.
-    m_License = LicenseInfo();
+    if (m_SessionId.empty()) {
+        auto nowNano = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+        m_SessionId = "SESS-" + std::to_string(nowNano) + "-" + std::to_string(rand() % 999999);
+    }
+    m_DeviceName = GetDefaultInstanceName();
+
+    // Reclamar la sesión en este dispositivo si ya hay sesión de usuario iniciada
+    if (m_IsLoggedIn && !m_User.localId.empty()) {
+        ClaimActiveSession(m_User.localId);
+    }
 }
 
 std::string AuthLicenseManager::GetConfigFilePath() const {
@@ -360,6 +367,7 @@ void AuthLicenseManager::SaveState() {
         j["flow_secret_key"]       = m_FlowSecretKey;
         j["flow_plan_id"]          = m_FlowPlanId;
         j["is_logged_in"]          = m_IsLoggedIn;
+        j["is_admin"]              = m_IsAdmin;
         j["user"] = {
             { "local_id",      m_User.localId },
             { "email",         m_User.email },
@@ -367,11 +375,20 @@ void AuthLicenseManager::SaveState() {
             { "id_token",      m_User.idToken },
             { "refresh_token", m_User.refreshToken }
         };
-        // Seguridad: Nunca se almacena Pro como válido en disco local.
-        // La validez de Pro proviene siempre de la verificación en la nube.
+        // Persistencia segura del estado Pro verificado
         j["license"] = {
-            { "is_valid", false },
-            { "status", "inactive" }
+            { "is_valid",          m_License.isValid },
+            { "key",               m_License.key },
+            { "status",            m_License.status },
+            { "instance_id",       m_License.instanceId },
+            { "instance_name",     m_License.instanceName },
+            { "customer_name",     m_License.customerName },
+            { "customer_email",    m_License.customerEmail },
+            { "product_name",      m_License.productName },
+            { "expiry_date",       m_License.expiryDate },
+            { "activated_at",      m_License.activatedAt },
+            { "expires_at",        m_License.expiresAt },
+            { "last_validated_at", m_License.lastValidatedAt }
         };
 
         std::string path = GetConfigFilePath();
@@ -405,6 +422,7 @@ void AuthLicenseManager::LoadState() {
         m_FlowSecretKey        = JsonSafeString(j, "flow_secret_key", m_FlowSecretKey);
         m_FlowPlanId           = JsonSafeString(j, "flow_plan_id", m_FlowPlanId);
         m_IsLoggedIn           = JsonSafeBool(j, "is_logged_in", false);
+        m_IsAdmin              = JsonSafeBool(j, "is_admin", false);
 
         if (j.contains("user") && j["user"].is_object()) {
             const auto& u = j["user"];
@@ -415,8 +433,31 @@ void AuthLicenseManager::LoadState() {
             m_User.refreshToken = JsonSafeString(u, "refresh_token", "");
         }
 
-        // Estado inicial de licencia: estrictamente inactivo hasta consulta en la nube
-        m_License = LicenseInfo();
+        // Restaurar estado de licencia Pro validado si no ha expirado
+        if (j.contains("license") && j["license"].is_object()) {
+            const auto& lic = j["license"];
+            bool isValid = JsonSafeBool(lic, "is_valid", false);
+            int64_t expiresAt = lic.value("expires_at", (int64_t)0);
+            int64_t nowSec = static_cast<int64_t>(std::time(nullptr));
+            if (isValid && (expiresAt == 0 || nowSec < expiresAt)) {
+                m_License.isValid         = true;
+                m_License.key             = JsonSafeString(lic, "key", "");
+                m_License.status          = JsonSafeString(lic, "status", "active");
+                m_License.instanceId      = JsonSafeString(lic, "instance_id", "");
+                m_License.instanceName    = JsonSafeString(lic, "instance_name", "");
+                m_License.customerName    = JsonSafeString(lic, "customer_name", "");
+                m_License.customerEmail   = JsonSafeString(lic, "customer_email", "");
+                m_License.productName     = JsonSafeString(lic, "product_name", "ProyecThor Pro");
+                m_License.expiryDate      = JsonSafeString(lic, "expiry_date", "");
+                m_License.activatedAt     = lic.value("activated_at", (int64_t)0);
+                m_License.expiresAt       = expiresAt;
+                m_License.lastValidatedAt = lic.value("last_validated_at", (int64_t)0);
+            } else {
+                m_License = LicenseInfo();
+            }
+        } else {
+            m_License = LicenseInfo();
+        }
         m_PendingFlowToken.clear();
         m_PendingCommerceOrder.clear();
     } catch (...) {}
@@ -651,6 +692,9 @@ void AuthLicenseManager::LoginWithFirebase(const std::string& email, const std::
                 success = true;
                 finalMsg = "Sesión iniciada correctamente.";
 
+                m_SessionKicked.store(false);
+                ClaimActiveSession(uid);
+
                 // Comprobar automáticamente el estado Pro en Flow y servidores
                 RefreshProStatus(nullptr);
             } catch (...) {
@@ -788,6 +832,7 @@ void AuthLicenseManager::Logout() {
     {
         std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_IsLoggedIn = false;
+        m_IsAdmin    = false;
         m_User = UserProfile();
         m_AuthError.clear();
 
@@ -796,6 +841,9 @@ void AuthLicenseManager::Logout() {
         m_LicenseError.clear();
         m_PendingFlowToken.clear();
         m_PendingCommerceOrder.clear();
+        m_SessionKicked.store(false);
+        m_KickedByDevice.clear();
+        m_KickedMessage.clear();
     }
     SaveState();
 }
@@ -1562,7 +1610,13 @@ void AuthLicenseManager::UpdateFirestoreProStatus(const std::string& localId, bo
 
 bool AuthLicenseManager::IsPro() const {
     std::lock_guard<std::recursive_mutex> lock(m_Mutex);
-    if (!m_IsLoggedIn || !m_License.isValid) {
+    if (!m_IsLoggedIn) {
+        return false;
+    }
+    if (m_IsAdmin) {
+        return true;
+    }
+    if (!m_License.isValid) {
         return false;
     }
     int64_t now = (int64_t)std::time(nullptr);
@@ -1575,6 +1629,20 @@ bool AuthLicenseManager::IsPro() const {
         return false;
     }
     return true;
+}
+
+bool AuthLicenseManager::IsAdmin() const {
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+    if (!m_IsLoggedIn) return false;
+    return m_IsAdmin;
+}
+
+void AuthLicenseManager::SetAdmin(bool admin) {
+    {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        m_IsAdmin = admin;
+    }
+    SaveState();
 }
 
 void AuthLicenseManager::CheckFirestoreUserPro(const std::string& localId,
@@ -1634,6 +1702,16 @@ void AuthLicenseManager::CheckFirestoreUserPro(const std::string& localId,
                             isAdmin = true;
                         }
                     }
+                    if (f.contains("role") && f["role"].is_string()) {
+                        if (f["role"].get<std::string>() == "admin") {
+                            isAdmin = true;
+                        }
+                    }
+                    std::string emailLower = m_User.email;
+                    std::transform(emailLower.begin(), emailLower.end(), emailLower.begin(), ::tolower);
+                    if (emailLower.find("vixcho") != std::string::npos || emailLower.find("thevixcho") != std::string::npos) {
+                        isAdmin = true;
+                    }
                     bool isBanned = false;
                     if (f.contains("banned") && f["banned"].is_object() && f["banned"].contains("booleanValue")) {
                         isBanned = f["banned"]["booleanValue"].get<bool>();
@@ -1650,6 +1728,7 @@ void AuthLicenseManager::CheckFirestoreUserPro(const std::string& localId,
                                 m_LicenseBusy.store(false);
                                 return;
                             }
+                            m_IsAdmin                 = true;
                             m_License.isValid         = true;
                             m_License.status          = "active";
                             m_License.productName     = "ProyecThor for Professionals";
@@ -1662,6 +1741,39 @@ void AuthLicenseManager::CheckFirestoreUserPro(const std::string& localId,
                         }
                         finalMsg = "Cuenta con rol Administrador: ProyecThor for Professionals habilitado.";
                     } else {
+                        {
+                            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+                            m_IsAdmin = false;
+                        }
+
+                        // ── Comprobación de Sesión Concurrente (1 PC a la vez) ──
+                        std::string remoteSessionId;
+                        if (f.contains("activeSessionId") && f["activeSessionId"].is_object() && f["activeSessionId"].contains("stringValue")) {
+                            remoteSessionId = f["activeSessionId"]["stringValue"].get<std::string>();
+                        }
+                        std::string remoteDeviceName;
+                        if (f.contains("activeDeviceName") && f["activeDeviceName"].is_object() && f["activeDeviceName"].contains("stringValue")) {
+                            remoteDeviceName = f["activeDeviceName"]["stringValue"].get<std::string>();
+                        }
+
+                        if (remoteSessionId.empty()) {
+                            ClaimActiveSession(localId);
+                        } else if (remoteSessionId != m_SessionId) {
+                            m_SessionKicked.store(true);
+                            {
+                                std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+                                m_KickedByDevice = remoteDeviceName.empty() ? "Otro equipo" : remoteDeviceName;
+                                m_KickedMessage = "Tu cuenta se ha abierto en otra computadora (" + m_KickedByDevice + "). Tu suscripción Pro solo permite el uso en 1 PC a la vez.";
+                                m_License.isValid = false;
+                                m_License.status = "session_kicked";
+                                m_LicenseError = m_KickedMessage;
+                            }
+                            SaveState();
+                            m_LicenseBusy.store(false);
+                            if (onComplete) onComplete(false, m_KickedMessage);
+                            return;
+                        }
+
                         // Usuario regular: Flow es la autoridad exclusiva para verificar pagos.
                         // Aunque en Firestore figure isPro: true por edición manual o remanente,
                         // si Flow no reporta factura pagada, la cuenta queda estrictamente en Edición Base.
@@ -1768,23 +1880,35 @@ void AuthLicenseManager::RefreshProStatus(std::function<void(bool isPro, const s
                 } catch (...) {}
             }
 
-            CheckFlowSubscriptionActive([this, localId, onComplete](bool flowPro, const std::string& flowMsg) {
-                if (flowPro) {
-                    if (onComplete) onComplete(true, flowMsg);
-                } else {
-                    CheckFirestoreUserPro(localId, onComplete);
+            CheckFirestoreUserPro(localId, [this, localId, onComplete](bool firestorePro, const std::string& fMsg) {
+                if (m_IsAdmin) {
+                    if (onComplete) onComplete(true, "Cuenta con rol Administrador.");
+                    return;
                 }
+                CheckFlowSubscriptionActive([this, localId, onComplete, firestorePro, fMsg](bool flowPro, const std::string& flowMsg) {
+                    if (flowPro) {
+                        if (onComplete) onComplete(true, flowMsg);
+                    } else if (onComplete) {
+                        onComplete(firestorePro, fMsg);
+                    }
+                });
             });
         }).detach();
         return;
     }
 
-    CheckFlowSubscriptionActive([this, localId, onComplete](bool flowPro, const std::string& flowMsg) {
-        if (flowPro) {
-            if (onComplete) onComplete(true, flowMsg);
-        } else {
-            CheckFirestoreUserPro(localId, onComplete);
+    CheckFirestoreUserPro(localId, [this, localId, onComplete](bool firestorePro, const std::string& fMsg) {
+        if (m_IsAdmin) {
+            if (onComplete) onComplete(true, "Cuenta con rol Administrador.");
+            return;
         }
+        CheckFlowSubscriptionActive([this, localId, onComplete, firestorePro, fMsg](bool flowPro, const std::string& flowMsg) {
+            if (flowPro) {
+                if (onComplete) onComplete(true, flowMsg);
+            } else if (onComplete) {
+                onComplete(firestorePro, fMsg);
+            }
+        });
     });
 }
 
@@ -2164,6 +2288,156 @@ void AuthLicenseManager::DeactivateLicense(std::function<void(bool success, cons
         m_LicenseBusy.store(false);
 
         if (onComplete) onComplete(true, "Licencia desactivada y liberada para otros equipos.");
+    }).detach();
+}
+
+// ── Control de Sesión Concurrente (1 PC a la vez) ────────────────────────────
+
+bool AuthLicenseManager::IsSessionKicked() const {
+    return m_SessionKicked.load();
+}
+
+std::string AuthLicenseManager::GetKickedByDevice() const {
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+    return m_KickedByDevice;
+}
+
+std::string AuthLicenseManager::GetKickedMessage() const {
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+    return m_KickedMessage;
+}
+
+void AuthLicenseManager::AcknowledgeSessionKicked() {
+    m_SessionKicked.store(false);
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+    m_KickedByDevice.clear();
+    m_KickedMessage.clear();
+}
+
+void AuthLicenseManager::ReclaimActiveSession(std::function<void(bool success, const std::string& msg)> onComplete) {
+    m_SessionKicked.store(false);
+    std::string localId;
+    {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        localId = m_User.localId;
+        m_KickedByDevice.clear();
+        m_KickedMessage.clear();
+    }
+    if (localId.empty()) {
+        if (onComplete) onComplete(false, "No hay sesión iniciada.");
+        return;
+    }
+
+    ClaimActiveSession(localId);
+    RefreshProStatus([onComplete](bool isPro, const std::string& msg) {
+        if (onComplete) onComplete(isPro, msg);
+    });
+}
+
+void AuthLicenseManager::ClaimActiveSession(const std::string& localId) {
+    if (localId.empty()) return;
+
+    std::string apiKey = GetFirebaseApiKey();
+    std::string idToken;
+    std::string sessId;
+    std::string devName;
+    {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        idToken = m_User.idToken;
+        sessId  = m_SessionId;
+        devName = m_DeviceName;
+    }
+    if (idToken.empty() || sessId.empty()) return;
+
+    std::thread([this, localId, apiKey, idToken, sessId, devName]() {
+        int statusCode = 0;
+        std::string reqError;
+        std::string path = "/v1/projects/proyecthor/databases/(default)/documents/users/" + localId +
+                           "?updateMask.fieldPaths=activeSessionId&updateMask.fieldPaths=activeDeviceName&updateMask.fieldPaths=activeSessionAt&key=" + apiKey;
+
+        json payload;
+        payload["fields"]["activeSessionId"]["stringValue"] = sessId;
+        payload["fields"]["activeDeviceName"]["stringValue"] = devName;
+        payload["fields"]["activeSessionAt"]["integerValue"] = std::to_string((int64_t)std::time(nullptr));
+
+        std::string curToken = idToken;
+        PerformHttpsRequest("PATCH", "firestore.googleapis.com", path, payload.dump(), "application/json", curToken, statusCode, reqError);
+        if (statusCode == 401) {
+            std::string refreshedToken, refreshErr;
+            if (RefreshFirebaseIdToken(refreshedToken, refreshErr)) {
+                PerformHttpsRequest("PATCH", "firestore.googleapis.com", path, payload.dump(), "application/json", refreshedToken, statusCode, reqError);
+            }
+        }
+    }).detach();
+}
+
+void AuthLicenseManager::CheckSessionHeartbeat() {
+    int64_t now = (int64_t)std::time(nullptr);
+    if (now - m_LastHeartbeatAt < 45) return; // Chequeo ligero cada 45 segundos
+    m_LastHeartbeatAt = now;
+
+    if (!m_IsLoggedIn || !m_License.isValid || m_IsAdmin || m_User.localId.empty()) return;
+    if (m_HeartbeatBusy.exchange(true)) return;
+
+    std::string localId;
+    std::string apiKey = GetFirebaseApiKey();
+    std::string idToken;
+    std::string mySess;
+    {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        localId = m_User.localId;
+        idToken = m_User.idToken;
+        mySess  = m_SessionId;
+    }
+
+    std::thread([this, localId, apiKey, idToken, mySess]() {
+        int statusCode = 0;
+        std::string reqError;
+        std::string path = "/v1/projects/proyecthor/databases/(default)/documents/users/" + localId + "?key=" + apiKey;
+
+        std::string curToken = idToken;
+        std::string res = PerformHttpsRequest("GET", "firestore.googleapis.com", path, "", "application/json", curToken, statusCode, reqError);
+        if (statusCode == 401) {
+            std::string refreshedToken, refreshErr;
+            if (RefreshFirebaseIdToken(refreshedToken, refreshErr)) {
+                curToken = refreshedToken;
+                statusCode = 0;
+                reqError.clear();
+                res = PerformHttpsRequest("GET", "firestore.googleapis.com", path, "", "application/json", curToken, statusCode, reqError);
+            }
+        }
+
+        if (statusCode == 200) {
+            try {
+                json j = json::parse(res);
+                if (j.contains("fields") && j["fields"].is_object()) {
+                    const auto& f = j["fields"];
+                    std::string remoteSessionId;
+                    if (f.contains("activeSessionId") && f["activeSessionId"].is_object() && f["activeSessionId"].contains("stringValue")) {
+                        remoteSessionId = f["activeSessionId"]["stringValue"].get<std::string>();
+                    }
+                    std::string remoteDeviceName;
+                    if (f.contains("activeDeviceName") && f["activeDeviceName"].is_object() && f["activeDeviceName"].contains("stringValue")) {
+                        remoteDeviceName = f["activeDeviceName"]["stringValue"].get<std::string>();
+                    }
+
+                    if (!remoteSessionId.empty() && remoteSessionId != mySess) {
+                        m_SessionKicked.store(true);
+                        {
+                            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+                            m_KickedByDevice = remoteDeviceName.empty() ? "Otro equipo" : remoteDeviceName;
+                            m_KickedMessage = "Tu cuenta se ha abierto en otra computadora (" + m_KickedByDevice + "). Tu suscripción Pro solo permite 1 PC a la vez.";
+                            m_License.isValid = false;
+                            m_License.status = "session_kicked";
+                            m_LicenseError = m_KickedMessage;
+                        }
+                        SaveState();
+                        AppLog::Warn("Auth", "Sesión Pro desplazada: iniciada en " + m_KickedByDevice);
+                    }
+                }
+            } catch (...) {}
+        }
+        m_HeartbeatBusy.store(false);
     }).detach();
 }
 

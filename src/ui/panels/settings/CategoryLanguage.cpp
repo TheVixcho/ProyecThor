@@ -126,8 +126,12 @@ void SettingsPanel::RenderCategoryLanguage() {
         bool   selected = (g.language == kLangs[i].lang);
         ImVec2 cardOrigin(langOrigin.x + i * (cardW + gap), langOrigin.y);
         if (LanguageCard(kLangs[i].code, ProyecThor::Settings::LanguageName(kLangs[i].lang),
-                         selected, accent, base, cardOrigin, cardW, cardH))
-            g.language = kLangs[i].lang;
+                         selected, accent, base, cardOrigin, cardW, cardH)) {
+            if (g.language != kLangs[i].lang) {
+                g.language = kLangs[i].lang;
+                ProyecThor::Settings::SettingsManager::Get().SaveSettings();
+            }
+        }
     }
     ImGui::SetCursorScreenPos(ImVec2(langOrigin.x, langOrigin.y + cardH + gap + 22.0f));
 
@@ -139,7 +143,9 @@ void SettingsPanel::RenderCategoryLanguage() {
     {
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.52f, 0.55f, 0.62f, 1.0f));
         ImGui::SetWindowFontScale(0.86f);
-        ImGui::TextUnformatted("VISTA PREVIA EN VIVO");
+        const char* previewHeader = (g.language == ProyecThor::Settings::Language::English) ? "LIVE PREVIEW"
+            : ((g.language == ProyecThor::Settings::Language::Portuguese) ? "PRÉ-VISUALIZAÇÃO EM DIRETO" : "VISTA PREVIA EN VIVO");
+        ImGui::TextUnformatted(previewHeader);
         ImGui::SetWindowFontScale(1.0f);
         ImGui::PopStyleColor();
         ImGui::Dummy(ImVec2(0.0f, 8.0f));

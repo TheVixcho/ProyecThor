@@ -1,6 +1,7 @@
 #include "ThumbnailWorker.h"
 #include "AppPaths.h"
 #include "MuninDRM.h"
+#include "core/settings/SettingsManager.h"
 #include "stb_image.h"
 #include "stb_image_write.h"
 #include <vlc/vlc.h>
@@ -32,6 +33,19 @@ unsigned FormatCB(void** opaque, char* chroma, unsigned* width, unsigned* height
 {
     auto* ctx = static_cast<FrameCtx*>(*opaque);
     std::memcpy(chroma, "RGBA", 4);
+
+    // Escalamos directamente en libVLC al tamaño de miniatura para no reservar
+    // búferes de 1080p/4K en RAM solo por una miniatura.
+    const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+    const unsigned maxW = perf.lowMemoryMode ? 256u : (perf.performanceMode ? 320u : 512u);
+    const unsigned maxH = perf.lowMemoryMode ? 144u : (perf.performanceMode ? 180u : 288u);
+    if (*width > 0 && *height > 0 && (*width > maxW || *height > maxH)) {
+        const double scale = std::min(static_cast<double>(maxW) / static_cast<double>(*width),
+                                      static_cast<double>(maxH) / static_cast<double>(*height));
+        *width  = std::max(16u, (static_cast<unsigned>(*width  * scale + 0.5) + 1u) & ~1u);
+        *height = std::max(16u, (static_cast<unsigned>(*height * scale + 0.5) + 1u) & ~1u);
+    }
+
     *pitches = (*width) * 4;
     *lines   = *height;
 
@@ -311,7 +325,8 @@ bool ThumbnailWorker::LoadThumbnailPixelsFromDisk(const std::string& path,
 ThumbnailWorker::ThumbnailWorker()
 {
     m_Running.store(true);
-    m_Thread = std::thread([this] { ThreadFunc(); });
+    // El hilo secundario se crea perezosamente en el primer Request() para no
+    // reservar pilas de hilos inactivos en equipos con RAM mínima.
 }
 
 ThumbnailWorker::~ThumbnailWorker()
@@ -327,9 +342,18 @@ void ThumbnailWorker::Request(const std::string& key, const std::string& videoPa
     std::lock_guard<std::mutex> lk(m_QueueMutex);
     if (std::find(m_Seen.begin(), m_Seen.end(), key) != m_Seen.end())
         return;
+    if (!m_Thread.joinable() && m_Running.load()) {
+        m_Thread = std::thread([this] { ThreadFunc(); });
+    }
     m_Seen.push_back(key);
     m_Pending.push_back({ key, videoPath, cachePngPath });
     m_Cv.notify_one();
+}
+
+void ThumbnailWorker::ResetSeen()
+{
+    std::lock_guard<std::mutex> lk(m_QueueMutex);
+    m_Seen.clear();
 }
 
 void ThumbnailWorker::DrainResults(std::vector<Result>& out)
@@ -362,7 +386,10 @@ void ThumbnailWorker::ThreadFunc()
         Result r;
         r.key = item.key;
         if (DecodeFirstFrame(item.videoPath, r.pixels, r.width, r.height)) {
-            DownscaleRGBAIfNeeded(r.pixels, r.width, r.height, 512, 288);
+            const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+            const unsigned maxW = perf.lowMemoryMode ? 256u : (perf.performanceMode ? 320u : 512u);
+            const unsigned maxH = perf.lowMemoryMode ? 144u : (perf.performanceMode ? 180u : 288u);
+            DownscaleRGBAIfNeeded(r.pixels, r.width, r.height, maxW, maxH);
             if (!item.cachePngPath.empty()) {
                 WritePngUtf8Safe(item.cachePngPath, static_cast<int>(r.width),
                                  static_cast<int>(r.height), r.pixels.data());

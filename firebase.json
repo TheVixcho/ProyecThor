@@ -10,12 +10,12 @@
     "redirects": [
       {
         "source": "/download",
-        "destination": "https://github.com/TheVixcho/ProyecThor/releases/latest/download/ProyecThor_Setup.exe",
+        "destination": "https://pub-4aad3f4e54404d6ab3c299176fa4fd65.r2.dev/ProyecThor_Setup_1.1.3.exe",
         "type": 302
       },
       {
         "source": "/downloads/ProyecThor_Setup.exe",
-        "destination": "https://github.com/TheVixcho/ProyecThor/releases/latest/download/ProyecThor_Setup.exe",
+        "destination": "https://pub-4aad3f4e54404d6ab3c299176fa4fd65.r2.dev/ProyecThor_Setup_1.1.3.exe",
         "type": 302
       }
     ],

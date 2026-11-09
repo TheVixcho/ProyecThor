@@ -1,4 +1,5 @@
 #include "PerformanceGovernor.h"
+#include "core/settings/SettingsManager.h"
 #include <algorithm>
 #include <iostream>
 
@@ -33,11 +34,16 @@ void PerformanceGovernor::ReportFrame(double frameMs)
     m_EmaFrameMs += (frameMs - m_EmaFrameMs) * kEmaAlpha;
 
     const double dtSeconds = frameMs / 1000.0;
+    const int targetFps = Settings::SettingsManager::Get().GetSettings().performance.targetFPS;
+    const double budgetMs = (targetFps > 0)
+        ? std::max(kFrameBudgetMs, (1000.0 / static_cast<double>(targetFps)) * 1.18)
+        : kFrameBudgetMs;
+    const double upgradeMs = budgetMs * 0.72;
 
-    if (m_EmaFrameMs > kFrameBudgetMs) {
+    if (m_EmaFrameMs > budgetMs) {
         m_TimeOverBudget  += dtSeconds;
         m_TimeUnderBudget  = 0.0;
-    } else if (m_EmaFrameMs < kUpgradeThresholdMs) {
+    } else if (m_EmaFrameMs < upgradeMs) {
         m_TimeUnderBudget += dtSeconds;
         m_TimeOverBudget   = 0.0;
     } else {

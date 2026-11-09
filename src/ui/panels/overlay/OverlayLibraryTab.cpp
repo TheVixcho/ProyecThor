@@ -7,8 +7,10 @@
 #include "core/FileDeletionManager.h"
 #include "core/AppPaths.h"
 #include "core/ThumbnailWorker.h"
+#include "core/settings/SettingsManager.h"
 #include "ui/framework/FilePicker.h"
 #include <imgui.h>
+#include <unordered_set>
 #ifdef _WIN32
 #include <windows.h>
 #include <shlobj.h>
@@ -108,9 +110,13 @@ static std::string NormalizeOverlayThumbKey(const std::string& path) {
 }
 
 static ImTextureID LoadImageThumb(const char* path) {
+    const auto& perf = ::ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+    const unsigned maxW = perf.lowMemoryMode ? 320u : (perf.performanceMode ? 426u : 640u);
+    const unsigned maxH = perf.lowMemoryMode ? 180u : (perf.performanceMode ? 240u : 360u);
+
     std::vector<uint8_t> pixels;
     unsigned w = 0, h = 0;
-    if (!Core::ThumbnailWorker::LoadThumbnailPixelsFromDisk(path ? path : "", pixels, w, h, 640, 360))
+    if (!Core::ThumbnailWorker::LoadThumbnailPixelsFromDisk(path ? path : "", pixels, w, h, maxW, maxH))
         return 0;
 
     GLuint tex = 0;
@@ -150,6 +156,18 @@ void OverlayLibraryTab::InvalidateSharedThumbnail(const std::string& path) {
         }
         s_SharedOverlayThumbs.erase(it);
     }
+}
+
+void OverlayLibraryTab::ClearSharedThumbnailCache() {
+    std::unordered_set<GLuint> uniqueTex;
+    for (const auto& kv : s_SharedOverlayThumbs) {
+        GLuint tex = static_cast<GLuint>(static_cast<uintptr_t>(kv.second));
+        if (tex != 0) uniqueTex.insert(tex);
+    }
+    for (GLuint tex : uniqueTex) {
+        glDeleteTextures(1, &tex);
+    }
+    s_SharedOverlayThumbs.clear();
 }
 
 void OverlayLibraryTab::PreloadAllThumbnails(

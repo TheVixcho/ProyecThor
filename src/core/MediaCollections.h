@@ -11,7 +11,9 @@ namespace ProyecThor::Core {
 enum class CollectionMediaType {
     Video = 0,
     Image = 1,
-    Audio = 2
+    Audio = 2,
+    Song = 3,
+    Document = 4
 };
 
 struct MediaCollection {
@@ -19,6 +21,7 @@ struct MediaCollection {
     std::vector<std::string> itemFilenames; // Filenames or paths in order
     float                    slideDuration = 5.0f; // Seconds for image slideshows
     bool                     loop          = true;
+    std::string              targetRoot    = "ProyecThor"; // "ProyecThor" or name/path of external folder
 };
 
 class MediaCollectionManager {
@@ -34,11 +37,12 @@ public:
     const MediaCollection*   GetCollection(CollectionMediaType type, const std::string& name) const;
     MediaCollection*         GetCollectionMutable(CollectionMediaType type, const std::string& name);
 
-    bool CreateCollection(CollectionMediaType type, const std::string& name);
+    bool CreateCollection(CollectionMediaType type, const std::string& name, const std::string& targetRoot = "ProyecThor");
     bool DeleteCollection(CollectionMediaType type, const std::string& name);
     bool RenameCollection(CollectionMediaType type, const std::string& oldName, const std::string& newName);
     bool MoveCollection(CollectionMediaType type, int fromIndex, int toIndex);
 
+    std::string GetTargetRoot(CollectionMediaType type, const std::string& name) const;
     std::string GetActiveCollection(CollectionMediaType type) const;
     void        SetActiveCollection(CollectionMediaType type, const std::string& name);
 
@@ -46,6 +50,7 @@ public:
     bool RemoveItemFromCollection(CollectionMediaType type, const std::string& collName, int index);
     bool RemoveItemFromCollectionByPath(CollectionMediaType type, const std::string& collName, const std::string& filename);
     bool MoveItemInCollection(CollectionMediaType type, const std::string& collName, int from, int to);
+    bool MoveItemBetweenCollections(CollectionMediaType type, const std::string& fromCol, const std::string& toCol, const std::string& filename);
 
     float GetSlideDuration(const std::string& collName) const;
     void  SetSlideDuration(const std::string& collName, float duration);
@@ -88,6 +93,8 @@ private:
     std::vector<MediaCollection> m_VideoCollections;
     std::vector<MediaCollection> m_ImageCollections;
     std::vector<MediaCollection> m_AudioCollections;
+    std::vector<MediaCollection> m_SongCollections;
+    std::vector<MediaCollection> m_DocumentCollections;
 
     // Queue State
     bool                m_QueuePlaying = false;

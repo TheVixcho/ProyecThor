@@ -524,7 +524,7 @@ void AudioPanel::PlayCurrent() {
     Play(m_CurrentTrack);
 }
 
-bool AudioPanel::PlayFileLive(const std::string& filename) {
+bool AudioPanel::PlayFile(const std::string& filename, bool live) {
     auto findIndex = [this, &filename]() -> int {
         for (int i = 0; i < static_cast<int>(m_Tracks.size()); i++)
             if (m_Tracks[i].filename == filename || m_Tracks[i].fullPath == filename) return i;
@@ -586,11 +586,17 @@ bool AudioPanel::PlayFileLive(const std::string& filename) {
 
     Play(idx);
 
-    auto& core = Core::PresentationCore::Get();
-    core.SetBackgroundAudio();
-    core.SetProjecting(true);
-    SetLiveBackground(true);
+    if (live) {
+        auto& core = Core::PresentationCore::Get();
+        core.SetBackgroundAudio();
+        core.SetProjecting(true);
+        SetLiveBackground(true);
+    }
     return true;
+}
+
+bool AudioPanel::PlayFileLive(const std::string& filename) {
+    return PlayFile(filename, /*live=*/true);
 }
 
 void AudioPanel::StopMusicOnly() {

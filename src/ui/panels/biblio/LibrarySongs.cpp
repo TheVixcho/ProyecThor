@@ -18,6 +18,9 @@
 #include "LibraryPlaylists.h"
 #include "LibraryMultimedia.h"
 #include "core/MediaCollections.h"
+#include "core/AuthLicenseManager.h"
+#include "core/MediaImportManager.h"
+#include "core/settings/SettingsManager.h"
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -187,7 +190,9 @@ static inline std::string NormalizeForSearch(const std::string& s)
 std::string GetSongDisplayName(const std::string& filename)
 {
     std::string title = GetSongMeta(filename).title;
-    return !title.empty() ? title : StripExtension(filename);
+    if (!title.empty()) return NormalizeToUtf8(title);
+    fs::path p = U8Path(filename);
+    return StripExtension(PathToUtf8(p.filename()));
 }
 
 // =============================================================================
@@ -430,7 +435,13 @@ void ClearSongIndexCache()
 
 static SongCacheEntry GetSongCacheEntry(const std::string& filename)
 {
-    std::string fullPath = GetAssetsPath() + "/songs/" + filename;
+    std::string fullPath;
+    fs::path p = U8Path(filename);
+    if (p.is_absolute()) {
+        fullPath = filename;
+    } else {
+        fullPath = GetAssetsPath() + "/songs/" + filename;
+    }
     std::error_code ec;
     fs::file_time_type curTime = fs::last_write_time(U8Path(fullPath), ec);
 
@@ -446,7 +457,7 @@ static SongCacheEntry GetSongCacheEntry(const std::string& filename)
     entry.fileWriteTime   = curTime;
     entry.displayName     = GetSongDisplayName(filename);
     entry.displayNameNorm = NormalizeForSearch(entry.displayName);
-    entry.fileStemNorm    = NormalizeForSearch(StripExtension(filename));
+    entry.fileStemNorm    = NormalizeForSearch(StripExtension(PathToUtf8(p.filename())));
     entry.author          = GetSongAuthor(filename);
     entry.authorNorm      = NormalizeForSearch(entry.author);
     entry.tags            = GetSongTags(filename);
@@ -488,6 +499,75 @@ static SongCacheEntry GetSongCacheEntry(const std::string& filename)
 std::vector<std::string> LoadSongVerses(const std::string& filename)
 {
     return GetSongCacheEntry(filename).verses;
+}
+
+void PreloadAllSongs(const std::function<void(int done, int total, const std::string& name)>& onProgress)
+{
+    (void)LoadSongAuthors();
+    (void)LoadSongTagsRaw();
+
+    std::vector<std::string> songFiles;
+    std::unordered_set<std::string> seen;
+
+    // 1. Escanear carpeta interna de canciones (recursivo para soportar subcarpetas)
+    std::string internalRoot = GetAssetsPath() + "/songs";
+    fs::path intFs = U8Path(internalRoot);
+    std::error_code ec;
+    if (fs::exists(intFs, ec)) {
+        for (const auto& entry : fs::recursive_directory_iterator(intFs, fs::directory_options::skip_permission_denied, ec)) {
+            if (ec) break;
+            if (!entry.is_regular_file()) continue;
+
+            std::string ext = entry.path().extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+            if (ext != ".txt") continue;
+
+            std::string rel = PathToUtf8Generic(fs::relative(entry.path(), intFs));
+            std::string key = Core::MediaImportManager::NormalizeFilenameKey(rel);
+            if (key.empty() || seen.count(key) > 0) continue;
+            seen.insert(key);
+            songFiles.push_back(NormalizeToUtf8(rel));
+        }
+    }
+
+    // 2. ProyecThor for Professionals: Escanear canciones en carpetas externas configuradas
+    if (Core::AuthLicenseManager::Get().IsPro()) {
+        const auto& storage = ProyecThor::Settings::SettingsManager::Get().GetSettings().storage;
+        for (const auto& wf : storage.watchedFolders) {
+            if (!wf.enabled || wf.path.empty()) continue;
+            fs::path wfp = U8Path(wf.path);
+            if (!fs::exists(wfp, ec) || !fs::is_directory(wfp, ec)) continue;
+
+            for (const auto& entry : fs::recursive_directory_iterator(wfp, fs::directory_options::skip_permission_denied, ec)) {
+                if (ec) break;
+                if (!entry.is_regular_file()) continue;
+
+                std::string ext = entry.path().extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+                if (ext != ".txt") continue;
+
+                std::string full = PathToUtf8(entry.path());
+                std::string key = Core::MediaImportManager::NormalizePathKey(full);
+                if (key.empty() || seen.count(key) > 0) continue;
+                seen.insert(key);
+                songFiles.push_back(full);
+            }
+        }
+    }
+
+    const int total = static_cast<int>(songFiles.size());
+    if (total == 0) {
+        if (onProgress) onProgress(0, 0, "");
+        return;
+    }
+
+    for (int i = 0; i < total; ++i) {
+        const std::string& path = songFiles[i];
+        SongCacheEntry entry = GetSongCacheEntry(path);
+        if (onProgress) {
+            onProgress(i + 1, total, entry.displayName.empty() ? path : entry.displayName);
+        }
+    }
 }
 
 // =============================================================================
@@ -799,10 +879,25 @@ static SongMatchDetail AnalyzeSongMatch(const std::string& filename, const std::
 
     // 3. Etiquetas (Tags)
     for (size_t ti = 0; ti < entry.tags.size(); ++ti) {
+        bool matched = false;
+        std::string tagDisplayName = entry.tags[ti];
         if (ti < entry.tagsNorm.size() && entry.tagsNorm[ti].find(qNorm) != std::string::npos) {
+            matched = true;
+        }
+        SongTagGroup grp = FindSongTagGroup(entry.tags[ti]);
+        if (!grp.id.empty()) {
+            tagDisplayName = grp.name;
+            if (!matched) {
+                std::string grpNameNorm = NormalizeForSearch(grp.name);
+                if (grpNameNorm.find(qNorm) != std::string::npos) {
+                    matched = true;
+                }
+            }
+        }
+        if (matched) {
             detail.kind = SongMatchKind::Tag;
             detail.matchParam = entry.tags[ti];
-            detail.snippet = entry.tags[ti];
+            detail.snippet = tagDisplayName;
             return detail;
         }
     }
@@ -1858,6 +1953,12 @@ static void RenderItemsListPane(LibraryContext& ctx)
                                        10.0f, rowHeight, 0.0f, matchPtr, cur,
                                        badgePrefixStr.empty() ? nullptr : badgePrefixStr.c_str());
 
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+                ImGui::SetDragDropPayload("MEDIA_ITEM_FILENAME", filteredItems[n].c_str(), filteredItems[n].size() + 1);
+                ImGui::Text("Mover/Copiar '%s'", disp.c_str());
+                ImGui::EndDragDropSource();
+            }
+
             if (ImGui::BeginPopupContextItem("song_ctx", ImGuiPopupFlags_MouseButtonRight)) {
                 if (ctx.currentCategoryInt == kCat_Songs) {
                     if (ImGui::BeginMenu(str.libAssignTag)) {
@@ -1872,7 +1973,11 @@ static void RenderItemsListPane(LibraryContext& ctx)
                                 if (ImGui::MenuItem(group.name.c_str(), nullptr, assigned)) {
                                     auto tags = ctx.getSongTags(filteredItems[n]);
                                     auto tagIt = std::find(tags.begin(), tags.end(), group.id);
-                                    if (assigned) tags.erase(tagIt); else tags.push_back(group.id);
+                                    if (assigned) {
+                                        if (tagIt != tags.end()) tags.erase(tagIt);
+                                    } else {
+                                        tags.push_back(group.id);
+                                    }
                                     ctx.setSongTags(filteredItems[n], tags);
                                     ForceListUpdate() = true;
                                 }
@@ -1885,6 +1990,30 @@ static void RenderItemsListPane(LibraryContext& ctx)
                         }
                         ImGui::EndMenu();
                     }
+
+                    auto songColNames = Core::MediaCollectionManager::Get().GetCollectionNames(Core::CollectionMediaType::Song);
+                    if (!songColNames.empty()) {
+                        if (ImGui::BeginMenu("Agregar a carpeta...")) {
+                            for (const auto& colName : songColNames) {
+                                const auto* col = Core::MediaCollectionManager::Get().GetCollection(Core::CollectionMediaType::Song, colName);
+                                bool inCol = false;
+                                if (col) {
+                                    for (const auto& item : col->itemFilenames) {
+                                        if (item == filteredItems[n]) { inCol = true; break; }
+                                    }
+                                }
+                                if (ImGui::MenuItem(colName.c_str(), nullptr, inCol)) {
+                                    if (!inCol) {
+                                        Core::MediaCollectionManager::Get().AddItemToCollection(Core::CollectionMediaType::Song, colName, filteredItems[n]);
+                                    } else {
+                                        Core::MediaCollectionManager::Get().RemoveItemFromCollectionByPath(Core::CollectionMediaType::Song, colName, filteredItems[n]);
+                                    }
+                                }
+                            }
+                            ImGui::EndMenu();
+                        }
+                    }
+
                     ImGui::Separator();
                 }
                 if (ImGui::MenuItem(str.libRename)) {
@@ -2215,20 +2344,54 @@ static void RenderMediaFoldersPane(LibraryContext& ctx, Core::CollectionMediaTyp
     auto colNames = colMgr.GetCollectionNames(type);
     std::string activeCol = colMgr.GetActiveCollection(type);
 
-    int totalCount = 0;
+    std::unordered_map<std::string, int> rootCounts;
+    std::unordered_map<std::string, std::vector<std::string>> rootFiles;
     std::vector<std::string> allFilesFallback;
+
     if (type == Core::CollectionMediaType::Video) {
-        const auto& list = Library::GetVideoList();
-        totalCount = (int)list.size();
-        for (const auto& it : list) allFilesFallback.push_back(it.filename);
+        for (const auto& it : Library::GetVideoList()) {
+            std::string rl = it.rootLabel.empty() ? "ProyecThor" : it.rootLabel;
+            rootCounts[rl]++;
+            rootFiles[rl].push_back(it.filename);
+            allFilesFallback.push_back(it.filename);
+        }
     } else if (type == Core::CollectionMediaType::Image) {
-        const auto& list = Library::GetImageList();
-        totalCount = (int)list.size();
-        for (const auto& it : list) allFilesFallback.push_back(it.filename);
+        for (const auto& it : Library::GetImageList()) {
+            std::string rl = it.rootLabel.empty() ? "ProyecThor" : it.rootLabel;
+            rootCounts[rl]++;
+            rootFiles[rl].push_back(it.filename);
+            allFilesFallback.push_back(it.filename);
+        }
+    } else if (type == Core::CollectionMediaType::Audio) {
+        for (const auto& it : Library::GetAudioList()) {
+            std::string rl = it.rootLabel.empty() ? "ProyecThor" : it.rootLabel;
+            rootCounts[rl]++;
+            rootFiles[rl].push_back(it.filename);
+            allFilesFallback.push_back(it.filename);
+        }
     } else {
-        const auto& list = Library::GetAudioList();
-        totalCount = (int)list.size();
-        for (const auto& it : list) allFilesFallback.push_back(it.filename);
+        for (const auto& fn : ctx.items) {
+            fs::path p = U8Path(fn);
+            std::string rl = "ProyecThor";
+            if (p.is_absolute()) {
+                rl = PathToUtf8(p.parent_path().filename());
+                if (rl.empty()) rl = "ProyecThor";
+            }
+            rootCounts[rl]++;
+            rootFiles[rl].push_back(fn);
+            allFilesFallback.push_back(fn);
+        }
+    }
+
+    std::vector<std::string> roots;
+    roots.push_back("ProyecThor");
+    if (Core::AuthLicenseManager::Get().IsPro()) {
+        auto extraRoots = Library::GetAvailableRootLabels(Core::ItemType::Video);
+        for (const auto& r : extraRoots) {
+            if (r != "ProyecThor" && std::find(roots.begin(), roots.end(), r) == roots.end()) {
+                roots.push_back(r);
+            }
+        }
     }
 
     bool isQueuePlaying = colMgr.IsQueuePlaying() && colMgr.GetQueueType() == type;
@@ -2236,9 +2399,16 @@ static void RenderMediaFoldersPane(LibraryContext& ctx, Core::CollectionMediaTyp
 
     static bool s_ShowNewFolderModal = false;
     static char s_NewFolderNameBuf[64] = "";
+    static int  s_NewFolderTargetRootIdx = 0;
+
     static bool s_ShowRenameFolderModal = false;
     static std::string s_RenameTargetFolder = "";
     static char s_RenameFolderNameBuf[64] = "";
+
+    static bool s_ShowMoveOrCopyModal = false;
+    static std::string s_PendingDropTargetCol = "";
+    static std::string s_PendingDropItemFilename = "";
+    static Core::CollectionMediaType s_PendingDropType = Core::CollectionMediaType::Video;
 
     const float itemSpY   = ImGui::GetStyle().ItemSpacing.y;
     const float btnRowH   = DS::ButtonHeight;
@@ -2257,53 +2427,68 @@ static void RenderMediaFoldersPane(LibraryContext& ctx, Core::CollectionMediaTyp
 
         ImDrawList* dl = ImGui::GetWindowDrawList();
 
-        auto RenderFolderRow = [&](const std::string& name, int count, bool isAll, int colIdx) {
+        auto RenderFolderRow = [&](const std::string& name, const std::string& rootIdentifier, int count, bool isRoot, int colIdx, float indent) {
             if (!searchLower.empty()) {
                 std::string nameLower = name;
                 std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
                 if (nameLower.find(searchLower) == std::string::npos) return;
             }
 
-            bool isSelected = isAll ? activeCol.empty() : (activeCol == name);
-            bool isThisQueueRunning = isQueuePlaying && (isAll ? queueCol.empty() : (queueCol == name));
+            bool isSelected = isRoot
+                ? (rootIdentifier.empty() ? (activeCol.empty() || activeCol == "__root__ProyecThor") : (activeCol == rootIdentifier))
+                : (activeCol == name);
 
-            ImGui::PushID(isAll ? "##all_folder" : name.c_str());
+            bool isThisQueueRunning = isQueuePlaying && (isRoot
+                ? (rootIdentifier.empty() ? queueCol.empty() : (queueCol == rootIdentifier))
+                : (queueCol == name));
+
+            std::string idPrefix = isRoot ? ("##root_fld_" + name) : ("##usr_fld_" + name);
+            ImGui::PushID(idPrefix.c_str());
 
             const float rowH = 34.0f;
             const float btnSz = 24.0f;
             const float spX = 4.0f;
-            const float actionW = isAll ? btnSz : (btnSz * 2.0f + spX);
+            const float actionW = isRoot ? btnSz : (btnSz * 2.0f + spX);
             const float availRowW = ImGui::GetContentRegionAvail().x;
             const float mainW = std::max(10.0f, availRowW - actionW - spX - 8.0f);
 
             ImVec2 pMin = ImGui::GetCursorScreenPos();
             ImVec2 pMax = { pMin.x + availRowW, pMin.y + rowH };
 
-            std::string invId = "##rowInvBtn_" + (isAll ? std::string("all") : name);
+            std::string invId = "##rowInvBtn_" + name;
             bool rowClicked = ImGui::InvisibleButton(invId.c_str(), ImVec2(mainW, rowH));
             bool rowHovered = ImGui::IsItemHovered();
 
-            if (!isAll) {
-                // Drag Source for reordering
+            // Drag Source for user collection reordering
+            if (!isRoot) {
                 if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
                     ImGui::SetDragDropPayload("FOLDER_REORDER_IDX", &colIdx, sizeof(int));
                     ImGui::Text("Mover carpeta '%s'", name.c_str());
                     ImGui::EndDragDropSource();
                 }
+            }
 
-                // Drag Target for reordering & dropping media items
-                if (ImGui::BeginDragDropTarget()) {
+            // Drag Target for reordering & dropping media items
+            if (ImGui::BeginDragDropTarget()) {
+                if (!isRoot) {
                     if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("FOLDER_REORDER_IDX")) {
                         int fromIdx = *(const int*)p->Data;
                         colMgr.MoveCollection(type, fromIdx, colIdx);
                     }
-                    if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("MEDIA_ITEM_FILENAME")) {
-                        const char* droppedFile = (const char*)p->Data;
-                        colMgr.AddItemToCollection(type, name, droppedFile);
-                    }
-                    ImGui::EndDragDropTarget();
                 }
+                if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("MEDIA_ITEM_FILENAME")) {
+                    const char* droppedFile = (const char*)p->Data;
+                    if (!isRoot) {
+                        s_ShowMoveOrCopyModal = true;
+                        s_PendingDropTargetCol = name;
+                        s_PendingDropItemFilename = droppedFile;
+                        s_PendingDropType = type;
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
 
+            if (!isRoot) {
                 if (ImGui::BeginPopupContextItem("##folderRowCtxMenu")) {
                     if (ImGui::MenuItem("▶ Reproducir en Cola")) {
                         colMgr.SetActiveCollection(type, name);
@@ -2333,7 +2518,7 @@ static void RenderMediaFoldersPane(LibraryContext& ctx, Core::CollectionMediaTyp
             }
 
             if (rowClicked) {
-                colMgr.SetActiveCollection(type, isAll ? "" : name);
+                colMgr.SetActiveCollection(type, rootIdentifier);
             }
 
             // Background & border across full row width
@@ -2346,12 +2531,17 @@ static void RenderMediaFoldersPane(LibraryContext& ctx, Core::CollectionMediaTyp
 
             // Icon 📁 and Folder Name
             float textY = pMin.y + (rowH - ImGui::GetTextLineHeight()) * 0.5f;
-            dl->AddText({ pMin.x + 8.0f, textY }, isAll ? IM_COL32(56, 189, 248, 255) : IM_COL32(245, 158, 11, 255), "📁");
+            float iconX = pMin.x + 8.0f + indent;
+            if (isRoot) {
+                dl->AddText({ iconX, textY }, IM_COL32(56, 189, 248, 255), "📁");
+            } else {
+                dl->AddText({ iconX - 10.0f, textY }, DS::TextSecondary, "↳");
+                dl->AddText({ iconX + 4.0f, textY }, IM_COL32(245, 158, 11, 255), "📁");
+            }
 
-            std::string dispName = isAll ? ((type == Core::CollectionMediaType::Video) ? "Todos los Videos" :
-                                            (type == Core::CollectionMediaType::Image) ? "Todas las Imágenes" :
-                                                                                         "Toda la Música") : name;
-            float maxTextW = mainW - 46.0f;
+            std::string dispName = name;
+            float textStartX = iconX + (isRoot ? 20.0f : 24.0f);
+            float maxTextW = mainW - (textStartX - pMin.x) - 20.0f;
             if (ImGui::CalcTextSize(dispName.c_str()).x > maxTextW) {
                 while (!dispName.empty() && ImGui::CalcTextSize((dispName + "...").c_str()).x > maxTextW) {
                     dispName.pop_back();
@@ -2361,68 +2551,117 @@ static void RenderMediaFoldersPane(LibraryContext& ctx, Core::CollectionMediaTyp
 
             ImU32 nameCol = isSelected ? IM_COL32(255, 255, 255, 255) :
                             (rowHovered ? IM_COL32(240, 240, 240, 255) : DS::TextPrimary);
-            dl->AddText({ pMin.x + 28.0f, textY }, nameCol, dispName.c_str());
+            dl->AddText({ textStartX, textY }, nameCol, dispName.c_str());
 
             std::string countStr = "(" + std::to_string(count) + ")";
-            float countX = pMin.x + 30.0f + ImGui::CalcTextSize(dispName.c_str()).x + 6.0f;
+            float countX = textStartX + ImGui::CalcTextSize(dispName.c_str()).x + 6.0f;
             if (countX + ImGui::CalcTextSize(countStr.c_str()).x < pMin.x + mainW) {
                 dl->AddText({ countX, textY }, DS::TextSecondary, countStr.c_str());
             }
 
-            // Buttons on the right
-            ImGui::SameLine(0.0f, spX);
+            // Buttons on the right (perfectamente centrados geométrica y visualmente)
+            const float btnH = 22.0f;
+            const float btnW = 22.0f;
+            const float btnY = pMin.y + (rowH - btnH) * 0.5f;
+            const float padR = 6.0f;
+
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
+            ImVec2 qBtnPos = isRoot ? ImVec2(pMax.x - padR - btnW, btnY)
+                                    : ImVec2(pMax.x - padR - btnW * 2.0f - spX, btnY);
+            ImGui::SetCursorScreenPos(qBtnPos);
+
             if (isThisQueueRunning) {
-                ImGui::PushStyleColor(ImGuiCol_Button,        IM_COL32(239, 68, 68, 180));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(239, 68, 68, 240));
+                ImGui::PushStyleColor(ImGuiCol_Button,        IM_COL32(239, 68, 68, 200));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(239, 68, 68, 245));
                 ImGui::PushStyleColor(ImGuiCol_ButtonActive,  IM_COL32(220, 38, 38, 255));
-                if (ImGui::Button("⏹##qStop", ImVec2(btnSz, rowH))) {
+                bool stopClicked = ImGui::Button("##qStop", ImVec2(btnW, btnH));
+
+                // Glifo cuadrado de Stop perfectamente centrado por coordenadas exactas
+                ImVec2 bCenter(qBtnPos.x + btnW * 0.5f, qBtnPos.y + btnH * 0.5f);
+                const float s = 8.0f;
+                dl->AddRectFilled(ImVec2(bCenter.x - s * 0.5f, bCenter.y - s * 0.5f),
+                                  ImVec2(bCenter.x + s * 0.5f, bCenter.y + s * 0.5f),
+                                  IM_COL32(255, 255, 255, 255), 1.0f);
+
+                if (stopClicked) {
                     colMgr.StopQueue();
                 }
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Detener cola");
                 ImGui::PopStyleColor(3);
             } else {
-                ImGui::PushStyleColor(ImGuiCol_Button,        IM_COL32(34, 197, 94, 80));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(34, 197, 94, 180));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  IM_COL32(34, 197, 94, 240));
-                if (ImGui::Button("▶##qPlay", ImVec2(btnSz, rowH))) {
-                    if (isAll) {
-                        colMgr.SetActiveCollection(type, "");
-                        colMgr.StartQueue(type, "", allFilesFallback, 0);
+                ImGui::PushStyleColor(ImGuiCol_Button,        IM_COL32(34, 197, 94, 90));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(34, 197, 94, 190));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  IM_COL32(34, 197, 94, 245));
+                bool playClicked = ImGui::Button("##qPlay", ImVec2(btnW, btnH));
+
+                // Glifo de Play triangular perfectamente centrado
+                ImVec2 bCenter(qBtnPos.x + btnW * 0.5f, qBtnPos.y + btnH * 0.5f);
+                const float trR = 4.8f;
+                dl->AddTriangleFilled(
+                    ImVec2(bCenter.x - trR * 0.60f, bCenter.y - trR),
+                    ImVec2(bCenter.x - trR * 0.60f, bCenter.y + trR),
+                    ImVec2(bCenter.x + trR * 0.85f, bCenter.y),
+                    IM_COL32(255, 255, 255, 255)
+                );
+
+                if (playClicked) {
+                    if (isRoot) {
+                        colMgr.SetActiveCollection(type, rootIdentifier);
+                        colMgr.StartQueue(type, rootIdentifier, rootFiles[name], 0);
                     } else {
                         colMgr.SetActiveCollection(type, name);
                         colMgr.StartQueue(type, name, {}, 0);
                     }
                 }
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip(isAll ? "Reproducir todos en cola" : "Reproducir carpeta en cola");
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip(isRoot ? "Reproducir archivos de esta carpeta en cola" : "Reproducir carpeta en cola");
                 ImGui::PopStyleColor(3);
             }
 
-            if (!isAll) {
-                ImGui::SameLine(0.0f, spX);
-                if (ImGui::Button("...##ctxBtn", ImVec2(btnSz, rowH))) {
+            if (!isRoot) {
+                ImVec2 ctxBtnPos(pMax.x - padR - btnW, btnY);
+                ImGui::SetCursorScreenPos(ctxBtnPos);
+                bool ctxClicked = ImGui::Button("##ctxBtn", ImVec2(btnW, btnH));
+
+                // Glifo de 3 puntos horizontales perfectamente centrados
+                ImVec2 bCenter(ctxBtnPos.x + btnW * 0.5f, ctxBtnPos.y + btnH * 0.5f);
+                const float dotR = 1.4f;
+                const float dotDist = 4.2f;
+                ImU32 dotCol = ImGui::IsItemHovered() ? IM_COL32(255, 255, 255, 255) : IM_COL32(180, 190, 205, 230);
+                dl->AddCircleFilled(ImVec2(bCenter.x - dotDist, bCenter.y), dotR, dotCol);
+                dl->AddCircleFilled(ImVec2(bCenter.x, bCenter.y), dotR, dotCol);
+                dl->AddCircleFilled(ImVec2(bCenter.x + dotDist, bCenter.y), dotR, dotCol);
+
+                if (ctxClicked) {
                     ImGui::OpenPopup("##folderRowCtxMenu");
                 }
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Opciones de carpeta");
             }
             ImGui::PopStyleVar();
 
+            ImGui::SetCursorScreenPos(ImVec2(pMin.x, pMax.y + 4.0f));
             ImGui::PopID();
         };
 
-        // 1. "Todos" row
-        RenderFolderRow("Todos", totalCount, true, -1);
+        // Render roots and their child user collections
+        for (const auto& r : roots) {
+            std::string rootKey = (r == "ProyecThor") ? "" : ("__root__" + r);
+            RenderFolderRow(r, rootKey, rootCounts[r], true, -1, 0.0f);
 
-        // 2. Custom folder rows
-        for (int i = 0; i < (int)colNames.size(); i++) {
-            const auto* c = colMgr.GetCollection(type, colNames[i]);
-            int count = c ? (int)c->itemFilenames.size() : 0;
-            RenderFolderRow(colNames[i], count, false, i);
+            // Render custom user collections that belong to this target root
+            for (int i = 0; i < (int)colNames.size(); i++) {
+                std::string tRoot = colMgr.GetTargetRoot(type, colNames[i]);
+                if (tRoot.empty()) tRoot = "ProyecThor";
+                if (tRoot == r || (r == "ProyecThor" && std::find(roots.begin(), roots.end(), tRoot) == roots.end())) {
+                    const auto* c = colMgr.GetCollection(type, colNames[i]);
+                    int count = c ? (int)c->itemFilenames.size() : 0;
+                    RenderFolderRow(colNames[i], colNames[i], count, false, i, 14.0f);
+                }
+            }
         }
 
         if (colNames.empty()) {
             ImGui::Spacing();
-            ImGui::TextDisabled("  Sin carpetas creadas.");
+            ImGui::TextDisabled("  Sin subcarpetas creadas.");
             ImGui::TextDisabled("  Haz clic abajo en '+ Nueva Carpeta'.");
         }
         ImGui::Dummy(ImVec2(0.0f, 0.0f));
@@ -2448,6 +2687,7 @@ static void RenderMediaFoldersPane(LibraryContext& ctx, Core::CollectionMediaTyp
         if (ImGui::Button("+ Nueva Carpeta", newBtnSize)) {
             s_ShowNewFolderModal = true;
             s_NewFolderNameBuf[0] = '\0';
+            s_NewFolderTargetRootIdx = 0;
         }
         ImGui::PopStyleVar();
         ImGui::PopStyleColor(3);
@@ -2473,16 +2713,33 @@ static void RenderMediaFoldersPane(LibraryContext& ctx, Core::CollectionMediaTyp
     }
     if (ImGui::BeginPopupModal("Nueva Carpeta##modalFolder", &s_ShowNewFolderModal,
                                ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
-        ImGui::Text("Nombre de la nueva carpeta:");
-        ImGui::SetNextItemWidth(260.0f);
+        ImGui::Text("Nombre de la nueva carpeta / cola:");
+        ImGui::SetNextItemWidth(280.0f);
         if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
         bool enterPressed = ImGui::InputText("##newFldName", s_NewFolderNameBuf, sizeof(s_NewFolderNameBuf),
                                             ImGuiInputTextFlags_EnterReturnsTrue);
         ImGui::Spacing();
+
+        std::string chosenRoot = "ProyecThor";
+        if (Core::AuthLicenseManager::Get().IsPro() && roots.size() > 1) {
+            ImGui::Separator();
+            ImGui::Text("¿Dónde deseas crear la carpeta / cola?");
+            for (int ri = 0; ri < (int)roots.size(); ++ri) {
+                std::string rLabel = (ri == 0) ? "📁 ProyecThor (carpeta personal)" : ("📁 " + roots[ri]);
+                if (ImGui::RadioButton(rLabel.c_str(), s_NewFolderTargetRootIdx == ri)) {
+                    s_NewFolderTargetRootIdx = ri;
+                }
+            }
+            if (s_NewFolderTargetRootIdx >= 0 && s_NewFolderTargetRootIdx < (int)roots.size()) {
+                chosenRoot = roots[s_NewFolderTargetRootIdx];
+            }
+            ImGui::Spacing();
+        }
+
         if (ImGui::Button("Crear", ImVec2(100.0f, DS::ButtonHeight)) || enterPressed) {
             std::string n = s_NewFolderNameBuf;
             if (!n.empty()) {
-                colMgr.CreateCollection(type, n);
+                colMgr.CreateCollection(type, n, chosenRoot);
                 colMgr.SetActiveCollection(type, n);
             }
             s_ShowNewFolderModal = false;
@@ -2523,6 +2780,46 @@ static void RenderMediaFoldersPane(LibraryContext& ctx, Core::CollectionMediaTyp
         ImGui::SameLine();
         if (ImGui::Button("Cancelar", ImVec2(100.0f, DS::ButtonHeight))) {
             s_ShowRenameFolderModal = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
+    // Modal: Mover o Duplicar (al arrastrar elemento a una carpeta)
+    if (s_ShowMoveOrCopyModal) {
+        ImGui::OpenPopup("¿Mover o Duplicar?##modalMoveOrCopySide");
+    }
+    if (vpFolder) {
+        ImGui::SetNextWindowViewport(vpFolder->ID);
+        ImGui::SetNextWindowPos(vpFolder->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    }
+    if (ImGui::BeginPopupModal("¿Mover o Duplicar?##modalMoveOrCopySide", &s_ShowMoveOrCopyModal,
+                               ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
+        ImGui::Text("¿Deseas mover o duplicar (copiar) a la carpeta '%s'?", s_PendingDropTargetCol.c_str());
+        ImGui::Spacing();
+        ImGui::TextDisabled("Archivo: %s", s_PendingDropItemFilename.c_str());
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (ImGui::Button("🔀 Mover a esta carpeta", ImVec2(170.0f, DS::ButtonHeight))) {
+            if (!activeCol.empty() && activeCol.rfind("__root__", 0) != 0 && activeCol != s_PendingDropTargetCol) {
+                colMgr.MoveItemBetweenCollections(s_PendingDropType, activeCol, s_PendingDropTargetCol, s_PendingDropItemFilename);
+            } else {
+                colMgr.AddItemToCollection(s_PendingDropType, s_PendingDropTargetCol, s_PendingDropItemFilename);
+            }
+            s_ShowMoveOrCopyModal = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("📋 Duplicar (Copiar)", ImVec2(160.0f, DS::ButtonHeight))) {
+            colMgr.AddItemToCollection(s_PendingDropType, s_PendingDropTargetCol, s_PendingDropItemFilename);
+            s_ShowMoveOrCopyModal = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancelar", ImVec2(90.0f, DS::ButtonHeight))) {
+            s_ShowMoveOrCopyModal = false;
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();

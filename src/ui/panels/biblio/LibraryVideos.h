@@ -12,4 +12,7 @@ void RenderLocalVideoList(LibraryContext& ctx);
 // Seccion de URLs de streaming con campo de entrada, lista y cola
 void RenderStreamURLSection(LibraryContext& ctx);
 
+// Libera la caché local de miniaturas de video en GPU
+void ClearLocalVideoThumbnailCache();
+
 } // namespace ProyecThor::Library

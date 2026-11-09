@@ -3,6 +3,7 @@
 #include "core/PresentationCore.h"
 #include "core/ThumbnailWorker.h"
 #include "core/MediaImportManager.h"
+#include "core/settings/SettingsManager.h"
 #include "stb_image.h"
 #include <iostream>
 #include <chrono>
@@ -208,9 +209,13 @@ void main() {
             return true;
         }
 
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        const unsigned maxImgW = perf.lowMemoryMode ? 1280u : (perf.performanceMode ? 1920u : 0u);
+        const unsigned maxImgH = perf.lowMemoryMode ? 720u  : (perf.performanceMode ? 1080u : 0u);
+
         std::vector<uint8_t> pixels;
         unsigned uw = 0, uh = 0;
-        if (!ThumbnailWorker::LoadThumbnailPixelsFromDisk(path, pixels, uw, uh, 0, 0) ||
+        if (!ThumbnailWorker::LoadThumbnailPixelsFromDisk(path, pixels, uw, uh, maxImgW, maxImgH) ||
             uw == 0 || uh == 0)
         {
             std::cerr << "[BackgroundLayer] Fallo al cargar imagen estatica: " << path << "\n";
@@ -616,8 +621,13 @@ void main() {
 
         GLuint finalTex = rawTex;
         const bool usingColdPoster = (m_IsVideo && !Active().HasVideoFrame() && m_PosterTex != 0);
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        const bool skipUpscaler = perf.performanceMode || perf.lowMemoryMode;
 
-        if (!usingColdPoster && m_FSREnabled) {
+        if (skipUpscaler) {
+            if (m_FSR.IsInitialized()) m_FSR.Destroy();
+            if (m_NIS.IsInitialized()) m_NIS.Destroy();
+        } else if (!usingColdPoster && m_FSREnabled) {
             if (!m_FSR.IsInitialized()) {
                 bool ok = m_FSR.Init(viewW, viewH);
                 if (ok) {
@@ -793,6 +803,9 @@ void main() {
     {
         EnsureBlitResources();
         if (outputW <= 0 || outputH <= 0) return;
+
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        if (perf.performanceMode || perf.lowMemoryMode) return;
 
         if (m_FSREnabled && !m_FSR.IsInitialized()) {
             if (m_FSR.Init(outputW, outputH)) {
@@ -1120,6 +1133,39 @@ void main() {
         m_PrefetchArmed = false;
         m_PrefetchedPath.clear();
 
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        if (perf.lowMemoryMode)
+        {
+            // En modo RAM mínima evitamos tener dos decodificadores y búferes de video simultáneos:
+            // liberamos Standby y el clip previo antes de abrir el nuevo en Active().
+            m_SwapPending        = false;
+            m_SwapReadyAt        = 0.0;
+            m_SwapSettledAt      = 0.0;
+            m_TransitionProgress = 1.0f;
+            Standby().SetAudioActive(false);
+            Standby().SetMute(true);
+            Standby().SetVolume(0);
+            Standby().Stop();
+            Active().Stop();
+            ClearPoster();
+
+            Active().Play(path, /*loop=*/wantNativeLoop, /*startMuted=*/true);
+            if (!m_IsLiveToPublic || !allowAudio)
+            {
+                Active().SetAudioActive(false);
+                Active().SetMute(true);
+                Active().SetVolume(0);
+            }
+            else
+            {
+                Active().SetAudioActive(true);
+                Active().SetMute(m_TargetMuted);
+                Active().SetVolume(m_TargetMuted ? 0 : m_TargetVolume.load());
+                ReapplyLiveEqualizer(Active());
+            }
+            return;
+        }
+
         if (m_SwapPending || hasRunningVideo)
         {
             // Ver comentario de wantNativeLoop arriba: los fondos
@@ -1169,6 +1215,9 @@ void main() {
 
     void BackgroundLayer::Prefetch(const std::string& path, bool allowAudio)
     {
+        if (ProyecThor::Settings::SettingsManager::Get().GetSettings().performance.lowMemoryMode)
+            return;
+
         std::string normPath = path;
         std::replace(normPath.begin(), normPath.end(), '\\', '/');
         std::transform(normPath.begin(), normPath.end(), normPath.begin(),
@@ -1361,6 +1410,13 @@ void main() {
         if (rawTex == 0 || targetW <= 0 || targetH <= 0)
             return nullptr;
 
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        if (perf.performanceMode || perf.lowMemoryMode) {
+            if (m_FSR.IsInitialized()) m_FSR.Destroy();
+            if (m_NIS.IsInitialized()) m_NIS.Destroy();
+            return (void*)(uintptr_t)rawTex;
+        }
+
         if (m_IsVideo && !Active().HasVideoFrame() && m_PosterTex != 0)
             return (void*)(uintptr_t)rawTex;
 
@@ -1408,7 +1464,12 @@ void main() {
     }
 
     void* BackgroundLayer::GetBlurredFillTexture(int workW, int workH) {
-        if (!m_FillBlurEnabled) return nullptr;
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        if (perf.performanceMode || perf.lowMemoryMode || !m_FillBlurEnabled) {
+            if (m_FillBlur.IsInitialized() && (perf.performanceMode || perf.lowMemoryMode))
+                m_FillBlur.Destroy();
+            return nullptr;
+        }
 
         GLuint rawTex = static_cast<GLuint>(reinterpret_cast<uintptr_t>(GetTextureID()));
         if (rawTex == 0 || workW <= 0 || workH <= 0) return nullptr;
@@ -1719,6 +1780,27 @@ void main() {
         m_PlayerB.Reinit();
         if (m_ActiveNative && m_IsLiveToPublic) {
             m_ActiveNative->player.ApplyDeinterlace(VLCBasePlayer::GetDefaultDeinterlace());
+        }
+    }
+
+    void BackgroundLayer::PurgeIdleResources()
+    {
+        if (!m_SwapPending && !m_PrefetchArmed)
+            Standby().ReleaseIdleResources();
+        if (!m_IsVideo)
+            Active().ReleaseIdleResources();
+        if (!m_IsVideo || Active().HasVideoFrame())
+            ClearPoster();
+
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        if (perf.performanceMode || perf.lowMemoryMode || !m_FSREnabled) {
+            if (m_FSR.IsInitialized()) m_FSR.Destroy();
+        }
+        if (perf.performanceMode || perf.lowMemoryMode || !m_NISEnabled) {
+            if (m_NIS.IsInitialized()) m_NIS.Destroy();
+        }
+        if (perf.performanceMode || perf.lowMemoryMode || !m_FillBlurEnabled) {
+            if (m_FillBlur.IsInitialized()) m_FillBlur.Destroy();
         }
     }
 

@@ -24,7 +24,11 @@ namespace {
 
 static std::string SongMetaPath(const std::string& filename)
 {
-    return GetAssetsPath() + "/songs_meta/" + filename + ".json";
+    std::string safe = filename;
+    for (char& c : safe) {
+        if (c == ':') c = '_';
+    }
+    return GetAssetsPath() + "/songs_meta/" + safe + ".json";
 }
 
 static void EnsureSongMetaDir()
@@ -120,13 +124,14 @@ void SetSongMeta(const std::string& filename, const SongMeta& meta)
 
     std::string metaPathStr = SongMetaPath(filename);
     fs::path metaPath = U8Path(metaPathStr);
+    std::error_code ec;
+    fs::create_directories(metaPath.parent_path(), ec);
     std::ofstream f(metaPath);
     if (f.is_open()) {
         f << j.dump(2);
         f.close();
     }
 
-    std::error_code ec;
     auto lastWrite = fs::last_write_time(metaPath, ec);
     {
         std::lock_guard<std::mutex> lk(s_MetaMutex);
@@ -142,6 +147,7 @@ void RenameSongMeta(const std::string& oldFilename, const std::string& newFilena
 
     EnsureSongMetaDir();
     fs::path newPath = U8Path(SongMetaPath(newFilename));
+    fs::create_directories(newPath.parent_path(), ec);
     fs::rename(oldPath, newPath, ec);
 
     {

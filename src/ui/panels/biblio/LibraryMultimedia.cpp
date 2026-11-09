@@ -1,4 +1,5 @@
 #include "LibraryMultimedia.h"
+#include "LibraryVideos.h"
 #include "LibraryIcons.h"
 #include "LibraryStyles.h"
 #include "LibraryHelpers.h"
@@ -10,6 +11,7 @@
 #include "core/PresentationCore.h"
 #include "core/FileDeletionManager.h"
 #include "core/MediaImportManager.h"
+#include "core/AuthLicenseManager.h"
 #include "core/settings/SettingsManager.h"
 #include "ui/panels/layers/LayersBgTab.h"
 #include "ui/views/Audio.h"
@@ -87,20 +89,64 @@ static std::string ItemFullPath(const MMItem& it) {
     }
 }
 
+std::string GetMMItemFullPath(const MMItem& it) {
+    return ItemFullPath(it);
+}
+
+std::string GetMMItemRootLabel(const MMItem& it) {
+    return it.rootLabel.empty() ? "ProyecThor" : it.rootLabel;
+}
+
+std::vector<std::string> GetAvailableRootLabels(Core::ItemType /*type*/) {
+    std::vector<std::string> roots;
+    roots.push_back("ProyecThor");
+    if (ProyecThor::Core::AuthLicenseManager::Get().IsPro()) {
+        const auto& watched = ProyecThor::Settings::SettingsManager::Get().GetSettings().storage.watchedFolders;
+        for (const auto& wf : watched) {
+            if (!wf.enabled || wf.path.empty()) continue;
+            std::error_code ec;
+            fs::path p = U8Path(wf.path);
+            if (fs::exists(p, ec) && fs::is_directory(p, ec)) {
+                std::string label = PathToUtf8(p.filename());
+                if (label.empty()) label = wf.path;
+                if (std::find(roots.begin(), roots.end(), label) == roots.end()) {
+                    roots.push_back(label);
+                }
+            }
+        }
+    }
+    return roots;
+}
+
 static void ScanFolder(const std::string& folder, const std::vector<std::string>& exts,
-                        Core::ItemType type, std::vector<MMItem>& out)
+                        Core::ItemType type, std::vector<MMItem>& out,
+                        const std::string& rootLabel = "ProyecThor", bool recursive = false)
 {
     std::error_code ec;
     fs::path dir = U8Path(folder);
     if (!fs::exists(dir, ec)) return;
-    for (const auto& entry : fs::directory_iterator(dir, ec)) {
-        if (ec) break;
-        if (!entry.is_regular_file()) continue;
+
+    auto processEntry = [&](const fs::directory_entry& entry) {
+        if (!entry.is_regular_file()) return;
         std::string ext = entry.path().extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(),
                        [](unsigned char c) { return (char)std::tolower(c); });
-        if (std::find(exts.begin(), exts.end(), ext) == exts.end()) continue;
-        out.push_back({ PathToUtf8(entry.path().filename()), type, "" });
+        if (std::find(exts.begin(), exts.end(), ext) == exts.end()) return;
+        std::string full = PathToUtf8(entry.path());
+        std::string fn   = PathToUtf8(entry.path().filename());
+        out.push_back({ fn, type, full, rootLabel });
+    };
+
+    if (recursive) {
+        for (const auto& entry : fs::recursive_directory_iterator(dir, fs::directory_options::skip_permission_denied, ec)) {
+            if (ec) break;
+            processEntry(entry);
+        }
+    } else {
+        for (const auto& entry : fs::directory_iterator(dir, ec)) {
+            if (ec) break;
+            processEntry(entry);
+        }
     }
 }
 
@@ -114,16 +160,14 @@ void RefreshMultimediaLists()
     const std::vector<std::string> imgExts = { ".jpg", ".jpeg", ".png", ".bmp", ".webp" };
     const std::vector<std::string> audExts = { ".mp3", ".flac", ".wav", ".ogg", ".aac", ".m4a", ".wma", ".opus", ".aiff" };
 
-    // 1. Escaneo de carpetas internas de la aplicacion
-    ScanFolder(VideoFolder(), vidExts, Core::ItemType::Video, s_Videos);
-    ScanFolder(ImageFolder(), imgExts, Core::ItemType::Image, s_Images);
-    ScanFolder(AudioFolder(), audExts, Core::ItemType::Audio, s_Audios);
+    // 1. Escaneo de carpetas internas de la aplicacion (Carpeta raíz "ProyecThor")
+    ScanFolder(VideoFolder(), vidExts, Core::ItemType::Video, s_Videos, "ProyecThor", false);
+    ScanFolder(ImageFolder(), imgExts, Core::ItemType::Image, s_Images, "ProyecThor", false);
+    ScanFolder(AudioFolder(), audExts, Core::ItemType::Audio, s_Audios, "ProyecThor", false);
 
-    // 2. Archivos externos vinculados explicitamente por el usuario (ej. desde Descargas
-    //    o carpetas vigiladas tras aceptar en el menu de seleccion Multimedia / Background).
-    //    Ya no se auto-importan silenciosamente las carpetas completas sin preguntar.
-    const auto& extFiles = ProyecThor::Settings::SettingsManager::Get().GetSettings().storage.externalMultimediaFiles;
-    for (const auto& rawPath : extFiles) {
+    // 2. Archivos externos vinculados explicitamente por el usuario
+    const auto& storage = ProyecThor::Settings::SettingsManager::Get().GetSettings().storage;
+    for (const auto& rawPath : storage.externalMultimediaFiles) {
         if (rawPath.empty()) continue;
         std::error_code ec;
         fs::path p = U8Path(rawPath);
@@ -140,32 +184,60 @@ void RefreshMultimediaLists()
 
         std::string fname = PathToUtf8(p.filename());
         std::string fpath = PathToUtf8(p);
-        if (isVid)      s_Videos.push_back({ fname, Core::ItemType::Video, fpath });
-        else if (isImg) s_Images.push_back({ fname, Core::ItemType::Image, fpath });
-        else            s_Audios.push_back({ fname, Core::ItemType::Audio, fpath });
+
+        std::string rootLabel = "ProyecThor";
+        for (const auto& wf : storage.watchedFolders) {
+            if (fpath.rfind(wf.path, 0) == 0) {
+                fs::path wfp = U8Path(wf.path);
+                rootLabel = PathToUtf8(wfp.filename());
+                if (rootLabel.empty()) rootLabel = wf.path;
+                break;
+            }
+        }
+
+        if (isVid)      s_Videos.push_back({ fname, Core::ItemType::Video, fpath, rootLabel });
+        else if (isImg) s_Images.push_back({ fname, Core::ItemType::Image, fpath, rootLabel });
+        else            s_Audios.push_back({ fname, Core::ItemType::Audio, fpath, rootLabel });
     }
 
-    // 3. Deduplicacion estricta por ruta canonica Y por nombre de archivo (case-insensitive)
-    //    para garantizar que nunca aparezcan dos entradas con el mismo nombre.
+    // 3. ProyecThor for Professionals: Escaneo automático de carpetas externas vinculadas sin duplicar
+    if (ProyecThor::Core::AuthLicenseManager::Get().IsPro()) {
+        for (const auto& wf : storage.watchedFolders) {
+            if (!wf.enabled || wf.path.empty()) continue;
+            std::error_code ec;
+            fs::path p = U8Path(wf.path);
+            if (!fs::exists(p, ec) || !fs::is_directory(p, ec)) continue;
+
+            std::string rootLabel = PathToUtf8(p.filename());
+            if (rootLabel.empty()) rootLabel = wf.path;
+
+            ScanFolder(wf.path, vidExts, Core::ItemType::Video, s_Videos, rootLabel, true);
+            ScanFolder(wf.path, imgExts, Core::ItemType::Image, s_Images, rootLabel, true);
+            ScanFolder(wf.path, audExts, Core::ItemType::Audio, s_Audios, rootLabel, true);
+        }
+    }
+
+    // 4. Deduplicacion por ruta y ordenamiento
     auto SortAndDedupe = [](std::vector<MMItem>& list) {
         std::unordered_set<std::string> seenPaths;
-        std::unordered_set<std::string> seenNames;
         std::vector<MMItem> uniqueList;
         uniqueList.reserve(list.size());
 
         for (auto& item : list) {
             std::string pathKey = Core::MediaImportManager::NormalizePathKey(ItemFullPath(item));
-            std::string nameKey = Core::MediaImportManager::NormalizeFilenameKey(item.filename);
-            if (nameKey.empty()) continue;
-            if (!pathKey.empty() && seenPaths.count(pathKey) > 0) continue;
-            if (seenNames.count(nameKey) > 0) continue;
+            if (pathKey.empty() || seenPaths.count(pathKey) > 0) continue;
 
-            if (!pathKey.empty()) seenPaths.insert(pathKey);
-            seenNames.insert(nameKey);
+            seenPaths.insert(pathKey);
+            if (item.rootLabel.empty()) item.rootLabel = "ProyecThor";
             uniqueList.push_back(std::move(item));
         }
 
         std::sort(uniqueList.begin(), uniqueList.end(), [](const MMItem& a, const MMItem& b) {
+            if (a.rootLabel != b.rootLabel) {
+                if (a.rootLabel == "ProyecThor") return true;
+                if (b.rootLabel == "ProyecThor") return false;
+                return a.rootLabel < b.rootLabel;
+            }
             std::string ka = Core::MediaImportManager::NormalizeFilenameKey(a.filename);
             std::string kb = Core::MediaImportManager::NormalizeFilenameKey(b.filename);
             if (ka != kb) return ka < kb;
@@ -194,9 +266,13 @@ void ImportMultimediaFile()
 // =============================================================================
 
 static ImTextureID LoadThumbFromDisk(const char* path) {
+    const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+    const unsigned maxW = perf.lowMemoryMode ? 256u : (perf.performanceMode ? 320u : 512u);
+    const unsigned maxH = perf.lowMemoryMode ? 144u : (perf.performanceMode ? 180u : 288u);
+
     std::vector<uint8_t> pixels;
     unsigned w = 0, h = 0;
-    if (!ProyecThor::Core::ThumbnailWorker::LoadThumbnailPixelsFromDisk(path ? path : "", pixels, w, h, 512, 288))
+    if (!ProyecThor::Core::ThumbnailWorker::LoadThumbnailPixelsFromDisk(path ? path : "", pixels, w, h, maxW, maxH))
         return 0;
 
     GLuint tex = 0;
@@ -338,8 +414,28 @@ ImTextureID GetMMAudioThumbnail(const std::string& path) {
     return GetAudioThumbnail(path);
 }
 
-std::string GetMMItemFullPath(const MMItem& it) {
-    return ItemFullPath(it);
+void ClearMultimediaThumbnailCaches() {
+    ClearLocalVideoThumbnailCache();
+
+    std::unordered_set<GLuint> uniqueTex;
+    auto collectFrom = [&](const std::unordered_map<std::string, ImTextureID>& cache) {
+        for (const auto& kv : cache) {
+            GLuint tex = static_cast<GLuint>(static_cast<uintptr_t>(kv.second));
+            if (tex != 0) uniqueTex.insert(tex);
+        }
+    };
+    collectFrom(s_VideoThumbCache);
+    collectFrom(s_ImageThumbCache);
+    collectFrom(s_AudioArtCache);
+
+    for (GLuint tex : uniqueTex) {
+        glDeleteTextures(1, &tex);
+    }
+
+    s_VideoThumbCache.clear();
+    s_ImageThumbCache.clear();
+    s_AudioArtCache.clear();
+    s_VideoThumbWorker.ResetSeen();
 }
 
 void PreloadMultimediaThumbnails(const MultimediaPreloadProgressFn& onProgress)
@@ -636,6 +732,13 @@ static void RenderMMContextMenu(const MMItem& item, const char* popupId) {
             core.SetBackgroundMedia(ItemFullPath(item), item.type == Core::ItemType::Video, /*allowAudio=*/item.type == Core::ItemType::Video);
         }
         ImGui::Separator();
+    } else if (item.type == Core::ItemType::Audio) {
+        if (ImGui::MenuItem("Enviar en vivo al proyector")) {
+            if (auto* ap = UI::AudioPanel::GetActiveInstance()) {
+                ap->PlayFileLive(ItemFullPath(item));
+            }
+        }
+        ImGui::Separator();
     }
     if (item.type == Core::ItemType::Video || item.type == Core::ItemType::Image) {
         if (ImGui::MenuItem("Mover a Fondos (Backgrounds)")) {
@@ -726,12 +829,11 @@ static void RenderMMRow(const MMItem& item, int rowIdx) {
         SelectMMItem(item);
         if (item.type == Core::ItemType::Audio) {
             if (auto* ap = UI::AudioPanel::GetActiveInstance()) {
-                ap->PlayFileLive(item.filename);
+                ap->PlayFile(ItemFullPath(item), /*live=*/false);
             }
-        } else {
+        } else if (item.type == Core::ItemType::Video) {
             auto& core = Core::PresentationCore::Get();
-            core.SetProjecting(true);
-            core.SetBackgroundMedia(ItemFullPath(item), item.type == Core::ItemType::Video, /*allowAudio=*/true);
+            core.RequestPreviewLoad(ItemFullPath(item), /*loop=*/false, /*startMuted=*/false);
         }
     }
 
@@ -810,12 +912,11 @@ static void RenderMMCard(const MMItem& item, int cardIdx, float W, float H, int 
         SelectMMItem(item);
         if (item.type == Core::ItemType::Audio) {
             if (auto* ap = UI::AudioPanel::GetActiveInstance()) {
-                ap->PlayFileLive(item.filename);
+                ap->PlayFile(ItemFullPath(item), /*live=*/false);
             }
-        } else {
+        } else if (item.type == Core::ItemType::Video) {
             auto& core = Core::PresentationCore::Get();
-            core.SetProjecting(true);
-            core.SetBackgroundMedia(ItemFullPath(item), item.type == Core::ItemType::Video, /*allowAudio=*/true);
+            core.RequestPreviewLoad(ItemFullPath(item), /*loop=*/false, /*startMuted=*/false);
         }
     }
 

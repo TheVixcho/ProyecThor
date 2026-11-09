@@ -64,6 +64,15 @@ inline std::string PathToUtf8(const fs::path& p)
     return p.string();
 #endif
 }
+
+inline std::string PathToUtf8Generic(const fs::path& p)
+{
+#ifdef _WIN32
+    return WideToUtf8(p.generic_wstring());
+#else
+    return p.generic_string();
+#endif
+}
 // =============================================================================
 //  Validacion y normalizacion de UTF-8
 // =============================================================================

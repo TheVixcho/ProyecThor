@@ -236,9 +236,30 @@ bool PresentationCore::GetGlobalMute() const {
         void* rawTex = m_Impl->background.GetTextureID();
         if (!rawTex) return nullptr;
 
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        if (perf.performanceMode || perf.lowMemoryMode)
+            return rawTex;
+
         GLuint raw = static_cast<GLuint>(reinterpret_cast<uintptr_t>(rawTex));
         GLuint processed = m_Impl->compositeFX.ProcessBackgroundForPreview(raw, targetW, targetH);
         return (void*)(uintptr_t)processed;
+    }
+
+    bool PresentationCore::IsBackgroundStaticImage() const {
+        return m_Impl ? m_Impl->background.IsStaticImage() : false;
+    }
+
+    void PresentationCore::PurgeMemoryCaches() {
+        if (!m_Impl) return;
+        m_Impl->background.PurgeIdleResources();
+        m_Impl->preview.PurgeIdleResources();
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        if (perf.performanceMode || perf.lowMemoryMode) {
+            m_Impl->compositeFX.DestroyPreviewOnly();
+        }
+        if (!IsStreamingNet()) {
+            DestroyFBO();
+        }
     }
 
     void* PresentationCore::GetBackgroundFillTexture(int workW, int workH) {
@@ -946,6 +967,12 @@ bool PresentationCore::GetGlobalMute() const {
     void PresentationCore::RenderProjectorViewportPostFX(ImGuiViewport* viewport,
                                                          void (*defaultRenderFn)(ImGuiViewport*, void*))
     {
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        if (perf.performanceMode || perf.lowMemoryMode) {
+            if (m_Impl) m_Impl->compositeFX.DestroyViewportOnly();
+            if (defaultRenderFn) defaultRenderFn(viewport, nullptr);
+            return;
+        }
         if (m_Impl) m_Impl->compositeFX.RenderViewport(viewport, defaultRenderFn);
         else if (defaultRenderFn) defaultRenderFn(viewport, nullptr);
     }
@@ -1035,7 +1062,16 @@ bool PresentationCore::GetGlobalMute() const {
     void PresentationCore::RenderExtraProjectorViewportPostFX(ImGuiID id, ImGuiViewport* viewport,
                                                                 void (*defaultRenderFn)(ImGuiViewport*, void*))
     {
-        if (!m_Impl) { if (defaultRenderFn) defaultRenderFn(viewport, nullptr); return; }
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        if (!m_Impl || perf.performanceMode || perf.lowMemoryMode) {
+            if (m_Impl) {
+                auto it = m_Impl->extraCompositeFX.find(id);
+                if (it != m_Impl->extraCompositeFX.end())
+                    it->second->DestroyViewportOnly();
+            }
+            if (defaultRenderFn) defaultRenderFn(viewport, nullptr);
+            return;
+        }
         auto it = m_Impl->extraCompositeFX.find(id);
         if (it != m_Impl->extraCompositeFX.end())
             it->second->RenderViewport(viewport, defaultRenderFn);
@@ -2990,12 +3026,13 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
         });
     }
 
-    bool PresentationCore::ToggleNetworkStream(bool enable, int port)
+    bool PresentationCore::ToggleNetworkStream(bool enable, int port, const StreamConfig* config)
     {
         if (enable)
         {
             if (m_NetworkServer && m_NetworkServer->IsRunning())
             {
+                if (config) m_NetworkServer->SetConfig(*config);
                 std::lock_guard<std::recursive_mutex> lk(m_Mutex);
                 m_State.isStreamingNet = true;
                 m_State.networkURL     = m_NetworkServer->GetBaseURL();
@@ -3003,6 +3040,7 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
             }
 
             m_NetworkServer = std::make_unique<NetworkStreamServer>();
+            if (config) m_NetworkServer->SetConfig(*config);
             m_NetworkServer->SetChatStore(&m_ChatMessageStore);
             WireNetworkServerProviders(*m_NetworkServer);
 

@@ -3,6 +3,7 @@
 #include "UIStrings.h"
 #include "LibrarySongs.h"
 #include "LibrarySongMeta.h"
+#include "ui/panels/biblio/LibraryHelpers.h"
 #include "SongBackgroundPicker.h"
 #include "ui/views/biblia/BibleTextUtils.h"
 #include <imgui.h>
@@ -66,7 +67,7 @@ void SongView::RenderSettingsCard(const std::string& songFilename, ImVec2 p_min,
     float  midY    = p_min.y + (cardSize.y - barH) * 0.5f;
 
     std::string styleLine = style.empty() ? "Estilo: (ninguno)" : ("Estilo: " + style);
-    std::string bgLine    = bg.path.empty() ? "Fondo: (ninguno)" : ("Fondo: " + std::filesystem::path(bg.path).filename().string());
+    std::string bgLine    = bg.path.empty() ? "Fondo: (ninguno)" : ("Fondo: " + ProyecThor::Library::PathToUtf8(std::filesystem::path(bg.path).filename()));
     ImVec2 s1 = ImGui::CalcTextSize(styleLine.c_str());
     ImVec2 s2 = ImGui::CalcTextSize(bgLine.c_str());
 
@@ -132,7 +133,7 @@ void SongView::RenderSongSettingsPopup(const std::string& songFilename)
 
         ImGui::TextUnformatted("Fondo:");
         ImGui::SetNextItemWidth(240.0f);
-        std::string bgPreview = bg.path.empty() ? "(ninguno)" : std::filesystem::path(bg.path).filename().string();
+        std::string bgPreview = bg.path.empty() ? "(ninguno)" : ProyecThor::Library::PathToUtf8(std::filesystem::path(bg.path).filename());
         if (ImGui::BeginCombo("##songBgCombo", bgPreview.c_str()))
         {
             if (ImGui::Selectable("(ninguno)", bg.path.empty()))

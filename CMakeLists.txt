@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.11)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 project(ProyecThor
-    VERSION 1.1.3
+    VERSION 1.1.4
     LANGUAGES C CXX
 )
 

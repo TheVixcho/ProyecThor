@@ -22,6 +22,13 @@ namespace ProyecThor::UI {
 namespace {
     namespace MT = MonitorTheme;
 
+    inline const char* TrLcr(const char* es, const char* en, const char* pt) {
+        auto lang = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language;
+        if (lang == ProyecThor::Settings::Language::English) return en;
+        if (lang == ProyecThor::Settings::Language::Portuguese) return pt;
+        return es;
+    }
+
     inline void DrawScaledImage(ImDrawList* dl, ImTextureID tex, ImVec2 pMin, ImVec2 pMax, float scale, float alpha)
     {
         if (!tex || alpha <= 0.001f) return;
@@ -282,7 +289,7 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
     {
         dl->AddRectFilled(p0, p1, ImGui::GetColorU32(MT::k_Bg3));
 
-        const char* msg     = "Sin proyección activa";
+        const char* msg     = TrLcr("Sin proyección activa", "No active projection", "Sem projeção ativa");
         ImVec2      msgSize = ImGui::CalcTextSize(msg);
         dl->AddText(
             ImVec2(p0.x + (drawW - msgSize.x) * 0.5f,
@@ -769,13 +776,13 @@ void DrawStageContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1)
     }
 
     // Badge de estado de salida (derecha)
-    const char* statusTxt = "○ EN ESPERA";
+    const char* statusTxt = TrLcr("○ EN ESPERA", "○ STANDBY", "○ EM ESPERA");
     ImU32 statusBgCol    = IM_COL32(45, 48, 58, 255);
     ImU32 statusTxtCol   = IM_COL32(180, 185, 195, 255);
 
     if (state.isProjecting)
     {
-        statusTxt    = "● EN VIVO";
+        statusTxt    = TrLcr("● EN VIVO", "● LIVE", "● EM DIRETO");
         statusBgCol  = IM_COL32(20, 95, 45, 255);
         statusTxtCol = IM_COL32(140, 255, 170, 255);
     }

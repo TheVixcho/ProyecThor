@@ -1,217 +1,364 @@
 #include "SettingsPanel.h"
 #include "SettingsManager.h"
 #include "core/SystemStats.h"
-#include "core/MediaImportManager.h"
+#include "core/MemoryOptimizer.h"
 #include "ui/framework/DesignSystem.h"
-#include "ui/panels/biblio/LibrarySongs.h"
-#include "ui/panels/biblio/LibrarySongMeta.h"
 #include <imgui.h>
+#include <imgui_internal.h>
+#include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <string>
 
 namespace DS = ProyecThor::UI::DS;
 
 namespace ProyecThor::UI::Settings {
 
+namespace {
+
+// ── Iconos vectoriales minimalistas de precisión ─────────────────────────────
+enum class PerfBtnIcon {
+    Standard,
+    EcoBattery,
+    Chip,
+    NoBlur,
+    PauseDisk,
+    Gauge30,
+    Gauge60,
+    GaugeMax,
+    CleanRam,
+    Check
+};
+
+void DrawPerfVectorIcon(ImDrawList* dl, ImVec2 center, float r, PerfBtnIcon icon, ImU32 col) {
+    const float t = std::max(1.3f, r * 0.16f);
+    switch (icon) {
+        case PerfBtnIcon::Standard: {
+            dl->AddRect({center.x - r * 0.85f, center.y - r * 0.65f},
+                        {center.x + r * 0.85f, center.y + r * 0.38f}, col, 2.0f, 0, t);
+            dl->AddLine({center.x, center.y + r * 0.38f}, {center.x, center.y + r * 0.72f}, col, t);
+            dl->AddLine({center.x - r * 0.45f, center.y + r * 0.72f},
+                        {center.x + r * 0.45f, center.y + r * 0.72f}, col, t);
+            break;
+        }
+        case PerfBtnIcon::EcoBattery: {
+            // Cuerpo de batería + hoja/rayo de ahorro energético
+            ImVec2 b0 = {center.x - r * 0.86f, center.y - r * 0.48f};
+            ImVec2 b1 = {center.x + r * 0.70f, center.y + r * 0.48f};
+            dl->AddRect(b0, b1, col, 2.2f, 0, t);
+            dl->AddRectFilled({b1.x + 1.0f, center.y - r * 0.22f},
+                              {b1.x + r * 0.20f, center.y + r * 0.22f}, col, 1.0f);
+            ImVec2 bolt[4] = {
+                {center.x + r * 0.04f, center.y - r * 0.30f},
+                {center.x - r * 0.28f, center.y + r * 0.02f},
+                {center.x + r * 0.08f, center.y + r * 0.02f},
+                {center.x - r * 0.20f, center.y + r * 0.30f}
+            };
+            dl->AddPolyline(bolt, 4, col, 0, t * 0.95f);
+            break;
+        }
+        case PerfBtnIcon::Chip: {
+            dl->AddRect({center.x - r * 0.60f, center.y - r * 0.60f},
+                        {center.x + r * 0.60f, center.y + r * 0.60f}, col, 2.0f, 0, t);
+            dl->AddRectFilled({center.x - r * 0.25f, center.y - r * 0.25f},
+                              {center.x + r * 0.25f, center.y + r * 0.25f}, col, 1.0f);
+            for (int i = -1; i <= 1; i += 2) {
+                float off = i * r * 0.30f;
+                dl->AddLine({center.x + off, center.y - r * 0.92f}, {center.x + off, center.y - r * 0.60f}, col, t * 0.85f);
+                dl->AddLine({center.x + off, center.y + r * 0.60f}, {center.x + off, center.y + r * 0.92f}, col, t * 0.85f);
+                dl->AddLine({center.x - r * 0.92f, center.y + off}, {center.x - r * 0.60f, center.y + off}, col, t * 0.85f);
+                dl->AddLine({center.x + r * 0.60f, center.y + off}, {center.x + r * 0.92f, center.y + off}, col, t * 0.85f);
+            }
+            break;
+        }
+        case PerfBtnIcon::NoBlur: {
+            dl->AddCircle(center, r * 0.72f, col, 18, t);
+            dl->AddLine({center.x - r * 0.56f, center.y + r * 0.56f},
+                        {center.x + r * 0.56f, center.y - r * 0.56f}, col, t);
+            break;
+        }
+        case PerfBtnIcon::PauseDisk: {
+            dl->AddRect({center.x - r * 0.78f, center.y - r * 0.65f},
+                        {center.x + r * 0.78f, center.y + r * 0.65f}, col, 2.0f, 0, t);
+            dl->AddLine({center.x - r * 0.22f, center.y - r * 0.28f},
+                        {center.x - r * 0.22f, center.y + r * 0.28f}, col, t * 1.15f);
+            dl->AddLine({center.x + r * 0.22f, center.y - r * 0.28f},
+                        {center.x + r * 0.22f, center.y + r * 0.28f}, col, t * 1.15f);
+            break;
+        }
+        case PerfBtnIcon::Gauge30:
+        case PerfBtnIcon::Gauge60:
+        case PerfBtnIcon::GaugeMax: {
+            dl->PathArcTo({center.x, center.y + r * 0.22f}, r * 0.78f, 3.14159f, 6.28318f, 16);
+            dl->PathStroke(col, 0, t);
+            float ang = (icon == PerfBtnIcon::Gauge30) ? -2.35f : (icon == PerfBtnIcon::Gauge60 ? -1.57f : -0.78f);
+            ImVec2 base = {center.x, center.y + r * 0.22f};
+            ImVec2 tip  = {base.x + std::cos(ang) * r * 0.58f, base.y + std::sin(ang) * r * 0.58f};
+            dl->AddLine(base, tip, col, t);
+            dl->AddCircleFilled(base, r * 0.14f, col, 8);
+            break;
+        }
+        case PerfBtnIcon::CleanRam: {
+            dl->AddCircle(center, r * 0.72f, col, 16, t);
+            dl->AddLine({center.x, center.y - r * 0.36f}, {center.x, center.y + r * 0.30f}, col, t);
+            dl->AddLine({center.x - r * 0.28f, center.y + r * 0.04f}, {center.x, center.y + r * 0.34f}, col, t);
+            dl->AddLine({center.x + r * 0.28f, center.y + r * 0.04f}, {center.x, center.y + r * 0.34f}, col, t);
+            break;
+        }
+        case PerfBtnIcon::Check: {
+            ImVec2 pts[3] = {
+                {center.x - r * 0.65f, center.y + r * 0.04f},
+                {center.x - r * 0.15f, center.y + r * 0.52f},
+                {center.x + r * 0.70f, center.y - r * 0.45f}
+            };
+            dl->AddPolyline(pts, 3, col, 0, t * 1.25f);
+            break;
+        }
+    }
+}
+
+bool StudioPerfButton(const char* id,
+                      const char* label,
+                      PerfBtnIcon icon,
+                      ImVec2      size,
+                      bool        active,
+                      bool        verticalLayout,
+                      ImU32       activeAccent = 0)
+{
+    size.x = std::max(24.0f, size.x);
+    size.y = std::max(22.0f, size.y);
+
+    ImGui::PushID(id);
+    const ImVec2 p0 = ImGui::GetCursorScreenPos();
+    const bool clicked = ImGui::InvisibleButton("##btn", size);
+    const bool hovered = ImGui::IsItemHovered();
+    const bool held    = ImGui::IsItemActive();
+    const ImVec2 p1    = { p0.x + size.x, p0.y + size.y };
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImU32 accent = (activeAccent != 0) ? activeAccent : DS::AccentLight;
+
+    ImU32 bgCol = DS::BtnDefaultFill;
+    if (held) {
+        bgCol = IM_COL32(54, 56, 60, 255);
+    } else if (active) {
+        ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accent);
+        ImVec4 bf = ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill);
+        const float mix = hovered ? 0.24f : 0.16f;
+        bgCol = ImGui::ColorConvertFloat4ToU32(ImVec4(
+            bf.x + (ac.x - bf.x) * mix,
+            bf.y + (ac.y - bf.y) * mix,
+            bf.z + (ac.z - bf.z) * mix,
+            1.0f));
+    } else if (hovered) {
+        bgCol = DS::BtnHoverFill;
+    }
+
+    ImU32 bordCol = active
+        ? accent
+        : (hovered ? IM_COL32(255, 255, 255, 48) : IM_COL32(255, 255, 255, 22));
+
+    dl->AddRectFilled(p0, p1, bgCol, DS::RadiusMedium);
+    dl->AddRect(p0, p1, bordCol, DS::RadiusMedium, 0, active ? 1.4f : 1.0f);
+
+    const ImU32 fgCol = active
+        ? DS::TextPrimary
+        : (hovered ? DS::TextPrimary : DS::TextSecondary);
+    const ImU32 icCol = active ? accent : fgCol;
+
+    const ImVec2 txtSz = ImGui::CalcTextSize(label);
+    dl->PushClipRect({ p0.x + 4.0f, p0.y + 2.0f }, { p1.x - 4.0f, p1.y - 2.0f }, true);
+    if (verticalLayout) {
+        const float iconR = 10.5f;
+        const float totalH = iconR * 2.0f + 8.0f + txtSz.y;
+        const float startY = p0.y + (size.y - totalH) * 0.5f;
+        DrawPerfVectorIcon(dl, {p0.x + size.x * 0.5f, startY + iconR}, iconR, icon, icCol);
+        dl->AddText({p0.x + (size.x - txtSz.x) * 0.5f, startY + iconR * 2.0f + 8.0f}, fgCol, label);
+
+        if (active) {
+            dl->AddCircleFilled({p1.x - 10.0f, p0.y + 10.0f}, 3.0f, accent, 10);
+        }
+    } else {
+        const float iconR = 7.5f;
+        const float gap   = 8.0f;
+        const float totalW = iconR * 2.0f + gap + txtSz.x;
+        const float startX = p0.x + std::max(6.0f, (size.x - totalW) * 0.5f);
+        const float midY   = (p0.y + p1.y) * 0.5f;
+        DrawPerfVectorIcon(dl, {startX + iconR, midY}, iconR, icon, icCol);
+        dl->AddText({startX + iconR * 2.0f + gap, midY - txtSz.y * 0.5f}, fgCol, label);
+    }
+    dl->PopClipRect();
+
+    ImGui::PopID();
+    return clicked;
+}
+
+void DrawMetricPill(ImDrawList* dl, ImVec2 p0, ImVec2 size, const char* tag, const char* val, ImU32 valCol) {
+    size.x = std::max(40.0f, size.x);
+    size.y = std::max(22.0f, size.y);
+    const ImVec2 p1 = {p0.x + size.x, p0.y + size.y};
+    dl->AddRectFilled(p0, p1, DS::BtnDefaultFill, DS::RadiusMedium);
+    dl->AddRect(p0, p1, IM_COL32(255, 255, 255, 18), DS::RadiusMedium, 0, 1.0f);
+
+    const ImVec2 tagSz = ImGui::CalcTextSize(tag);
+    const ImVec2 valSz = ImGui::CalcTextSize(val);
+    const float midY   = (p0.y + p1.y) * 0.5f;
+    dl->PushClipRect({ p0.x + 4.0f, p0.y + 2.0f }, { p1.x - 4.0f, p1.y - 2.0f }, true);
+    dl->AddText({p0.x + 10.0f, midY - tagSz.y * 0.5f}, DS::TextSecondary, tag);
+    dl->AddText({p1.x - 10.0f - valSz.x, midY - valSz.y * 0.5f}, valCol, val);
+    dl->PopClipRect();
+}
+
+} // namespace
+
 void SettingsPanel::RenderCategoryPerformance() {
-    auto& mgr = ProyecThor::Settings::SettingsManager::Get();
+    auto& mgr  = ProyecThor::Settings::SettingsManager::Get();
     auto& perf = mgr.GetSettings().performance;
 
-    if (SectionTitle("Modo Rendimiento", "Rendimiento")) {
-        // ── Tarjeta 1: Switch Maestro "Modo Rendimiento" ───────────────────────
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
-        ImGui::PushStyleColor(ImGuiCol_Border,  perf.performanceMode
-            ? ImVec4(0.20f, 0.80f, 0.55f, 0.40f)
-            : ImVec4(1.0f, 1.0f, 1.0f, 0.08f));
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 10.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 14.0f));
+    if (!SectionTitle("Ahorro de energía", "Ahorro de energía"))
+        return;
 
-        float masterCardH = 148.0f;
-        if (ImGui::BeginChild("##perfMasterCard", ImVec2(0.0f, masterCardH), true)) {
-            bool perfMode = perf.performanceMode;
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6.0f, 6.0f));
-            if (ImGui::Checkbox("##togglePerfMode", &perfMode)) {
-                perf.performanceMode = perfMode;
-                if (perfMode) {
-                    perf.disableGlassBlur = true;
-                    perf.pauseBackgroundScan = true;
-                    if (perf.targetFPS <= 0) perf.targetFPS = 60;
-                }
-                mgr.SaveSettings();
-            }
-            ImGui::PopStyleVar();
+    static float s_RamFreedTimer = 0.0f;
+    if (s_RamFreedTimer > 0.0f) {
+        s_RamFreedTimer = std::max(0.0f, s_RamFreedTimer - ImGui::GetIO().DeltaTime);
+    }
 
-            ImGui::SameLine(0.0f, 10.0f);
-            ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]);
-            ImGui::TextColored(perf.performanceMode
-                ? ImVec4(0.25f, 0.90f, 0.60f, 1.0f)
-                : ImGui::ColorConvertU32ToFloat4(DS::TextPrimary),
-                "Modo Rendimiento (Bajo Consumo)");
-            ImGui::PopFont();
+    const float availW = std::max(260.0f, ImGui::GetContentRegionAvail().x);
+    const float gap    = 8.0f;
+    const float col3W  = std::max(80.0f, (availW - gap * 2.0f) / 3.0f);
 
-            ImGui::Dummy(ImVec2(0.0f, 4.0f));
-            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
-            ImGui::TextWrapped("Diseñado para equipos con procesadores modestos o de gama de entrada "
-                               "(Intel Pentium Gold, Celeron, Core 2 Duo, 4-8 GB de RAM y gráficas integradas Intel HD/UHD). "
-                               "Optimiza la interfaz, detiene tareas en segundo plano no esenciales y evita el congelamiento de pantalla.");
-            ImGui::PopStyleColor();
+    const ImU32 kAccentGreen = IM_COL32(72, 208, 148, 255);
+    const ImU32 kAccentCyan  = IM_COL32(88, 178, 236, 255);
 
-            ImGui::Dummy(ImVec2(0.0f, 6.0f));
-            ImGui::TextColored(ImVec4(0.40f, 0.85f, 0.65f, 1.0f),
-                perf.performanceMode ? "✔ MODO RENDIMIENTO ACTIVO: Reducción máxima de carga de CPU y GPU."
-                                     : "○ Modo estándar: Todos los efectos visuales y escaneos de disco activos.");
+    // ── Fila 1: Preajustes de 1 clic ─────────────────────────────────────────
+    const bool isMinRam    = perf.lowMemoryMode;
+    const bool isPowerSave = perf.performanceMode && !perf.lowMemoryMode;
+    const bool isStandard  = !perf.performanceMode && !perf.lowMemoryMode;
+
+    if (StudioPerfButton("##presetStd", "Estándar", PerfBtnIcon::Standard, {col3W, 68.0f}, isStandard, true)) {
+        perf.performanceMode     = false;
+        perf.lowMemoryMode       = false;
+        perf.disableGlassBlur    = false;
+        perf.pauseBackgroundScan = false;
+        perf.targetFPS           = 60;
+        mgr.SaveSettings();
+    }
+    ImGui::SameLine(0.0f, gap);
+
+    if (StudioPerfButton("##presetEco", "Ahorro de energía", PerfBtnIcon::EcoBattery, {col3W, 68.0f}, isPowerSave, true, kAccentGreen)) {
+        perf.performanceMode     = true;
+        perf.lowMemoryMode       = false;
+        perf.disableGlassBlur    = true;
+        perf.pauseBackgroundScan = true;
+        perf.targetFPS           = 60;
+        mgr.SaveSettings();
+        ProyecThor::Core::MemoryOptimizer::RequestPurge(false, false);
+    }
+    ImGui::SameLine(0.0f, gap);
+
+    if (StudioPerfButton("##presetMinRam", "RAM Mínima", PerfBtnIcon::Chip, {col3W, 68.0f}, isMinRam, true, kAccentCyan)) {
+        perf.performanceMode     = true;
+        perf.lowMemoryMode       = true;
+        perf.disableGlassBlur    = true;
+        perf.pauseBackgroundScan = true;
+        perf.targetFPS           = 30;
+        mgr.SaveSettings();
+        ProyecThor::Core::MemoryOptimizer::RequestPurge(true, true);
+        s_RamFreedTimer = 2.5f;
+    }
+
+    ImGui::Dummy({0.0f, 10.0f});
+
+    // ── Fila 2: Interruptores individuales ───────────────────────────────────
+    if (StudioPerfButton("##togBlur", "Sin Blur", PerfBtnIcon::NoBlur, {col3W, 38.0f}, perf.disableGlassBlur, false)) {
+        perf.disableGlassBlur = !perf.disableGlassBlur;
+        mgr.SaveSettings();
+    }
+    ImGui::SameLine(0.0f, gap);
+
+    if (StudioPerfButton("##togLowMem", "Baja RAM", PerfBtnIcon::Chip, {col3W, 38.0f}, perf.lowMemoryMode, false, kAccentCyan)) {
+        perf.lowMemoryMode = !perf.lowMemoryMode;
+        if (perf.lowMemoryMode) {
+            perf.performanceMode = true;
         }
-        ImGui::EndChild();
-        ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor(2);
-
-        ImGui::Dummy(ImVec2(0.0f, 14.0f));
-
-        // ── Tarjeta 2: Gráficos y Renderizado ──────────────────────────────────
-        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextPrimary), "Gráficos y Renderizado");
-        ImGui::Spacing();
-
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
-        ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(1.0f, 1.0f, 1.0f, 0.08f));
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 14.0f));
-
-        if (ImGui::BeginChild("##perfGpuCard", ImVec2(0.0f, 175.0f), true)) {
-            bool glassBlur = perf.disableGlassBlur;
-            if (ImGui::Checkbox("Desactivar desenfoque de pantalla en GPU (Glass Blur)", &glassBlur)) {
-                perf.disableGlassBlur = glassBlur;
-                mgr.SaveSettings();
-            }
-            HelpTooltip("Elimina la pasada de captura del framebuffer y shaders de desenfoque gaussiano continuo. Recomendado para Intel UHD 610/620.");
-
-            ImGui::Dummy(ImVec2(0.0f, 6.0f));
-
-            bool lowMem = perf.lowMemoryMode;
-            if (ImGui::Checkbox("Modo de baja memoria (Búferes reducidos)", &lowMem)) {
-                perf.lowMemoryMode = lowMem;
-                mgr.SaveSettings();
-            }
-            HelpTooltip("Limita la memoria RAM utilizada por cachés y búferes intermedios. Ideal para computadoras con 4 u 8 GB de RAM.");
-
-            ImGui::Dummy(ImVec2(0.0f, 10.0f));
-
-            // Selector de límite de fotogramas (FPS)
-            ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextSecondary), "Límite de fotogramas por segundo (FPS):");
-            ImGui::SetNextItemWidth(260.0f);
-
-            int currentFps = perf.targetFPS;
-            const char* fpsLabels[] = {
-                "Sin límite (o según monitor)",
-                "30 FPS (Ahorro máximo para Pentium)",
-                "60 FPS (Equilibrado y fluido)"
-            };
-            int fpsValues[] = { 0, 30, 60 };
-            int currentIdx = 0;
-            if (currentFps == 30) currentIdx = 1;
-            else if (currentFps == 60) currentIdx = 2;
-
-            if (ImGui::Combo("##targetFpsCombo", &currentIdx, fpsLabels, 3)) {
-                perf.targetFPS = fpsValues[currentIdx];
-                mgr.SaveSettings();
-            }
-            HelpTooltip("Limitar a 60 o 30 FPS cede tiempo de CPU a la reproducción de video y evita que el hilo principal consuma el 100% de la CPU.");
+        mgr.SaveSettings();
+        if (perf.lowMemoryMode) {
+            ProyecThor::Core::MemoryOptimizer::RequestPurge(true, true);
+            s_RamFreedTimer = 2.5f;
         }
-        ImGui::EndChild();
-        ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor(2);
+    }
+    ImGui::SameLine(0.0f, gap);
 
-        ImGui::Dummy(ImVec2(0.0f, 14.0f));
+    if (StudioPerfButton("##togNoScan", "Sin Escaneo", PerfBtnIcon::PauseDisk, {col3W, 38.0f}, perf.pauseBackgroundScan, false)) {
+        perf.pauseBackgroundScan = !perf.pauseBackgroundScan;
+        mgr.SaveSettings();
+    }
 
-        // ── Tarjeta 3: Subprocesos y Disco ─────────────────────────────────────
-        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextPrimary), "Subprocesos y Acceso a Disco");
-        ImGui::Spacing();
+    ImGui::Dummy({0.0f, 10.0f});
 
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
-        ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(1.0f, 1.0f, 1.0f, 0.08f));
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 14.0f));
+    // ── Fila 3: Límite de FPS ────────────────────────────────────────────────
+    if (StudioPerfButton("##fps30", "30 FPS", PerfBtnIcon::Gauge30, {col3W, 36.0f}, perf.targetFPS == 30, false, kAccentGreen)) {
+        perf.targetFPS = 30;
+        mgr.SaveSettings();
+    }
+    ImGui::SameLine(0.0f, gap);
 
-        static std::string s_CacheFeedback = "";
-        static float s_CacheFeedbackTimer = 0.0f;
+    if (StudioPerfButton("##fps60", "60 FPS", PerfBtnIcon::Gauge60, {col3W, 36.0f}, perf.targetFPS == 60, false)) {
+        perf.targetFPS = 60;
+        mgr.SaveSettings();
+    }
+    ImGui::SameLine(0.0f, gap);
 
-        if (ImGui::BeginChild("##perfThreadsCard", ImVec2(0.0f, 140.0f), true)) {
-            bool pauseScan = perf.pauseBackgroundScan;
-            if (ImGui::Checkbox("Pausar escaneo automático de carpetas y descargas", &pauseScan)) {
-                perf.pauseBackgroundScan = pauseScan;
-                mgr.SaveSettings();
-            }
-            HelpTooltip("Evita crear hilos secundarios periódicos cada 3 segundos que leen el disco en segundo plano. Puedes buscar archivos nuevos manualmente cuando quieras en Ajustes > Datos.");
+    if (StudioPerfButton("##fpsMax", "Máx FPS", PerfBtnIcon::GaugeMax, {col3W, 36.0f}, perf.targetFPS == 0, false)) {
+        perf.targetFPS = 0;
+        mgr.SaveSettings();
+    }
 
-            ImGui::Dummy(ImVec2(0.0f, 10.0f));
+    ImGui::Dummy({0.0f, 14.0f});
+    DS::GlassSeparator(1.0f);
+    ImGui::Dummy({0.0f, 12.0f});
 
-            if (DS::GlassButton("Limpiar caché de canciones y memoria RAM", ImVec2(310.0f, 32.0f))) {
-                ProyecThor::Library::ClearSongIndexCache();
-                s_CacheFeedback = "✔ Caché de canciones, autores y metadatos liberada de la memoria RAM.";
-                s_CacheFeedbackTimer = 5.0f;
-            }
-            HelpTooltip("Vacía la caché en memoria para refrescarla limpiamente desde los archivos en disco.");
+    // ── Fila 4: Indicadores compactos + Liberar RAM ──────────────────────────
+    auto& sys = ProyecThor::Core::SystemStats::Get();
+    const float fps    = ImGui::GetIO().Framerate;
+    const float cpu    = sys.CpuPercent();
+    const float appRam = ProyecThor::Core::MemoryOptimizer::GetProcessRamMB();
 
-            if (!s_CacheFeedback.empty()) {
-                ImGui::SameLine(0.0f, 12.0f);
-                ImGui::TextColored(ImVec4(0.40f, 0.85f, 0.65f, 1.0f), "%s", s_CacheFeedback.c_str());
-                s_CacheFeedbackTimer -= ImGui::GetIO().DeltaTime;
-                if (s_CacheFeedbackTimer <= 0.0f) s_CacheFeedback.clear();
-            }
-        }
-        ImGui::EndChild();
-        ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor(2);
+    char fpsBuf[24], cpuBuf[24], ramBuf[32];
+    std::snprintf(fpsBuf, sizeof(fpsBuf), "%.0f", fps);
+    std::snprintf(cpuBuf, sizeof(cpuBuf), "%.0f%%", cpu);
+    std::snprintf(ramBuf, sizeof(ramBuf), "%.0f MB", appRam);
 
-        ImGui::Dummy(ImVec2(0.0f, 14.0f));
+    const float cleanBtnW = std::max(120.0f, std::min(168.0f, availW * 0.34f));
+    const float pillsArea = std::max(130.0f, availW - cleanBtnW - gap);
+    const float pillW     = std::max(40.0f, (pillsArea - gap * 2.0f) / 3.0f);
+    const float rowH      = 38.0f;
 
-        // ── Tarjeta 4: Diagnóstico del Sistema en Tiempo Real ──────────────────
-        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextPrimary), "Diagnóstico del Sistema");
-        ImGui::Spacing();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImVec2 cur = ImGui::GetCursorScreenPos();
 
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
-        ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(1.0f, 1.0f, 1.0f, 0.08f));
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, 14.0f));
+    const ImU32 fpsCol = (fps < 24.0f) ? DS::DangerColor : kAccentGreen;
+    const ImU32 cpuCol = (cpu > 80.0f) ? DS::DangerColor : DS::TextPrimary;
+    const ImU32 ramCol = (appRam > 650.0f) ? IM_COL32(242, 188, 72, 255) : kAccentCyan;
 
-        if (ImGui::BeginChild("##perfDiagCard", ImVec2(0.0f, 185.0f), true)) {
-            auto& sys = ProyecThor::Core::SystemStats::Get();
-            float cpu = sys.CpuPercent();
-            float ramUsed = sys.RamUsedMB();
-            float ramTotal = sys.RamTotalMB();
-            float fps = ImGui::GetIO().Framerate;
-            const std::string& gpu = sys.GpuName();
+    DrawMetricPill(dl, cur, {pillW, rowH}, "FPS", fpsBuf, fpsCol);
+    DrawMetricPill(dl, {cur.x + pillW + gap, cur.y}, {pillW, rowH}, "CPU", cpuBuf, cpuCol);
+    DrawMetricPill(dl, {cur.x + (pillW + gap) * 2.0f, cur.y}, {pillW, rowH}, "RAM", ramBuf, ramCol);
 
-            // Fila GPU y FPS
-            ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextSecondary), "Gráfica activa:");
-            ImGui::SameLine(0.0f, 6.0f);
-            ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextPrimary), "%s", gpu.empty() ? "Detectando..." : gpu.c_str());
+    ImGui::Dummy({pillsArea, rowH});
+    ImGui::SameLine(0.0f, gap);
 
-            ImGui::SameLine(ImGui::GetContentRegionAvail().x - 140.0f);
-            ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextSecondary), "FPS:");
-            ImGui::SameLine(0.0f, 6.0f);
-            ImGui::TextColored(fps < 30.0f ? ImVec4(1.0f, 0.40f, 0.40f, 1.0f) : ImVec4(0.40f, 0.90f, 0.60f, 1.0f), "%.1f", fps);
-
-            ImGui::Dummy(ImVec2(0.0f, 8.0f));
-
-            // Barra CPU
-            float cpuFraction = std::clamp(cpu / 100.0f, 0.0f, 1.0f);
-            ImVec4 cpuColor = (cpu > 80.0f) ? ImVec4(0.95f, 0.35f, 0.35f, 1.0f)
-                            : (cpu > 50.0f) ? ImVec4(0.95f, 0.75f, 0.25f, 1.0f)
-                                            : ImVec4(0.35f, 0.75f, 0.95f, 1.0f);
-            ImGui::Text("Uso de CPU del equipo:  %.1f %%", cpu);
-            AnimatedProgressBar(cpuFraction, ImVec2(-1.0f, 8.0f), cpuColor);
-
-            ImGui::Dummy(ImVec2(0.0f, 8.0f));
-
-            // Barra RAM
-            float ramFraction = (ramTotal > 0.0f) ? std::clamp(ramUsed / ramTotal, 0.0f, 1.0f) : 0.0f;
-            ImVec4 ramColor = (ramFraction > 0.85f) ? ImVec4(0.95f, 0.35f, 0.35f, 1.0f) : ImVec4(0.40f, 0.80f, 0.55f, 1.0f);
-            ImGui::Text("Memoria RAM:  %.0f MB / %.0f MB  (%.0f %%)", ramUsed, ramTotal, ramFraction * 100.0f);
-            AnimatedProgressBar(ramFraction, ImVec2(-1.0f, 8.0f), ramColor);
-        }
-        ImGui::EndChild();
-        ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor(2);
+    const bool justFreed = (s_RamFreedTimer > 0.0f);
+    if (StudioPerfButton("##freeRamNow",
+                         justFreed ? "RAM Liberada" : "Liberar RAM",
+                         justFreed ? PerfBtnIcon::Check : PerfBtnIcon::CleanRam,
+                         {cleanBtnW, rowH},
+                         justFreed,
+                         false,
+                         kAccentGreen))
+    {
+        ProyecThor::Core::MemoryOptimizer::RequestPurge(true, true);
+        s_RamFreedTimer = 2.5f;
     }
 }
 

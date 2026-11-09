@@ -1,10 +1,11 @@
-#include "core/settings/SettingsManager.h"
 #pragma once
 #include "../IPanel.h"
+#include "core/settings/SettingsManager.h"
 #include "core/PresentationCore.h"
 #include "AudioMeters.h"
 #include <string>
 #include <unordered_map>
+#include <vector>
 #include <imgui.h>
 
 namespace ProyecThor::UI {
@@ -44,6 +45,8 @@ private:
     UIManager*      m_UIManager        = nullptr;
     TeamChatPanel*  m_TeamChatPanelRef = nullptr;
 
+    bool HasPlayableLiveMedia() const;
+    void RenderMonitorHeader(float w, float h);
     void RenderContent(float panelW, float panelH);
 
     void RenderQuickActionsClear(float railW);
@@ -54,19 +57,10 @@ private:
     enum class InlineTool { None, Overlays, Chat, Pads, Clock, Tiles };
     InlineTool m_ActiveTool = InlineTool::None;
 
-    static constexpr float kLiveTransportMinH = 160.0f;
-
     void RenderInlineTool(float w, float h);
-
-    void RenderNetworkBar(
-        const ImVec2&                   p0,
-        const ImVec2&                   p1,
-        const Core::PresentationState&  state,
-        Core::PresentationCore&         core);
-
     void RenderLiveTransport(float w, float h);
 
-    enum class PreviewSource { Publico, Stage, Transmision, Lan };
+    enum class PreviewSource { Publico, Stage };
     PreviewSource m_PreviewSource = PreviewSource::Publico;
 
     AudioMeters m_AudioMeters;
@@ -96,4 +90,4 @@ private:
     size_t      m_FolderPlaylistIndex = 0;
 };
 
-}
+} // namespace ProyecThor::UI

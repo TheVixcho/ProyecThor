@@ -171,6 +171,8 @@ export const translations = {
         price: "$9.990",
         period: "CLP / month",
         features: [
+          { strong: "Transparencies & Overlays via LAN", desc: "Network streaming feed with alpha transparency for OBS Studio, vMix, and live broadcasts." },
+          { strong: "1 Device at a Time (Single Concurrent Session)", desc: "Secure active session on 1 device at a time. Seamlessly switch between your booth PC and personal laptop." },
           { strong: "Multi-Monitor & Dual Screen Support", desc: "Dedicated operator control console decoupled from the clean audience projection." },
           { strong: "Stage Display (Confidence Monitors)", desc: "Dedicated stage monitor feed for worship teams and speakers with current verse, next lyrics, and timers." },
           { strong: "Canva Connection & 3rd-Party APIs", desc: "Native Canva Connect integration to sync and import high-resolution slides." },
@@ -186,6 +188,7 @@ export const translations = {
         downloadToHire: "Download ProyecThor to Subscribe to Pro",
         termsTitle: "Activation and License Terms:",
         terms: [
+          "Subscription is valid for 1 device at a time (single concurrent session per account).",
           "Subscription activation is immediate and automated upon payment with Flow inside the app.",
           "For urgent activation assistance or queries, contact theproyecthor@gmail.com.",
           "Pro license and its cloud features require an active internet connection.",
@@ -372,6 +375,8 @@ export const translations = {
         price: "$9.990",
         period: "CLP / mes",
         features: [
+          { strong: "Transparencias y Overlays por LAN", desc: "Integración nativa para transmitir overlays con fondo transparente por red local a OBS Studio, vMix y encoders." },
+          { strong: "1 Dispositivo a la Vez (Sesión Concurrente)", desc: "Uso activo en 1 equipo a la vez. Cambia libremente entre tu PC de cabina y laptop personal con protección total de cuenta." },
           { strong: "Soporte Multi-Monitor y Pantalla Doble", desc: "Consola de control dedicada e independiente desacoplada de la salida limpia para el proyector." },
           { strong: "Stage Display (Monitores de Retorno)", desc: "Salida para músicos y púlpito con estrofa actual, próxima estrofa, acordes y reloj de cuenta regresiva." },
           { strong: "Conexión con Canva y APIs de Terceros", desc: "Integración nativa con Canva Connect para sincronizar e importar diapositivas en alta resolución." },
@@ -387,6 +392,7 @@ export const translations = {
         downloadToHire: "Descargar ProyecThor para Contratar Pro",
         termsTitle: "Términos de Activación y Licencia:",
         terms: [
+          "La suscripción es válida para 1 dispositivo a la vez (sesión única concurrente por cuenta).",
           "La activación de la suscripción se realiza de forma automática e instantánea al pagar con Flow dentro de la aplicación.",
           "Si requieres activación urgente o ante cualquier problema, escribe a theproyecthor@gmail.com.",
           "La licencia Pro y sus servicios cloud funcionan exclusivamente con conexión activa a internet.",

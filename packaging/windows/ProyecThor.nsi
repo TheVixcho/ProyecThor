@@ -18,7 +18,7 @@ SetCompressor /SOLID lzma
 !define PRODUCT_WEB_SITE "https://proyecthor.web.app"
 
 !ifndef VERSION
-  !define VERSION "1.1.3"
+  !define VERSION "1.1.4"
 !endif
 
 !ifndef BUILD_DIR
@@ -210,6 +210,18 @@ Section "ProyecThor" SEC01
     WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe\SupportedTypes" ".avi" ""
     WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe\SupportedTypes" ".mov" ""
     WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe\SupportedTypes" ".webm" ""
+    WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe\SupportedTypes" ".jpg" ""
+    WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe\SupportedTypes" ".jpeg" ""
+    WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe\SupportedTypes" ".png" ""
+    WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe\SupportedTypes" ".bmp" ""
+    WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe\SupportedTypes" ".webp" ""
+    WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe\SupportedTypes" ".txt" ""
+    WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe\SupportedTypes" ".prosong" ""
+
+    ; Menú contextual clic derecho directo en Windows Explorer: "Abrir con ProyecThor"
+    WriteRegStr HKCU "Software\Classes\*\shell\ProyecThor" "" "Abrir con ProyecThor"
+    WriteRegStr HKCU "Software\Classes\*\shell\ProyecThor" "Icon" '"$INSTDIR\proyecthor.ico"'
+    WriteRegStr HKCU "Software\Classes\*\shell\ProyecThor\command" "" '"$INSTDIR\ProyecThor.exe" "%1"'
 SectionEnd
 
 ; -----------------------------------------------------------------------------
@@ -230,6 +242,7 @@ Section "Uninstall"
     DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\ProyecThor"
     DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ProyecThor"
     DeleteRegKey HKCU "Software\Classes\Applications\ProyecThor.exe"
+    DeleteRegKey HKCU "Software\Classes\*\shell\ProyecThor"
 
     ; Purgar posibles claves residuales de Inno Setup
     DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\{66A0344F-F850-49CB-9F63-488AB7B3DBCD}_is1"

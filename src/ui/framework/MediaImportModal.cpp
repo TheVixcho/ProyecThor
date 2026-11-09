@@ -401,7 +401,7 @@ void RenderMediaImportModal() {
         }
 
         ImGui::Spacing();
-        ImGui::Checkbox("Copiar archivos dentro de la carpeta del programa (desmarcado = abrir directo desde su carpeta sin duplicar)",
+        ImGui::Checkbox("Copiar archivo dentro de la carpeta del programa",
                         &s_CopyToAppFolder);
 
         ImGui::Spacing();

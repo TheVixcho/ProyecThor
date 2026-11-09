@@ -2,6 +2,7 @@
 #include "SettingsManager.h"
 #include "core/AppPaths.h"
 #include "core/MediaImportManager.h"
+#include "core/AuthLicenseManager.h"
 #include "ui/framework/FilePicker.h"
 #include "ui/framework/DesignSystem.h"
 #include <imgui.h>
@@ -225,175 +226,161 @@ void SettingsPanel::RenderCategoryData()
         }
     }
 
+
+
     // ─────────────────────────────────────────────────────────────────────────
-    //  Subcategoría: Gestión de Videos y Duplicación
+    //  Subcategoría 2: Carpetas de Escaneo (ProyecThor for Professionals)
     // ─────────────────────────────────────────────────────────────────────────
-    if (SectionTitle("Gestión de Videos", "Almacenamiento")) {
-        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextPrimary),
-            "Carpeta de Videos Asignada y Opciones de Duplicación");
-        ImGui::Dummy(ImVec2(0.0f, 4.0f));
+    if (SectionTitle("Carpetas de Escaneo", "Almacenamiento")) {
+        const bool isPro = ProyecThor::Core::AuthLicenseManager::Get().IsPro();
 
-        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextSecondary),
-            "Para ahorrar espacio en disco, ProyecThor reproduce los videos directamente desde la carpeta asignada "
-            "sin copiarlos ni duplicarlos a la app.");
+        if (!isPro) {
+            // Usuarios estándar: sin carpetas de auto-importación/escaneo externo
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.12f, 0.09f, 0.04f, 0.70f));
+            ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(0.95f, 0.75f, 0.20f, 0.45f));
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 10.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f, 16.0f));
 
-        ImGui::Dummy(ImVec2(0.0f, 10.0f));
+            if (ImGui::BeginChild("##proDataOnlyBanner", ImVec2(0.0f, 0.0f),
+                ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_Borders,
+                ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+            {
+                const float bannerWrapX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 6.0f;
+                ImGui::PushTextWrapPos(bannerWrapX);
 
-        std::string currentVideoDir = settings.general.defaultMediaFolder.empty()
-            ? (ProyecThor::GetAssetsPath() + "/videos")
-            : settings.general.defaultMediaFolder;
+                ImGui::TextColored(ImVec4(1.0f, 0.82f, 0.30f, 1.0f), "★ Función Exclusiva: ProyecThor for Professionals");
+                ImGui::Dummy(ImVec2(0.0f, 6.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextPrimary));
+                ImGui::TextUnformatted("Los usuarios estándar almacenan sus datos exclusivamente en AppData (assets) mediante la función Importar.");
+                ImGui::PopStyleColor();
+                ImGui::Dummy(ImVec2(0.0f, 4.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
+                ImGui::TextUnformatted("ProyecThor for Professionals te permite vincular carpetas completas de escaneo externas (como Descargas o tu biblioteca Mi Música) para buscar y reproducir directamente sin necesidad de duplicar archivos en disco.");
+                ImGui::PopStyleColor();
 
-        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextHint), "Carpeta activa:");
-        ImGui::SameLine();
-        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::AccentColor), "%s", currentVideoDir.c_str());
+                ImGui::PopTextWrapPos();
+            }
+            ImGui::EndChild();
+            ImGui::PopStyleVar(2);
+            ImGui::PopStyleColor(2);
 
-        ImGui::Dummy(ImVec2(0.0f, 6.0f));
+            ImGui::Dummy(ImVec2(0.0f, 14.0f));
+            ImGui::BeginDisabled();
+            DS::GlassButton("+ Agregar carpeta de escaneo... (Requiere Pro)", ImVec2(320.0f, 32.0f));
+            ImGui::EndDisabled();
+        } else {
+            // Usuarios PRO: control total de carpetas de escaneo sin duplicar
+            ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextPrimary),
+                "Detección y Escaneo Directo de Carpetas (Sin Duplicar Archivos)");
+            ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
-        if (DS::GlassButton("Cambiar carpeta de videos...", ImVec2(220.0f, 30.0f), DS::AccentColor)) {
-            std::string picked = ProyecThor::UI::PickFolder("Seleccionar carpeta de videos");
-            if (!picked.empty()) {
-                settings.general.defaultMediaFolder = picked;
+            ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextSecondary),
+                "Agrega carpetas externas (como tu carpeta de Descargas o bibliotecas de música y video). "
+                "ProyecThor las escaneará directamente y las mostrará como ramas independientes junto a la carpeta ProyecThor.");
+
+            ImGui::Dummy(ImVec2(0.0f, 10.0f));
+
+            if (ImGui::Checkbox("Escanear automáticamente la carpeta 'Descargas' sin duplicar archivos",
+                                &settings.storage.watchDownloadsFolder))
+            {
                 mgr.SaveSettings();
-            }
-        }
-        ImGui::SameLine(0.0f, 10.0f);
-        if (!settings.general.defaultMediaFolder.empty()) {
-            if (DS::GlassButton("Restablecer por defecto", ImVec2(170.0f, 30.0f))) {
-                settings.general.defaultMediaFolder = "";
-                mgr.SaveSettings();
-            }
-            ImGui::SameLine(0.0f, 10.0f);
-        }
-        if (DS::GlassButton("Abrir en Explorador", ImVec2(150.0f, 30.0f))) {
-            OpenFolderInExplorer(currentVideoDir);
-        }
-
-        ImGui::Dummy(ImVec2(0.0f, 12.0f));
-
-        if (ImGui::Checkbox("Duplicar archivos de video en los archivos del programa", &settings.general.duplicateMediaFiles)) {
-            mgr.SaveSettings();
-        }
-        HelpTooltip("Desactivado por defecto. Si está activado, ProyecThor copiará una versión duplicada de cada video a la carpeta interna del programa. "
-                    "Si está desactivado, ProyecThor reproducirá los videos originales directamente desde la carpeta asignada.");
-
-        ImGui::Dummy(ImVec2(0.0f, 14.0f));
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    //  Subcategoría 2: Carpetas de Importe Automático y Vinculadas (Watched Folders)
-    // ─────────────────────────────────────────────────────────────────────────
-    if (SectionTitle("Carpetas Vinculadas", "Almacenamiento")) {
-        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextPrimary),
-            "Detección Inteligente sin Duplicados (Descargas y Carpetas Vinculadas)");
-        ImGui::Dummy(ImVec2(0.0f, 4.0f));
-
-        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextSecondary),
-            "Cuando aparezcan nuevos videos, fondos o imágenes en 'Descargas' o en tus carpetas vinculadas, "
-            "ProyecThor te preguntará si deseas agregarlos y podrás elegir entre Multimedia o Background "
-            "abriéndolos directamente desde su carpeta original sin duplicar archivos.");
-
-        ImGui::Dummy(ImVec2(0.0f, 10.0f));
-
-        if (ImGui::Checkbox("Detectar nuevos archivos descargados en 'Descargas' y preguntar antes de vincular",
-                            &settings.storage.watchDownloadsFolder))
-        {
-            mgr.SaveSettings();
-            if (settings.storage.watchDownloadsFolder) {
-                ProyecThor::Core::MediaImportManager::Get().TriggerImmediateScan();
-            }
-        }
-        HelpTooltip("Monitorea tu carpeta de Descargas y abre el selector interactivo (Multimedia / Background) sólo para archivos nuevos, evitando duplicados.");
-
-        ImGui::Dummy(ImVec2(0.0f, 8.0f));
-
-        if (DS::GlassButton("+ Agregar carpeta vinculada...", ImVec2(240.0f, 32.0f), DS::AccentColor)) {
-            std::string picked = ProyecThor::UI::PickFolder("Seleccionar carpeta para vincular");
-            if (!picked.empty()) {
-                bool exists = false;
-                for (const auto& wf : settings.storage.watchedFolders) {
-                    if (wf.path == picked) { exists = true; break; }
-                }
-                if (!exists) {
-                    ProyecThor::Settings::WatchedFolder wf;
-                    wf.path          = picked;
-                    wf.copyToDataDir = false; // por defecto reproducir directo sin duplicar
-                    wf.enabled       = true;
-                    settings.storage.watchedFolders.push_back(wf);
-                    mgr.SaveSettings();
+                if (settings.storage.watchDownloadsFolder) {
                     ProyecThor::Core::MediaImportManager::Get().TriggerImmediateScan();
                 }
             }
-        }
-        ImGui::SameLine(0.0f, 10.0f);
-        if (DS::GlassButton("Buscar archivos nuevos ahora", ImVec2(220.0f, 32.0f))) {
-            ProyecThor::Core::MediaImportManager::Get().TriggerImmediateScan();
-        }
+            HelpTooltip("Monitorea tu carpeta de Descargas para detectar y mostrar nuevos archivos directamente sin duplicar espacio en disco.");
 
-        ImGui::Dummy(ImVec2(0.0f, 12.0f));
+            ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
-        if (settings.storage.watchedFolders.empty()) {
-            ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextHint),
-                "No hay carpetas vinculadas actualmente. Toca '+ Agregar carpeta vinculada...' para vincular una.");
-        } else {
-            int deleteIndex = -1;
-
-            for (size_t i = 0; i < settings.storage.watchedFolders.size(); ++i) {
-                auto& wf = settings.storage.watchedFolders[i];
-                ImGui::PushID(static_cast<int>(i));
-
-                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
-                ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(1.0f, 1.0f, 1.0f, 0.08f));
-                ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
-                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f, 10.0f));
-
-                float cardH = 96.0f;
-                if (ImGui::BeginChild("##wfCard", ImVec2(0.0f, cardH), true)) {
-                    ImGui::Checkbox("##enableWf", &wf.enabled);
-                    ImGui::SameLine(0.0f, 8.0f);
-
-                    ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(wf.enabled ? DS::TextPrimary : DS::TextHint),
-                        "%s", wf.path.c_str());
-
-                    ImGui::Dummy(ImVec2(0.0f, 6.0f));
-
-                    // Selector de Modo de Importación
-                    ImGui::SetCursorPosX(34.0f);
-                    if (ImGui::RadioButton("Cargar sin copiar (reproducir original)", !wf.copyToDataDir)) {
-                        wf.copyToDataDir = false;
+            if (DS::GlassButton("+ Agregar carpeta de escaneo...", ImVec2(240.0f, 32.0f), DS::AccentColor)) {
+                std::string picked = ProyecThor::UI::PickFolder("Seleccionar carpeta de escaneo para vincular");
+                if (!picked.empty()) {
+                    bool exists = false;
+                    for (const auto& wf : settings.storage.watchedFolders) {
+                        if (wf.path == picked) { exists = true; break; }
+                    }
+                    if (!exists) {
+                        ProyecThor::Settings::WatchedFolder wf;
+                        wf.path          = picked;
+                        wf.copyToDataDir = false; // reproducir directo sin duplicar
+                        wf.enabled       = true;
+                        settings.storage.watchedFolders.push_back(wf);
                         mgr.SaveSettings();
-                    }
-                    HelpTooltip("Los archivos se leen directamente desde esta carpeta sin duplicar espacio en disco.");
-
-                    ImGui::SameLine(0.0f, 20.0f);
-                    if (ImGui::RadioButton("Copiar a la carpeta de datos", wf.copyToDataDir)) {
-                        wf.copyToDataDir = true;
-                        mgr.SaveSettings();
-                    }
-                    HelpTooltip("Los archivos nuevos detectados se copiarán automáticamente a la carpeta de la aplicación.");
-
-                    // Botones de acción en la derecha
-                    float availW = ImGui::GetContentRegionAvail().x;
-                    ImGui::SameLine(availW - 180.0f);
-
-                    if (DS::GlassButton("Abrir", ImVec2(70.0f, 24.0f))) {
-                        OpenFolderInExplorer(wf.path);
-                    }
-                    ImGui::SameLine(0.0f, 6.0f);
-                    if (DS::GlassButton("Eliminar", ImVec2(90.0f, 24.0f), DS::DangerColorDim)) {
-                        deleteIndex = static_cast<int>(i);
+                        ProyecThor::Core::MediaImportManager::Get().TriggerImmediateScan();
                     }
                 }
-                ImGui::EndChild();
-                ImGui::PopStyleVar(2);
-                ImGui::PopStyleColor(2);
-
-                ImGui::Dummy(ImVec2(0.0f, 6.0f));
-                ImGui::PopID();
+            }
+            ImGui::SameLine(0.0f, 10.0f);
+            if (DS::GlassButton("Buscar archivos nuevos ahora", ImVec2(220.0f, 32.0f))) {
+                ProyecThor::Core::MediaImportManager::Get().TriggerImmediateScan();
             }
 
-            if (deleteIndex >= 0 && deleteIndex < (int)settings.storage.watchedFolders.size()) {
-                settings.storage.watchedFolders.erase(settings.storage.watchedFolders.begin() + deleteIndex);
-                mgr.SaveSettings();
+            ImGui::Dummy(ImVec2(0.0f, 12.0f));
+
+            if (settings.storage.watchedFolders.empty()) {
+                ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(DS::TextHint),
+                    "No hay carpetas de escaneo vinculadas actualmente. Toca '+ Agregar carpeta de escaneo...' para vincular una biblioteca externa.");
+            } else {
+                int deleteIndex = -1;
+
+                for (size_t i = 0; i < settings.storage.watchedFolders.size(); ++i) {
+                    auto& wf = settings.storage.watchedFolders[i];
+                    ImGui::PushID(static_cast<int>(i));
+
+                    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
+                    ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(1.0f, 1.0f, 1.0f, 0.08f));
+                    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
+                    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f, 10.0f));
+
+                    float cardH = 96.0f;
+                    if (ImGui::BeginChild("##wfCard", ImVec2(0.0f, cardH), true)) {
+                        ImGui::Checkbox("##enableWf", &wf.enabled);
+                        ImGui::SameLine(0.0f, 8.0f);
+
+                        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(wf.enabled ? DS::TextPrimary : DS::TextHint),
+                            "%s", wf.path.c_str());
+
+                        ImGui::Dummy(ImVec2(0.0f, 6.0f));
+
+                        // Selector de Modo de Importación
+                        ImGui::SetCursorPosX(34.0f);
+                        if (ImGui::RadioButton("Cargar sin copiar (reproducir original)", !wf.copyToDataDir)) {
+                            wf.copyToDataDir = false;
+                            mgr.SaveSettings();
+                        }
+                        HelpTooltip("Los archivos se leen directamente desde esta carpeta sin duplicar espacio en disco.");
+
+                        ImGui::SameLine(0.0f, 20.0f);
+                        if (ImGui::RadioButton("Copiar a la carpeta de datos", wf.copyToDataDir)) {
+                            wf.copyToDataDir = true;
+                            mgr.SaveSettings();
+                        }
+                        HelpTooltip("Los archivos nuevos detectados se copiarán automáticamente a la carpeta de la aplicación.");
+
+                        // Botones de acción en la derecha
+                        float availW = ImGui::GetContentRegionAvail().x;
+                        ImGui::SameLine(availW - 180.0f);
+
+                        if (DS::GlassButton("Abrir", ImVec2(70.0f, 24.0f))) {
+                            OpenFolderInExplorer(wf.path);
+                        }
+                        ImGui::SameLine(0.0f, 6.0f);
+                        if (DS::GlassButton("Eliminar", ImVec2(90.0f, 24.0f), DS::DangerColorDim)) {
+                            deleteIndex = static_cast<int>(i);
+                        }
+                    }
+                    ImGui::EndChild();
+                    ImGui::PopStyleVar(2);
+                    ImGui::PopStyleColor(2);
+
+                    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+                    ImGui::PopID();
+                }
+
+                if (deleteIndex >= 0 && deleteIndex < (int)settings.storage.watchedFolders.size()) {
+                    settings.storage.watchedFolders.erase(settings.storage.watchedFolders.begin() + deleteIndex);
+                    mgr.SaveSettings();
+                }
             }
         }
     }

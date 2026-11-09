@@ -57,6 +57,9 @@ public:
     // miniaturas... (N)" en la UI).
     size_t PendingCount() const;
 
+    // Limpia el historial de claves vistas para permitir regenerar/recargar tras liberar RAM.
+    void ResetSeen();
+
     // Precalienta la instancia compartida de libVLC usada para miniaturas
     // (evita pagar el escaneo de plugins en el primer video).
     static void WarmupVlcEngine();

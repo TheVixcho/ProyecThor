@@ -9,6 +9,14 @@
 #include "ui/panels/biblio/LibraryMultimedia.h"
 #include "ui/framework/FilePicker.h"
 #include "ui/framework/bin/StyleGeneralApp.h"
+#include "core/AuthLicenseManager.h"
+
+static inline const char* TrBg(const char* es, const char* en, const char* pt) {
+    auto lang = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language;
+    if (lang == ProyecThor::Settings::Language::English) return en;
+    if (lang == ProyecThor::Settings::Language::Portuguese) return pt;
+    return es;
+}
 #include <atomic>
 #include <unordered_set>
 #include <imgui.h>
@@ -119,6 +127,21 @@ static void EraseSharedBgThumbnail(const std::string& path) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Thumbnails
 // ─────────────────────────────────────────────────────────────────────────────
+static uint64_t s_BgThumbPurgeEpoch = 0;
+void ClearSharedBgThumbnailCache() {
+    ++s_BgThumbPurgeEpoch;
+    auto& cache = SharedBgThumbnailCache();
+    std::unordered_set<GLuint> uniqueTex;
+    for (const auto& kv : cache) {
+        GLuint tex = static_cast<GLuint>(static_cast<uintptr_t>(kv.second));
+        if (tex != 0) uniqueTex.insert(tex);
+    }
+    for (GLuint tex : uniqueTex) {
+        glDeleteTextures(1, &tex);
+    }
+    cache.clear();
+}
+
 static ImTextureID LoadImageThumb(const char* path);
 
 // Miniaturas de video: se generan en 2do plano via ThumbnailWorker (ver
@@ -148,7 +171,10 @@ static std::string ThumbCachePathFor(const std::string& absVideoPath) {
 static ImTextureID LoadImageThumb(const char* path) {
     std::vector<uint8_t> pixels;
     unsigned w = 0, h = 0;
-    if (!Core::ThumbnailWorker::LoadThumbnailPixelsFromDisk(path ? path : "", pixels, w, h, 512, 288))
+    const auto& perf = Settings::SettingsManager::Get().GetSettings().performance;
+    const unsigned maxW = perf.lowMemoryMode ? 256u : (perf.performanceMode ? 320u : 512u);
+    const unsigned maxH = perf.lowMemoryMode ? 144u : (perf.performanceMode ? 180u : 288u);
+    if (!Core::ThumbnailWorker::LoadThumbnailPixelsFromDisk(path ? path : "", pixels, w, h, maxW, maxH))
         return 0;
 
     GLuint tex = 0;
@@ -201,6 +227,10 @@ ImTextureID LayersBgTab::GetThumbnail(const std::string& path, bool isVideo) {
 // Llamar una vez por frame desde Render(): sube a textura GL los frames que
 // el worker haya terminado de decodificar desde el ultimo frame.
 void LayersBgTab::DrainThumbnailResults() {
+    if (m_SeenPurgeEpoch != s_BgThumbPurgeEpoch) {
+        m_SeenPurgeEpoch = s_BgThumbPurgeEpoch;
+        m_ThumbWorker.ResetSeen();
+    }
     auto& cache = SharedBgThumbnailCache();
     std::vector<Core::ThumbnailWorker::Result> results;
     m_ThumbWorker.DrainResults(results);
@@ -321,6 +351,43 @@ void LayersBgTab::ReloadList() {
         bg.isImage    = IsImage(ext);
         bg.isExternal = true;
         TryPushEntry(std::move(bg));
+    }
+
+    // ProyecThor for Professionals: Escaneo automático de carpetas externas vinculadas sin duplicar
+    if (ProyecThor::Core::AuthLicenseManager::Get().IsPro()) {
+        const auto& watched = ProyecThor::Settings::SettingsManager::Get().GetSettings().storage.watchedFolders;
+        for (const auto& wf : watched) {
+            if (!wf.enabled || wf.path.empty()) continue;
+            std::error_code ec;
+            fs::path wfp = Library::U8Path(wf.path);
+            if (!fs::exists(wfp, ec) || !fs::is_directory(wfp, ec)) continue;
+
+            std::string rootLabel = Library::PathToUtf8(wfp.filename());
+            if (rootLabel.empty()) rootLabel = wf.path;
+
+            if (std::find(m_BgFolders.begin(), m_BgFolders.end(), rootLabel) == m_BgFolders.end()) {
+                m_BgFolders.push_back(rootLabel);
+            }
+
+            for (const auto& entry : fs::recursive_directory_iterator(wfp, fs::directory_options::skip_permission_denied, ec)) {
+                if (ec) break;
+                if (!entry.is_regular_file()) continue;
+
+                std::string ext = entry.path().extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(),
+                               [](unsigned char c) { return (char)std::tolower(c); });
+                if (!IsMedia(ext)) continue;
+
+                BgEntry bg;
+                bg.fullPath   = Library::PathToUtf8(entry.path());
+                bg.name       = Library::PathToUtf8(entry.path().stem());
+                bg.ext        = ext;
+                bg.folder     = rootLabel;
+                bg.isImage    = IsImage(ext);
+                bg.isExternal = true;
+                TryPushEntry(std::move(bg));
+            }
+        }
     }
 
     std::sort(m_BgFolders.begin(), m_BgFolders.end());
@@ -721,7 +788,7 @@ void LayersBgTab::SelectFolder(const std::string& folderKey) {
 //  Toolbar superior — compacta, solo iconos (estilo ProPresenter/Holyrics)
 // ─────────────────────────────────────────────────────────────────────────────
 void LayersBgTab::RenderTopBar() {
-    const std::string title = m_CurrentBgFolder.empty() ? "Todos" : m_CurrentBgFolder;
+    const std::string title = m_CurrentBgFolder.empty() ? TrBg("Todos", "All", "Todos") : m_CurrentBgFolder;
     const float initCursorX = ImGui::GetCursorPosX();
     const float availW      = ImGui::GetContentRegionAvail().x;
     const float btnSz       = 28.0f;
@@ -749,7 +816,7 @@ void LayersBgTab::RenderTopBar() {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(10.0f, 5.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
     ImGui::SetNextItemWidth(searchW);
-    ImGui::InputTextWithHint("##bgSearch", "Buscar fondo...", m_SearchBuffer, sizeof(m_SearchBuffer));
+    ImGui::InputTextWithHint("##bgSearch", TrBg("Buscar fondo...", "Search background...", "Pesquisar fundo..."), m_SearchBuffer, sizeof(m_SearchBuffer));
     ImGui::PopStyleVar(3);
     ImGui::PopStyleColor(4);
 
@@ -822,7 +889,7 @@ void LayersBgTab::RenderTopBar() {
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, LP::Surface3);
         ImGui::PushStyleColor(ImGuiCol_Border, LP::Border);
         ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
-        if (ImGui::Button("\xE2\x96\xBC Colapsar", ImVec2(collapseBtnW, btnSz))) {
+        if (ImGui::Button(TrBg("\xE2\x96\xBC Colapsar", "\xE2\x96\xBC Collapse", "\xE2\x96\xBC Recolher"), ImVec2(collapseBtnW, btnSz))) {
             m_OnCollapseCallback();
         }
         ImGui::PopStyleColor(4);
@@ -971,7 +1038,7 @@ void LayersBgTab::RenderFolderChips() {
     };
 
     int totalCount = static_cast<int>(m_AllBackgrounds.size());
-    chip("Todos", "", totalCount, m_CurrentBgFolder.empty());
+    chip(TrBg("Todos", "All", "Todos"), "", totalCount, m_CurrentBgFolder.empty());
     for (const auto& fn : m_BgFolders) {
         int cnt = 0;
         for (const auto& bg : m_AllBackgrounds) if (bg.folder == fn) cnt++;
@@ -985,7 +1052,7 @@ void LayersBgTab::RenderFolderSidebar(float w, float h) {
     (void)h;
     int totalCount = static_cast<int>(m_AllBackgrounds.size());
 
-    RenderSidebarItem("Todos", "", totalCount, m_CurrentBgFolder.empty(), w);
+    RenderSidebarItem(TrBg("Todos", "All", "Todos"), "", totalCount, m_CurrentBgFolder.empty(), w);
 
     if (!m_BgFolders.empty()) {
         ImGui::Dummy({w, 2.0f});

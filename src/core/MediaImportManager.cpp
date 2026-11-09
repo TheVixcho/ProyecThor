@@ -1,6 +1,7 @@
 #include "MediaImportManager.h"
 
 #include "AppPaths.h"
+#include "AuthLicenseManager.h"
 #include "settings/SettingsManager.h"
 #include "ui/framework/FilePicker.h"
 #include "ui/panels/biblio/LibraryHelpers.h"
@@ -455,6 +456,13 @@ void MediaImportManager::Update() {
 void MediaImportManager::StartAsyncWatcherScan() {
     if (m_ScanRunning.exchange(true))
         return;
+
+    // Solo usuarios PRO pueden escanear carpetas externas y Descargas en segundo plano sin duplicar archivos.
+    // Los usuarios estándar importan sus archivos exclusivamente a AppData/proyecthor/assets.
+    if (!AuthLicenseManager::Get().IsPro()) {
+        m_ScanRunning = false;
+        return;
+    }
 
     // Capturar snapshot en el hilo principal para cero carreras de datos
     const auto& settings = Settings::SettingsManager::Get().GetSettings();

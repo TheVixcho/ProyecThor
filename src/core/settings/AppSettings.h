@@ -55,7 +55,8 @@ namespace ProyecThor::Settings {
         bool    autoDownload    = false;
         std::string updateChannel = "stable";  // "stable" | "beta"
         std::string lastChecked = "";
-        std::string currentVersion = "0.1.0";
+        std::string currentVersion = "1.1.4";
+        std::string cloudflareBaseUrl = "https://pub-4aad3f4e54404d6ab3c299176fa4fd65.r2.dev";
     };
 
     // ── Apariencia / Tema ─────────────────────────────────────────────────────

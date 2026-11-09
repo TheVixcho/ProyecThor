@@ -40,7 +40,7 @@ namespace ProyecThor::UI::Settings {
         // app movil companion).
         void SetSyncPanelRef(ProyecThor::UI::SyncPanel* ref) { m_SyncPanelRef = ref; }
     private:
-        int         m_SelectedCategory  = 0;
+        int         m_SelectedCategory  = 7;
         int         m_PrevCategory      = -1;   // para detectar cambio de categoría
         float       m_SaveTimer         = 0.0f;
         std::string m_SaveStatusMsg     = "";
@@ -90,6 +90,7 @@ namespace ProyecThor::UI::Settings {
         void RenderCategoryData();
         void RenderCategoryAccount();
         void RenderCategoryPerformance();
+        void RenderCategoryPatchNotes();
 
         ProyecThor::UI::OSCPanel*       m_OSCPanelRef       = nullptr;
         ProyecThor::UI::BroadcastPanel* m_BroadcastPanelRef = nullptr;
