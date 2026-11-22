@@ -14,7 +14,7 @@ pkgver=0.6.0.r0.g0000000
 pkgrel=1
 pkgdesc="Motor de proyeccion profesional para iglesias, teatros y eventos en vivo (libmpv + OpenGL + ImGui) -- build desde la rama beta"
 arch=('x86_64')
-url="https://proyecthor.web.app"
+url="https://github.com/TheVixcho/ProyecThor"
 license=('MIT')
 depends=(
   'mpv'

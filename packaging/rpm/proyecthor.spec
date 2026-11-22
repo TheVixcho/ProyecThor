@@ -3,7 +3,7 @@ Version:        0.3.2
 Release:        1%{?dist}
 Summary:        Reproductor multimedia con libmpv + OpenGL + ImGui
 License:        Custom
-URL:            https://github.com/tuusuario/proyecthor
+URL:            https://github.com/TheVixcho/ProyecThor
 Source0:        %{name}-%{version}.tar.gz
 
 BuildRequires:  cmake

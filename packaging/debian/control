@@ -11,7 +11,7 @@ Build-Depends: debhelper-compat (= 13),
                libgl1-mesa-dev,
                libmpv-dev
 Standards-Version: 4.6.2
-Homepage: https://proyecthor.web.app
+Homepage: https://github.com/TheVixcho/ProyecThor
 
 Package: proyecthor
 Architecture: amd64

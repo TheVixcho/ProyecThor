@@ -15,7 +15,7 @@ SetCompressor /SOLID lzma
 ; Definiciones del producto
 !define PRODUCT_NAME "ProyecThor"
 !define PRODUCT_PUBLISHER "vixcho"
-!define PRODUCT_WEB_SITE "https://proyecthor.web.app"
+!define PRODUCT_WEB_SITE "https://github.com/TheVixcho/ProyecThor"
 
 !ifndef VERSION
   !define VERSION "1.1.4"

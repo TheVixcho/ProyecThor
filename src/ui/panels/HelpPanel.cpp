@@ -516,7 +516,7 @@ void HelpPanel::RenderCategoryCommunity() {
         Tr("Portal central del proyecto con manuales, instaladores para Windows y Linux, y documentación completa.",
            "Central project portal with user manuals, installers for Windows and Linux, and comprehensive documentation.",
            "Portal central do projeto com manuais, instaladores para Windows e Linux e documentação."),
-        "https://proyecthor.web.app",
+        "https://github.com/TheVixcho/ProyecThor",
         IM_COL32(56, 189, 248, 255), // Azul cielo
         Tr("Visitar Web", "Visit Website", "Visitar Site")
     );
