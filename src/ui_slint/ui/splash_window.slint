@@ -1,0 +1,120 @@
+import { Theme } from "theme.slint";
+
+export component SplashWindow inherits Window {
+    title: "ProyecThor";
+    width: 580px;
+    height: 340px;
+    no-frame: true;
+    background: transparent;
+
+    in property <string> app-version: "1.1.4";
+    in property <string> status-text: "Inicializando ProyecThor...";
+    in property <float> progress: 0.15;
+    in property <image> logo-image;
+    in property <bool> has-logo: false;
+    in property <image> bg-image;
+    in property <bool> has-bg: false;
+
+    Rectangle {
+        border-radius: 18px;
+        background: Theme.bg-root;
+        border-width: 1px;
+        border-color: Theme.border-medium;
+        clip: true;
+
+        if root.has-bg : Image {
+            source: root.bg-image;
+            image-fit: cover;
+            opacity: 0.32;
+        }
+
+        // Dark carbon vignette gradient
+        Rectangle {
+            background: @linear-gradient(180deg, #09090bcc 0%, #08080af2 100%);
+        }
+
+        VerticalLayout {
+            padding: 36px;
+            spacing: 16px;
+            alignment: center;
+
+            HorizontalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 84px;
+                    height: 84px;
+                    border-radius: 20px;
+                    background: Theme.bg-surface-1;
+                    border-width: 1px;
+                    border-color: Theme.border-medium;
+                    clip: true;
+
+                    if root.has-logo : Image {
+                        source: root.logo-image;
+                        width: 72px;
+                        height: 72px;
+                        x: 6px;
+                        y: 6px;
+                        image-fit: contain;
+                    }
+
+                    if !root.has-logo : Text {
+                        text: "P";
+                        color: Theme.text-primary;
+                        font-size: 40px;
+                        font-weight: 800;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            VerticalLayout {
+                spacing: 4px;
+                Text {
+                    text: "ProyecThor";
+                    color: Theme.text-primary;
+                    font-size: 28px;
+                    font-weight: 800;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    text: "v" + root.app-version + "  •  Open Source  •  Slint + libmpv";
+                    color: Theme.text-secondary;
+                    font-size: 12.5px;
+                    font-weight: 500;
+                    horizontal-alignment: center;
+                }
+            }
+
+            Rectangle { height: 10px; }
+
+            // Progress bar
+            VerticalLayout {
+                spacing: 8px;
+                Rectangle {
+                    height: 5px;
+                    border-radius: 3px;
+                    background: Theme.bg-surface-2;
+                    clip: true;
+
+                    Rectangle {
+                        x: 0;
+                        width: parent.width * Math.clamp(root.progress, 0.0, 1.0);
+                        height: parent.height;
+                        border-radius: 3px;
+                        background: Theme.accent-strong;
+                        animate width { duration: 180ms; easing: ease-out; }
+                    }
+                }
+
+                Text {
+                    text: root.status-text;
+                    color: Theme.text-muted;
+                    font-size: 11.5px;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+    }
+}

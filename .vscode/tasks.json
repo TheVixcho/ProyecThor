@@ -2,6 +2,27 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "Compilar Slint (Linux)",
+            "type": "shell",
+            "command": "cmake -B build-linux -G Ninja && cmake --build build-linux --target ProyecThorSlint",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$gcc"],
+            "detail": "Compila la nueva UI Slint + libmpv nativa en build-linux/ProyecThorSlint"
+        },
+        {
+            "label": "Compilar Slint (Windows)",
+            "type": "shell",
+            "command": "cmake -B build-win -G Ninja && cmake --build build-win --target ProyecThorSlint",
+            "group": {
+                "kind": "build"
+            },
+            "problemMatcher": ["$msCompile", "$gcc"],
+            "detail": "Compila la nueva UI Slint + libmpv para Windows en build-win/ProyecThorSlint.exe"
+        },
+        {
             "label": "Compilar Windows",
             "type": "process",
             "command": "cmd.exe",

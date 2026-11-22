@@ -1,0 +1,263 @@
+import { Theme } from "theme.slint";
+import { ToolbarIsland, CircleIslandButton } from "components.slint";
+
+export component TopBar inherits Rectangle {
+    in-out property <int> active-tab: 0;
+    in-out property <int> design-subtab: 0;
+    in-out property <int> net-subtab: 0;
+    in property <string> app-version: "1.1.4";
+    in property <image> logo-image;
+    in property <bool> has-logo: false;
+    in property <bool> audience-live: false;
+    in property <bool> stage-live: false;
+
+    property <string> hover-tip: "";
+
+    callback toggle-audience();
+    callback toggle-stage();
+    callback clear-all();
+    callback import-file();
+
+    height: 52px;
+    background: Theme.bg-glass;
+
+    Rectangle {
+        y: parent.height - 1px;
+        width: 100%;
+        height: 1px;
+        background: Theme.border-subtle;
+    }
+
+    HorizontalLayout {
+        padding-left: 18px;
+        padding-right: 18px;
+        spacing: 12px;
+
+        // ── Left Floating Islands (fixed position, NEVER shifts on hover) ──
+        HorizontalLayout {
+            horizontal-stretch: 0;
+            spacing: 14px;
+            alignment: start;
+
+            // Isla 1: Contenido (Canciones, Biblia, Multimedia, Fondos/Overlays, Capturadora/URL)
+            ToolbarIsland {
+                y: (parent.height - self.height) / 2;
+                HorizontalLayout {
+                    padding: 3px;
+                    spacing: 5px;
+
+                    CircleIslandButton {
+                        icon: @image-url("icons/music.svg");
+                        tooltip: "Canciones";
+                        accent-color: #38bdf8;
+                        active: root.active-tab == 0;
+                        clicked => { root.active-tab = 0; }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/book.svg");
+                        tooltip: "Biblia";
+                        accent-color: #fbbf24;
+                        active: root.active-tab == 1;
+                        clicked => { root.active-tab = 1; }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/film.svg");
+                        tooltip: "Multimedia";
+                        accent-color: #ec4899;
+                        active: root.active-tab == 2;
+                        clicked => { root.active-tab = 2; }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/layers.svg");
+                        tooltip: "Fondos y Overlays";
+                        accent-color: #f97316;
+                        active: root.active-tab == 3;
+                        clicked => { root.active-tab = 3; }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/camera.svg");
+                        tooltip: "Capturadora y URL a Pantalla";
+                        accent-color: #ec4899;
+                        active: root.active-tab == 8;
+                        clicked => { root.active-tab = 8; }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                }
+            }
+
+            // Isla 2: Diseño (Estilos, Shaders, Transiciones, Tiles, Pads)
+            ToolbarIsland {
+                y: (parent.height - self.height) / 2;
+                HorizontalLayout {
+                    padding: 3px;
+                    spacing: 5px;
+
+                    CircleIslandButton {
+                        icon: @image-url("icons/palette.svg");
+                        tooltip: "Estilos de Letras y Alertas";
+                        accent-color: #a855f7;
+                        active: root.active-tab == 4 && root.design-subtab == 0;
+                        clicked => { root.active-tab = 4; root.design-subtab = 0; }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/sliders.svg");
+                        tooltip: "Shaders, Filtros y Ecualizador";
+                        accent-color: #38bdf8;
+                        active: root.active-tab == 4 && root.design-subtab == 1;
+                        clicked => { root.active-tab = 4; root.design-subtab = 1; }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/shuffle.svg");
+                        tooltip: "Transiciones";
+                        accent-color: #f43f5e;
+                        active: root.active-tab == 4 && root.design-subtab == 2;
+                        clicked => { root.active-tab = 4; root.design-subtab = 2; }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/columns.svg");
+                        tooltip: "Tiles (Pantalla Dividida)";
+                        accent-color: #3b82f6;
+                        active: root.active-tab == 4 && root.design-subtab == 3;
+                        clicked => { root.active-tab = 4; root.design-subtab = 3; }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/grid.svg");
+                        tooltip: "Pads de Escena";
+                        accent-color: #818cf8;
+                        active: root.active-tab == 6;
+                        clicked => { root.active-tab = 6; }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                }
+            }
+
+            // Isla 3: Redes, Celular, Chat/Reloj y Luces OSC
+            ToolbarIsland {
+                y: (parent.height - self.height) / 2;
+                HorizontalLayout {
+                    padding: 3px;
+                    spacing: 5px;
+
+                    CircleIslandButton {
+                        icon: @image-url("icons/wifi.svg");
+                        tooltip: "Transmisión LAN (OBS)";
+                        accent-color: #10b981;
+                        active: root.active-tab == 5 && root.net-subtab == 0;
+                        clicked => { root.active-tab = 5; root.net-subtab = 0; }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/smartphone.svg");
+                        tooltip: "Conectar Celular (Mobile)";
+                        accent-color: #38bdf8;
+                        active: root.active-tab == 5 && root.net-subtab == 1;
+                        clicked => { root.active-tab = 5; root.net-subtab = 1; }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/clock.svg");
+                        tooltip: "Chat LAN y Reloj";
+                        accent-color: #facc15;
+                        active: root.active-tab == 5 && root.net-subtab == 2;
+                        clicked => { root.active-tab = 5; root.net-subtab = 2; }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/zap.svg");
+                        tooltip: "Luces OSC (Yggdrasil)";
+                        accent-color: #f43f5e;
+                        active: root.active-tab == 5 && root.net-subtab == 3;
+                        clicked => { root.active-tab = 5; root.net-subtab = 3; }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                }
+            }
+
+            // Isla 4: Importar y Ajustes
+            ToolbarIsland {
+                y: (parent.height - self.height) / 2;
+                HorizontalLayout {
+                    padding: 3px;
+                    spacing: 5px;
+
+                    CircleIslandButton {
+                        icon: @image-url("icons/upload.svg");
+                        tooltip: "Importar Archivo";
+                        accent-color: #2dd4bf;
+                        clicked => { root.import-file(); }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/settings.svg");
+                        tooltip: "Ajustes y Temas";
+                        accent-color: Theme.accent-strong;
+                        active: root.active-tab == 7;
+                        clicked => { root.active-tab = 7; }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                }
+            }
+        }
+
+        // Fixed-flex spacer holding the hover label — NEVER changes layout geometry
+        Rectangle {
+            horizontal-stretch: 1;
+            min-width: 0px;
+            clip: true;
+
+            if root.hover-tip != "" : Text {
+                width: 100%;
+                height: 100%;
+                text: root.hover-tip;
+                color: Theme.text-secondary;
+                font-size: 11.5px;
+                font-weight: 600;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+
+        // ── Isla 5 (Derecha): Estado en Vivo (Público, Stage, Borrar Todo) ──
+        ToolbarIsland {
+            horizontal-stretch: 0;
+            y: (parent.height - self.height) / 2;
+            HorizontalLayout {
+                padding: 3px;
+                spacing: 5px;
+
+                CircleIslandButton {
+                    icon: @image-url("icons/tv.svg");
+                    tooltip: root.audience-live ? "Público EN VIVO" : "Activar Salida Público";
+                    accent-color: Theme.live-green;
+                    active: root.audience-live;
+                    clicked => { root.toggle-audience(); }
+                    hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                }
+                CircleIslandButton {
+                    icon: @image-url("icons/monitor.svg");
+                    tooltip: root.stage-live ? "Stage Display ON" : "Activar Stage Display";
+                    accent-color: Theme.stage-amber;
+                    active: root.stage-live;
+                    clicked => { root.toggle-stage(); }
+                    hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                }
+                CircleIslandButton {
+                    icon: @image-url("icons/trash.svg");
+                    tooltip: "Borrar Todo";
+                    accent-color: Theme.danger;
+                    clicked => { root.clear-all(); }
+                    hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                }
+            }
+        }
+    }
+}

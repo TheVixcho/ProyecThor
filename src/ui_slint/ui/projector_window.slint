@@ -1,0 +1,572 @@
+import { Theme } from "theme.slint";
+
+component StyledTextBlock inherits Rectangle {
+    in property <string> text-body: "";
+    in property <string> ref-body: "";
+    in property <float> text-size: 60.0;
+    in property <int> text-align: 1;
+    in property <color> text-color: #ffffff;
+    in property <string> font-family-name: "";
+    in property <int> font-weight-val: 700;
+    in property <bool> text-shadow: true;
+    in property <bool> text-outline: false;
+    in property <bool> text-glow: false;
+    in property <bool> text-neon: false;
+    in property <bool> text-3d: false;
+    in property <bool> text-underline: false;
+    in property <color> glow-color: #38bdf8;
+    in property <bool> text-box-bg: false;
+
+    border-radius: 16px;
+    background: root.text-box-bg ? #0000009e : transparent;
+
+    VerticalLayout {
+        padding: root.text-box-bg ? 24px : 0px;
+        spacing: 14px;
+
+        Rectangle {
+            min-height: fg-txt.preferred-height;
+
+            // Optional Glow / Neon halo
+            if root.text-glow : Text {
+                x: 0px; y: 0px;
+                width: parent.width;
+                text: root.text-body;
+                color: root.glow-color.transparentize(0.45);
+                font-family: root.font-family-name;
+                font-size: (root.text-size + 2.0) * 1px;
+                font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                wrap: word-wrap;
+            }
+
+            // Optional 4-way crisp outline
+            if root.text-outline : Text {
+                x: -2px; y: 0px; width: parent.width;
+                text: root.text-body; color: #000000ee;
+                font-family: root.font-family-name; font-size: root.text-size * 1px; font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center); wrap: word-wrap;
+            }
+            if root.text-outline : Text {
+                x: 2px; y: 0px; width: parent.width;
+                text: root.text-body; color: #000000ee;
+                font-family: root.font-family-name; font-size: root.text-size * 1px; font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center); wrap: word-wrap;
+            }
+            if root.text-outline : Text {
+                x: 0px; y: -2px; width: parent.width;
+                text: root.text-body; color: #000000ee;
+                font-family: root.font-family-name; font-size: root.text-size * 1px; font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center); wrap: word-wrap;
+            }
+            if root.text-outline : Text {
+                x: 0px; y: 2px; width: parent.width;
+                text: root.text-body; color: #000000ee;
+                font-family: root.font-family-name; font-size: root.text-size * 1px; font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center); wrap: word-wrap;
+            }
+
+            // Optional Drop Shadow
+            if root.text-shadow : Text {
+                x: 3px; y: 4px;
+                width: parent.width;
+                text: root.text-body;
+                color: #000000cc;
+                font-family: root.font-family-name;
+                font-size: root.text-size * 1px;
+                font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                wrap: word-wrap;
+            }
+
+            // Optional 3D Extrusion Depth
+            if root.text-3d : Text {
+                x: 4px; y: 5px;
+                width: parent.width;
+                text: root.text-body;
+                color: #18181bee;
+                font-family: root.font-family-name;
+                font-size: root.text-size * 1px;
+                font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                wrap: word-wrap;
+            }
+            if root.text-3d : Text {
+                x: 2px; y: 3px;
+                width: parent.width;
+                text: root.text-body;
+                color: #27272aee;
+                font-family: root.font-family-name;
+                font-size: root.text-size * 1px;
+                font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                wrap: word-wrap;
+            }
+
+            // Optional Neon Outer Halo
+            if root.text-neon : Text {
+                x: 0px; y: 0px;
+                width: parent.width;
+                text: root.text-body;
+                color: #22d3ee88;
+                font-family: root.font-family-name;
+                font-size: (root.text-size + 3.0) * 1px;
+                font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                wrap: word-wrap;
+            }
+
+            // Main Crisp Foreground Text
+            fg-txt := Text {
+                width: parent.width;
+                text: root.text-body;
+                color: root.text-neon ? #e0f2fe : root.text-color;
+                font-family: root.font-family-name;
+                font-size: root.text-size * 1px;
+                font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                wrap: word-wrap;
+            }
+        }
+
+        if root.text-underline && root.text-body != "" : Rectangle {
+            height: 3px;
+            border-radius: 1.5px;
+            background: root.text-color.transparentize(0.25);
+        }
+
+        if root.ref-body != "" : Text {
+            text: root.ref-body;
+            color: Theme.accent;
+            font-family: root.font-family-name;
+            font-size: Math.max(22.0, root.text-size * 0.42) * 1px;
+            font-weight: 600;
+            horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+        }
+    }
+}
+
+export component ProjectorWindow inherits Window {
+    title: "ProyecThor — Salida Público";
+    preferred-width: 1280px;
+    preferred-height: 720px;
+    background: #000000;
+
+    in property <string> live-text: "";
+    in property <string> live-ref: "";
+    in property <string> tile2-text: "";
+    in property <string> tile2-ref: "";
+    in property <string> alert-text: "";
+    in property <string> clock-overlay-text: "";
+    in property <bool> show-clock-overlay: false;
+
+    in property <image> bg-image;
+    in property <bool> has-bg-image: false;
+    in property <color> bg-solid-color: #000000;
+    in property <image> overlay-image;
+    in property <bool> has-overlay-image: false;
+    in property <string> live-overlay-title: "";
+    in property <string> live-overlay-sub: "";
+    in property <bool> show-custom-overlay: false;
+
+    // Typography & Text Effects
+    in property <float> text-size: 60.0;
+    in property <int> text-align: 1;
+    in property <int> text-valign: 1;
+    in property <color> text-color: #ffffff;
+    in property <string> font-family-name: "";
+    in property <int> font-weight-val: 700;
+    in property <bool> text-shadow: true;
+    in property <bool> text-outline: false;
+    in property <bool> text-glow: false;
+    in property <bool> text-neon: false;
+    in property <bool> text-3d: false;
+    in property <bool> text-underline: false;
+    in property <color> glow-color: #38bdf8;
+    in property <bool> text-box-bg: false;
+    in property <float> text-margin-h: 64.0;
+    in property <float> lyrics-pos-x: 0.5;   // 0.0 .. 1.0
+    in property <float> lyrics-pos-y: 0.5;   // 0.0 .. 1.0
+    in property <float> lyrics-width: 0.90;  // 0.3 .. 1.0
+
+    // Independent Index / Bible Reference Box (CanvaStyleEditor parity)
+    in property <bool> index-box-enabled: false;
+    in property <float> index-pos-x: 0.5;
+    in property <float> index-pos-y: 0.86;
+    in property <float> index-size: 30.0;
+    in property <color> index-color: #d4d4d8;
+
+    // Shaders overlay (Vignette)
+    in property <bool> vignette-enabled: false;
+
+    // Transitions
+    in property <int> transition-type: 1;      // 0=None, 1=Fade, 2=SlideLeft, 3=SlideUp
+    in property <duration> transition-dur: 350ms;
+    in property <bool> transition-visible: true;
+
+    // Tiles (Split Screen)
+    in property <bool> tiles-enabled: false;
+    in property <int> tiles-layout: 0;         // 0=SplitVertical (2 cols), 1=SplitHorizontal (2 rows)
+    in property <bool> tiles-show-divider: true;
+
+    // Layer 0: Solid Background Color + Video / Image
+    Rectangle {
+        background: root.bg-solid-color;
+    }
+
+    if root.has-bg-image : Image {
+        source: root.bg-image;
+        image-fit: cover;
+    }
+
+    if root.has-bg-image && (root.live-text != "" || root.show-clock-overlay) : Rectangle {
+        background: #00000050;
+    }
+
+    // Optional Vignette Shader effect
+    if root.vignette-enabled : Rectangle {
+        background: @radial-gradient(circle, #00000000 45%, #000000b8 100%);
+    }
+
+    // Layer 1: Optional PNG Overlay
+    if root.has-overlay-image : Image {
+        source: root.overlay-image;
+        image-fit: contain;
+    }
+
+    // Layer 2: Live Text (Single or Split Tiles) with Transition Animation
+    Rectangle {
+        opacity: root.transition-visible ? 1.0 : (root.transition-type == 0 ? 1.0 : 0.0);
+        x: root.transition-visible ? 0px : (root.transition-type == 2 ? 70px : 0px);
+        y: root.transition-visible ? 0px : (root.transition-type == 3 ? 48px : 0px);
+
+        animate opacity { duration: root.transition-dur; easing: ease-out; }
+        animate x       { duration: root.transition-dur; easing: ease-out; }
+        animate y       { duration: root.transition-dur; easing: ease-out; }
+
+        // Standard Single Screen Mode (with CanvaStyleEditor free positioning)
+        if !root.tiles-enabled : Rectangle {
+            if root.live-text != "" : StyledTextBlock {
+                width: Math.clamp(root.lyrics-width, 0.3, 1.0) * parent.width;
+                x: Math.clamp(root.lyrics-pos-x * parent.width - self.width / 2, 16px, Math.max(16px, parent.width - self.width - 16px));
+                y: Math.clamp(root.lyrics-pos-y * parent.height - self.preferred-height / 2, 16px, Math.max(16px, parent.height - self.preferred-height - 16px));
+                text-body: root.live-text;
+                ref-body: root.index-box-enabled ? "" : root.live-ref;
+                text-size: root.text-size;
+                text-align: root.text-align;
+                text-color: root.text-color;
+                font-family-name: root.font-family-name;
+                font-weight-val: root.font-weight-val;
+                text-shadow: root.text-shadow;
+                text-outline: root.text-outline;
+                text-glow: root.text-glow;
+                text-neon: root.text-neon;
+                text-3d: root.text-3d;
+                text-underline: root.text-underline;
+                glow-color: root.glow-color;
+                text-box-bg: root.text-box-bg;
+            }
+
+            // Independent Index / Reference Box
+            if root.index-box-enabled && root.live-ref != "" : Rectangle {
+                width: Math.min(parent.width * 0.85, ref-txt.preferred-width + 32px);
+                height: ref-txt.preferred-height + 14px;
+                x: Math.clamp(root.index-pos-x * parent.width - self.width / 2, 16px, Math.max(16px, parent.width - self.width - 16px));
+                y: Math.clamp(root.index-pos-y * parent.height - self.height / 2, 16px, Math.max(16px, parent.height - self.height - 16px));
+                border-radius: 10px;
+                background: root.text-box-bg ? #00000099 : transparent;
+
+                ref-txt := Text {
+                    text: root.live-ref;
+                    color: root.index-color;
+                    font-family: root.font-family-name;
+                    font-size: root.index-size * 1px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // Tiles Split Vertical (2 Columns)
+        if root.tiles-enabled && root.tiles-layout == 0 : HorizontalLayout {
+            padding: 36px;
+            spacing: 20px;
+
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                if root.live-text != "" : StyledTextBlock {
+                    text-body: root.live-text;
+                    ref-body: root.live-ref;
+                    text-size: root.text-size * 0.78;
+                    text-align: root.text-align;
+                    text-color: root.text-color;
+                    font-family-name: root.font-family-name;
+                    font-weight-val: root.font-weight-val;
+                    text-shadow: root.text-shadow;
+                    text-outline: root.text-outline;
+                    text-glow: root.text-glow;
+                    glow-color: root.glow-color;
+                    text-box-bg: root.text-box-bg;
+                }
+            }
+
+            if root.tiles-show-divider : Rectangle {
+                width: 2px;
+                background: #ffffff35;
+            }
+
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                if root.tile2-text != "" : StyledTextBlock {
+                    text-body: root.tile2-text;
+                    ref-body: root.tile2-ref;
+                    text-size: root.text-size * 0.72;
+                    text-align: root.text-align;
+                    text-color: #d4d4d8;
+                    font-family-name: root.font-family-name;
+                    font-weight-val: root.font-weight-val;
+                    text-shadow: root.text-shadow;
+                    text-outline: root.text-outline;
+                    text-glow: false;
+                    text-box-bg: root.text-box-bg;
+                }
+            }
+        }
+
+        // Tiles Split Horizontal (2 Rows)
+        if root.tiles-enabled && root.tiles-layout == 1 : VerticalLayout {
+            padding: 36px;
+            spacing: 16px;
+
+            VerticalLayout {
+                vertical-stretch: 1;
+                alignment: center;
+                if root.live-text != "" : StyledTextBlock {
+                    text-body: root.live-text;
+                    ref-body: root.live-ref;
+                    text-size: root.text-size * 0.80;
+                    text-align: root.text-align;
+                    text-color: root.text-color;
+                    font-family-name: root.font-family-name;
+                    font-weight-val: root.font-weight-val;
+                    text-shadow: root.text-shadow;
+                    text-outline: root.text-outline;
+                    text-glow: root.text-glow;
+                    glow-color: root.glow-color;
+                    text-box-bg: root.text-box-bg;
+                }
+            }
+
+            if root.tiles-show-divider : Rectangle {
+                height: 2px;
+                background: #ffffff35;
+            }
+
+            VerticalLayout {
+                vertical-stretch: 1;
+                alignment: center;
+                if root.tile2-text != "" : StyledTextBlock {
+                    text-body: root.tile2-text;
+                    ref-body: root.tile2-ref;
+                    text-size: root.text-size * 0.72;
+                    text-align: root.text-align;
+                    text-color: #d4d4d8;
+                    font-family-name: root.font-family-name;
+                    font-weight-val: root.font-weight-val;
+                    text-shadow: root.text-shadow;
+                    text-outline: root.text-outline;
+                    text-glow: false;
+                    text-box-bg: root.text-box-bg;
+                }
+            }
+        }
+    }
+
+    // Layer 3: Clock / Countdown Overlay
+    if root.show-clock-overlay && root.clock-overlay-text != "" : Rectangle {
+        x: root.live-text == "" ? (parent.width - self.width) / 2 : parent.width - self.width - 36px;
+        y: root.live-text == "" ? (parent.height - self.height) / 2 : 28px;
+        width: root.live-text == "" ? 420px : 190px;
+        height: root.live-text == "" ? 130px : 56px;
+        border-radius: 14px;
+        background: #09090bcc;
+        border-width: 1px;
+        border-color: Theme.border-medium;
+
+        Text {
+            text: root.clock-overlay-text;
+            color: #ffffff;
+            font-size: root.live-text == "" ? 76px : 30px;
+            font-weight: 800;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    // Layer 3.5: Live Lower-Third Custom Overlay
+    if root.show-custom-overlay && (root.live-overlay-title != "" || root.live-overlay-sub != "") : Rectangle {
+        x: 52px;
+        y: parent.height - 148px;
+        width: Math.min(720px, parent.width - 104px);
+        height: 86px;
+        border-radius: 14px;
+        background: #0d0d10e6;
+        border-width: 1px;
+        border-color: Theme.border-accent;
+
+        HorizontalLayout {
+            padding-left: 0px;
+            padding-right: 20px;
+            spacing: 16px;
+            Rectangle { width: 6px; background: Theme.accent-strong; border-radius: 3px; }
+            VerticalLayout {
+                alignment: center;
+                spacing: 3px;
+                Text { text: root.live-overlay-title; color: #ffffff; font-size: 26px; font-weight: 800; overflow: elide; }
+                if root.live-overlay-sub != "" : Text { text: root.live-overlay-sub; color: Theme.text-secondary; font-size: 17px; font-weight: 500; overflow: elide; }
+            }
+        }
+    }
+
+    // Layer 4: Quick Alert Banner (Lower-Third)
+    if root.alert-text != "" : Rectangle {
+        y: parent.height - 64px;
+        width: 100%;
+        height: 64px;
+        background: #111113eb;
+        border-width: 1px;
+        border-color: Theme.border-accent;
+
+        Text {
+            text: root.alert-text;
+            color: #ffffff;
+            font-size: 26px;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
+
+export component StageWindow inherits Window {
+    title: "ProyecThor — Stage Display";
+    preferred-width: 1120px;
+    preferred-height: 640px;
+    background: #08080a;
+
+    in property <string> live-text: "";
+    in property <string> live-ref: "";
+    in property <string> next-text: "";
+    in property <string> clock-text: "00:00:00";
+    in property <string> timer-text: "";
+    in property <string> stage-alert: "";
+
+    VerticalLayout {
+        padding: 26px;
+        spacing: 18px;
+
+        HorizontalLayout {
+            alignment: space-between;
+            Text {
+                text: "STAGE DISPLAY";
+                color: Theme.stage-amber;
+                font-size: 15px;
+                font-weight: 800;
+                vertical-alignment: center;
+            }
+            Text {
+                text: root.live-ref;
+                color: Theme.accent;
+                font-size: 20px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+            HorizontalLayout {
+                spacing: 18px;
+                if root.timer-text != "" : Text {
+                    text: root.timer-text;
+                    color: Theme.stage-amber;
+                    font-size: 32px;
+                    font-weight: 800;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: root.clock-text;
+                    color: #ffffff;
+                    font-size: 32px;
+                    font-weight: 800;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        if root.stage-alert != "" : Rectangle {
+            height: 56px;
+            border-radius: 12px;
+            background: Theme.danger-soft;
+            border-width: 2px;
+            border-color: Theme.danger;
+
+            Text {
+                text: "ALERTA: " + root.stage-alert;
+                color: #fecaca;
+                font-size: 22px;
+                font-weight: 800;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle {
+            vertical-stretch: 2;
+            border-radius: 16px;
+            background: Theme.bg-surface-0;
+            border-width: 2px;
+            border-color: Theme.live-green.transparentize(0.35);
+
+            VerticalLayout {
+                padding: 26px;
+                alignment: center;
+                Text {
+                    text: root.live-text == "" ? "(En espera)" : root.live-text;
+                    color: root.live-text == "" ? Theme.text-muted : #ffffff;
+                    font-size: 40px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+        }
+
+        Rectangle {
+            vertical-stretch: 1;
+            border-radius: 14px;
+            background: Theme.bg-surface-1;
+            border-width: 1px;
+            border-color: Theme.border-subtle;
+
+            VerticalLayout {
+                padding: 18px;
+                spacing: 6px;
+                Text {
+                    text: "SIGUIENTE";
+                    color: Theme.text-muted;
+                    font-size: 12.5px;
+                    font-weight: 700;
+                }
+                Text {
+                    text: root.next-text == "" ? "—" : root.next-text;
+                    color: Theme.text-secondary;
+                    font-size: 23px;
+                    font-weight: 500;
+                    wrap: word-wrap;
+                    overflow: elide;
+                    vertical-stretch: 1;
+                }
+            }
+        }
+    }
+}

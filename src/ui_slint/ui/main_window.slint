@@ -1,0 +1,2430 @@
+import { ScrollView, LineEdit, TextEdit, Slider } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { GlassCard, GlassButton, IconButton, SlideTile, SwitchRow, PadTile, ThemeSwatchButton } from "components.slint";
+import { TopBar } from "topbar.slint";
+export { Theme } from "theme.slint";
+export { ProjectorWindow, StageWindow } from "projector_window.slint";
+export { SplashWindow } from "splash_window.slint";
+
+export struct LibraryItem {
+    title: string,
+    subtitle: string,
+    path: string,
+    thumbnail: image,
+    has-thumbnail: bool,
+}
+
+export struct SlideItem {
+    badge: string,
+    body: string,
+    ref-text: string,
+}
+
+export struct QueueItem {
+    title: string,
+    kind: string,
+}
+
+export struct PadItem {
+    name: string,
+    summary: string,
+    assigned: bool,
+}
+
+export struct CaptureDeviceItem {
+    name: string,
+    uri: string,
+}
+
+export component MainWindow inherits Window {
+    title: "ProyecThor — Open Source (Slint + libmpv)";
+    preferred-width: 1420px;
+    preferred-height: 860px;
+    min-width: 1100px;
+    min-height: 660px;
+    background: Theme.bg-root;
+
+    // ── App State ──
+    in-out property <int> active-tab: 0;
+    in property <string> app-version: "1.1.4";
+    in property <image> logo-image;
+    in property <bool> has-logo: false;
+    in-out property <string> search-query: "";
+
+    // Library, Slides & Service Queue
+    in property <[LibraryItem]> library-items: [];
+    in-out property <int> selected-library-index: -1;
+    in property <string> selected-item-title: "Selecciona una canción o pasaje";
+
+    in property <[SlideItem]> slides: [];
+    in-out property <int> active-slide-index: -1;
+
+    in property <[QueueItem]> queue-items: [];
+
+    // Song Editor inline state
+    in-out property <bool> song-editor-open: false;
+    in-out property <string> editor-song-title: "";
+    in-out property <string> editor-song-body: "";
+
+    // Bible quick nav
+    in property <string> current-bible-name: "Sin Biblia";
+    in-out property <int> selected-chapter: 1;
+    in property <int> chapter-count: 1;
+
+    // Backgrounds vs Overlays sub-tab (when active-tab == 3)
+    in-out property <int> bg-subtab: 0; // 0=Fondos, 1=Overlays PNG
+
+    // Live Projection State
+    in-out property <bool> audience-live: false;
+    in-out property <bool> stage-live: false;
+    in property <string> live-text: "";
+    in property <string> live-ref: "";
+    in property <string> live-bg-name: "Sin fondo";
+    in property <color> live-bg-solid-color: #030304;
+    in property <string> live-overlay-name: "Sin overlay";
+    in property <[LibraryItem]> bg-dock-items: [];
+    in-out property <int> bg-dock-tab: 0; // 0=Fondos, 1=Colores, 2=Overlay Lower-Third
+    in-out property <bool> bg-dock-expanded: true;
+    in-out property <string> custom-overlay-title: "";
+    in-out property <string> custom-overlay-sub: "";
+    in-out property <bool> custom-overlay-active: false;
+    in property <image> live-preview-image;
+    in property <bool> has-live-preview-image: false;
+    in property <image> live-overlay-image;
+    in property <bool> has-live-overlay-image: false;
+
+    // Media Playback State (libmpv)
+    in-out property <bool> media-paused: false;
+    in-out property <bool> media-muted: false;
+    in-out property <bool> media-loop: false;
+    in-out property <float> media-volume: 100.0;
+    in-out property <float> media-position: 0.0;
+    in property <string> media-time-label: "00:00 / 00:00";
+
+    // Design, Typography, Shaders, Transitions, Tiles & Alerts (Tab 4)
+    in-out property <int> design-subtab: 0; // 0=Estilos, 1=Shaders/EQ, 2=Transiciones, 3=Tiles
+    in-out property <float> text-size: 60.0;
+    in-out property <int> text-align: 1;   // 0=Left, 1=Center, 2=Right
+    in-out property <int> text-valign: 1;  // 0=Top, 1=Center, 2=Bottom
+    in-out property <int> text-color-idx: 0;
+    in property <color> text-color: #ffffff;
+    in-out property <int> font-family-idx: 0; // 0=Default, 1=Sans, 2=Serif, 3=Mono
+    in-out property <int> font-weight-idx: 1; // 0=Regular(400), 1=Bold(700), 2=Black(900)
+    in-out property <bool> text-shadow: true;
+    in-out property <bool> text-outline: false;
+    in-out property <bool> text-glow: false;
+    in-out property <bool> text-neon: false;
+    in-out property <bool> text-3d: false;
+    in-out property <bool> text-underline: false;
+    in-out property <bool> text-uppercase: false;
+    in-out property <bool> text-box-bg: false;
+    in-out property <float> text-margin-h: 64.0;
+    in-out property <float> lyrics-pos-x: 0.5;
+    in-out property <float> lyrics-pos-y: 0.5;
+    in-out property <float> lyrics-width: 0.90;
+    in-out property <bool> index-box-enabled: false;
+    in-out property <float> index-pos-x: 0.5;
+    in-out property <float> index-pos-y: 0.86;
+    in-out property <float> index-size: 30.0;
+    in-out property <int> style-editor-box: 0; // 0=Caja Letras, 1=Caja Referencia/Índice
+    in-out property <int> style-editor-ribbon: 0; // 0=Fuente/Posición, 1=Efectos, 2=Alertas
+    in-out property <int> active-saved-style-idx: -1;
+    in-out property <string> custom-style-name: "";
+    in property <[string]> saved-style-names: [];
+
+    // Media / Background Preview in Center Stage
+    in property <image> selected-media-preview;
+    in property <bool> has-selected-media-preview: false;
+    in property <string> selected-media-info: "";
+
+    // Shaders & Video/Audio Filters (libmpv)
+    in-out property <float> shader-brightness: 0.0;
+    in-out property <float> shader-contrast: 0.0;
+    in-out property <float> shader-saturation: 0.0;
+    in-out property <float> shader-gamma: 0.0;
+    in-out property <bool> shader-blur: false;
+    in-out property <bool> shader-vignette: false;
+    in-out property <int> shader-preset: 0;
+    in-out property <bool> eq-enabled: false;
+    in-out property <float> eq-bass: 0.0;
+    in-out property <float> eq-mid: 0.0;
+    in-out property <float> eq-treble: 0.0;
+
+    // Transitions
+    in-out property <int> transition-type: 1; // 0=None, 1=Fade, 2=SlideLeft, 3=SlideUp
+    in-out property <float> transition-duration-ms: 350.0;
+
+    // Tiles (Split Screen)
+    in-out property <bool> tiles-enabled: false;
+    in-out property <int> tiles-layout: 0;      // 0=2 Cols, 1=2 Rows
+    in-out property <bool> tiles-divider: true;
+    in-out property <int> tiles-continuity: 0;  // 0=Actual+Siguiente, 1=Anterior+Actual
+
+    in-out property <string> alert-input: "";
+    in property <string> active-public-alert: "";
+    in property <string> active-stage-alert: "";
+
+    // Clock & Countdown Timer
+    in property <string> clock-now-text: "00:00:00";
+    in property <string> timer-display-text: "05:00";
+    in-out property <bool> timer-running: false;
+    in-out property <bool> show-clock-on-public: false;
+    in-out property <bool> timer-mode-countdown: true;
+
+    // Pads (8 quick scene pads)
+    in property <[PadItem]> pads: [];
+
+    // Capture & URL to Screen (Tab 8)
+    in-out property <string> stream-url-input: "";
+    in-out property <bool> stream-url-loop: false;
+    in-out property <bool> stream-url-muted: false;
+    in property <string> capture-status: "Ingresa una URL (YouTube, RTSP, HLS, HTTP) o selecciona una capturadora / cámara USB.";
+    in property <[CaptureDeviceItem]> capture-devices: [];
+    in-out property <int> selected-capture-idx: -1;
+
+    // Network Hub (Tab 5): LAN Stream, Mobile Sync, Chat LAN, OSC Yggdrasil
+    in-out property <int> net-subtab: 0; // 0=LAN Stream, 1=Celular Mobile, 2=Chat & Reloj, 3=Luces OSC
+    in-out property <bool> lan-running: false;
+    in property <string> lan-url: "Inactivo — pulsa Iniciar para transmitir en tu red local";
+    in-out property <bool> lan-transparent: false;
+    in-out property <bool> lan-send-bg: true;
+    in property <image> lan-qr-image;
+    in property <bool> has-lan-qr: false;
+
+    in-out property <bool> mobile-running: false;
+    in property <string> mobile-url: "Inactivo — pulsa Iniciar para conectar tu celular";
+    in property <string> mobile-pin: "000000";
+    in property <image> mobile-qr-image;
+    in property <bool> has-mobile-qr: false;
+
+    in property <string> chat-log: "Activa la Transmisión LAN para abrir el Chat de Equipo en /chat.";
+    in-out property <string> chat-input: "";
+
+    in-out property <string> osc-host: "127.0.0.1";
+    in-out property <string> osc-port: "9000";
+    in-out property <string> osc-address: "/cue/1";
+    in-out property <string> osc-args: "1";
+    in property <string> osc-status: "Listo para enviar mensajes OSC (QLC+, grandMA, Resolume, TouchOSC)";
+
+    // Settings, Themes & Updater
+    in-out property <int> active-theme-idx: 0;
+    in-out property <bool> fsr-enabled: true;
+    in-out property <bool> performance-mode: false;
+    in-out property <bool> fullscreen-output: true;
+    in property <string> update-status: "Listo para comprobar en GitHub Releases (TheVixcho/ProyecThor)";
+
+    // ── Callbacks to C++ Core ──
+    callback tab-changed(int);
+    callback bg-subtab-changed(int);
+    callback search-changed(string);
+    callback library-item-selected(int);
+    callback slide-clicked(int);
+    callback next-slide();
+    callback prev-slide();
+
+    // Song Editor
+    callback new-song-clicked();
+    callback edit-song-clicked();
+    callback save-song-clicked(string, string);
+    callback cancel-song-editor();
+
+    // Service Queue
+    callback add-current-to-queue();
+    callback queue-item-clicked(int);
+    callback clear-queue();
+
+    // Bible
+    callback cycle-bible-version();
+    callback bible-chapter-changed(int);
+
+    // Live Output
+    callback toggle-audience();
+    callback toggle-stage();
+    callback clear-text();
+    callback clear-background();
+    callback clear-overlay();
+    callback clear-all();
+
+    // Media Transport
+    callback toggle-pause();
+    callback stop-media();
+    callback toggle-mute();
+    callback toggle-loop();
+    callback volume-changed(float);
+    callback seek-changed(float);
+
+    // Design, Shaders, Transitions, Tiles & Alerts
+    callback style-changed();
+    callback apply-style-preset(int);
+    callback save-custom-style(string);
+    callback load-custom-style(int);
+    callback delete-custom-style(int);
+    callback text-color-selected(int);
+    callback shaders-changed();
+    callback reset-shaders();
+    callback eq-changed();
+    callback apply-eq-preset(int);
+    callback transition-changed();
+    callback test-transition();
+    callback tiles-changed();
+    callback send-public-alert(string);
+    callback send-stage-alert(string);
+    callback clear-alerts();
+
+    // Clock & Timer
+    callback timer-set-minutes(int);
+    callback timer-toggle();
+    callback timer-reset();
+    callback clock-overlay-toggled(bool);
+
+    // Pads
+    callback pad-triggered(int);
+    callback pad-saved(int);
+
+    // Capture & URL to Screen
+    callback send-url-to-screen(string, bool, bool);
+    callback refresh-capture-devices();
+    callback start-capture-device(int);
+    callback stop-capture-or-url();
+
+    // Network Hub
+    callback toggle-lan-stream();
+    callback lan-config-changed();
+    callback toggle-mobile-server();
+    callback regenerate-mobile-pin();
+    callback send-chat-message(string);
+    callback send-osc(string, string, string, string);
+
+    // Themes & Settings
+    callback theme-selected(int);
+    callback import-file-clicked();
+    callback import-background-clicked();
+    callback dock-bg-selected(int);
+    callback dock-solid-color-selected(int);
+    callback custom-overlay-toggled(string, string, bool);
+    callback open-legacy-imgui();
+    callback fsr-changed(bool);
+    callback performance-mode-changed(bool);
+    callback fullscreen-changed(bool);
+    callback check-github-updates();
+
+    changed active-tab => {
+        root.tab-changed(root.active-tab);
+    }
+
+    VerticalLayout {
+        // ── Top Floating Bar (ImGui-style islands + circular buttons) ──
+        topbar := TopBar {
+            active-tab <=> root.active-tab;
+            design-subtab <=> root.design-subtab;
+            net-subtab <=> root.net-subtab;
+            app-version: root.app-version;
+            logo-image: root.logo-image;
+            has-logo: root.has-logo;
+            audience-live: root.audience-live;
+            stage-live: root.stage-live;
+            toggle-audience => { root.toggle-audience(); }
+            toggle-stage => { root.toggle-stage(); }
+            clear-all => { root.clear-all(); }
+            import-file => { root.import-file-clicked(); }
+        }
+
+        // ── Main 3-Column Workspace ──
+        HorizontalLayout {
+            padding: 10px;
+            spacing: 10px;
+            vertical-stretch: 1;
+
+            // ═════════════════════════════════════════════════════════════════
+            //  COLUMN 1: LIBRARY SIDEBAR + SERVICE QUEUE
+            // ═════════════════════════════════════════════════════════════════
+            if root.active-tab < 4 : VerticalLayout {
+                width: 286px;
+                spacing: 10px;
+
+                GlassCard {
+                    vertical-stretch: 2;
+
+                    VerticalLayout {
+                        padding: 11px;
+                        spacing: 9px;
+
+                        // Sidebar header + quick actions
+                        HorizontalLayout {
+                            alignment: space-between;
+                            Text {
+                                text: root.active-tab == 0 ? "Canciones"
+                                    : root.active-tab == 1 ? "Biblia"
+                                    : root.active-tab == 2 ? "Multimedia"
+                                    : (root.bg-subtab == 0 ? "Fondos en Bucle" : "Overlays PNG");
+                                color: Theme.text-primary;
+                                font-size: 13.5px;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                            }
+
+                            HorizontalLayout {
+                                spacing: 5px;
+                                IconButton {
+                                    icon: @image-url("icons/upload.svg");
+                                    clicked => { root.import-file-clicked(); }
+                                }
+                                if root.active-tab == 0 : IconButton {
+                                    icon: @image-url("icons/plus.svg");
+                                    clicked => { root.new-song-clicked(); }
+                                }
+                                if root.active-tab == 1 : GlassButton {
+                                    label: root.current-bible-name;
+                                    icon: @image-url("icons/refresh.svg");
+                                    has-icon: true;
+                                    clicked => { root.cycle-bible-version(); }
+                                }
+                                Text {
+                                    text: root.library-items.length;
+                                    color: Theme.text-muted;
+                                    font-size: 11.5px;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        // Sub-tabs for Fondos vs Overlays
+                        if root.active-tab == 3 : HorizontalLayout {
+                            spacing: 6px;
+                            GlassButton {
+                                label: "Fondos";
+                                icon: @image-url("icons/film.svg");
+                                has-icon: true;
+                                primary: root.bg-subtab == 0;
+                                horizontal-stretch: 1;
+                                clicked => { root.bg-subtab = 0; root.bg-subtab-changed(0); }
+                            }
+                            GlassButton {
+                                label: "Overlays";
+                                icon: @image-url("icons/layers.svg");
+                                has-icon: true;
+                                primary: root.bg-subtab == 1;
+                                horizontal-stretch: 1;
+                                clicked => { root.bg-subtab = 1; root.bg-subtab-changed(1); }
+                            }
+                        }
+
+                        // Search box with icon
+                        Rectangle {
+                            height: 34px;
+                            border-radius: Theme.radius-md;
+                            background: Theme.bg-input;
+                            border-width: 1px;
+                            border-color: Theme.border-subtle;
+
+                            HorizontalLayout {
+                                padding-left: 9px;
+                                padding-right: 8px;
+                                spacing: 6px;
+
+                                Image {
+                                    source: @image-url("icons/search.svg");
+                                    width: 14px;
+                                    height: 14px;
+                                    y: (parent.height - self.height) / 2;
+                                    colorize: Theme.text-muted;
+                                }
+
+                                LineEdit {
+                                    placeholder-text: "Buscar...";
+                                    text <=> root.search-query;
+                                    edited(txt) => { root.search-changed(txt); }
+                                }
+                            }
+                        }
+
+                        // Bible chapter quick selector
+                        if root.active-tab == 1 && root.chapter-count > 1 : HorizontalLayout {
+                            spacing: 6px;
+                            IconButton {
+                                icon: @image-url("icons/prev.svg");
+                                clicked => {
+                                    if (root.selected-chapter > 1) {
+                                        root.selected-chapter -= 1;
+                                        root.bible-chapter-changed(root.selected-chapter);
+                                    }
+                                }
+                            }
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                height: 33px;
+                                border-radius: Theme.radius-md;
+                                background: Theme.bg-surface-1;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+                                Text {
+                                    text: "Cap. " + root.selected-chapter + " / " + root.chapter-count;
+                                    color: Theme.text-primary;
+                                    font-size: 12px;
+                                    font-weight: 600;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            IconButton {
+                                icon: @image-url("icons/next.svg");
+                                clicked => {
+                                    if (root.selected-chapter < root.chapter-count) {
+                                        root.selected-chapter += 1;
+                                        root.bible-chapter-changed(root.selected-chapter);
+                                    }
+                                }
+                            }
+                        }
+
+                        // Scrollable Library List
+                        ScrollView {
+                            vertical-stretch: 1;
+                            VerticalLayout {
+                                spacing: 3px;
+                                padding-right: 4px;
+
+                                for item[idx] in root.library-items : Rectangle {
+                                    height: item.subtitle == "" ? 36px : 46px;
+                                    border-radius: Theme.radius-sm;
+                                    background: idx == root.selected-library-index
+                                        ? Theme.bg-surface-hover
+                                        : (item-ta.has-hover ? Theme.bg-surface-1 : transparent);
+                                    border-width: 1px;
+                                    border-color: idx == root.selected-library-index
+                                        ? Theme.border-accent
+                                        : transparent;
+
+                                    VerticalLayout {
+                                        padding-left: 10px;
+                                        padding-right: 10px;
+                                        alignment: center;
+                                        spacing: 1px;
+
+                                        Text {
+                                            text: item.title;
+                                            color: idx == root.selected-library-index ? Theme.text-primary : Theme.text-secondary;
+                                            font-size: 12.5px;
+                                            font-weight: idx == root.selected-library-index ? 600 : 400;
+                                            overflow: elide;
+                                        }
+                                        if item.subtitle != "" : Text {
+                                            text: item.subtitle;
+                                            color: Theme.text-muted;
+                                            font-size: 10.5px;
+                                            overflow: elide;
+                                        }
+                                    }
+
+                                    item-ta := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            root.selected-library-index = idx;
+                                            root.library-item-selected(idx);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Service Queue (Cola de Servicio) ──
+                GlassCard {
+                    height: 195px;
+
+                    VerticalLayout {
+                        padding: 10px;
+                        spacing: 7px;
+
+                        HorizontalLayout {
+                            alignment: space-between;
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Image {
+                                    source: @image-url("icons/list.svg");
+                                    width: 14px;
+                                    height: 14px;
+                                    y: (parent.height - self.height) / 2;
+                                    colorize: Theme.text-secondary;
+                                }
+                                Text {
+                                    text: "Cola de Servicio (" + root.queue-items.length + ")";
+                                    color: Theme.text-primary;
+                                    font-size: 12px;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            if root.queue-items.length > 0 : IconButton {
+                                icon: @image-url("icons/trash.svg");
+                                danger: true;
+                                clicked => { root.clear-queue(); }
+                            }
+                        }
+
+                        ScrollView {
+                            vertical-stretch: 1;
+                            VerticalLayout {
+                                spacing: 3px;
+                                if root.queue-items.length == 0 : Text {
+                                    text: "Usa '+ Cola' para armar el orden del servicio.";
+                                    color: Theme.text-muted;
+                                    font-size: 11px;
+                                    wrap: word-wrap;
+                                }
+                                for qitem[qidx] in root.queue-items : Rectangle {
+                                    height: 30px;
+                                    border-radius: Theme.radius-sm;
+                                    background: q-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
+
+                                    HorizontalLayout {
+                                        padding-left: 8px;
+                                        padding-right: 8px;
+                                        spacing: 6px;
+                                        Text {
+                                            text: qitem.kind;
+                                            color: Theme.text-muted;
+                                            font-size: 10px;
+                                            font-weight: 700;
+                                            vertical-alignment: center;
+                                        }
+                                        Text {
+                                            text: qitem.title;
+                                            color: Theme.text-primary;
+                                            font-size: 11.5px;
+                                            overflow: elide;
+                                            vertical-alignment: center;
+                                            horizontal-stretch: 1;
+                                        }
+                                    }
+
+                                    q-ta := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => { root.queue-item-clicked(qidx); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ═════════════════════════════════════════════════════════════════
+            //  COLUMN 2: CENTER WORKSPACE + BOTTOM BACKGROUNDS DOCK
+            // ═════════════════════════════════════════════════════════════════
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 10px;
+
+                GlassCard {
+                    vertical-stretch: 1;
+
+                    VerticalLayout {
+                    padding: 15px;
+                    spacing: 12px;
+
+                    // ── Inline Song Editor (when active-tab == 0 && song-editor-open) ──
+                    if root.active-tab == 0 && root.song-editor-open : VerticalLayout {
+                        spacing: 10px;
+                        vertical-stretch: 1;
+
+                        HorizontalLayout {
+                            alignment: space-between;
+                            Text {
+                                text: "Editor de Canciones";
+                                color: Theme.text-primary;
+                                font-size: 16px;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                GlassButton {
+                                    label: "Cancelar";
+                                    clicked => { root.cancel-song-editor(); }
+                                }
+                                GlassButton {
+                                    label: "Guardar (.txt)";
+                                    icon: @image-url("icons/save.svg");
+                                    has-icon: true;
+                                    primary: true;
+                                    clicked => { root.save-song-clicked(root.editor-song-title, root.editor-song-body); }
+                                }
+                            }
+                        }
+
+                        LineEdit {
+                            placeholder-text: "Título de la canción...";
+                            text <=> root.editor-song-title;
+                        }
+
+                        Text {
+                            text: "Separa cada estrofa con una línea en blanco:";
+                            color: Theme.text-muted;
+                            font-size: 11.5px;
+                        }
+
+                        TextEdit {
+                            vertical-stretch: 1;
+                            text <=> root.editor-song-body;
+                        }
+                    }
+
+                    // ── Modes 0..3: Slides / Verses / Media Cards ──
+                    if root.active-tab < 4 && !(root.active-tab == 0 && root.song-editor-open) : VerticalLayout {
+                        spacing: 11px;
+                        vertical-stretch: 1;
+
+                        HorizontalLayout {
+                            alignment: space-between;
+                            Text {
+                                text: root.selected-item-title;
+                                color: Theme.text-primary;
+                                font-size: 15.5px;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                                overflow: elide;
+                                horizontal-stretch: 1;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                if root.active-tab == 0 && root.selected-library-index >= 0 : GlassButton {
+                                    label: "Editar";
+                                    icon: @image-url("icons/edit.svg");
+                                    has-icon: true;
+                                    clicked => { root.edit-song-clicked(); }
+                                }
+                                if root.selected-library-index >= 0 : GlassButton {
+                                    label: "+ Cola";
+                                    icon: @image-url("icons/list.svg");
+                                    has-icon: true;
+                                    clicked => { root.add-current-to-queue(); }
+                                }
+                                GlassButton {
+                                    label: "Anterior";
+                                    icon: @image-url("icons/prev.svg");
+                                    has-icon: true;
+                                    clicked => { root.prev-slide(); }
+                                }
+                                GlassButton {
+                                    label: "Siguiente";
+                                    icon: @image-url("icons/next.svg");
+                                    has-icon: true;
+                                    primary: true;
+                                    clicked => { root.next-slide(); }
+                                }
+                            }
+                        }
+
+                        ScrollView {
+                            vertical-stretch: 1;
+                            VerticalLayout {
+                                spacing: 9px;
+                                padding-right: 6px;
+
+                                // Media / Background Large 16:9 Preview Card (when active-tab == 2 or 3)
+                                if (root.active-tab == 2 || root.active-tab == 3) && root.selected-library-index >= 0 : Rectangle {
+                                    height: 290px;
+                                    border-radius: Theme.radius-md;
+                                    background: #050507;
+                                    border-width: 1px;
+                                    border-color: Theme.border-medium;
+                                    clip: true;
+
+                                    if root.has-selected-media-preview : Image {
+                                        source: root.selected-media-preview;
+                                        image-fit: contain;
+                                    }
+
+                                    if !root.has-selected-media-preview : Text {
+                                        text: root.selected-media-info;
+                                        color: Theme.text-secondary;
+                                        font-size: 13px;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                        wrap: word-wrap;
+                                    }
+
+                                    Rectangle {
+                                        y: parent.height - 34px;
+                                        width: 100%;
+                                        height: 34px;
+                                        background: #09090bcc;
+                                        HorizontalLayout {
+                                            padding-left: 12px;
+                                            padding-right: 12px;
+                                            alignment: space-between;
+                                            Text { text: root.selected-item-title; color: #ffffff; font-size: 12px; font-weight: 700; vertical-alignment: center; overflow: elide; }
+                                            Text { text: root.selected-media-info; color: Theme.text-secondary; font-size: 11px; vertical-alignment: center; }
+                                        }
+                                    }
+                                }
+
+                                if root.slides.length == 0 && root.active-tab < 2 : Rectangle {
+                                    height: 220px;
+                                    Text {
+                                        text: root.active-tab == 0 ? "Selecciona una canción a la izquierda o pulsa '+' para crear una nueva."
+                                            : "Selecciona un libro y capítulo para proyectar versículos.";
+                                        color: Theme.text-muted;
+                                        font-size: 13px;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+
+                                if root.active-tab >= 2 && root.selected-library-index < 0 : Rectangle {
+                                    height: 220px;
+                                    Text {
+                                        text: root.active-tab == 2
+                                            ? "Selecciona un video, imagen o audio de tu carpeta Multimedia a la izquierda."
+                                            : "Selecciona un fondo de tu carpeta Fondos (backgrounds/) o un Overlay PNG.";
+                                        color: Theme.text-muted;
+                                        font-size: 13px;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+
+                                for slide[sidx] in root.slides : SlideTile {
+                                    badge: slide.badge;
+                                    body: slide.body;
+                                    active: sidx == root.active-slide-index;
+                                    clicked => {
+                                        root.active-slide-index = sidx;
+                                        root.slide-clicked(sidx);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Mode 4: Diseño (Estilos de Letras, Shaders/EQ, Transiciones, Tiles) ──
+                    if root.active-tab == 4 : VerticalLayout {
+                        spacing: 11px;
+                        vertical-stretch: 1;
+
+                        HorizontalLayout {
+                            alignment: space-between;
+                            Text {
+                                text: "Diseño de Proyección";
+                                color: Theme.text-primary;
+                                font-size: 16.5px;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                GlassButton { label: "Estilos";      icon: @image-url("icons/palette.svg"); has-icon: true; primary: root.design-subtab == 0; clicked => { root.design-subtab = 0; } }
+                                GlassButton { label: "Shaders / EQ"; icon: @image-url("icons/sliders.svg"); has-icon: true; primary: root.design-subtab == 1; clicked => { root.design-subtab = 1; } }
+                                GlassButton { label: "Transiciones"; icon: @image-url("icons/shuffle.svg"); has-icon: true; primary: root.design-subtab == 2; clicked => { root.design-subtab = 2; } }
+                                GlassButton { label: "Tiles";        icon: @image-url("icons/columns.svg"); has-icon: true; primary: root.design-subtab == 3; clicked => { root.design-subtab = 3; } }
+                            }
+                        }
+
+                        // Subtab 0: Estilos de Letras, Efectos y Alertas
+                        if root.design-subtab == 0 : ScrollView {
+                            vertical-stretch: 1;
+                            VerticalLayout {
+                                spacing: 11px;
+                                padding-right: 8px;
+
+                                // Style Editor 16:9 Live Visual Canvas (CanvaStyleEditor parity)
+                                Rectangle {
+                                    height: 196px;
+                                    border-radius: Theme.radius-md;
+                                    background: root.live-bg-solid-color;
+                                    border-width: 1px;
+                                    border-color: Theme.border-medium;
+                                    clip: true;
+
+                                    if root.has-live-preview-image : Image {
+                                        source: root.live-preview-image;
+                                        image-fit: cover;
+                                    }
+
+                                    Rectangle { background: #00000045; }
+
+                                    // Preview of Lyrics Box positioned freely
+                                    Rectangle {
+                                        width: Math.clamp(root.lyrics-width, 0.3, 1.0) * parent.width;
+                                        height: 78px;
+                                        x: Math.clamp(root.lyrics-pos-x * parent.width - self.width / 2, 6px, Math.max(6px, parent.width - self.width - 6px));
+                                        y: Math.clamp(root.lyrics-pos-y * parent.height - self.height / 2, 6px, Math.max(6px, parent.height - self.height - 6px));
+                                        border-radius: 6px;
+                                        background: root.text-box-bg ? #00000090 : transparent;
+                                        border-width: root.style-editor-box == 0 ? 1.5px : 1px;
+                                        border-color: root.style-editor-box == 0 ? Theme.accent-strong : #ffffff30;
+
+                                        Text {
+                                            width: parent.width - 12px;
+                                            x: 6px;
+                                            height: parent.height;
+                                            text: root.live-text == "" ? "Vista previa del estilo de letras\nProyecThor Open Source" : root.live-text;
+                                            color: root.text-neon ? #e0f2fe : root.text-color;
+                                            font-size: Math.clamp(root.text-size * 0.28, 10.0, 26.0) * 1px;
+                                            font-weight: root.font-weight-idx == 0 ? 400 : (root.font-weight-idx == 2 ? 900 : 700);
+                                            horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                                            vertical-alignment: center;
+                                            wrap: word-wrap;
+                                            overflow: elide;
+                                        }
+                                    }
+
+                                    // Preview of Independent Index / Reference Box
+                                    if root.index-box-enabled : Rectangle {
+                                        width: 150px;
+                                        height: 26px;
+                                        x: Math.clamp(root.index-pos-x * parent.width - self.width / 2, 6px, Math.max(6px, parent.width - self.width - 6px));
+                                        y: Math.clamp(root.index-pos-y * parent.height - self.height / 2, 6px, Math.max(6px, parent.height - self.height - 6px));
+                                        border-radius: 5px;
+                                        background: #00000088;
+                                        border-width: root.style-editor-box == 1 ? 1.5px : 1px;
+                                        border-color: root.style-editor-box == 1 ? Theme.stage-amber : #ffffff40;
+
+                                        Text {
+                                            text: root.live-ref == "" ? "Juan 3:16" : root.live-ref;
+                                            color: Theme.accent;
+                                            font-size: Math.clamp(root.index-size * 0.36, 9.0, 16.0) * 1px;
+                                            font-weight: 700;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+
+                                // Box Selector (Letras vs Referencia/Índice) + Position Sliders
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
+
+                                    VerticalLayout {
+                                        padding: 13px;
+                                        spacing: 9px;
+
+                                        HorizontalLayout {
+                                            spacing: 8px;
+                                            GlassButton { label: "Editar Caja: Letras"; horizontal-stretch: 1; primary: root.style-editor-box == 0; clicked => { root.style-editor-box = 0; } }
+                                            GlassButton { label: "Editar Caja: Referencia / Índice"; horizontal-stretch: 1; primary: root.style-editor-box == 1; clicked => { root.style-editor-box = 1; } }
+                                        }
+
+                                        if root.style-editor-box == 0 : VerticalLayout {
+                                            spacing: 6px;
+                                            HorizontalLayout { alignment: space-between; Text { text: "Posición X (Letras)"; color: Theme.text-secondary; font-size: 11.5px; } Text { text: Math.round(root.lyrics-pos-x * 100) + "%"; color: Theme.text-primary; font-size: 11.5px; } }
+                                            Slider { minimum: 0.05; maximum: 0.95; value <=> root.lyrics-pos-x; changed(v) => { root.style-changed(); } }
+                                            HorizontalLayout { alignment: space-between; Text { text: "Posición Y (Letras)"; color: Theme.text-secondary; font-size: 11.5px; } Text { text: Math.round(root.lyrics-pos-y * 100) + "%"; color: Theme.text-primary; font-size: 11.5px; } }
+                                            Slider { minimum: 0.08; maximum: 0.92; value <=> root.lyrics-pos-y; changed(v) => { root.style-changed(); } }
+                                            HorizontalLayout { alignment: space-between; Text { text: "Ancho de Caja"; color: Theme.text-secondary; font-size: 11.5px; } Text { text: Math.round(root.lyrics-width * 100) + "%"; color: Theme.text-primary; font-size: 11.5px; } }
+                                            Slider { minimum: 0.30; maximum: 1.00; value <=> root.lyrics-width; changed(v) => { root.style-changed(); } }
+                                        }
+
+                                        if root.style-editor-box == 1 : VerticalLayout {
+                                            spacing: 6px;
+                                            SwitchRow {
+                                                title: "Caja de Referencia / Índice Independiente";
+                                                subtitle: "Posiciona la cita bíblica o título en un recuadro separado de las letras";
+                                                checked <=> root.index-box-enabled;
+                                                toggled(v) => { root.style-changed(); }
+                                            }
+                                            HorizontalLayout { alignment: space-between; Text { text: "Posición X (Referencia)"; color: Theme.text-secondary; font-size: 11.5px; } Text { text: Math.round(root.index-pos-x * 100) + "%"; color: Theme.text-primary; font-size: 11.5px; } }
+                                            Slider { minimum: 0.05; maximum: 0.95; value <=> root.index-pos-x; changed(v) => { root.style-changed(); } }
+                                            HorizontalLayout { alignment: space-between; Text { text: "Posición Y (Referencia)"; color: Theme.text-secondary; font-size: 11.5px; } Text { text: Math.round(root.index-pos-y * 100) + "%"; color: Theme.text-primary; font-size: 11.5px; } }
+                                            Slider { minimum: 0.05; maximum: 0.95; value <=> root.index-pos-y; changed(v) => { root.style-changed(); } }
+                                            HorizontalLayout { alignment: space-between; Text { text: "Tamaño de Referencia"; color: Theme.text-secondary; font-size: 11.5px; } Text { text: Math.round(root.index-size) + " px"; color: Theme.text-primary; font-size: 11.5px; } }
+                                            Slider { minimum: 16; maximum: 72; value <=> root.index-size; changed(v) => { root.style-changed(); } }
+                                        }
+                                    }
+                                }
+
+                                // Style Presets + Custom Saved Styles
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
+
+                                    VerticalLayout {
+                                        padding: 13px;
+                                        spacing: 9px;
+                                        Text { text: "Estilos de Letras (Presets y Guardados)"; color: Theme.text-secondary; font-size: 12px; font-weight: 700; }
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            GlassButton { label: "Clásico";     horizontal-stretch: 1; clicked => { root.apply-style-preset(0); } }
+                                            GlassButton { label: "Subtítulo";   horizontal-stretch: 1; clicked => { root.apply-style-preset(1); } }
+                                            GlassButton { label: "Biblia";      horizontal-stretch: 1; clicked => { root.apply-style-preset(2); } }
+                                            GlassButton { label: "Neón / Glow"; horizontal-stretch: 1; clicked => { root.apply-style-preset(3); } }
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            LineEdit {
+                                                horizontal-stretch: 1;
+                                                placeholder-text: "Nombre del nuevo estilo personalizado...";
+                                                text <=> root.custom-style-name;
+                                            }
+                                            GlassButton {
+                                                label: "Guardar Estilo";
+                                                icon: @image-url("icons/save.svg");
+                                                has-icon: true;
+                                                primary: true;
+                                                clicked => {
+                                                    if (root.custom-style-name != "") {
+                                                        root.save-custom-style(root.custom-style-name);
+                                                        root.custom-style-name = "";
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        if root.saved-style-names.length > 0 : VerticalLayout {
+                                            spacing: 4px;
+                                            for sname[sidx] in root.saved-style-names : HorizontalLayout {
+                                                spacing: 6px;
+                                                GlassButton {
+                                                    label: sname;
+                                                    horizontal-stretch: 1;
+                                                    primary: sidx == root.active-saved-style-idx;
+                                                    clicked => { root.active-saved-style-idx = sidx; root.load-custom-style(sidx); }
+                                                }
+                                                IconButton {
+                                                    icon: @image-url("icons/trash.svg");
+                                                    danger: true;
+                                                    clicked => { root.delete-custom-style(sidx); }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Typography & Text Effects
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
+
+                                    VerticalLayout {
+                                        padding: 14px;
+                                        spacing: 10px;
+
+                                        HorizontalLayout {
+                                            spacing: 10px;
+                                            VerticalLayout {
+                                                horizontal-stretch: 1;
+                                                spacing: 5px;
+                                                Text { text: "Tipografía"; color: Theme.text-secondary; font-size: 11.5px; font-weight: 600; }
+                                                HorizontalLayout {
+                                                    spacing: 5px;
+                                                    GlassButton { label: "Default"; horizontal-stretch: 1; primary: root.font-family-idx == 0; clicked => { root.font-family-idx = 0; root.style-changed(); } }
+                                                    GlassButton { label: "Sans";    horizontal-stretch: 1; primary: root.font-family-idx == 1; clicked => { root.font-family-idx = 1; root.style-changed(); } }
+                                                    GlassButton { label: "Serif";   horizontal-stretch: 1; primary: root.font-family-idx == 2; clicked => { root.font-family-idx = 2; root.style-changed(); } }
+                                                    GlassButton { label: "Mono";    horizontal-stretch: 1; primary: root.font-family-idx == 3; clicked => { root.font-family-idx = 3; root.style-changed(); } }
+                                                }
+                                            }
+                                            VerticalLayout {
+                                                horizontal-stretch: 1;
+                                                spacing: 5px;
+                                                Text { text: "Grosor"; color: Theme.text-secondary; font-size: 11.5px; font-weight: 600; }
+                                                HorizontalLayout {
+                                                    spacing: 5px;
+                                                    GlassButton { label: "Normal"; horizontal-stretch: 1; primary: root.font-weight-idx == 0; clicked => { root.font-weight-idx = 0; root.style-changed(); } }
+                                                    GlassButton { label: "Negrita";horizontal-stretch: 1; primary: root.font-weight-idx == 1; clicked => { root.font-weight-idx = 1; root.style-changed(); } }
+                                                    GlassButton { label: "Extra";  horizontal-stretch: 1; primary: root.font-weight-idx == 2; clicked => { root.font-weight-idx = 2; root.style-changed(); } }
+                                                }
+                                            }
+                                        }
+
+                                        HorizontalLayout {
+                                            alignment: space-between;
+                                            Text { text: "Tamaño de Fuente"; color: Theme.text-primary; font-size: 12px; font-weight: 600; }
+                                            Text { text: Math.round(root.text-size) + " px"; color: Theme.accent-strong; font-size: 12px; font-weight: 700; }
+                                        }
+                                        Slider { minimum: 24; maximum: 140; value <=> root.text-size; changed(v) => { root.style-changed(); } }
+
+                                        HorizontalLayout {
+                                            alignment: space-between;
+                                            Text { text: "Márgenes Horizontales"; color: Theme.text-primary; font-size: 12px; font-weight: 600; }
+                                            Text { text: Math.round(root.text-margin-h) + " px"; color: Theme.accent-strong; font-size: 12px; font-weight: 700; }
+                                        }
+                                        Slider { minimum: 16; maximum: 220; value <=> root.text-margin-h; changed(v) => { root.style-changed(); } }
+
+                                        HorizontalLayout {
+                                            spacing: 12px;
+                                            VerticalLayout {
+                                                horizontal-stretch: 1;
+                                                spacing: 5px;
+                                                Text { text: "Alineación Horizontal"; color: Theme.text-secondary; font-size: 11.5px; font-weight: 600; }
+                                                HorizontalLayout {
+                                                    spacing: 5px;
+                                                    GlassButton { label: "Izq";    horizontal-stretch: 1; primary: root.text-align == 0; clicked => { root.text-align = 0; root.style-changed(); } }
+                                                    GlassButton { label: "Centro"; horizontal-stretch: 1; primary: root.text-align == 1; clicked => { root.text-align = 1; root.style-changed(); } }
+                                                    GlassButton { label: "Der";    horizontal-stretch: 1; primary: root.text-align == 2; clicked => { root.text-align = 2; root.style-changed(); } }
+                                                }
+                                            }
+                                            VerticalLayout {
+                                                horizontal-stretch: 1;
+                                                spacing: 5px;
+                                                Text { text: "Posición Vertical"; color: Theme.text-secondary; font-size: 11.5px; font-weight: 600; }
+                                                HorizontalLayout {
+                                                    spacing: 5px;
+                                                    GlassButton { label: "Arriba"; horizontal-stretch: 1; primary: root.text-valign == 0; clicked => { root.text-valign = 0; root.style-changed(); } }
+                                                    GlassButton { label: "Centro"; horizontal-stretch: 1; primary: root.text-valign == 1; clicked => { root.text-valign = 1; root.style-changed(); } }
+                                                    GlassButton { label: "Abajo";  horizontal-stretch: 1; primary: root.text-valign == 2; clicked => { root.text-valign = 2; root.style-changed(); } }
+                                                }
+                                            }
+                                        }
+
+                                        Text { text: "Color del Texto"; color: Theme.text-secondary; font-size: 11.5px; font-weight: 600; }
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            GlassButton { label: "Blanco";   horizontal-stretch: 1; primary: root.text-color-idx == 0; clicked => { root.text-color-selected(0); } }
+                                            GlassButton { label: "Crema";    horizontal-stretch: 1; primary: root.text-color-idx == 1; clicked => { root.text-color-selected(1); } }
+                                            GlassButton { label: "Plata";    horizontal-stretch: 1; primary: root.text-color-idx == 2; clicked => { root.text-color-selected(2); } }
+                                            GlassButton { label: "Dorado";   horizontal-stretch: 1; primary: root.text-color-idx == 3; clicked => { root.text-color-selected(3); } }
+                                            GlassButton { label: "Amarillo"; horizontal-stretch: 1; primary: root.text-color-idx == 4; clicked => { root.text-color-selected(4); } }
+                                        }
+
+                                        SwitchRow { title: "Sombra de Texto"; checked <=> root.text-shadow; toggled(v) => { root.style-changed(); } }
+                                        SwitchRow { title: "Contorno / Borde Negro"; subtitle: "Borde nítido alrededor de cada letra"; checked <=> root.text-outline; toggled(v) => { root.style-changed(); } }
+                                        SwitchRow { title: "Resplandor / Glow"; subtitle: "Halo luminoso alrededor del texto"; checked <=> root.text-glow; toggled(v) => { root.style-changed(); } }
+                                        SwitchRow { title: "Efecto Neón"; subtitle: "Brillo neón cian de alto impacto"; checked <=> root.text-neon; toggled(v) => { root.style-changed(); } }
+                                        SwitchRow { title: "Texto 3D (Extrusión)"; subtitle: "Profundidad tridimensional detrás del texto"; checked <=> root.text-3d; toggled(v) => { root.style-changed(); } }
+                                        SwitchRow { title: "Subrayado"; checked <=> root.text-underline; toggled(v) => { root.style-changed(); } }
+                                        SwitchRow { title: "TODO EN MAYÚSCULAS"; checked <=> root.text-uppercase; toggled(v) => { root.style-changed(); } }
+                                        SwitchRow { title: "Caja Oscura detrás del Texto"; checked <=> root.text-box-bg; toggled(v) => { root.style-changed(); } }
+
+                                        HorizontalLayout {
+                                            alignment: start;
+                                            GlassButton {
+                                                label: "Abrir Editor Visual Avanzado (Motor ImGui / GL)";
+                                                icon: @image-url("icons/layers.svg");
+                                                has-icon: true;
+                                                clicked => { root.open-legacy-imgui(); }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Quick Alerts / Notas Rápidas
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
+
+                                    VerticalLayout {
+                                        padding: 13px;
+                                        spacing: 8px;
+                                        Text { text: "Notas Rápidas / Alertas en Vivo"; color: Theme.text-secondary; font-size: 12px; font-weight: 700; }
+                                        LineEdit { placeholder-text: "Ej: Atención dueño del vehículo AB-1234 / Quedan 2 minutos..."; text <=> root.alert-input; }
+                                        HorizontalLayout {
+                                            spacing: 7px;
+                                            GlassButton { label: "Enviar a Público"; icon: @image-url("icons/tv.svg"); has-icon: true; primary: true; clicked => { root.send-public-alert(root.alert-input); } }
+                                            GlassButton { label: "Enviar a Stage";   icon: @image-url("icons/bell.svg"); has-icon: true; clicked => { root.send-stage-alert(root.alert-input); } }
+                                            GlassButton { label: "Limpiar";          icon: @image-url("icons/trash.svg"); has-icon: true; danger: true; clicked => { root.clear-alerts(); } }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Subtab 1: Shaders / Filtros de Video + Ecualizador de Audio (libmpv)
+                        if root.design-subtab == 1 : ScrollView {
+                            vertical-stretch: 1;
+                            VerticalLayout {
+                                spacing: 12px;
+                                padding-right: 8px;
+
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
+
+                                    VerticalLayout {
+                                        padding: 14px;
+                                        spacing: 10px;
+
+                                        HorizontalLayout {
+                                            alignment: space-between;
+                                            Text { text: "Shaders y Color Grading en Vivo (libmpv)"; color: Theme.text-primary; font-size: 13.5px; font-weight: 700; vertical-alignment: center; }
+                                            GlassButton { label: "Restablecer"; icon: @image-url("icons/refresh.svg"); has-icon: true; clicked => { root.reset-shaders(); } }
+                                        }
+
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            GlassButton { label: "Normal"; horizontal-stretch: 1; primary: root.shader-preset == 0; clicked => { root.shader-preset = 0; root.shaders-changed(); } }
+                                            GlassButton { label: "Cálido"; horizontal-stretch: 1; primary: root.shader-preset == 1; clicked => { root.shader-preset = 1; root.shaders-changed(); } }
+                                            GlassButton { label: "Cine";   horizontal-stretch: 1; primary: root.shader-preset == 2; clicked => { root.shader-preset = 2; root.shaders-changed(); } }
+                                            GlassButton { label: "Noir B&W"; horizontal-stretch: 1; primary: root.shader-preset == 3; clicked => { root.shader-preset = 3; root.shaders-changed(); } }
+                                            GlassButton { label: "Sepia";  horizontal-stretch: 1; primary: root.shader-preset == 4; clicked => { root.shader-preset = 4; root.shaders-changed(); } }
+                                            GlassButton { label: "Contraste"; horizontal-stretch: 1; primary: root.shader-preset == 5; clicked => { root.shader-preset = 5; root.shaders-changed(); } }
+                                        }
+
+                                        HorizontalLayout { alignment: space-between; Text { text: "Brillo"; color: Theme.text-secondary; font-size: 12px; } Text { text: Math.round(root.shader-brightness); color: Theme.text-primary; font-size: 12px; } }
+                                        Slider { minimum: -50; maximum: 50; value <=> root.shader-brightness; changed(v) => { root.shaders-changed(); } }
+
+                                        HorizontalLayout { alignment: space-between; Text { text: "Contraste"; color: Theme.text-secondary; font-size: 12px; } Text { text: Math.round(root.shader-contrast); color: Theme.text-primary; font-size: 12px; } }
+                                        Slider { minimum: -50; maximum: 50; value <=> root.shader-contrast; changed(v) => { root.shaders-changed(); } }
+
+                                        HorizontalLayout { alignment: space-between; Text { text: "Saturación"; color: Theme.text-secondary; font-size: 12px; } Text { text: Math.round(root.shader-saturation); color: Theme.text-primary; font-size: 12px; } }
+                                        Slider { minimum: -100; maximum: 100; value <=> root.shader-saturation; changed(v) => { root.shaders-changed(); } }
+
+                                        HorizontalLayout { alignment: space-between; Text { text: "Gamma"; color: Theme.text-secondary; font-size: 12px; } Text { text: Math.round(root.shader-gamma); color: Theme.text-primary; font-size: 12px; } }
+                                        Slider { minimum: -50; maximum: 50; value <=> root.shader-gamma; changed(v) => { root.shaders-changed(); } }
+
+                                        SwitchRow { title: "Desenfoque de Fondo (Gaussian Blur)"; subtitle: "Suaviza videos de fondo para resaltar las letras"; checked <=> root.shader-blur; toggled(v) => { root.shaders-changed(); } }
+                                        SwitchRow { title: "Viñeta Cinemática"; subtitle: "Oscurece suavemente los bordes de la proyección"; checked <=> root.shader-vignette; toggled(v) => { root.shaders-changed(); } }
+                                    }
+                                }
+
+                                // Audio Equalizer (libmpv lavfi)
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
+
+                                    VerticalLayout {
+                                        padding: 14px;
+                                        spacing: 9px;
+
+                                        SwitchRow { title: "Ecualizador de Audio (libmpv)"; subtitle: "Ajusta Graves, Medios y Agudos en tiempo real"; checked <=> root.eq-enabled; toggled(v) => { root.eq-changed(); } }
+
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            GlassButton { label: "Plano";     horizontal-stretch: 1; clicked => { root.apply-eq-preset(0); } }
+                                            GlassButton { label: "Voz / Pred."; horizontal-stretch: 1; clicked => { root.apply-eq-preset(1); } }
+                                            GlassButton { label: "Alabanza";  horizontal-stretch: 1; clicked => { root.apply-eq-preset(2); } }
+                                            GlassButton { label: "Acústico";  horizontal-stretch: 1; clicked => { root.apply-eq-preset(3); } }
+                                        }
+
+                                        HorizontalLayout { alignment: space-between; Text { text: "Graves (100 Hz)"; color: Theme.text-secondary; font-size: 12px; } Text { text: Math.round(root.eq-bass) + " dB"; color: Theme.text-primary; font-size: 12px; } }
+                                        Slider { minimum: -12; maximum: 12; value <=> root.eq-bass; changed(v) => { root.eq-changed(); } }
+
+                                        HorizontalLayout { alignment: space-between; Text { text: "Medios (1 kHz)"; color: Theme.text-secondary; font-size: 12px; } Text { text: Math.round(root.eq-mid) + " dB"; color: Theme.text-primary; font-size: 12px; } }
+                                        Slider { minimum: -12; maximum: 12; value <=> root.eq-mid; changed(v) => { root.eq-changed(); } }
+
+                                        HorizontalLayout { alignment: space-between; Text { text: "Agudos (8 kHz)"; color: Theme.text-secondary; font-size: 12px; } Text { text: Math.round(root.eq-treble) + " dB"; color: Theme.text-primary; font-size: 12px; } }
+                                        Slider { minimum: -12; maximum: 12; value <=> root.eq-treble; changed(v) => { root.eq-changed(); } }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Subtab 2: Transiciones animadas
+                        if root.design-subtab == 2 : ScrollView {
+                            vertical-stretch: 1;
+                            VerticalLayout {
+                                spacing: 12px;
+                                padding-right: 8px;
+
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
+
+                                    VerticalLayout {
+                                        padding: 16px;
+                                        spacing: 12px;
+
+                                        Text { text: "Transiciones entre Diapositivas y Versículos"; color: Theme.text-primary; font-size: 14px; font-weight: 700; }
+
+                                        HorizontalLayout {
+                                            spacing: 8px;
+                                            GlassButton { label: "Corte Directo"; horizontal-stretch: 1; primary: root.transition-type == 0; clicked => { root.transition-type = 0; root.transition-changed(); } }
+                                            GlassButton { label: "Fundido (Fade)"; horizontal-stretch: 1; primary: root.transition-type == 1; clicked => { root.transition-type = 1; root.transition-changed(); } }
+                                            GlassButton { label: "Deslizar Izq"; horizontal-stretch: 1; primary: root.transition-type == 2; clicked => { root.transition-type = 2; root.transition-changed(); } }
+                                            GlassButton { label: "Deslizar Arriba"; horizontal-stretch: 1; primary: root.transition-type == 3; clicked => { root.transition-type = 3; root.transition-changed(); } }
+                                        }
+
+                                        HorizontalLayout {
+                                            alignment: space-between;
+                                            Text { text: "Duración de la Transición"; color: Theme.text-secondary; font-size: 12.5px; font-weight: 600; }
+                                            Text { text: Math.round(root.transition-duration-ms) + " ms"; color: Theme.accent-strong; font-size: 12.5px; font-weight: 700; }
+                                        }
+                                        Slider {
+                                            minimum: 100;
+                                            maximum: 1500;
+                                            value <=> root.transition-duration-ms;
+                                            changed(v) => { root.transition-changed(); }
+                                        }
+
+                                        HorizontalLayout {
+                                            alignment: start;
+                                            GlassButton {
+                                                label: "Probar Transición en Pantalla";
+                                                icon: @image-url("icons/play.svg");
+                                                has-icon: true;
+                                                primary: true;
+                                                clicked => { root.test-transition(); }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Subtab 3: Tiles (Pantalla Dividida)
+                        if root.design-subtab == 3 : ScrollView {
+                            vertical-stretch: 1;
+                            VerticalLayout {
+                                spacing: 12px;
+                                padding-right: 8px;
+
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
+
+                                    VerticalLayout {
+                                        padding: 16px;
+                                        spacing: 12px;
+
+                                        Text { text: "Tiles — Pantalla Dividida en Vivo"; color: Theme.text-primary; font-size: 14px; font-weight: 700; }
+
+                                        SwitchRow {
+                                            title: "Activar Modo Tiles (Pantalla Dividida)";
+                                            subtitle: "Divide la salida Público en 2 paneles para mostrar continuidad o dos bloques";
+                                            checked <=> root.tiles-enabled;
+                                            toggled(v) => { root.tiles-changed(); }
+                                        }
+
+                                        Text { text: "Distribución"; color: Theme.text-secondary; font-size: 12px; font-weight: 600; }
+                                        HorizontalLayout {
+                                            spacing: 8px;
+                                            GlassButton { label: "2 Columnas (Izq / Der)"; horizontal-stretch: 1; primary: root.tiles-layout == 0; clicked => { root.tiles-layout = 0; root.tiles-changed(); } }
+                                            GlassButton { label: "2 Filas (Sup / Inf)";    horizontal-stretch: 1; primary: root.tiles-layout == 1; clicked => { root.tiles-layout = 1; root.tiles-changed(); } }
+                                        }
+
+                                        Text { text: "Modo de Continuidad en Panel 2"; color: Theme.text-secondary; font-size: 12px; font-weight: 600; }
+                                        HorizontalLayout {
+                                            spacing: 8px;
+                                            GlassButton { label: "Actual + Siguiente"; horizontal-stretch: 1; primary: root.tiles-continuity == 0; clicked => { root.tiles-continuity = 0; root.tiles-changed(); } }
+                                            GlassButton { label: "Actual + Anterior";  horizontal-stretch: 1; primary: root.tiles-continuity == 1; clicked => { root.tiles-continuity = 1; root.tiles-changed(); } }
+                                        }
+
+                                        SwitchRow {
+                                            title: "Mostrar Línea Divisora";
+                                            checked <=> root.tiles-divider;
+                                            toggled(v) => { root.tiles-changed(); }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Mode 5: Redes (Transmisión LAN, Celular Mobile, Chat & Reloj, Luces OSC) ──
+                    if root.active-tab == 5 : VerticalLayout {
+                        spacing: 12px;
+                        vertical-stretch: 1;
+
+                        HorizontalLayout {
+                            alignment: space-between;
+                            Text {
+                                text: "Redes, Celular, Transmisión LAN y Reloj";
+                                color: Theme.text-primary;
+                                font-size: 16.5px;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                GlassButton { label: "Transmisión LAN"; icon: @image-url("icons/radio.svg");      has-icon: true; primary: root.net-subtab == 0; clicked => { root.net-subtab = 0; } }
+                                GlassButton { label: "Celular";         icon: @image-url("icons/smartphone.svg"); has-icon: true; primary: root.net-subtab == 1; clicked => { root.net-subtab = 1; } }
+                                GlassButton { label: "Chat y Reloj";    icon: @image-url("icons/clock.svg");      has-icon: true; primary: root.net-subtab == 2; clicked => { root.net-subtab = 2; } }
+                                GlassButton { label: "Luces OSC";       icon: @image-url("icons/zap.svg");        has-icon: true; primary: root.net-subtab == 3; clicked => { root.net-subtab = 3; } }
+                            }
+                        }
+
+                        // Subtab 0: Transmisión LAN (OBS / Navegador / Stage LAN)
+                        if root.net-subtab == 0 : ScrollView {
+                            vertical-stretch: 1;
+                            VerticalLayout {
+                                spacing: 12px;
+                                padding-right: 8px;
+
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: root.lan-running ? Theme.live-green.transparentize(0.4) : Theme.border-subtle;
+
+                                    HorizontalLayout {
+                                        padding: 16px;
+                                        spacing: 16px;
+
+                                        VerticalLayout {
+                                            horizontal-stretch: 1;
+                                            spacing: 10px;
+                                            Text { text: "Servidor de Transmisión en Red Local (HTTP / OBS)"; color: Theme.text-primary; font-size: 14px; font-weight: 700; }
+                                            Text { text: root.lan-url; color: root.lan-running ? Theme.live-green : Theme.text-secondary; font-size: 13px; font-weight: 600; wrap: word-wrap; }
+                                            Text {
+                                                text: "Abre esta dirección en OBS Studio (Fuente de Navegador), en otra pantalla o en cualquier dispositivo en la misma red Wi-Fi. Chat de equipo disponible en /chat.";
+                                                color: Theme.text-muted;
+                                                font-size: 11.5px;
+                                                wrap: word-wrap;
+                                            }
+                                            HorizontalLayout {
+                                                alignment: start;
+                                                GlassButton {
+                                                    label: root.lan-running ? "Detener Transmisión LAN" : "Iniciar Transmisión LAN (Puerto 8080)";
+                                                    icon: @image-url("icons/radio.svg");
+                                                    has-icon: true;
+                                                    primary: !root.lan-running;
+                                                    danger: root.lan-running;
+                                                    clicked => { root.toggle-lan-stream(); }
+                                                }
+                                            }
+                                        }
+
+                                        if root.has-lan-qr : Rectangle {
+                                            width: 146px;
+                                            height: 146px;
+                                            border-radius: 10px;
+                                            background: #fafafa;
+                                            Image {
+                                                source: root.lan-qr-image;
+                                                width: 136px;
+                                                height: 136px;
+                                                x: 5px;
+                                                y: 5px;
+                                                image-fit: contain;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
+
+                                    VerticalLayout {
+                                        padding: 14px;
+                                        spacing: 6px;
+                                        Text { text: "Opciones de Capas LAN (Gratis Open Source)"; color: Theme.text-secondary; font-size: 12px; font-weight: 700; }
+                                        SwitchRow {
+                                            title: "Modo Transparente (Canal Alpha para OBS)";
+                                            subtitle: "Envía solo las letras sobre fondo transparente para superponer sobre cámaras en OBS";
+                                            checked <=> root.lan-transparent;
+                                            toggled(v) => { root.lan-config-changed(); }
+                                        }
+                                        SwitchRow {
+                                            title: "Transmitir Color / Fondo";
+                                            subtitle: "Incluye el fondo detrás del texto cuando el modo transparente está desactivado";
+                                            checked <=> root.lan-send-bg;
+                                            toggled(v) => { root.lan-config-changed(); }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Subtab 1: Conectar Celular (ProyecThor Mobile + Control Remoto Web)
+                        if root.net-subtab == 1 : ScrollView {
+                            vertical-stretch: 1;
+                            VerticalLayout {
+                                spacing: 12px;
+                                padding-right: 8px;
+
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: root.mobile-running ? Theme.live-green.transparentize(0.4) : Theme.border-subtle;
+
+                                    HorizontalLayout {
+                                        padding: 16px;
+                                        spacing: 16px;
+
+                                        VerticalLayout {
+                                            horizontal-stretch: 1;
+                                            spacing: 10px;
+                                            Text { text: "Conectar Celular (ProyecThor Mobile & Control Remoto)"; color: Theme.text-primary; font-size: 14px; font-weight: 700; }
+                                            Text { text: root.mobile-url; color: root.mobile-running ? Theme.live-green : Theme.text-secondary; font-size: 13px; font-weight: 600; wrap: word-wrap; }
+                                            HorizontalLayout {
+                                                spacing: 10px;
+                                                Rectangle {
+                                                    height: 36px;
+                                                    border-radius: Theme.radius-md;
+                                                    background: Theme.bg-surface-2;
+                                                    border-width: 1px;
+                                                    border-color: Theme.border-medium;
+                                                    HorizontalLayout {
+                                                        padding-left: 14px;
+                                                        padding-right: 14px;
+                                                        Text {
+                                                            text: "PIN: " + root.mobile-pin;
+                                                            color: Theme.text-primary;
+                                                            font-size: 15px;
+                                                            font-weight: 800;
+                                                            vertical-alignment: center;
+                                                        }
+                                                    }
+                                                }
+                                                GlassButton {
+                                                    label: "Regenerar PIN";
+                                                    icon: @image-url("icons/refresh.svg");
+                                                    has-icon: true;
+                                                    clicked => { root.regenerate-mobile-pin(); }
+                                                }
+                                            }
+                                            Text {
+                                                text: "Escanea el QR desde tu celular para abrir el Control Remoto en el navegador o emparejar la app ProyecThor Mobile (descubrimiento automático UDP 47990 + HTTP 8090).";
+                                                color: Theme.text-muted;
+                                                font-size: 11.5px;
+                                                wrap: word-wrap;
+                                            }
+                                            HorizontalLayout {
+                                                alignment: start;
+                                                GlassButton {
+                                                    label: root.mobile-running ? "Detener Servidor Móvil" : "Iniciar Servidor Móvil (Puerto 8090)";
+                                                    icon: @image-url("icons/smartphone.svg");
+                                                    has-icon: true;
+                                                    primary: !root.mobile-running;
+                                                    danger: root.mobile-running;
+                                                    clicked => { root.toggle-mobile-server(); }
+                                                }
+                                            }
+                                        }
+
+                                        if root.has-mobile-qr : Rectangle {
+                                            width: 156px;
+                                            height: 156px;
+                                            border-radius: 10px;
+                                            background: #fafafa;
+                                            Image {
+                                                source: root.mobile-qr-image;
+                                                width: 146px;
+                                                height: 146px;
+                                                x: 5px;
+                                                y: 5px;
+                                                image-fit: contain;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Subtab 2: Chat de Equipo LAN + Reloj y Temporizador
+                        if root.net-subtab == 2 : ScrollView {
+                            vertical-stretch: 1;
+                            VerticalLayout {
+                                spacing: 12px;
+                                padding-right: 8px;
+
+                                // Clock & Countdown
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    Rectangle {
+                                        horizontal-stretch: 1;
+                                        height: 98px;
+                                        border-radius: Theme.radius-md;
+                                        background: Theme.bg-surface-1;
+                                        border-width: 1px;
+                                        border-color: Theme.border-subtle;
+                                        VerticalLayout {
+                                            padding: 12px;
+                                            alignment: center;
+                                            Text { text: "HORA ACTUAL"; color: Theme.text-muted; font-size: 10.5px; font-weight: 700; horizontal-alignment: center; }
+                                            Text { text: root.clock-now-text; color: Theme.text-primary; font-size: 32px; font-weight: 800; horizontal-alignment: center; }
+                                        }
+                                    }
+                                    Rectangle {
+                                        horizontal-stretch: 1;
+                                        height: 98px;
+                                        border-radius: Theme.radius-md;
+                                        background: Theme.bg-surface-1;
+                                        border-width: 1px;
+                                        border-color: root.timer-running ? Theme.stage-amber : Theme.border-subtle;
+                                        VerticalLayout {
+                                            padding: 12px;
+                                            alignment: center;
+                                            Text { text: "CUENTA REGRESIVA"; color: Theme.stage-amber; font-size: 10.5px; font-weight: 700; horizontal-alignment: center; }
+                                            Text { text: root.timer-display-text; color: Theme.text-primary; font-size: 32px; font-weight: 800; horizontal-alignment: center; }
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
+                                    VerticalLayout {
+                                        padding: 14px;
+                                        spacing: 10px;
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            GlassButton { label: "1m";  horizontal-stretch: 1; clicked => { root.timer-set-minutes(1); } }
+                                            GlassButton { label: "3m";  horizontal-stretch: 1; clicked => { root.timer-set-minutes(3); } }
+                                            GlassButton { label: "5m";  horizontal-stretch: 1; clicked => { root.timer-set-minutes(5); } }
+                                            GlassButton { label: "10m"; horizontal-stretch: 1; clicked => { root.timer-set-minutes(10); } }
+                                            GlassButton { label: "15m"; horizontal-stretch: 1; clicked => { root.timer-set-minutes(15); } }
+                                            GlassButton {
+                                                label: root.timer-running ? "Pausar" : "Iniciar";
+                                                icon: root.timer-running ? @image-url("icons/pause.svg") : @image-url("icons/play.svg");
+                                                has-icon: true;
+                                                primary: true;
+                                                clicked => { root.timer-toggle(); }
+                                            }
+                                            IconButton { icon: @image-url("icons/refresh.svg"); clicked => { root.timer-reset(); } }
+                                        }
+                                        SwitchRow {
+                                            title: "Proyectar Reloj / Cuenta Regresiva en Salida Público";
+                                            checked <=> root.show-clock-on-public;
+                                            toggled(v) => { root.clock-overlay-toggled(v); }
+                                        }
+                                        SwitchRow {
+                                            title: "Mostrar Cuenta Regresiva (desactivado = Hora Actual)";
+                                            checked <=> root.timer-mode-countdown;
+                                            toggled(v) => { root.clock-overlay-toggled(root.show-clock-on-public); }
+                                        }
+                                    }
+                                }
+
+                                // Team Chat LAN
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
+                                    VerticalLayout {
+                                        padding: 14px;
+                                        spacing: 9px;
+                                        Text { text: "Chat de Equipo en Red Local (/chat)"; color: Theme.text-secondary; font-size: 12px; font-weight: 700; }
+                                        Rectangle {
+                                            min-height: 110px;
+                                            border-radius: Theme.radius-sm;
+                                            background: Theme.bg-input;
+                                            border-width: 1px;
+                                            border-color: Theme.border-subtle;
+                                            VerticalLayout {
+                                                padding: 10px;
+                                                Text {
+                                                    text: root.chat-log;
+                                                    color: Theme.text-primary;
+                                                    font-size: 12px;
+                                                    wrap: word-wrap;
+                                                }
+                                            }
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 8px;
+                                            LineEdit {
+                                                horizontal-stretch: 1;
+                                                placeholder-text: "Escribe un mensaje para el equipo...";
+                                                text <=> root.chat-input;
+                                            }
+                                            GlassButton {
+                                                label: "Enviar";
+                                                icon: @image-url("icons/chat.svg");
+                                                has-icon: true;
+                                                primary: true;
+                                                clicked => {
+                                                    if (root.chat-input != "") {
+                                                        root.send-chat-message(root.chat-input);
+                                                        root.chat-input = "";
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Subtab 3: Luces OSC (Yggdrasil)
+                        if root.net-subtab == 3 : ScrollView {
+                            vertical-stretch: 1;
+                            VerticalLayout {
+                                spacing: 12px;
+                                padding-right: 8px;
+
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
+
+                                    VerticalLayout {
+                                        padding: 16px;
+                                        spacing: 11px;
+                                        Text { text: "Yggdrasil — Control de Luces y Consolas por OSC (UDP)"; color: Theme.text-primary; font-size: 14px; font-weight: 700; }
+
+                                        HorizontalLayout {
+                                            spacing: 8px;
+                                            LineEdit { horizontal-stretch: 2; placeholder-text: "IP Destino (ej. 127.0.0.1)"; text <=> root.osc-host; }
+                                            LineEdit { horizontal-stretch: 1; placeholder-text: "Puerto (9000)"; text <=> root.osc-port; }
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 8px;
+                                            LineEdit { horizontal-stretch: 2; placeholder-text: "Dirección OSC (ej. /cue/1)"; text <=> root.osc-address; }
+                                            LineEdit { horizontal-stretch: 1; placeholder-text: "Args (ej. 1, 0.5)"; text <=> root.osc-args; }
+                                            GlassButton {
+                                                label: "Enviar OSC";
+                                                icon: @image-url("icons/zap.svg");
+                                                has-icon: true;
+                                                primary: true;
+                                                clicked => { root.send-osc(root.osc-host, root.osc-port, root.osc-address, root.osc-args); }
+                                            }
+                                        }
+
+                                        Text { text: "Disparos Rápidos"; color: Theme.text-secondary; font-size: 12px; font-weight: 600; }
+                                        HorizontalLayout {
+                                            spacing: 8px;
+                                            GlassButton { label: "Cue 1 (/cue/1)"; horizontal-stretch: 1; clicked => { root.send-osc(root.osc-host, root.osc-port, "/cue/1", "1"); } }
+                                            GlassButton { label: "Cue 2 (/cue/2)"; horizontal-stretch: 1; clicked => { root.send-osc(root.osc-host, root.osc-port, "/cue/2", "1"); } }
+                                            GlassButton { label: "Cue 3 (/cue/3)"; horizontal-stretch: 1; clicked => { root.send-osc(root.osc-host, root.osc-port, "/cue/3", "1"); } }
+                                            GlassButton { label: "Blackout";       horizontal-stretch: 1; danger: true; clicked => { root.send-osc(root.osc-host, root.osc-port, "/blackout", "1"); } }
+                                        }
+
+                                        Text { text: root.osc-status; color: Theme.text-secondary; font-size: 12px; wrap: word-wrap; }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Mode 6: Pads de Escena Rápida (8 Pads) ──
+                    if root.active-tab == 6 : ScrollView {
+                        vertical-stretch: 1;
+                        VerticalLayout {
+                            spacing: 12px;
+                            padding-right: 8px;
+
+                            Text {
+                                text: "Pads de Escena Rápida";
+                                color: Theme.text-primary;
+                                font-size: 17px;
+                                font-weight: 700;
+                            }
+                            Text {
+                                text: "Pulsa el icono de guardar en cualquier Pad para capturar el texto, fondo y estilo actuales. Haz clic en el Pad para disparar la escena al instante.";
+                                color: Theme.text-secondary;
+                                font-size: 12px;
+                                wrap: word-wrap;
+                            }
+
+                            // 2 rows x 4 pads
+                            HorizontalLayout {
+                                spacing: 10px;
+                                for idx in [0, 1, 2, 3] : PadTile {
+                                    horizontal-stretch: 1;
+                                    name: root.pads[idx].name;
+                                    summary: root.pads[idx].summary;
+                                    assigned: root.pads[idx].assigned;
+                                    trigger => { root.pad-triggered(idx); }
+                                    save-here => { root.pad-saved(idx); }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 10px;
+                                for idx in [4, 5, 6, 7] : PadTile {
+                                    horizontal-stretch: 1;
+                                    name: root.pads[idx].name;
+                                    summary: root.pads[idx].summary;
+                                    assigned: root.pads[idx].assigned;
+                                    trigger => { root.pad-triggered(idx); }
+                                    save-here => { root.pad-saved(idx); }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Mode 7: Ajustes, Temas (14 Presets ImGui) & GitHub Auto-Updater ──
+                    if root.active-tab == 7 : ScrollView {
+                        vertical-stretch: 1;
+                        VerticalLayout {
+                            spacing: 12px;
+                            padding-right: 8px;
+
+                            Text {
+                                text: "Ajustes y Apariencia — ProyecThor Open Source";
+                                color: Theme.text-primary;
+                                font-size: 17px;
+                                font-weight: 700;
+                            }
+
+                            // 14 Themes migrated from ImGui (with visual color swatches)
+                            Rectangle {
+                                border-radius: Theme.radius-md;
+                                background: Theme.bg-surface-1;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+
+                                VerticalLayout {
+                                    padding: 14px;
+                                    spacing: 8px;
+
+                                    Text { text: "Temas de la Aplicación (14 Presets)"; color: Theme.text-secondary; font-size: 12.5px; font-weight: 700; }
+
+                                    HorizontalLayout {
+                                        spacing: 6px;
+                                        ThemeSwatchButton { label: "Oscuro (Plomo)";  bg-swatch: #08080a; accent-swatch: #d4d4d8; horizontal-stretch: 1; active: root.active-theme-idx == 0;  clicked => { root.theme-selected(0); } }
+                                        ThemeSwatchButton { label: "Claro";           bg-swatch: #dcdfe3; accent-swatch: #405775; horizontal-stretch: 1; active: root.active-theme-idx == 1;  clicked => { root.theme-selected(1); } }
+                                        ThemeSwatchButton { label: "Naranja y Negro"; bg-swatch: #0d0b0a; accent-swatch: #c7701f; horizontal-stretch: 1; active: root.active-theme-idx == 2;  clicked => { root.theme-selected(2); } }
+                                        ThemeSwatchButton { label: "Jazz";            bg-swatch: #170d12; accent-swatch: #b88c42; horizontal-stretch: 1; active: root.active-theme-idx == 3;  clicked => { root.theme-selected(3); } }
+                                        ThemeSwatchButton { label: "Ko-fi";           bg-swatch: #ede6d9; accent-swatch: #d96b6b; horizontal-stretch: 1; active: root.active-theme-idx == 4;  clicked => { root.theme-selected(4); } }
+                                    }
+                                    HorizontalLayout {
+                                        spacing: 6px;
+                                        ThemeSwatchButton { label: "Deadlock";        bg-swatch: #0b110e; accent-swatch: #6bb352; horizontal-stretch: 1; active: root.active-theme-idx == 5;  clicked => { root.theme-selected(5); } }
+                                        ThemeSwatchButton { label: "Galaxia";         bg-swatch: #0b0a13; accent-swatch: #8c61cc; horizontal-stretch: 1; active: root.active-theme-idx == 6;  clicked => { root.theme-selected(6); } }
+                                        ThemeSwatchButton { label: "Mek";             bg-swatch: #1e1e2e; accent-swatch: #89b4fa; horizontal-stretch: 1; active: root.active-theme-idx == 7;  clicked => { root.theme-selected(7); } }
+                                        ThemeSwatchButton { label: "Cyberpunk Neón";  bg-swatch: #0b0c16; accent-swatch: #00ebf9; horizontal-stretch: 1; active: root.active-theme-idx == 8;  clicked => { root.theme-selected(8); } }
+                                        ThemeSwatchButton { label: "Emerald Studio";  bg-swatch: #07100d; accent-swatch: #10b981; horizontal-stretch: 1; active: root.active-theme-idx == 9;  clicked => { root.theme-selected(9); } }
+                                    }
+                                    HorizontalLayout {
+                                        spacing: 6px;
+                                        ThemeSwatchButton { label: "Crimson Velvet";  bg-swatch: #0f0608; accent-swatch: #ef4444; horizontal-stretch: 1; active: root.active-theme-idx == 10; clicked => { root.theme-selected(10); } }
+                                        ThemeSwatchButton { label: "Midnight Blue";   bg-swatch: #050811; accent-swatch: #38bdf8; horizontal-stretch: 1; active: root.active-theme-idx == 11; clicked => { root.theme-selected(11); } }
+                                        ThemeSwatchButton { label: "Amethyst Violet"; bg-swatch: #0a0512; accent-swatch: #a855f7; horizontal-stretch: 1; active: root.active-theme-idx == 12; clicked => { root.theme-selected(12); } }
+                                        ThemeSwatchButton { label: "Titanium Silver"; bg-swatch: #0e0f12; accent-swatch: #9eaec2; horizontal-stretch: 1; active: root.active-theme-idx == 13; clicked => { root.theme-selected(13); } }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                border-radius: Theme.radius-md;
+                                background: Theme.bg-surface-1;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+
+                                VerticalLayout {
+                                    padding: 14px;
+                                    spacing: 8px;
+
+                                    Text { text: "Proyección y Rendimiento"; color: Theme.text-secondary; font-size: 12px; font-weight: 700; }
+
+                                    SwitchRow {
+                                        title: "Proyección a Pantalla Completa";
+                                        subtitle: "Cubre todo el monitor sin bordes ni barra de título";
+                                        checked <=> root.fullscreen-output;
+                                        toggled(v) => { root.fullscreen-changed(v); }
+                                    }
+
+                                    SwitchRow {
+                                        title: "Escalado AMD FSR 1.0";
+                                        subtitle: "Mejora la nitidez en fondos y videos";
+                                        checked <=> root.fsr-enabled;
+                                        toggled(v) => { root.fsr-changed(v); }
+                                    }
+
+                                    SwitchRow {
+                                        title: "Modo Ahorro de Energía / Rendimiento";
+                                        subtitle: "Reduce resolución interna de decodificación de video para PCs modestas";
+                                        checked <=> root.performance-mode;
+                                        toggled(v) => { root.performance-mode-changed(v); }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                border-radius: Theme.radius-md;
+                                background: Theme.bg-surface-1;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+
+                                VerticalLayout {
+                                    padding: 14px;
+                                    spacing: 10px;
+
+                                    Text { text: "Actualizaciones (GitHub Releases)"; color: Theme.text-secondary; font-size: 12px; font-weight: 700; }
+                                    Text {
+                                        text: "Versión instalada: v" + root.app-version + "  •  github.com/TheVixcho/ProyecThor";
+                                        color: Theme.text-secondary;
+                                        font-size: 12px;
+                                    }
+                                    Text {
+                                        text: root.update-status;
+                                        color: Theme.text-primary;
+                                        font-size: 12px;
+                                        wrap: word-wrap;
+                                    }
+                                    HorizontalLayout {
+                                        alignment: start;
+                                        GlassButton {
+                                            label: "Buscar actualizaciones en GitHub";
+                                            icon: @image-url("icons/refresh.svg");
+                                            has-icon: true;
+                                            primary: true;
+                                            clicked => { root.check-github-updates(); }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Mode 8: Capturadora (USB/HDMI/V4L2) & URL / Stream a Pantalla ──
+                    if root.active-tab == 8 : ScrollView {
+                        vertical-stretch: 1;
+                        VerticalLayout {
+                            spacing: 14px;
+                            padding-right: 8px;
+
+                            Text {
+                                text: "Capturadora de Video y URL a Pantalla";
+                                color: Theme.text-primary;
+                                font-size: 17px;
+                                font-weight: 700;
+                            }
+
+                            // Card 1: Enviar URL a Pantalla
+                            Rectangle {
+                                border-radius: Theme.radius-md;
+                                background: Theme.bg-surface-1;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+
+                                VerticalLayout {
+                                    padding: 15px;
+                                    spacing: 10px;
+
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        Image {
+                                            source: @image-url("icons/globe.svg");
+                                            width: 16px;
+                                            height: 16px;
+                                            y: (parent.height - self.height) / 2;
+                                            colorize: Theme.accent-strong;
+                                        }
+                                        Text {
+                                            text: "Enviar URL / Stream a Pantalla (YouTube, RTSP, HLS .m3u8, HTTP)";
+                                            color: Theme.text-primary;
+                                            font-size: 13.5px;
+                                            font-weight: 700;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+
+                                    LineEdit {
+                                        placeholder-text: "Pega aquí una URL (ej. https://youtube.com/watch?v=... o rtsp://192.168.1.50:554/stream)";
+                                        text <=> root.stream-url-input;
+                                    }
+
+                                    HorizontalLayout {
+                                        spacing: 12px;
+                                        SwitchRow {
+                                            horizontal-stretch: 1;
+                                            title: "Reproducir en Bucle";
+                                            checked <=> root.stream-url-loop;
+                                        }
+                                        SwitchRow {
+                                            horizontal-stretch: 1;
+                                            title: "Silenciar Audio";
+                                            checked <=> root.stream-url-muted;
+                                        }
+                                    }
+
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        GlassButton {
+                                            label: "Enviar URL a Pantalla";
+                                            icon: @image-url("icons/tv.svg");
+                                            has-icon: true;
+                                            primary: true;
+                                            clicked => {
+                                                if (root.stream-url-input != "") {
+                                                    root.send-url-to-screen(root.stream-url-input, root.stream-url-loop, root.stream-url-muted);
+                                                }
+                                            }
+                                        }
+                                        GlassButton {
+                                            label: "Detener Señal";
+                                            icon: @image-url("icons/stop.svg");
+                                            has-icon: true;
+                                            danger: true;
+                                            clicked => { root.stop-capture-or-url(); }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Card 2: Capturadora / Cámaras USB & HDMI
+                            Rectangle {
+                                border-radius: Theme.radius-md;
+                                background: Theme.bg-surface-1;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+
+                                VerticalLayout {
+                                    padding: 15px;
+                                    spacing: 10px;
+
+                                    HorizontalLayout {
+                                        alignment: space-between;
+                                        HorizontalLayout {
+                                            spacing: 8px;
+                                            Image {
+                                                source: @image-url("icons/camera.svg");
+                                                width: 16px;
+                                                height: 16px;
+                                                y: (parent.height - self.height) / 2;
+                                                colorize: Theme.accent-strong;
+                                            }
+                                            Text {
+                                                text: "Capturadoras y Cámaras Detectadas (USB / HDMI / V4L2)";
+                                                color: Theme.text-primary;
+                                                font-size: 13.5px;
+                                                font-weight: 700;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+                                        GlassButton {
+                                            label: "Refrescar Cámaras";
+                                            icon: @image-url("icons/refresh.svg");
+                                            has-icon: true;
+                                            clicked => { root.refresh-capture-devices(); }
+                                        }
+                                    }
+
+                                    if root.capture-devices.length == 0 : Text {
+                                        text: "No se detectaron cámaras o capturadoras USB conectadas. Conecta tu capturadora HDMI/USB y pulsa 'Refrescar Cámaras'.";
+                                        color: Theme.text-muted;
+                                        font-size: 12px;
+                                        wrap: word-wrap;
+                                    }
+
+                                    for dev[didx] in root.capture-devices : Rectangle {
+                                        height: 46px;
+                                        border-radius: Theme.radius-sm;
+                                        background: didx == root.selected-capture-idx
+                                            ? Theme.bg-surface-hover
+                                            : (dev-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-0);
+                                        border-width: 1px;
+                                        border-color: didx == root.selected-capture-idx
+                                            ? Theme.live-green
+                                            : Theme.border-subtle;
+
+                                        HorizontalLayout {
+                                            padding-left: 12px;
+                                            padding-right: 12px;
+                                            alignment: space-between;
+                                            VerticalLayout {
+                                                alignment: center;
+                                                Text { text: dev.name; color: Theme.text-primary; font-size: 13px; font-weight: 600; }
+                                                Text { text: dev.uri;  color: Theme.text-muted;   font-size: 10.5px; }
+                                            }
+                                            Text {
+                                                text: didx == root.selected-capture-idx ? "● EN VIVO" : "Clic para proyectar";
+                                                color: didx == root.selected-capture-idx ? Theme.live-green : Theme.text-secondary;
+                                                font-size: 11.5px;
+                                                font-weight: 700;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+
+                                        dev-ta := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => {
+                                                root.selected-capture-idx = didx;
+                                                root.start-capture-device(didx);
+                                            }
+                                        }
+                                    }
+
+                                    Text {
+                                        text: root.capture-status;
+                                        color: Theme.text-secondary;
+                                        font-size: 12px;
+                                        wrap: word-wrap;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                }
+
+                // ── BOTTOM DOCK: MENÚ INFERIOR DE BACKGROUNDS, COLORES Y OVERLAYS ──
+                GlassCard {
+                    height: root.bg-dock-expanded ? 156px : 40px;
+
+                    VerticalLayout {
+                        padding: 8px;
+                        spacing: 7px;
+
+                        // Dock Header Bar
+                        HorizontalLayout {
+                            alignment: space-between;
+                            HorizontalLayout {
+                                spacing: 6px;
+                                GlassButton {
+                                    label: "Fondos (" + root.bg-dock-items.length + ")";
+                                    icon: @image-url("icons/layers.svg");
+                                    has-icon: true;
+                                    primary: root.bg-dock-tab == 0 && root.bg-dock-expanded;
+                                    clicked => { root.bg-dock-tab = 0; root.bg-dock-expanded = true; }
+                                }
+                                GlassButton {
+                                    label: "Colores Sólidos";
+                                    primary: root.bg-dock-tab == 1 && root.bg-dock-expanded;
+                                    clicked => { root.bg-dock-tab = 1; root.bg-dock-expanded = true; }
+                                }
+                                GlassButton {
+                                    label: "Overlay Lower-Third";
+                                    primary: root.bg-dock-tab == 2 && root.bg-dock-expanded;
+                                    clicked => { root.bg-dock-tab = 2; root.bg-dock-expanded = true; }
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 5px;
+                                GlassButton {
+                                    label: "Importar Fondo";
+                                    icon: @image-url("icons/upload.svg");
+                                    has-icon: true;
+                                    clicked => { root.import-background-clicked(); }
+                                }
+                                IconButton {
+                                    icon: @image-url("icons/trash.svg");
+                                    danger: true;
+                                    clicked => { root.clear-background(); }
+                                }
+                                GlassButton {
+                                    label: root.bg-dock-expanded ? "▼" : "▲";
+                                    clicked => { root.bg-dock-expanded = !root.bg-dock-expanded; }
+                                }
+                            }
+                        }
+
+                        // Dock Tab 0: Horizontal Strip of Backgrounds
+                        if root.bg-dock-expanded && root.bg-dock-tab == 0 : ScrollView {
+                            vertical-stretch: 1;
+                            HorizontalLayout {
+                                spacing: 8px;
+                                if root.bg-dock-items.length == 0 : Text {
+                                    text: "Sin fondos aún — pulsa 'Importar' para agregar videos o imágenes de fondo.";
+                                    color: Theme.text-muted;
+                                    font-size: 12px;
+                                    vertical-alignment: center;
+                                }
+                                for bg[bidx] in root.bg-dock-items : Rectangle {
+                                    width: 152px;
+                                    height: 88px;
+                                    border-radius: Theme.radius-sm;
+                                    background: #050507;
+                                    border-width: 1px;
+                                    border-color: bg-ta.has-hover ? Theme.accent-strong : Theme.border-subtle;
+                                    clip: true;
+
+                                    if bg.has-thumbnail : Image {
+                                        source: bg.thumbnail;
+                                        image-fit: cover;
+                                    }
+
+                                    // Bottom gradient scrim with title
+                                    Rectangle {
+                                        y: parent.height - 28px;
+                                        width: 100%;
+                                        height: 28px;
+                                        background: #08080ad4;
+                                        HorizontalLayout {
+                                            padding-left: 7px;
+                                            padding-right: 7px;
+                                            Text {
+                                                text: bg.title;
+                                                color: #f4f4f5;
+                                                font-size: 10.5px;
+                                                font-weight: 600;
+                                                vertical-alignment: center;
+                                                overflow: elide;
+                                            }
+                                        }
+                                    }
+
+                                    // Type badge top-left
+                                    Rectangle {
+                                        x: 5px;
+                                        y: 5px;
+                                        height: 16px;
+                                        border-radius: 4px;
+                                        background: #09090bcc;
+                                        HorizontalLayout {
+                                            padding-left: 5px;
+                                            padding-right: 5px;
+                                            Text {
+                                                text: bg.subtitle;
+                                                color: Theme.accent;
+                                                font-size: 8.5px;
+                                                font-weight: 700;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+                                    }
+
+                                    bg-ta := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => { root.dock-bg-selected(bidx); }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Dock Tab 1: Solid Colors Quick Strip
+                        if root.bg-dock-expanded && root.bg-dock-tab == 1 : HorizontalLayout {
+                            spacing: 8px;
+                            vertical-stretch: 1;
+                            ThemeSwatchButton { label: "Negro";      bg-swatch: #000000; accent-swatch: #52525b; horizontal-stretch: 1; clicked => { root.dock-solid-color-selected(0); } }
+                            ThemeSwatchButton { label: "Carbón";     bg-swatch: #121215; accent-swatch: #a1a1aa; horizontal-stretch: 1; clicked => { root.dock-solid-color-selected(1); } }
+                            ThemeSwatchButton { label: "Azul Noche"; bg-swatch: #081226; accent-swatch: #38bdf8; horizontal-stretch: 1; clicked => { root.dock-solid-color-selected(2); } }
+                            ThemeSwatchButton { label: "Burdeo";     bg-swatch: #240911; accent-swatch: #f43f5e; horizontal-stretch: 1; clicked => { root.dock-solid-color-selected(3); } }
+                            ThemeSwatchButton { label: "Esmeralda";  bg-swatch: #072219; accent-swatch: #10b981; horizontal-stretch: 1; clicked => { root.dock-solid-color-selected(4); } }
+                            ThemeSwatchButton { label: "Violeta";    bg-swatch: #170a2b; accent-swatch: #a855f7; horizontal-stretch: 1; clicked => { root.dock-solid-color-selected(5); } }
+                        }
+
+                        // Dock Tab 2: Quick Lower-Third Overlay Builder
+                        if root.bg-dock-expanded && root.bg-dock-tab == 2 : HorizontalLayout {
+                            spacing: 8px;
+                            alignment: center;
+                            LineEdit { horizontal-stretch: 2; placeholder-text: "Título (ej. Pastor Juan Pérez)"; text <=> root.custom-overlay-title; }
+                            LineEdit { horizontal-stretch: 2; placeholder-text: "Subtítulo (ej. Mensaje: La Fe que Mueve Montañas)"; text <=> root.custom-overlay-sub; }
+                            GlassButton {
+                                label: root.custom-overlay-active ? "Ocultar" : "Mostrar";
+                                icon: @image-url("icons/tv.svg");
+                                has-icon: true;
+                                primary: !root.custom-overlay-active;
+                                danger: root.custom-overlay-active;
+                                clicked => {
+                                    root.custom-overlay-active = !root.custom-overlay-active;
+                                    root.custom-overlay-toggled(root.custom-overlay-title, root.custom-overlay-sub, root.custom-overlay-active);
+                                }
+                            }
+                            GlassButton {
+                                label: "Editor ImGui";
+                                clicked => { root.open-legacy-imgui(); }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ═════════════════════════════════════════════════════════════════
+            //  COLUMN 3: LIVE OUTPUT MONITOR & LIBMPV TRANSPORT
+            // ═════════════════════════════════════════════════════════════════
+            GlassCard {
+                width: 344px;
+
+                VerticalLayout {
+                    padding: 13px;
+                    spacing: 10px;
+
+                    HorizontalLayout {
+                        alignment: space-between;
+                        Text {
+                            text: "Vista en Vivo";
+                            color: Theme.text-primary;
+                            font-size: 13.5px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                        Rectangle {
+                            height: 22px;
+                            border-radius: 11px;
+                            background: root.audience-live ? Theme.live-green-soft : Theme.bg-surface-2;
+                            border-width: 1px;
+                            border-color: root.audience-live ? Theme.live-green : Theme.border-subtle;
+                            HorizontalLayout {
+                                padding-left: 9px;
+                                padding-right: 9px;
+                                Text {
+                                    text: root.audience-live ? "● AL AIRE" : "OFFLINE";
+                                    color: root.audience-live ? Theme.live-green : Theme.text-muted;
+                                    font-size: 10px;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+
+                    // ── 16:9 Live Preview Screen ──
+                    Rectangle {
+                        height: 178px;
+                        border-radius: Theme.radius-md;
+                        background: root.live-bg-solid-color;
+                        border-width: 1px;
+                        border-color: root.audience-live ? Theme.live-green.transparentize(0.45) : Theme.border-medium;
+                        clip: true;
+
+                        if root.has-live-preview-image : Image {
+                            source: root.live-preview-image;
+                            image-fit: cover;
+                        }
+
+                        if root.has-live-preview-image && root.live-text != "" : Rectangle {
+                            background: #00000055;
+                        }
+
+                        if root.has-live-overlay-image : Image {
+                            source: root.live-overlay-image;
+                            image-fit: contain;
+                        }
+
+                        VerticalLayout {
+                            padding: 12px;
+                            alignment: root.text-valign == 0 ? start : (root.text-valign == 2 ? end : center);
+                            spacing: 5px;
+
+                            Text {
+                                text: root.live-text == "" ? "(Sin texto proyectado)" : root.live-text;
+                                color: root.live-text == "" ? Theme.text-muted : root.text-color;
+                                font-size: root.live-text == "" ? 11.5px : 13.5px;
+                                font-weight: 700;
+                                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                                wrap: word-wrap;
+                                overflow: elide;
+                            }
+
+                            if root.live-ref != "" : Text {
+                                text: root.live-ref;
+                                color: Theme.accent;
+                                font-size: 10.5px;
+                                font-weight: 600;
+                                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                            }
+                        }
+
+                        if root.active-public-alert != "" : Rectangle {
+                            y: parent.height - 24px;
+                            width: 100%;
+                            height: 24px;
+                            background: #111113e8;
+                            Text {
+                                text: root.active-public-alert;
+                                color: #ffffff;
+                                font-size: 10px;
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
+                        }
+                    }
+
+                    // Active media/overlay status
+                    VerticalLayout {
+                        spacing: 2px;
+                        Text { text: "Fondo: " + root.live-bg-name; color: Theme.text-secondary; font-size: 11px; overflow: elide; }
+                        if root.has-live-overlay-image : Text { text: "Overlay: " + root.live-overlay-name; color: Theme.text-muted; font-size: 10.5px; overflow: elide; }
+                    }
+
+                    // ── Quick Clear Buttons with Icons ──
+                    HorizontalLayout {
+                        spacing: 6px;
+                        GlassButton {
+                            label: "Texto";
+                            icon: @image-url("icons/trash.svg");
+                            has-icon: true;
+                            horizontal-stretch: 1;
+                            clicked => { root.clear-text(); }
+                        }
+                        GlassButton {
+                            label: "Fondo";
+                            icon: @image-url("icons/trash.svg");
+                            has-icon: true;
+                            horizontal-stretch: 1;
+                            clicked => { root.clear-background(); }
+                        }
+                        if root.has-live-overlay-image : GlassButton {
+                            label: "Overlay";
+                            icon: @image-url("icons/trash.svg");
+                            has-icon: true;
+                            clicked => { root.clear-overlay(); }
+                        }
+                    }
+
+                    // ── Media Transport Card (libmpv) ──
+                    Rectangle {
+                        border-radius: Theme.radius-md;
+                        background: Theme.bg-surface-1;
+                        border-width: 1px;
+                        border-color: Theme.border-subtle;
+
+                        VerticalLayout {
+                            padding: 11px;
+                            spacing: 9px;
+
+                            HorizontalLayout {
+                                alignment: space-between;
+                                Text { text: "Reproductor libmpv"; color: Theme.text-primary; font-size: 11.5px; font-weight: 700; }
+                                Text { text: root.media-time-label; color: Theme.text-muted; font-size: 10.5px; }
+                            }
+
+                            Slider {
+                                minimum: 0.0;
+                                maximum: 1.0;
+                                value <=> root.media-position;
+                                released(v) => { root.seek-changed(v); }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 6px;
+                                GlassButton {
+                                    label: root.media-paused ? "Reanudar" : "Pausar";
+                                    icon: root.media-paused ? @image-url("icons/play.svg") : @image-url("icons/pause.svg");
+                                    has-icon: true;
+                                    horizontal-stretch: 1;
+                                    clicked => { root.toggle-pause(); }
+                                }
+                                IconButton {
+                                    icon: @image-url("icons/stop.svg");
+                                    clicked => { root.stop-media(); }
+                                }
+                                IconButton {
+                                    icon: @image-url("icons/repeat.svg");
+                                    active: root.media-loop;
+                                    clicked => { root.toggle-loop(); }
+                                }
+                                IconButton {
+                                    icon: root.media-muted ? @image-url("icons/volume_off.svg") : @image-url("icons/volume.svg");
+                                    active: root.media-muted;
+                                    clicked => { root.toggle-mute(); }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                Image {
+                                    source: root.media-muted ? @image-url("icons/volume_off.svg") : @image-url("icons/volume.svg");
+                                    width: 14px;
+                                    height: 14px;
+                                    y: (parent.height - self.height) / 2;
+                                    colorize: Theme.text-secondary;
+                                }
+                                Slider {
+                                    horizontal-stretch: 1;
+                                    minimum: 0;
+                                    maximum: 150;
+                                    value <=> root.media-volume;
+                                    changed(v) => { root.volume-changed(v); }
+                                }
+                                Text { text: Math.round(root.media-volume) + "%"; color: Theme.text-primary; font-size: 11px; vertical-alignment: center; width: 34px; }
+                            }
+                        }
+                    }
+
+                    Rectangle { vertical-stretch: 1; }
+
+                    Text {
+                        text: "libmpv (GPU)  •  Slint 1.19  •  Open Source";
+                        color: Theme.text-muted;
+                        font-size: 10px;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}

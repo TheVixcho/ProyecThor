@@ -1,0 +1,502 @@
+import { Theme } from "theme.slint";
+
+export component GlassCard inherits Rectangle {
+    background: Theme.bg-surface-0;
+    border-radius: Theme.radius-lg;
+    border-width: 1px;
+    border-color: Theme.border-subtle;
+    clip: true;
+}
+
+export component ToolbarIsland inherits Rectangle {
+    height: 40px;
+    border-radius: 20px;
+    background: Theme.bg-surface-0;
+    border-width: 1px;
+    border-color: Theme.border-medium;
+}
+
+export component CircleIslandButton inherits Rectangle {
+    in property <image> icon;
+    in property <bool> active: false;
+    in property <color> accent-color: Theme.accent;
+    in property <string> tooltip: "";
+    callback clicked();
+    callback hovered-changed(bool, string);
+
+    width: 34px;
+    height: 34px;
+    border-radius: 17px;
+    background: root.active
+        ? root.accent-color.transparentize(0.65)
+        : (ta.has-hover ? root.accent-color.transparentize(0.74) : #ffffff0a);
+    border-width: root.active ? 1.5px : 1px;
+    border-color: root.active
+        ? root.accent-color.transparentize(0.10)
+        : (ta.has-hover ? root.accent-color.transparentize(0.45) : #ffffff16);
+
+    animate background { duration: 120ms; easing: ease-out; }
+    animate border-color { duration: 120ms; easing: ease-out; }
+
+    Image {
+        source: root.icon;
+        width: 17px;
+        height: 17px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        colorize: (root.active || ta.has-hover) ? root.accent-color : Theme.text-secondary;
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+        changed has-hover => {
+            root.hovered-changed(self.has-hover, root.tooltip);
+        }
+    }
+}
+
+export component PillTab inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <bool> has-icon: true;
+    in property <bool> active: false;
+    callback clicked();
+
+    height: 32px;
+    border-radius: 16px;
+    background: root.active
+        ? Theme.bg-surface-hover
+        : (ta.has-hover ? Theme.bg-surface-2 : transparent);
+    border-width: 1px;
+    border-color: root.active
+        ? Theme.border-accent
+        : (ta.has-hover ? Theme.border-subtle : transparent);
+
+    animate background { duration: 120ms; easing: ease-out; }
+    animate border-color { duration: 120ms; easing: ease-out; }
+
+    HorizontalLayout {
+        padding-left: 11px;
+        padding-right: 12px;
+        spacing: 6px;
+        alignment: center;
+
+        if root.has-icon : Image {
+            source: root.icon;
+            width: 15px;
+            height: 15px;
+            y: (parent.height - self.height) / 2;
+            colorize: root.active ? Theme.text-primary : (ta.has-hover ? Theme.text-primary : Theme.text-secondary);
+        }
+
+        Text {
+            text: root.label;
+            color: root.active ? Theme.text-primary : (ta.has-hover ? Theme.text-primary : Theme.text-secondary);
+            font-size: 12.5px;
+            font-weight: root.active ? 600 : 500;
+            vertical-alignment: center;
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component LiveActionPill inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <bool> has-icon: true;
+    in property <bool> active: false;
+    in property <bool> show-dot: true;
+    in property <color> accent-color: Theme.live-green;
+    callback clicked();
+
+    height: 34px;
+    border-radius: 17px;
+    background: root.active
+        ? root.accent-color.transparentize(0.78)
+        : (ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-2);
+    border-width: 1px;
+    border-color: root.active
+        ? root.accent-color
+        : (ta.has-hover ? Theme.border-medium : Theme.border-subtle);
+
+    animate background { duration: 130ms; easing: ease-out; }
+    animate border-color { duration: 130ms; easing: ease-out; }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 13px;
+        spacing: 6px;
+        alignment: center;
+
+        if root.show-dot : Rectangle {
+            width: 7px;
+            height: 7px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 3.5px;
+            background: root.active ? root.accent-color : Theme.text-muted;
+            animate background { duration: 150ms; }
+        }
+
+        if root.has-icon : Image {
+            source: root.icon;
+            width: 14px;
+            height: 14px;
+            y: (parent.height - self.height) / 2;
+            colorize: root.active ? Theme.text-primary : (ta.has-hover ? Theme.text-primary : Theme.text-secondary);
+        }
+
+        Text {
+            text: root.label;
+            color: root.active ? Theme.text-primary : (ta.has-hover ? Theme.text-primary : Theme.text-secondary);
+            font-size: 12px;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component GlassButton inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <bool> has-icon: false;
+    in property <bool> primary: false;
+    in property <bool> danger: false;
+    callback clicked();
+
+    height: 33px;
+    border-radius: Theme.radius-md;
+    background: root.danger
+        ? (ta.has-hover ? Theme.danger.transparentize(0.62) : Theme.danger-soft)
+        : (root.primary
+            ? (ta.has-hover ? #e4e4e7 : Theme.accent)
+            : (ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-2));
+    border-width: 1px;
+    border-color: root.danger
+        ? Theme.danger.transparentize(0.45)
+        : (root.primary ? Theme.accent-strong : Theme.border-subtle);
+
+    animate background { duration: 120ms; }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 6px;
+        alignment: center;
+
+        if root.has-icon : Image {
+            source: root.icon;
+            width: 14px;
+            height: 14px;
+            y: (parent.height - self.height) / 2;
+            colorize: root.primary ? Theme.accent-fg : (root.danger ? #fca5a5 : Theme.text-primary);
+        }
+
+        if root.label != "" : Text {
+            text: root.label;
+            color: root.primary ? Theme.accent-fg : (root.danger ? #fca5a5 : Theme.text-primary);
+            font-size: 12px;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <bool> active: false;
+    in property <bool> danger: false;
+    callback clicked();
+
+    width: 33px;
+    height: 33px;
+    border-radius: Theme.radius-md;
+    background: root.danger
+        ? (ta.has-hover ? Theme.danger.transparentize(0.65) : Theme.danger-soft)
+        : (root.active
+            ? Theme.bg-surface-hover
+            : (ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-2));
+    border-width: 1px;
+    border-color: root.danger
+        ? Theme.danger.transparentize(0.45)
+        : (root.active ? Theme.border-accent : Theme.border-subtle);
+
+    Image {
+        source: root.icon;
+        width: 15px;
+        height: 15px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        colorize: root.danger ? #fca5a5 : (root.active || ta.has-hover ? Theme.text-primary : Theme.text-secondary);
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component SlideTile inherits Rectangle {
+    in property <string> badge;
+    in property <string> body;
+    in property <bool> active: false;
+    callback clicked();
+
+    min-height: 104px;
+    border-radius: Theme.radius-md;
+    background: root.active
+        ? Theme.bg-surface-hover
+        : (ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1);
+    border-width: root.active ? 2px : 1px;
+    border-color: root.active
+        ? Theme.accent
+        : (ta.has-hover ? Theme.border-medium : Theme.border-subtle);
+
+    animate background { duration: 110ms; }
+    animate border-color { duration: 110ms; }
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 6px;
+
+        HorizontalLayout {
+            Rectangle {
+                height: 20px;
+                border-radius: 5px;
+                background: root.active ? Theme.accent : Theme.bg-surface-2;
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    Text {
+                        text: root.badge;
+                        color: root.active ? #09090b : Theme.text-secondary;
+                        font-size: 11px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            if root.active : Text {
+                text: "● EN VIVO";
+                color: Theme.live-green;
+                font-size: 10.5px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+        }
+
+        Text {
+            text: root.body;
+            color: Theme.text-primary;
+            font-size: 13px;
+            wrap: word-wrap;
+            overflow: elide;
+            vertical-stretch: 1;
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component SwitchRow inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle: "";
+    in-out property <bool> checked: false;
+    callback toggled(bool);
+
+    height: root.subtitle == "" ? 42px : 52px;
+    border-radius: Theme.radius-md;
+    background: ta.has-hover ? Theme.bg-surface-2 : transparent;
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 12px;
+        alignment: space-between;
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.title;
+                color: Theme.text-primary;
+                font-size: 13px;
+                font-weight: 500;
+            }
+            if root.subtitle != "" : Text {
+                text: root.subtitle;
+                color: Theme.text-muted;
+                font-size: 11px;
+            }
+        }
+
+        Rectangle {
+            width: 42px;
+            height: 24px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 12px;
+            background: root.checked ? Theme.accent : Theme.bg-surface-2;
+            border-width: 1px;
+            border-color: root.checked ? Theme.accent-strong : Theme.border-medium;
+            animate background { duration: 130ms; }
+
+            Rectangle {
+                width: 18px;
+                height: 18px;
+                border-radius: 9px;
+                x: root.checked ? parent.width - self.width - 3px : 3px;
+                y: 3px;
+                background: root.checked ? #09090b : Theme.text-primary;
+                animate x { duration: 130ms; easing: ease-out; }
+            }
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.checked = !root.checked;
+            root.toggled(root.checked);
+        }
+    }
+}
+
+export component PadTile inherits Rectangle {
+    in property <string> name;
+    in property <string> summary;
+    in property <bool> assigned: false;
+    callback trigger();
+    callback save-here();
+
+    min-height: 110px;
+    border-radius: Theme.radius-md;
+    background: root.assigned
+        ? (ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-2)
+        : (ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1);
+    border-width: 1px;
+    border-color: root.assigned ? Theme.border-accent : Theme.border-subtle;
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            if (root.assigned) {
+                root.trigger();
+            } else {
+                root.save-here();
+            }
+        }
+    }
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 6px;
+
+        HorizontalLayout {
+            alignment: space-between;
+            Text {
+                text: root.name;
+                color: root.assigned ? Theme.text-primary : Theme.text-muted;
+                font-size: 13px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                width: 24px;
+                height: 24px;
+                border-radius: 6px;
+                background: save-ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-1;
+                border-width: 1px;
+                border-color: Theme.border-subtle;
+
+                Image {
+                    source: @image-url("icons/save.svg");
+                    width: 13px;
+                    height: 13px;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    colorize: Theme.text-secondary;
+                }
+
+                save-ta := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.save-here(); }
+                }
+            }
+        }
+
+        Text {
+            text: root.assigned ? root.summary : "Vacío — haz clic para guardar la escena actual";
+            color: root.assigned ? Theme.text-secondary : Theme.text-muted;
+            font-size: 11.5px;
+            wrap: word-wrap;
+            overflow: elide;
+            vertical-stretch: 1;
+        }
+    }
+}
+
+export component ThemeSwatchButton inherits Rectangle {
+    in property <string> label;
+    in property <color> bg-swatch;
+    in property <color> accent-swatch;
+    in property <bool> active: false;
+    callback clicked();
+
+    height: 36px;
+    border-radius: Theme.radius-md;
+    background: root.active
+        ? Theme.bg-surface-hover
+        : (ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-2);
+    border-width: root.active ? 2px : 1px;
+    border-color: root.active ? Theme.accent-strong : Theme.border-subtle;
+
+    HorizontalLayout {
+        padding-left: 9px;
+        padding-right: 10px;
+        spacing: 7px;
+        alignment: start;
+
+        Rectangle {
+            width: 16px;
+            height: 16px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 8px;
+            background: root.bg-swatch;
+            border-width: 2px;
+            border-color: root.accent-swatch;
+        }
+
+        Text {
+            text: root.label;
+            color: Theme.text-primary;
+            font-size: 11.5px;
+            font-weight: root.active ? 700 : 500;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}

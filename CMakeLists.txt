@@ -677,3 +677,128 @@ endif()
         )
     endif()
 endif()
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  ProyecThorSlint — Nueva Interfaz Moderna (Slint + libmpv, Dark Glass)
+#  Migración incremental en rama beta manteniendo compatibilidad Linux + Windows
+# ══════════════════════════════════════════════════════════════════════════════
+option(PROYECTHOR_BUILD_SLINT "Compilar la nueva interfaz moderna con Slint" ON)
+if(PROYECTHOR_BUILD_SLINT)
+    set(SLINT_SDK_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/slint-linux")
+    set(SLINT_SDK_WIN   "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/slint-win")
+
+    find_package(Slint QUIET PATHS "${SLINT_SDK_LINUX}" "${SLINT_SDK_WIN}")
+    if(Slint_FOUND)
+        message(STATUS "Slint C++ SDK encontrado (${Slint_VERSION}): habilitando target ProyecThorSlint")
+
+        if(WIN32)
+            add_executable(ProyecThorSlint WIN32
+                src/ui_slint/main_slint.cpp
+                src/ui_slint/SlintApp.cpp
+                src/ui_slint/SlintVideoPlayer.cpp
+                src/ui_slint/SlintMobileServer.cpp
+                src/core/io/BibleXmlIO.cpp
+                src/core/NetworkStreamServer.cpp
+                src/core/ChatMessageStore.cpp
+                src/core/OSCSender.cpp
+                src/vendor/qrcodegen/qrcodegen.cpp
+                src/vendor/stb/stb_image_write_impl.cpp
+                ${RESOURCE_FILE}
+            )
+        else()
+            add_executable(ProyecThorSlint
+                src/ui_slint/main_slint.cpp
+                src/ui_slint/SlintApp.cpp
+                src/ui_slint/SlintVideoPlayer.cpp
+                src/ui_slint/SlintMobileServer.cpp
+                src/core/io/BibleXmlIO.cpp
+                src/core/NetworkStreamServer.cpp
+                src/core/ChatMessageStore.cpp
+                src/core/OSCSender.cpp
+                src/vendor/qrcodegen/qrcodegen.cpp
+                src/vendor/stb/stb_image_write_impl.cpp
+            )
+        endif()
+
+        set_target_properties(ProyecThorSlint PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+        target_compile_definitions(ProyecThorSlint PRIVATE CPPHTTPLIB_NO_EXCEPTIONS)
+
+        slint_target_sources(ProyecThorSlint src/ui_slint/ui/main_window.slint)
+
+        target_include_directories(ProyecThorSlint PRIVATE
+            "${CMAKE_BINARY_DIR}/generated"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/core/io"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/views/biblia"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/ui_slint"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/qrcodegen"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/stb"
+            "${HTTPLIB_DIR}"
+        )
+
+        target_link_libraries(ProyecThorSlint PRIVATE
+            Slint::Slint
+            nlohmann_json::nlohmann_json
+        )
+
+        if(WIN32)
+            target_include_directories(ProyecThorSlint PRIVATE "${MPV_SDK}/include")
+            target_link_libraries(ProyecThorSlint PRIVATE "${MPV_WIN_LIB}" ws2_32 iphlpapi)
+            if(MSVC)
+                target_link_options(ProyecThorSlint PRIVATE "/ENTRY:mainCRTStartup")
+            endif()
+            if(EXISTS "${SLINT_SDK_WIN}/bin/slint_cpp.dll")
+                add_custom_command(TARGET ProyecThorSlint POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${SLINT_SDK_WIN}/bin/slint_cpp.dll"
+                        "$<TARGET_FILE_DIR:ProyecThorSlint>"
+                    COMMENT "Copiando slint_cpp.dll al directorio de salida"
+                )
+            endif()
+            if(EXISTS "${MPV_SDK}/libmpv-2.dll")
+                add_custom_command(TARGET ProyecThorSlint POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${MPV_SDK}/libmpv-2.dll"
+                        "$<TARGET_FILE_DIR:ProyecThorSlint>"
+                    COMMENT "Copiando libmpv-2.dll al directorio de salida"
+                )
+            endif()
+        else()
+            if(MPV_FOUND)
+                target_include_directories(ProyecThorSlint PRIVATE ${MPV_INCLUDE_DIRS})
+            elseif(MPV_INC_LINUX)
+                target_include_directories(ProyecThorSlint PRIVATE "${MPV_INC_LINUX}")
+            endif()
+            target_link_libraries(ProyecThorSlint PRIVATE
+                ${MPV_LINK_TARGET}
+                pthread
+                dl
+            )
+            set_target_properties(ProyecThorSlint PROPERTIES
+                INSTALL_RPATH "$ORIGIN"
+                BUILD_WITH_INSTALL_RPATH TRUE
+                SKIP_BUILD_RPATH FALSE
+            )
+            if(EXISTS "${SLINT_SDK_LINUX}/lib/libslint_cpp.so")
+                add_custom_command(TARGET ProyecThorSlint POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${SLINT_SDK_LINUX}/lib/libslint_cpp.so"
+                        "$<TARGET_FILE_DIR:ProyecThorSlint>"
+                    COMMENT "Copiando libslint_cpp.so al directorio de salida"
+                )
+            endif()
+        endif()
+
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets")
+            add_custom_command(TARGET ProyecThorSlint POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+                    "$<TARGET_FILE_DIR:ProyecThorSlint>"
+                COMMENT "Copiando assets/ al directorio de salida de ProyecThorSlint"
+            )
+        endif()
+    else()
+        message(STATUS "Slint C++ SDK no encontrado en src/vendor/sdk/slint-{linux,win} — omitiendo target ProyecThorSlint")
+    endif()
+endif()
