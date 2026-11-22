@@ -1,0 +1,35 @@
+{
+  "id": "ytdlp",
+  "name": "Gestor YouTube & Streaming (yt-dlp)",
+  "version": "1.0.0",
+  "author": "Comunidad ProyecThor",
+  "description": "Extractor de transmisiones y subtítulos mediante yt-dlp. Resuelve URLs directas para reproducción en VLC y descarga letras de canciones sin depender de funciones fijas en el núcleo de la aplicación.",
+  "icon": "globe",
+  "entrypoint": "ytdlp_runner.py",
+  "actions": [
+    {
+      "id": "status",
+      "name": "Comprobar Estado",
+      "description": "Verifica si yt-dlp está instalado y obtiene su versión",
+      "args": []
+    },
+    {
+      "id": "resolve_stream",
+      "name": "Resolver Stream de Video",
+      "description": "Obtiene el enlace directo de video (MP4/HLS) reproducible por VLC",
+      "args": ["url"]
+    },
+    {
+      "id": "get_lyrics",
+      "name": "Extraer Subtítulos / Letra",
+      "description": "Descarga subtítulos del video y los formatea como estrofas de canción",
+      "args": ["url"]
+    },
+    {
+      "id": "update_ytdlp",
+      "name": "Actualizar yt-dlp (-U)",
+      "description": "Descarga y actualiza el binario de yt-dlp a la última versión disponible",
+      "args": []
+    }
+  ]
+}
