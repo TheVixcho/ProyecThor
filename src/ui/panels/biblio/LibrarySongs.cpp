@@ -18,7 +18,6 @@
 #include "LibraryPlaylists.h"
 #include "LibraryMultimedia.h"
 #include "core/MediaCollections.h"
-#include "core/AuthLicenseManager.h"
 #include "core/MediaImportManager.h"
 #include "core/settings/SettingsManager.h"
 #include <filesystem>
@@ -531,7 +530,7 @@ void PreloadAllSongs(const std::function<void(int done, int total, const std::st
     }
 
     // 2. ProyecThor for Professionals: Escanear canciones en carpetas externas configuradas
-    if (Core::AuthLicenseManager::Get().IsPro()) {
+    if (true) {
         const auto& storage = ProyecThor::Settings::SettingsManager::Get().GetSettings().storage;
         for (const auto& wf : storage.watchedFolders) {
             if (!wf.enabled || wf.path.empty()) continue;
@@ -2385,7 +2384,7 @@ static void RenderMediaFoldersPane(LibraryContext& ctx, Core::CollectionMediaTyp
 
     std::vector<std::string> roots;
     roots.push_back("ProyecThor");
-    if (Core::AuthLicenseManager::Get().IsPro()) {
+    if (true) {
         auto extraRoots = Library::GetAvailableRootLabels(Core::ItemType::Video);
         for (const auto& r : extraRoots) {
             if (r != "ProyecThor" && std::find(roots.begin(), roots.end(), r) == roots.end()) {
@@ -2721,7 +2720,7 @@ static void RenderMediaFoldersPane(LibraryContext& ctx, Core::CollectionMediaTyp
         ImGui::Spacing();
 
         std::string chosenRoot = "ProyecThor";
-        if (Core::AuthLicenseManager::Get().IsPro() && roots.size() > 1) {
+        if (roots.size() > 1) {
             ImGui::Separator();
             ImGui::Text("¿Dónde deseas crear la carpeta / cola?");
             for (int ri = 0; ri < (int)roots.size(); ++ri) {

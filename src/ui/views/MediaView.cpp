@@ -1,6 +1,6 @@
 #include "MediaView.h"
 #include "core/PresentationCore.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include "core/AppPaths.h"
 #include "UIStrings.h"
 #include "ui/panels/biblio/LibraryHelpers.h"
@@ -24,7 +24,7 @@ namespace ProyecThor::UI {
         return oss.str();
     }
 
-    void MediaView::Render(Core::VLCBasePlayer* previewPlayer) {
+    void MediaView::Render(Core::MPVBasePlayer* previewPlayer) {
         const auto& str = ProyecThor::UI::GetUIStrings();
 
         auto selection = Core::PresentationCore::Get().PeekSelection();

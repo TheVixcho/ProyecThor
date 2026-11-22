@@ -1,6 +1,6 @@
 #include "LiveContentRenderer.h"
 #include "core/PresentationCore.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include "core/settings/SettingsManager.h"
 #include "core/settings/StageLayoutTemplates.h"
 #include "ui/panels/capture/CapturePanel.h"

@@ -123,7 +123,7 @@ void DrawTimeRow(float innerW, float padLeft, int64_t curMs, int64_t lenMs)
     ImGui::PopStyleColor();
 }
 
-void DrawVideoFrame(Core::VLCBasePlayer* player, float w, float h, const char* placeholder,
+void DrawVideoFrame(Core::MPVBasePlayer* player, float w, float h, const char* placeholder,
                     const char* badgeLabel, ImVec4 badgeAccent, bool pulseBorder,
                     bool showBadge, ProyecThor::Shaders::PostProcessorFSR* fsr)
 {

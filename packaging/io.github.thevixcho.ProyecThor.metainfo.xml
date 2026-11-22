@@ -33,8 +33,8 @@
       <li xml:lang="es">Proyección de letras y escrituras bíblicas con edición en caliente instantánea</li>
       <li>Stage display confidence monitor with digital clocks and customized alerts</li>
       <li xml:lang="es">Monitor de escenario (Stage Display) con relojes digitales y avisos personalizados</li>
-      <li>Integrated media playback supporting VLC hardware-accelerated video and audio</li>
-      <li xml:lang="es">Reproducción multimedia integrada con aceleración por hardware vía VLC</li>
+      <li>Integrated media playback supporting libmpv hardware-accelerated video and audio</li>
+      <li xml:lang="es">Reproducción multimedia integrada con aceleración por hardware vía libmpv</li>
       <li>Real-time visual post-processing effects including CRT, film grain, bloom, and blur</li>
       <li xml:lang="es">Efectos visuales de post-procesamiento en tiempo real (CRT, grano de película, bloom, desenfoque)</li>
       <li>Network control, web remote access, and OSC protocol support</li>

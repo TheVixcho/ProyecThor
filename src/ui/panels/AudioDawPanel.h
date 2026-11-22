@@ -1,7 +1,7 @@
 #pragma once
 #include "media/audio/AudioRecorder.h"
 #include "media/audio/AudioMixdown.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include <imgui.h>
 #include <cstdint>
 #include <memory>
@@ -28,7 +28,7 @@ namespace ProyecThor::UI {
 //  AudioDawPanel.cpp) con un cabezal de reproduccion avanzado por software
 //  (ImGui::GetTime()). Es una sincronizacion "razonable para revisar", no
 //  grado broadcast/sample-accurate -- cada pista arranca su clip con un
-//  SetPosition() normalizado (VLCBasePlayer no tiene Seek en ms), asi que
+//  SetPosition() normalizado (MPVBasePlayer no tiene Seek en ms), asi que
 //  puede haber una deriva chica entre pistas. Para escuchar el resultado
 //  FINAL de verdad, Renderizar (ver AudioMixdown) mezcla todo via ffmpeg,
 //  sample-accurate, sin depender de este cabezal por software.
@@ -91,16 +91,16 @@ private:
     int m_SelClipIdx       = -1;
 
     // ── Previsualizacion de UN clip (doble click / boton "Reproducir clip") ─
-    Core::VLCBasePlayer m_PreviewPlayer;
+    Core::MPVBasePlayer m_PreviewPlayer;
     bool                m_PreviewPlaying = false;
 
     // ── "Reproducir todo" (todas las pistas a la vez) ──────────────────────
     // Pool de reproductores PERSISTENTES, uno por pista -- se reusan llamando
     // Play() de nuevo cuando cambia el clip activo, nunca se crea/destruye
-    // una instancia por clip (VLCBasePlayer es pesado de construir, ver
+    // una instancia por clip (MPVBasePlayer es pesado de construir, ver
     // BackgroundLayer::NativePlayback/m_PlayerA-B, mismo criterio ya
     // establecido en el resto de la app).
-    std::vector<std::unique_ptr<Core::VLCBasePlayer>> m_TrackPlayers;
+    std::vector<std::unique_ptr<Core::MPVBasePlayer>> m_TrackPlayers;
     std::vector<int>    m_TrackActiveClip; // por pista: indice del clip sonando ahora, -1 = ninguno
     bool                 m_MixPlaying = false;
     double                m_MixPlayheadMs = 0.0;

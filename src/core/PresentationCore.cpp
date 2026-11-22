@@ -1,7 +1,6 @@
 #include "PresentationCore.h"
 #include "BackgroundLayer.h"
 #include "graphics/shaders/CompositePostChain.h"
-#include "AuthLicenseManager.h"
 #include "stb_image.h"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -138,7 +137,7 @@ bool PresentationCore::GetGlobalMute() const {
         return m_Impl ? m_Impl->preview.GetTextureID() : nullptr;
     }
 
-    VLCBasePlayer* PresentationCore::GetPreviewPlayer() {
+    MPVBasePlayer* PresentationCore::GetPreviewPlayer() {
         return m_Impl ? m_Impl->preview.GetPlayer() : nullptr;
     }
 
@@ -336,24 +335,24 @@ bool PresentationCore::GetGlobalMute() const {
     }
 
     void PresentationCore::SetVLCHardwareDecoder(const std::string& dec) {
-        VLCBasePlayer::SetDefaultHwDecoder(dec);
+        MPVBasePlayer::SetDefaultHwDecoder(dec);
     }
     std::string PresentationCore::GetVLCHardwareDecoder() const {
-        return VLCBasePlayer::GetDefaultHwDecoder();
+        return MPVBasePlayer::GetDefaultHwDecoder();
     }
 
     void PresentationCore::SetVLCVideoOutput(const std::string& vout) {
-        VLCBasePlayer::SetDefaultVideoOutput(vout);
+        MPVBasePlayer::SetDefaultVideoOutput(vout);
     }
     std::string PresentationCore::GetVLCVideoOutput() const {
-        return VLCBasePlayer::GetDefaultVideoOutput();
+        return MPVBasePlayer::GetDefaultVideoOutput();
     }
 
     void PresentationCore::SetVLCDeinterlace(const std::string& deint) {
-        VLCBasePlayer::SetDefaultDeinterlace(deint);
+        MPVBasePlayer::SetDefaultDeinterlace(deint);
     }
     std::string PresentationCore::GetVLCDeinterlace() const {
-        return VLCBasePlayer::GetDefaultDeinterlace();
+        return MPVBasePlayer::GetDefaultDeinterlace();
     }
 
     bool PresentationCore::IsActiveNativeVideo() const {
@@ -2197,12 +2196,8 @@ void PresentationCore::SetPrevContent(const std::string& text, const std::string
         {
             std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             m_State.targetMonitorIndex = index;
-            if (AuthLicenseManager::Get().IsPro()) {
-                m_State.extraTargetMonitors =
-                    ProyecThor::Settings::SettingsManager::Get().GetSettings().projection.extraMonitors;
-            } else {
-                m_State.extraTargetMonitors.clear();
-            }
+            m_State.extraTargetMonitors =
+                ProyecThor::Settings::SettingsManager::Get().GetSettings().projection.extraMonitors;
             projecting = m_State.isProjecting;
         }
         if (m_Impl) {
@@ -2212,21 +2207,12 @@ void PresentationCore::SetPrevContent(const std::string& text, const std::string
 
     void PresentationCore::SetStaging(bool active, int monitorIndex) {
         std::lock_guard<std::recursive_mutex> lock(m_Mutex);
-        if (active && !AuthLicenseManager::Get().IsPro()) {
-            m_State.isStaging = false;
-            m_State.extraStageMonitors.clear();
-            return;
-        }
         m_State.isStaging = active;
         if (monitorIndex >= 0)
             m_State.stageMonitorIndex = monitorIndex;
         if (active) {
-            if (AuthLicenseManager::Get().IsPro()) {
-                m_State.extraStageMonitors =
-                    ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay.extraMonitors;
-            } else {
-                m_State.extraStageMonitors.clear();
-            }
+            m_State.extraStageMonitors =
+                ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay.extraMonitors;
         }
         ++m_StreamVersion;
     }
@@ -2241,7 +2227,7 @@ void PresentationCore::SetPrevContent(const std::string& text, const std::string
         m_ProjectorHeight = h;
     }
 
-    VLCBasePlayer* PresentationCore::GetBackgroundPlayer() {
+    MPVBasePlayer* PresentationCore::GetBackgroundPlayer() {
         return m_Impl ? m_Impl->background.GetPlayer() : nullptr;
     }
 
@@ -2263,7 +2249,7 @@ void PresentationCore::SetPrevContent(const std::string& text, const std::string
             m_State.livePosition = pos;
         }
         if (m_Impl) {
-            VLCBasePlayer* player = m_Impl->background.GetPlayer();
+            MPVBasePlayer* player = m_Impl->background.GetPlayer();
             if (player) player->SetPosition(pos);
             m_Impl->background.SeekSync(pos);
         }

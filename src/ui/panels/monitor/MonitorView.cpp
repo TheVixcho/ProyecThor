@@ -3,7 +3,7 @@
 #include "MonitorQueueIO.h"
 #include "MonitorQueueHelpers.h"
 #include "core/PresentationCore.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include "StyleGeneralApp.h"
 #include <imgui.h>
 #include <algorithm>
@@ -41,7 +41,7 @@ void MonitorView::Update()
         auto  state = core.GetState();
         if (state.bgType == Core::PresentationState::BackgroundType::Video)
         {
-            if (Core::VLCBasePlayer* bg = core.GetBackgroundPlayer())
+            if (Core::MPVBasePlayer* bg = core.GetBackgroundPlayer())
             {
                 if (bg->ConsumeEndReached())
                 {
@@ -67,7 +67,7 @@ void MonitorView::Update()
     }
 }
 
-void MonitorView::Render(Core::VLCBasePlayer* player)
+void MonitorView::Render(Core::MPVBasePlayer* player)
 {
     if (!player) {
         ImGui::PushStyleColor(ImGuiCol_Text, k_TextDim);
@@ -76,7 +76,7 @@ void MonitorView::Render(Core::VLCBasePlayer* player)
         return;
     }
 
-    Core::VLCBasePlayer* bg            = Core::PresentationCore::Get().GetBackgroundPlayer();
+    Core::MPVBasePlayer* bg            = Core::PresentationCore::Get().GetBackgroundPlayer();
     bool                 isSharedPlayer = (player == bg);
 
     // Antes se recalculaba al principio de RenderLiveControls (ahora vive en
@@ -203,7 +203,7 @@ void MonitorView::Render(Core::VLCBasePlayer* player)
     RenderQueue(queueW);
 }
 
-void MonitorView::RenderFloatingPreview(Core::VLCBasePlayer* player, float w, float h)
+void MonitorView::RenderFloatingPreview(Core::MPVBasePlayer* player, float w, float h)
 {
     RenderPreviewMonitor(player, w, h);
 }

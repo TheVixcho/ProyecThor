@@ -41,7 +41,6 @@
 #include "MediaImportModal.h"
 #include "core/MediaImportManager.h"
 #include "core/MediaCollections.h"
-#include "core/AuthLicenseManager.h"
 #include <ctime>
 
 namespace ProyecThor::UI {
@@ -74,13 +73,40 @@ static bool StatusDotToggle(ImDrawList* dl, const char* id, const char* label, b
 // Escala actual de la barra superior (1.0 = tamano completo; menor si no caben las islas)
 static float s_ToolbarScale = 1.0f;
 
+// Tooltip dibujado en el ForegroundDrawList del viewport principal.
+// Nunca crea ventanas OS/XWayland secundarias: evita robos de foco y parpadeos
+// al hacer hover en compositores Wayland como Hyprland o Sway.
+static void DrawToolbarTooltipInViewport(ImGuiViewport* vp, float anchorCenterX, float anchorBottomY, const char* text)
+{
+    if (!vp || !text || !*text) return;
+    ImDrawList* fdl = ImGui::GetForegroundDrawList(vp);
+    if (!fdl) return;
+
+    const ImVec2 pad(10.0f, 5.0f);
+    const ImVec2 textSz = ImGui::CalcTextSize(text);
+    const float boxW = textSz.x + pad.x * 2.0f;
+    const float boxH = textSz.y + pad.y * 2.0f;
+
+    float x = anchorCenterX - boxW * 0.5f;
+    const float minX = vp->Pos.x + 8.0f;
+    const float maxX = vp->Pos.x + vp->Size.x - boxW - 8.0f;
+    if (x < minX) x = minX;
+    if (x > maxX) x = maxX;
+    const float y = anchorBottomY + 8.0f;
+
+    const ImVec2 p0(x, y);
+    const ImVec2 p1(x + boxW, y + boxH);
+    fdl->AddRectFilled({ p0.x, p0.y + 2.0f }, { p1.x, p1.y + 2.0f }, IM_COL32(0, 0, 0, 110), 7.0f);
+    fdl->AddRectFilled(p0, p1, IM_COL32(22, 25, 34, 245), 7.0f);
+    fdl->AddRect(p0, p1, IM_COL32(255, 255, 255, 36), 7.0f, 0, 1.0f);
+    fdl->AddText({ p0.x + pad.x, p0.y + pad.y }, IM_COL32(240, 244, 250, 255), text);
+}
+
 UIManager::UIManager()
     : m_Window(nullptr)
     , m_ShowConfig(false)
     , m_ShowHelp(false)
     , m_ShowDebug(false)
-    , m_MuninCloudPanel(std::make_unique<MuninCloudPanel>())
-    , m_HuginStatsPanel(std::make_unique<HuginStatsPanel>())
 {}
 UIManager::~UIManager() { Shutdown(); }
 
@@ -344,9 +370,7 @@ if (m_TransitionPanel && state.textTransitionTrigger != m_LastTransitionTrigger)
                     }
                 }
 
-                // Monitores de salida publica ADICIONALES (Multi-salida) --
-                // Exclusivo de ProyecThor for Professionals.
-                if (ProyecThor::Core::AuthLicenseManager::Get().IsPro())
+                // Monitores de salida publica ADICIONALES (Multi-salida)
                 {
                     for (int extraIdx : state.extraTargetMonitors)
                     {
@@ -374,12 +398,6 @@ if (m_TransitionPanel && state.textTransitionTrigger != m_LastTransitionTrigger)
 
     if (state.isStaging)
     {
-        // Monitor de Escenario (Stage Display) -- Exclusivo de ProyecThor for Professionals
-        if (!ProyecThor::Core::AuthLicenseManager::Get().IsPro())
-        {
-            Core::PresentationCore::Get().SetStaging(false);
-        }
-        else
         {
             int stageMonitorIdx = state.stageMonitorIndex;
             int stageMonitorCount = 0;
@@ -1100,12 +1118,9 @@ void UIManager::RenderAll()
     if (m_ShowChatWindow)
         RenderChatWindow();
 
-    // Se somete siempre: el WebView2 embebido necesita que se le avise UpdateBounds(..., visible=false)
-    RenderAIAssistantWindow();
     Core::VoiceAssistant::Get().Update();
     RenderVoiceAssistantWindow();
     m_VoiceAssistantPanel.RenderAssistedPromptBanner();
-    RenderProWindows();
 
     // Ventana flotante "Centro de Conexiones" (Red LAN, App Móvil, Transmisión, OSC, Chat)
     if (m_ShowConnectionsWindow)
@@ -1118,11 +1133,6 @@ void UIManager::RenderAll()
     // Notas de Versión / PatchNotes modal (solo con Ctrl+Alt+N, nunca tecla simple N)
     if (m_ShowPatchNotesModal)
         RenderPatchNotesModal();
-    if (m_ShowProFeatureModal)
-        RenderProFeatureModal();
-
-    RenderSessionKickedModal();
-    ProyecThor::Core::AuthLicenseManager::Get().CheckSessionHeartbeat();
     {
         ImGuiIO& io = ImGui::GetIO();
         if (!io.WantTextInput && io.KeyCtrl && io.KeyAlt && !io.KeyShift &&
@@ -1222,7 +1232,7 @@ if (m_FocusViewNextFrame) {
     if (m_ShowHelp)
         m_HelpPanel.Render(&m_ShowHelp);
 
-    if (m_ShowDebug && ProyecThor::Core::AuthLicenseManager::Get().IsAdmin())
+    if (m_ShowDebug)
         m_DebugPanel.Render(&m_ShowDebug);
 
    EndDockspace();
@@ -1473,14 +1483,14 @@ void UIManager::RenderModeToolbar()
                 ImGui::SetCursorScreenPos(bMin);
                 const std::string btnId = std::string("##islandBtn_") + item.label;
                 bool clicked = ImGui::InvisibleButton(btnId.c_str(), { bMax.x - bMin.x, bMax.y - bMin.y });
-                bool hovered = isWindowFocused && ImGui::IsItemHovered();
+                bool hovered = ImGui::IsItemHovered();
 
                 if (clicked && item.onClick) {
                     item.onClick();
                 }
 
                 if (hovered && !showLbl && item.label) {
-                    ImGui::SetTooltip("%s", item.label);
+                    DrawToolbarTooltipInViewport(vp, btnCenterX, islandMax.y, item.label);
                 }
 
                 ImVec4 baseCol = ImGui::ColorConvertU32ToFloat4(DS::TextSecondary);
@@ -1591,28 +1601,6 @@ void UIManager::RenderModeToolbar()
                 IM_COL32(251, 191, 36, 255) // Ámbar dorado
             }
         };
-
-        if (Core::AuthLicenseManager::Get().IsPro()) {
-            island1.push_back({
-                "Canva",
-                AppIcons::DrawIcon_Canva,
-                [this]() {
-                    return !IsPanelCollapsed(0) && !IsAnyToolWindowOpen() &&
-                           (m_LibraryPanelRef &&
-                            m_LibraryPanelRef->GetSideMode() == LibrarySideMode::Canva);
-                },
-                [this]() {
-                    CloseAllToolWindows();
-                    if (m_LibraryPanelRef) {
-                        m_LibraryPanelRef->SelectSideMode(LibrarySideMode::Canva);
-                    }
-                    SetActiveLeftPanel(ActiveLeftPanel::Library);
-                    SetPanelCollapsed(0, false);
-                    SetPanelCollapsed(1, true);
-                },
-                IM_COL32(0, 196, 204, 255) // Cyan turquesa Canva (#00C4CC)
-            });
-        }
 
         island1.push_back({
             trTb("Captura", "Capture", "Captura"),
@@ -1730,29 +1718,12 @@ void UIManager::RenderModeToolbar()
             }
         };
 
-        // ── Isla 3: Cuenta/Pro - Configuración - Ayuda ────────────
-        auto& authMgr = ProyecThor::Core::AuthLicenseManager::Get();
-        const bool isProActive = authMgr.IsPro();
-        const char* accountLabel = isProActive ? "Pro" : trTb("Cuenta", "Account", "Conta");
-        ImU32 accountCol = isProActive
-            ? IM_COL32(245, 180, 50, 255)  // Dorado Pro
-            : IM_COL32(70, 195, 220, 255);  // Cyan
-
+        // ── Isla 3: Configuración - Ayuda - Debug ────────────
         std::vector<IslandItem> island3 = {
-            {
-                accountLabel,
-                AppIcons::DrawIcon_Account,
-                [this]() { return m_ShowConfig && m_SettingsPanel.GetSelectedCategory() == 10; },
-                [this]() {
-                    CloseAllToolWindows();
-                    RequestSettings(10);
-                },
-                accountCol
-            },
             {
                 trTb("Configuración", "Settings", "Definições"),
                 AppIcons::DrawIcon_Settings,
-                [this]() { return m_ShowConfig && m_SettingsPanel.GetSelectedCategory() != 10; },
+                [this]() { return m_ShowConfig; },
                 [this]() {
                     bool wasOpen = m_ShowConfig;
                     CloseAllToolWindows();
@@ -1768,11 +1739,8 @@ void UIManager::RenderModeToolbar()
                     ToggleHelp();
                 },
                 IM_COL32(45, 212, 191, 255) // Verde turquesa / menta
-            }
-        };
-
-        if (authMgr.IsAdmin()) {
-            island3.push_back({
+            },
+            {
                 trTb("Debug", "Debug", "Debug"),
                 AppIcons::DrawIcon_Debug,
                 [this]() { return m_ShowDebug; },
@@ -1781,113 +1749,26 @@ void UIManager::RenderModeToolbar()
                     CloseAllToolWindows();
                     m_ShowDebug = !wasOpen;
                 },
-                IM_COL32(239, 68, 68, 255) // Carmesí vibrante de Debug Admin
-            });
-        }
+                IM_COL32(239, 68, 68, 255) // Carmesí consola debug
+            }
+        };
 
         // ── Medir ancho de la isla de estado en vivo (Preview / Conexiones / Público / Stage / Borrar Todo) ──
-        const int statusCount = isProActive ? 5 : 4;
+        const int statusCount = 5;
         float statusPairHalfSum = 0.0f;
         if (showLbl) {
             float wPrv = measureLabelW("Preview");
             float wCnx = measureLabelW("Conexiones");
             float wAud = measureLabelW("Público");
-            float wStg = isProActive ? measureLabelW("Stage") : 0.0f;
+            float wStg = measureLabelW("Stage");
             float wClr = measureLabelW("Borrar Todo");
-            if (isProActive) {
-                statusPairHalfSum = std::max({(wPrv + wCnx) * 0.5f, (wCnx + wAud) * 0.5f, (wAud + wStg) * 0.5f, (wStg + wClr) * 0.5f});
-            } else {
-                statusPairHalfSum = std::max({(wPrv + wCnx) * 0.5f, (wCnx + wAud) * 0.5f, (wAud + wClr) * 0.5f});
-            }
+            statusPairHalfSum = std::max({(wPrv + wCnx) * 0.5f, (wCnx + wAud) * 0.5f, (wAud + wStg) * 0.5f, (wStg + wClr) * 0.5f});
         }
         float statusBtnStep = 0.0f;
         float statusIslandW = 0.0f;
         float kToolbarSideMargin = 26.0f;
         float kIslandGap         = 24.0f;
         float statusScreenX      = 0.0f;
-
-        // ── Isla Pro: Nube de Recursos (Munin), Estadísticas (Hugin), Cancionero Nube (Firebase) y Chat IA ──
-        std::vector<IslandItem> islandPro = {
-            {
-                "Munin",
-                AppIcons::DrawIcon_Cloud,
-                [this]() { return m_ShowMuninCloud; },
-                [this, isProActive]() {
-                    if (!isProActive) {
-                        ShowProFeatureModal(
-                            "MuninCloud — Nube de Recursos Cloudflare R2",
-                            "MuninCloud es la tienda y catálogo en la nube oficial de ProyecThor for Professionals.\n\n"
-                            "• Descarga con 1 clic fondos de video en bucle (motion loops en alta definición).\n"
-                            "• Fondos de imagen exclusivos optimizados para proyección de texto legible.\n"
-                            "• Paquetes completos de biblias y cancioneros listos para proyectar.\n"
-                            "• Almacenamiento de alta velocidad impulsado por Cloudflare R2 sin límites de transferencia."
-                        );
-                        return;
-                    }
-                    bool wasOpen = m_ShowMuninCloud;
-                    CloseAllToolWindows();
-                    m_ShowMuninCloud = !wasOpen;
-                },
-                IM_COL32(56, 189, 248, 255) // Azul celestial / Munin
-            },
-            {
-                "Hugin",
-                AppIcons::DrawIcon_Stats,
-                [this]() { return m_ShowHuginStats; },
-                [this, isProActive]() {
-                    if (!isProActive) {
-                        ShowProFeatureModal(
-                            "Hugin — Estadísticas y Telemetría del Auditorio",
-                            "Hugin es el centro de analítica y telemetría de ProyecThor for Professionals.\n\n"
-                            "• Monitoreo en tiempo real de FPS promedio y estabilidad gráfica ante proyección secundaria.\n"
-                            "• Ranking de las canciones más cantadas y proyectadas en tus reuniones y cultos.\n"
-                            "• Métricas de rendimiento, tiempos de sesión y estabilidad del motor gráfico."
-                        );
-                        return;
-                    }
-                    bool wasOpen = m_ShowHuginStats;
-                    CloseAllToolWindows();
-                    m_ShowHuginStats = !wasOpen;
-                },
-                IM_COL32(245, 158, 11, 255) // Dorado / Estadísticas
-            },
-            {
-                trTb("Cancionero Nube", "Cloud Songs", "Canções na Nuvem"),
-                AppIcons::DrawIcon_CloudDocument,
-                [this]() { return m_ShowProCloudSongs; },
-                [this, isProActive]() {
-                    if (!isProActive) {
-                        ShowProFeatureModal(
-                            "Cancionero en Nube — Cancionero en Firebase",
-                            "Sincroniza y respalda tus cancioneros, listas de reproducción y repertorio directamente en la nube de Firebase de ProyecThor para acceder desde cualquier dispositivo."
-                        );
-                        return;
-                    }
-                    bool wasOpen = m_ShowProCloudSongs;
-                    CloseAllToolWindows();
-                    m_ShowProCloudSongs = !wasOpen;
-                },
-                IM_COL32(56, 189, 248, 255) // Azul cielo / Cancionero Nube
-            },
-            {
-                trTb("Chat IA", "AI Chat", "Chat IA"),
-                AppIcons::DrawIcon_Sparkle,
-                [this]() { return m_ShowProAIChat; },
-                [this, isProActive]() {
-                    if (!isProActive) {
-                        ShowProFeatureModal(
-                            "Chat IA con Google Gemini & DeepSeek",
-                            "La asistencia con Inteligencia Artificial te permite estructurar versos, corregir métrica de canciones, buscar referencias bíblicas complejas y generar oraciones en tiempo real."
-                        );
-                        return;
-                    }
-                    bool wasOpen = m_ShowProAIChat;
-                    CloseAllToolWindows();
-                    m_ShowProAIChat = !wasOpen;
-                },
-                IM_COL32(192, 132, 252, 255) // Lavanda / IA
-            }
-        };
 
         // ── Auto-ajuste: si las islas no caben en el ancho disponible, se reducen todas
         //    proporcionalmente (iconos, círculos, separaciones) para que nunca se solapen.
@@ -1898,8 +1779,7 @@ void UIManager::RenderModeToolbar()
             };
             const float baseNeeded =
                 widthOf((int)island1.size(), 6.0f) + widthOf((int)islandDesign.size(), 6.0f) +
-                widthOf((int)island2.size(), 6.0f) +
-                widthOf((int)islandPro.size(), 6.0f) + widthOf((int)island3.size(), 6.0f) +
+                widthOf((int)island2.size(), 6.0f) + widthOf((int)island3.size(), 6.0f) +
                 widthOf(statusCount, 6.0f) +
                 26.0f * 2.0f + 24.0f * 4.0f;
             uiS = std::clamp(winW / std::max(1.0f, baseNeeded), 0.5f, 1.0f);
@@ -1919,7 +1799,7 @@ void UIManager::RenderModeToolbar()
             statusPosScreenX = statusScreenX;
         }
 
-        // 1. Primera isla (Librería, Overlays, Biblia, Canva, Captura): izquierda con margen
+        // 1. Primera isla (Librería, Overlays, Biblia, Captura): izquierda con margen
         float island1W = CalcIslandW(island1);
         float island1X = winPos.x + kToolbarSideMargin;
         RenderIsland("island1", island1, island1X);
@@ -1929,27 +1809,23 @@ void UIManager::RenderModeToolbar()
         float islandDesignX = island1X + island1W + kIslandGap;
         RenderIsland("islandDesign", islandDesign, islandDesignX);
 
-        // 3. Extremo derecho: Status -> Ajustes (island3) -> Funciones Pro (islandPro)
+        // 3. Extremo derecho: Status -> Ajustes (island3)
         float rightEdge = statusScreenX - kIslandGap;
         float island3W = CalcIslandW(island3);
         float island3X = rightEdge - island3W;
 
-        float islandProW = CalcIslandW(islandPro);
-        float islandProX = island3X - kIslandGap - islandProW;
-
-        // 4. Isla de Utilidades (Notas, Voz, Chat, Anuncios): centrada entre islandDesign e islandPro
+        // 4. Isla de Utilidades (Notas, Voz, Chat, Anuncios): centrada entre islandDesign e island3
         float island2W = CalcIslandW(island2);
-        float availCenter = (islandProX - kIslandGap) - (islandDesignX + islandDesignW + kIslandGap);
+        float availCenter = (island3X - kIslandGap) - (islandDesignX + islandDesignW + kIslandGap);
         float island2X = (islandDesignX + islandDesignW + kIslandGap) + std::max(0.0f, (availCenter - island2W) * 0.5f);
         if (island2X < islandDesignX + islandDesignW + kIslandGap) {
             island2X = islandDesignX + islandDesignW + kIslandGap;
         }
-        if (island2X + island2W > islandProX - kIslandGap) {
-            island2X = (islandProX - kIslandGap) - island2W;
+        if (island2X + island2W > island3X - kIslandGap) {
+            island2X = (island3X - kIslandGap) - island2W;
         }
 
         RenderIsland("island2", island2, island2X);
-        RenderIsland("islandPro", islandPro, islandProX);
         RenderIsland("island3", island3, island3X);
     }
 
@@ -1971,14 +1847,10 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
     auto trSt = [isEnSt, isPtSt](const char* es, const char* en, const char* pt) -> const char* {
         return isEnSt ? en : (isPtSt ? pt : es);
     };
-    auto& authMgr = ProyecThor::Core::AuthLicenseManager::Get();
-    const bool isPro = authMgr.IsPro();
+    const bool isPro = true;
 
     const bool audienceOn = core.IsProjecting();
-    const bool stageOn    = isPro ? (sd.useLAN ? core.IsStreamingNet() : core.IsStaging()) : false;
-    if (!isPro && core.IsStaging()) {
-        core.SetStaging(false);
-    }
+    const bool stageOn    = sd.useLAN ? core.IsStreamingNet() : core.IsStaging();
 
     const bool  showLbl        = false; // Modo compacto solo iconos en barra superior
     const float uiS            = s_ToolbarScale;
@@ -2038,7 +1910,7 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
             // ── Botón 0: Preview ──
             ImGui::SetCursorScreenPos(bMin);
             bool clicked = ImGui::InvisibleButton("##statusBtn_Preview", { bMax.x - bMin.x, bMax.y - bMin.y });
-            bool hovered = isWindowFocused && ImGui::IsItemHovered();
+            bool hovered = ImGui::IsItemHovered();
             if (clicked) m_ShowMediaPreviewWindow = !m_ShowMediaPreviewWindow;
 
             dl->AddCircleFilled(iconCenter, targetRadius, IM_COL32(255, 255, 255, 8), 24);
@@ -2062,15 +1934,15 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
                 dl->AddText({ lblX, lblY }, iconCol, "Preview");
             }
 
-            if (hovered && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
-                ImGui::SetTooltip("%s", m_ShowMediaPreviewWindow ? trSt("Vista Previa Abierta (Clic para cerrar)", "Preview Open (Click to close)", "Pré-visualização aberta (Clique para fechar)") : trSt("Abrir Vista Previa de Multimedia", "Open Media Preview", "Abrir Pré-visualização de Multimédia"));
+            if (hovered) {
+                DrawToolbarTooltipInViewport(ImGui::GetMainViewport(), btnCenterX, islandMax.y, m_ShowMediaPreviewWindow ? trSt("Vista Previa Abierta (Clic para cerrar)", "Preview Open (Click to close)", "Pré-visualização aberta (Clique para fechar)") : trSt("Abrir Vista Previa de Multimedia", "Open Media Preview", "Abrir Pré-visualização de Multimédia"));
             }
         }
         else if (itemIdx == 1) {
             // ── Botón 1: Conexiones (Centro de Conexiones y Reloj) ──
             ImGui::SetCursorScreenPos(bMin);
             bool clicked = ImGui::InvisibleButton("##statusBtn_Conexiones", { bMax.x - bMin.x, bMax.y - bMin.y });
-            bool hovered = isWindowFocused && ImGui::IsItemHovered();
+            bool hovered = ImGui::IsItemHovered();
             if (clicked) {
                 bool wasOpen = m_ShowConnectionsWindow;
                 CloseAllToolWindows();
@@ -2109,15 +1981,15 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
                 dl->AddText({ lblX, lblY }, iconCol, "Conexiones");
             }
 
-            if (hovered && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
-                ImGui::SetTooltip("%s", m_ShowConnectionsWindow ? trSt("Centro de Conexiones y Reloj (Clic para cerrar)", "Connections & Clock Center (Click to close)", "Centro de Conexões e Relógio (Clique para fechar)") : trSt("Centro de Conexiones y Reloj (Red, Móvil, Streaming, OSC, Reloj, Chat)", "Connections & Clock Center (Network, Mobile, Streaming, OSC, Clock, Chat)", "Centro de Conexões e Relógio (Rede, Móvel, Streaming, OSC, Relógio, Conversa)"));
+            if (hovered) {
+                DrawToolbarTooltipInViewport(ImGui::GetMainViewport(), btnCenterX, islandMax.y, m_ShowConnectionsWindow ? trSt("Centro de Conexiones y Reloj (Clic para cerrar)", "Connections & Clock Center (Click to close)", "Centro de Conexões e Relógio (Clique para fechar)") : trSt("Centro de Conexiones y Reloj (Red, Móvil, Streaming, OSC, Reloj, Chat)", "Connections & Clock Center (Network, Mobile, Streaming, OSC, Clock, Chat)", "Centro de Conexões e Relógio (Rede, Móvel, Streaming, OSC, Relógio, Conversa)"));
             }
         }
         else if (itemIdx == 2) {
             // ── Botón 2: Público ──
             ImGui::SetCursorScreenPos(bMin);
             bool clicked = ImGui::InvisibleButton("##statusBtn_Publico", { bMax.x - bMin.x, bMax.y - bMin.y });
-            bool hovered = isWindowFocused && ImGui::IsItemHovered();
+            bool hovered = ImGui::IsItemHovered();
             if (clicked) ToggleAudience(!audienceOn);
 
             dl->AddCircleFilled(iconCenter, targetRadius, IM_COL32(255, 255, 255, 8), 24);
@@ -2141,15 +2013,15 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
                 dl->AddText({ lblX, lblY }, iconCol, "Público");
             }
 
-            if (hovered && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
-                ImGui::SetTooltip("%s", audienceOn ? trSt("Público en Vivo (Clic para detener)", "Audience Live (Click to stop)", "Público em Direto (Clique para parar)") : trSt("Proyectar a Pantalla de Público", "Project to Audience Display", "Projetar para Ecrã do Público"));
+            if (hovered) {
+                DrawToolbarTooltipInViewport(ImGui::GetMainViewport(), btnCenterX, islandMax.y, audienceOn ? trSt("Público en Vivo (Clic para detener)", "Audience Live (Click to stop)", "Público em Direto (Clique para parar)") : trSt("Proyectar a Pantalla de Público", "Project to Audience Display", "Projetar para Ecrã do Público"));
             }
         }
         else if (isPro && itemIdx == 3) {
             // ── Botón 3: Stage (Monitor de Escenario) ──
             ImGui::SetCursorScreenPos(bMin);
             bool clicked = ImGui::InvisibleButton("##statusBtn_Stage", { bMax.x - bMin.x, bMax.y - bMin.y });
-            bool hovered = isWindowFocused && ImGui::IsItemHovered();
+            bool hovered = ImGui::IsItemHovered();
             if (clicked) ToggleStageQuick(!stageOn);
 
             dl->AddCircleFilled(iconCenter, targetRadius, IM_COL32(255, 255, 255, 8), 24);
@@ -2173,15 +2045,15 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
                 dl->AddText({ lblX, lblY }, iconCol, "Stage");
             }
 
-            if (hovered && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
-                ImGui::SetTooltip("%s", stageOn ? trSt("Monitor de Escenario Activo (Clic para detener)", "Stage Display Active (Click to stop)", "Monitor de Palco Ativo (Clique para parar)") : trSt("Transmitir a Monitor de Escenario (Stage Display)", "Cast to Stage Display", "Transmitir para Monitor de Palco (Stage Display)"));
+            if (hovered) {
+                DrawToolbarTooltipInViewport(ImGui::GetMainViewport(), btnCenterX, islandMax.y, stageOn ? trSt("Monitor de Escenario Activo (Clic para detener)", "Stage Display Active (Click to stop)", "Monitor de Palco Ativo (Clique para parar)") : trSt("Transmitir a Monitor de Escenario (Stage Display)", "Cast to Stage Display", "Transmitir para Monitor de Palco (Stage Display)"));
             }
         }
         else {
             // ── Botón 3: Borrar Todo ──
             ImGui::SetCursorScreenPos(bMin);
             bool clicked = ImGui::InvisibleButton("##statusBtn_BorrarTodo", { bMax.x - bMin.x, bMax.y - bMin.y });
-            bool hovered = isWindowFocused && ImGui::IsItemHovered();
+            bool hovered = ImGui::IsItemHovered();
             if (clicked) {
                 core.ClearLayer2();
                 core.StopBackgroundMedia();
@@ -2211,8 +2083,8 @@ void UIManager::RenderModeToolbarStatusActions(float screenX, float railH)
                 dl->AddText({ lblX, lblY }, dangerCol, "Borrar Todo");
             }
 
-            if (hovered && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
-                ImGui::SetTooltip("%s", trSt("Borrar Todo (Limpiar proyecciones en vivo)", "Clear All (Clear live projections)", "Limpar Tudo (Limpar projeções em direto)"));
+            if (hovered) {
+                DrawToolbarTooltipInViewport(ImGui::GetMainViewport(), btnCenterX, islandMax.y, trSt("Borrar Todo (Limpiar proyecciones en vivo)", "Clear All (Clear live projections)", "Limpar Tudo (Limpar projeções em direto)"));
             }
         }
     }
@@ -2247,14 +2119,6 @@ void UIManager::ToggleAudience(bool active)
 
 void UIManager::ToggleStageQuick(bool active)
 {
-    auto& authMgr = ProyecThor::Core::AuthLicenseManager::Get();
-    if (!authMgr.IsPro()) {
-        ShowProFeatureModal("Monitor de Escenario (Stage Display)",
-                            "La salida de Monitor de Escenario (Stage Display) para predicadores y músicos es una función exclusiva de ProyecThor for Professionals.\n\nEn la versión estándar puedes proyectar a 1 pantalla secundaria estándar. Activa tu suscripción Pro para habilitar el monitor de escenario.");
-        Core::PresentationCore::Get().SetStaging(false);
-        return;
-    }
-
     auto& core = Core::PresentationCore::Get();
     auto& sd   = ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay;
 
@@ -2291,8 +2155,7 @@ void UIManager::ToggleStageQuick(bool active)
 
 bool UIManager::IsAnyToolWindowOpen() const
 {
-    return m_ShowNotes || m_ShowConnectionsWindow || m_ShowConfig || m_ShowHelp || m_ShowDebug || m_ShowVoiceAssistant || m_ShowAIAssistant ||
-           m_ShowProCloudSongs || m_ShowProAIChat || m_ShowProImageGen ||
+    return m_ShowNotes || m_ShowConnectionsWindow || m_ShowConfig || m_ShowHelp || m_ShowDebug || m_ShowVoiceAssistant ||
            m_ShowStylesWindow || m_ShowShadersWindow || m_ShowTransitionsWindow || m_ShowAnnouncementsWindow ||
            m_ShowPadsWindow || m_ShowTilesWindow || m_ShowChatWindow;
 }
@@ -2307,13 +2170,6 @@ void UIManager::CloseAllToolWindows()
     m_ShowHelp                = false;
     m_ShowDebug               = false;
     m_ShowVoiceAssistant      = false;
-    m_ShowAIAssistant         = false;
-    m_ShowProCloudSongs       = false;
-    m_ShowProAIChat           = false;
-    m_ShowProImageGen         = false;
-    m_ShowCanvaWindow         = false;
-    m_ShowMuninCloud          = false;
-    m_ShowHuginStats          = false;
     m_ShowStylesWindow        = false;
     m_ShowShadersWindow       = false;
     m_ShowTransitionsWindow   = false;
@@ -2369,24 +2225,9 @@ void UIManager::RenderNotesWindow()
     }
 }
 
-void UIManager::RenderAIAssistantWindow()
-{
-    m_AIAssistant.Render(&m_ShowAIAssistant, m_GlassRenderer);
-}
-
 void UIManager::RenderVoiceAssistantWindow()
 {
     m_VoiceAssistantPanel.Render(&m_ShowVoiceAssistant, m_GlassRenderer);
-}
-
-void UIManager::RenderProWindows()
-{
-    m_ProCloudSongsPanel.Render(&m_ShowProCloudSongs, m_GlassRenderer);
-    m_ProAIChatPanel.Render(&m_ShowProAIChat, m_GlassRenderer);
-    m_ProImageGenPanel.Render(&m_ShowProImageGen, m_GlassRenderer);
-    if (m_MuninCloudPanel) m_MuninCloudPanel->Render(&m_ShowMuninCloud);
-    if (m_HuginStatsPanel) m_HuginStatsPanel->Render(&m_ShowHuginStats);
-    // Canva se renderiza embebido directamente en LibraryPanel (LibrarySideMode::Canva), no como ventana flotante.
 }
 
 void UIManager::RenderMediaPreviewFloatingWindow()
@@ -3760,159 +3601,4 @@ void UIManager::RenderPatchNotesModal()
     ImGui::PopStyleColor(2);
 }
 
-void UIManager::ShowProFeatureModal(const std::string& title, const std::string& description)
-{
-    m_ProFeatureModalTitle = title;
-    m_ProFeatureModalDesc  = description;
-    m_ShowProFeatureModal  = true;
-}
-
-void UIManager::RenderProFeatureModal()
-{
-    if (!m_ShowProFeatureModal) return;
-
-    ImGuiViewport* vp = ImGui::GetMainViewport();
-    const float modalW = 540.0f;
-    const float modalH = 340.0f;
-
-    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(modalW, modalH), ImGuiCond_Always);
-
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.09f, 0.11f, 0.16f, 0.98f));
-    ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(0.95f, 0.75f, 0.20f, 0.90f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.5f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(22.0f, 18.0f));
-
-    if (ImGui::Begin("Función ProyecThor for Professionals##Modal", &m_ShowProFeatureModal,
-                     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize))
-    {
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
-            m_ShowProFeatureModal = false;
-        }
-
-        // Título con badge dorado PRO
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.75f, 0.20f, 1.0f));
-        ImGui::TextUnformatted(m_ProFeatureModalTitle.c_str());
-        ImGui::PopStyleColor();
-
-        ImGui::SameLine();
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
-        ImGui::TextUnformatted("— Exclusivo Pro");
-        ImGui::PopStyleColor();
-
-        ImGui::Separator();
-        ImGui::Dummy(ImVec2(0.0f, 6.0f));
-
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.88f, 0.94f, 1.0f));
-        ImGui::TextWrapped("%s", m_ProFeatureModalDesc.c_str());
-        ImGui::PopStyleColor();
-
-        ImGui::Dummy(ImVec2(0.0f, 8.0f));
-
-        // Tarjeta de Precio y Beneficios PRO
-        {
-            ImVec2 cardP0 = ImGui::GetCursorScreenPos();
-            float cardInnerW = modalW - 44.0f;
-            float cardInnerH = 68.0f;
-            ImDrawList* dl = ImGui::GetWindowDrawList();
-            dl->AddRectFilled(cardP0, ImVec2(cardP0.x + cardInnerW, cardP0.y + cardInnerH), IM_COL32(245, 158, 11, 24), 6.0f);
-            dl->AddRect(cardP0, ImVec2(cardP0.x + cardInnerW, cardP0.y + cardInnerH), IM_COL32(245, 158, 11, 140), 6.0f);
-
-            dl->AddText(ImVec2(cardP0.x + 12.0f, cardP0.y + 10.0f), IM_COL32(255, 215, 0, 255), "Suscripción ProyecThor PRO: $9.990 CLP / mes (1 dispositivo a la vez)");
-            dl->AddText(ImVec2(cardP0.x + 12.0f, cardP0.y + 32.0f), IM_COL32(185, 205, 235, 255),
-                        "Incluye: Transparencias por LAN (OBS/vMix), Stage Display, Chat IA Gemini,\nCloud Storage 5,000+ canciones, Canva Connect y Sincronización Multi-Sala.");
-            ImGui::Dummy(ImVec2(cardInnerW, cardInnerH));
-        }
-
-        ImGui::Dummy(ImVec2(0.0f, 12.0f));
-
-        // Botones inferiores: Obtener Pro / Cerrar
-        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.85f, 0.65f, 0.15f, 0.95f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.95f, 0.75f, 0.22f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.08f, 0.08f, 0.10f, 1.0f));
-        if (ImGui::Button("Activar ProyecThor PRO ($9.990 CLP)", ImVec2(280.0f, 32.0f))) {
-            m_ShowProFeatureModal = false;
-            CloseAllToolWindows();
-            RequestSettings(10); // Categoría Cuenta / Suscripción Pro
-        }
-        ImGui::PopStyleColor(3);
-
-        ImGui::SameLine(0.0f, 12.0f);
-        if (DS::GlassButton("Cerrar", ImVec2(100.0f, 32.0f))) {
-            m_ShowProFeatureModal = false;
-        }
-    }
-    ImGui::End();
-    ImGui::PopStyleVar(3);
-    ImGui::PopStyleColor(2);
-}
-
-void UIManager::RenderSessionKickedModal()
-{
-    auto& authMgr = ProyecThor::Core::AuthLicenseManager::Get();
-    if (!authMgr.IsSessionKicked()) return;
-
-    ImGuiViewport* vp = ImGui::GetMainViewport();
-    const float modalW = 540.0f;
-    const float modalH = 260.0f;
-
-    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(modalW, modalH), ImGuiCond_Always);
-
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.10f, 0.08f, 0.12f, 0.98f));
-    ImGui::PushStyleColor(ImGuiCol_Border,   ImVec4(0.95f, 0.35f, 0.35f, 0.95f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.8f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(24.0f, 20.0f));
-
-    bool open = true;
-    if (ImGui::Begin("Sesión Iniciada en Otro Equipo##KickedModal", &open,
-                     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize))
-    {
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.35f, 0.35f, 1.0f));
-        ImGui::TextUnformatted("⚠️  Sesión Activa en Otro Dispositivo");
-        ImGui::PopStyleColor();
-
-        ImGui::Separator();
-        ImGui::Dummy(ImVec2(0.0f, 6.0f));
-
-        std::string kickedDevice = authMgr.GetKickedByDevice();
-        if (kickedDevice.empty()) kickedDevice = "Otro equipo";
-
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.90f, 0.92f, 0.96f, 1.0f));
-        ImGui::TextWrapped("Se ha iniciado sesión con tu cuenta ProyecThor en otra computadora:");
-        ImGui::PopStyleColor();
-
-        ImGui::Dummy(ImVec2(0.0f, 4.0f));
-        ImGui::TextColored(ImVec4(0.35f, 0.80f, 1.0f, 1.0f), "💻 Equipo activo: %s", kickedDevice.c_str());
-
-        ImGui::Dummy(ImVec2(0.0f, 4.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.70f, 0.75f, 0.85f, 0.95f));
-        ImGui::TextWrapped("Tu suscripción ProyecThor for Professionals permite el uso en 1 PC a la vez. Por seguridad, las funciones Pro en este equipo han vuelto temporalmente a la Edición Base.");
-        ImGui::PopStyleColor();
-
-        ImGui::Dummy(ImVec2(0.0f, 14.0f));
-
-        // Botón 1: Reclamar sesión en este equipo
-        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.20f, 0.50f, 0.90f, 0.95f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.30f, 0.60f, 1.00f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-        if (ImGui::Button("Reactivar y usar en este PC", ImVec2(240.0f, 34.0f))) {
-            authMgr.ReclaimActiveSession();
-        }
-        ImGui::PopStyleColor(3);
-
-        ImGui::SameLine(0.0f, 12.0f);
-
-        // Botón 2: Continuar en Edición Base
-        if (DS::GlassButton("Continuar en Modo Base", ImVec2(180.0f, 34.0f))) {
-            authMgr.AcknowledgeSessionKicked();
-        }
-    }
-    ImGui::End();
-    ImGui::PopStyleVar(3);
-    ImGui::PopStyleColor(2);
-}
-
-}
+} // namespace ProyecThor::UI

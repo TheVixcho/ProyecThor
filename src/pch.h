@@ -21,6 +21,17 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
+#include <regex>
+
+#if !defined(_WIN32)
+#ifndef strncpy_s
+inline void strncpy_s(char* dest, const char* src, size_t count) {
+    if (!dest || count == 0) return;
+    std::strncpy(dest, src ? src : "", count);
+    dest[count] = '\0';
+}
+#endif
+#endif
 
 // ImGui, JSON y GLM
 #ifndef IMGUI_DEFINE_MATH_OPERATORS

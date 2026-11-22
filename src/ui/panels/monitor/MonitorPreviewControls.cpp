@@ -1,7 +1,7 @@
 #include "MonitorView.h"
 #include "MonitorTheme.h"
 #include "core/PresentationCore.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include <imgui.h>
 #include <algorithm>
 #include <cstdint>
@@ -53,10 +53,10 @@ static void DrawSpeakerToggleIcon(ImDrawList* dl, ImVec2 center, float size, ImU
 
 // Boton mute/unmute del audio de Preview -- por default el player de
 // Preview es forceSilent=true (nunca duplicar lo que ya suena en vivo, ver
-// VLCBasePlayer::SetForceSilent), este es el UNICO lugar donde el operador
+// MPVBasePlayer::SetForceSilent), este es el UNICO lugar donde el operador
 // puede pedir escucharlo a proposito. Compartido entre RenderPreviewControls
 // y RenderFullscreenToolbar.
-void MonitorView::RenderPreviewAudioToggle(Core::VLCBasePlayer* player, float btnSize)
+void MonitorView::RenderPreviewAudioToggle(Core::MPVBasePlayer* player, float btnSize)
 {
     ImVec4 bg  = m_PreviewAudioEnabled ? MT::k_AmberBtn    : MT::k_NeutBtn;
     ImVec4 hov = m_PreviewAudioEnabled ? MT::k_AmberBtnHov : MT::k_NeutBtnHov;
@@ -103,7 +103,7 @@ void MonitorView::RenderPreviewAudioToggle(Core::VLCBasePlayer* player, float bt
 // Timeline + botones de transporte -- compartido entre la barra acoplada
 // normal (RenderPreviewControls) y la barra flotante auto-oculta de
 // pantalla completa (RenderFullscreenToolbar).
-void MonitorView::RenderTransportRow(Core::VLCBasePlayer* player, float innerW)
+void MonitorView::RenderTransportRow(Core::MPVBasePlayer* player, float innerW)
 {
     if (!player) {
         ImGui::Spacing();
@@ -113,7 +113,7 @@ void MonitorView::RenderTransportRow(Core::VLCBasePlayer* player, float innerW)
         return;
     }
 
-    Core::VLCBasePlayer* bg     = Core::PresentationCore::Get().GetBackgroundPlayer();
+    Core::MPVBasePlayer* bg     = Core::PresentationCore::Get().GetBackgroundPlayer();
     bool                 shared = (player == bg) && m_LivePlaying;
     ImGui::BeginDisabled(shared);
 
@@ -204,7 +204,7 @@ void MonitorView::RenderTransportRow(Core::VLCBasePlayer* player, float innerW)
     ImGui::EndDisabled();
 }
 
-void MonitorView::RenderPreviewControls(Core::VLCBasePlayer* player, float w)
+void MonitorView::RenderPreviewControls(Core::MPVBasePlayer* player, float w)
 {
     const float controlsH = 120.0f;
     const float padX      = 8.0f;

@@ -1,7 +1,7 @@
 Name:           proyecthor
 Version:        0.3.2
 Release:        1%{?dist}
-Summary:        Reproductor multimedia con VLC + OpenGL + ImGui
+Summary:        Reproductor multimedia con libmpv + OpenGL + ImGui
 License:        Custom
 URL:            https://github.com/tuusuario/proyecthor
 Source0:        %{name}-%{version}.tar.gz
@@ -10,17 +10,17 @@ BuildRequires:  cmake
 BuildRequires:  ninja-build
 BuildRequires:  gcc-c++
 BuildRequires:  git
-BuildRequires:  pkgconfig(libvlc)
+BuildRequires:  pkgconfig(mpv)
 BuildRequires:  glfw-devel
 BuildRequires:  mesa-libGL-devel
 
-Requires:       vlc-libs
+Requires:       mpv-libs
 Requires:       glfw
 Requires:       mesa-libGL
 Recommends:     yt-dlp
 
 %description
-ProyecThor es un reproductor multimedia basado en libVLC para el
+ProyecThor es un reproductor multimedia basado en libmpv para el
 video/audio, OpenGL para el render y Dear ImGui para la interfaz.
 
 %prep

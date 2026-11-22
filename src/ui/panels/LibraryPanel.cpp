@@ -1,7 +1,5 @@
 #include "LibraryPanel.h"
 
-#include "core/CanvaClient.h"
-#include "core/AuthLicenseManager.h"
 #include "core/settings/SettingsManager.h"
 #include "ui/panels/capture/CapturePanel.h"
 #include "ui/panels/layers/LayersBgTab.h"
@@ -293,12 +291,6 @@ void LibraryPanel::SetUIManager(UIManager* manager)
         m_PluginsPanel = std::make_unique<PluginsPanel>();
         m_PluginsPanel->SetUIManager(m_UIManagerRef);
     }
-    if (!m_CanvaPanel) {
-        m_CanvaPanel = std::make_unique<CanvaPanel>();
-        m_CanvaPanel->SetOnOpenMultimedia([this]() {
-            SelectCategory(LibraryCategory::Multimedia);
-        });
-    }
     if (!m_PanelPicker && m_UIManagerRef) {
         m_PanelPicker = std::make_unique<PanelPickerFullscreen>(this, m_UIManagerRef);
     }
@@ -486,7 +478,7 @@ void LibraryPanel::RefreshList()
                 }
 
                 // ProyecThor for Professionals: Escanear canciones (.txt) en carpetas externas de escaneo
-                if (Core::AuthLicenseManager::Get().IsPro()) {
+                if (true) {
                     const auto& watched = ::ProyecThor::Settings::SettingsManager::Get().GetSettings().storage.watchedFolders;
                     for (const auto& wf : watched) {
                         if (!wf.enabled || wf.path.empty()) continue;
@@ -525,7 +517,7 @@ void LibraryPanel::RefreshList()
                     }
                 }
 
-                if (Core::AuthLicenseManager::Get().IsPro()) {
+                if (true) {
                     const auto& watched = ::ProyecThor::Settings::SettingsManager::Get().GetSettings().storage.watchedFolders;
                     for (const auto& wf : watched) {
                         if (!wf.enabled || wf.path.empty()) continue;
@@ -765,13 +757,6 @@ void LibraryPanel::Render()
     // ahora.
     m_OClock.Update();
 
-    if (Core::CanvaClient::Get().ConsumeLibraryRefresh())
-    {
-        Library::RefreshMultimediaLists();
-        UI::BumpBackgroundsListRevision();
-        RefreshList();
-    }
-
     if (m_NeedsRefreshList.exchange(false))
     {
         RefreshList();
@@ -899,12 +884,8 @@ void LibraryPanel::Render()
         }
         else if (m_SideMode == LibrarySideMode::Canva)
         {
-            if (!Core::AuthLicenseManager::Get().IsPro()) {
-                m_SideMode = LibrarySideMode::Categories;
-                Library::RenderSideList(ctx);
-            } else if (m_CanvaPanel) {
-                m_CanvaPanel->RenderContent(m_UIManagerRef ? &m_UIManagerRef->GetGlassRenderer() : nullptr);
-            }
+            m_SideMode = LibrarySideMode::Categories;
+            Library::RenderSideList(ctx);
         }
         else if (m_SideMode == LibrarySideMode::Capture)
         {

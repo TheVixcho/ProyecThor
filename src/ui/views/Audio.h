@@ -2,7 +2,7 @@
 
 #include "IPanel.h"
 #include "audio/AudioAlbumArt.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include "media/player/MusicPlayer.h"
 #include "core/SubtitleImporter.h"
 #include <string>

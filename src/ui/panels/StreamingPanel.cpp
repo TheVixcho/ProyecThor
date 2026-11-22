@@ -1,6 +1,5 @@
 #include "StreamingPanel.h"
 #include "core/PresentationCore.h"
-#include "core/AuthLicenseManager.h"
 #include "ui/framework/UIManager.h"
 #include "SettingsManager.h"
 #include <GL/glew.h>
@@ -736,7 +735,7 @@ void StreamingPanel::RenderURLSection()
 void StreamingPanel::RenderLayerSelector()
 {
     float w = std::min(ImGui::GetContentRegionAvail().x, 740.0f);
-    const bool isPro = Core::AuthLicenseManager::Get().IsPro();
+    const bool isPro = true;
 
     if (!isPro && m_Config.transparentMode) {
         m_Config.transparentMode = false;
@@ -815,23 +814,13 @@ void StreamingPanel::RenderLayerSelector()
         DrawMoldableToggleVisual(dl, swPos, *row.val, hovered, held, rid);
 
         if (clicked) {
-            if (row.isTranspRow && !*row.val && !isPro) {
-                if (m_UIManager) {
-                    m_UIManager->ShowProFeatureModal(
-                        "Transparencia para OBS",
-                        "Muestra tus letras y textos directamente sobre tus cámaras en OBS o vMix sin ningún fondo.\n\n"
-                        "En la versión gratuita puedes apagar 'Fondo' para proyectar sobre pantalla negra. Mejora a ProyecThor Pro para activar la transparencia."
-                    );
-                }
-            } else {
-                *row.val = !*row.val;
-                if (row.isTranspRow && *row.val) {
-                    m_Config.sendBackground = false;
-                } else if (row.isBgRow && *row.val) {
-                    m_Config.transparentMode = false;
-                }
-                m_ConfigDirty = true;
+            *row.val = !*row.val;
+            if (row.isTranspRow && *row.val) {
+                m_Config.sendBackground = false;
+            } else if (row.isBgRow && *row.val) {
+                m_Config.transparentMode = false;
             }
+            m_ConfigDirty = true;
         }
     }
 

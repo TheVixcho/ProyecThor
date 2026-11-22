@@ -13,7 +13,7 @@ namespace ProyecThor::Core {
 // ── ThumbnailWorker ───────────────────────────────────────────────────────
 // Genera miniaturas de video en un hilo dedicado — decodifica el primer
 // frame real via libVLC en modo callback puro (mismo mecanismo que usa
-// VLCBasePlayer para el video en vivo), asi que NUNCA abre una ventana
+// MPVBasePlayer para el video en vivo), asi que NUNCA abre una ventana
 // propia (a diferencia de pedirle a libVLC un snapshot con salida de video
 // por defecto). Tambien saca el trabajo lento (abrir+decodificar el
 // archivo) del hilo de UI, para que la biblioteca no se trabe generando
@@ -60,9 +60,8 @@ public:
     // Limpia el historial de claves vistas para permitir regenerar/recargar tras liberar RAM.
     void ResetSeen();
 
-    // Precalienta la instancia compartida de libVLC usada para miniaturas
-    // (evita pagar el escaneo de plugins en el primer video).
-    static void WarmupVlcEngine();
+    // Precalienta el motor libmpv usado para miniaturas.
+    static void WarmupMediaEngine();
 
     // Reduce en CPU una imagen RGBA si supera maxW x maxH usando promedio de
     // area ponderado por alpha (preserva bordes limpios tanto en videos/fotos

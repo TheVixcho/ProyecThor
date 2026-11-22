@@ -21,14 +21,7 @@
 #include "panels/BroadcastPanel.h"
 #include "panels/SyncPanel.h"
 #include "panels/OSCPanel.h"
-#include "panels/AIAssistantPanel.h"
 #include "panels/VoiceAssistantPanel.h"
-#include "panels/ProCloudSongsPanel.h"
-#include "panels/ProAIChatPanel.h"
-#include "panels/ProImageGeneratorPanel.h"
-#include "panels/CanvaPanel.h"
-#include "panels/MuninCloudPanel.h"
-#include "panels/HuginStatsPanel.h"
 #include "panels/HelpPanel.h"
 #include "panels/DebugPanel.h"
 #include "ui/views/QuickNotes.h"
@@ -96,7 +89,6 @@ uint64_t m_LastTransitionTrigger = 0;
     void OpenHub();
     void OpenPatchNotes();
     bool IsPatchNotesOpen() const { return m_ShowPatchNotesModal; }
-    void ShowProFeatureModal(const std::string& title, const std::string& description);
 
     void SetShowMediaPreviewWindow(bool show) { m_ShowMediaPreviewWindow = show; }
     bool IsMediaPreviewWindowOpen() const { return m_ShowMediaPreviewWindow; }
@@ -175,7 +167,6 @@ uint64_t m_LastTransitionTrigger = 0;
     void ToggleHelp();
     void RequestHelp(int initialCategory = 0);
     bool IsHelpOpen() const { return m_ShowHelp; }
-    void ToggleAIAssistant() { m_ShowAIAssistant = !m_ShowAIAssistant; }
     void ToggleVoiceAssistant() { m_ShowVoiceAssistant = !m_ShowVoiceAssistant; }
     void ToggleConnectionsWindow() { m_ShowConnectionsWindow = !m_ShowConnectionsWindow; }
     void OpenConnectionsTab(int tab) { m_ConnectionsActiveTab = tab; m_ShowConnectionsWindow = true; }
@@ -255,29 +246,9 @@ private:
     bool         m_ShowNotes = false;
     QuickNotes   m_NotesPanel;
 
-    void            RenderAIAssistantWindow();
-    bool            m_ShowAIAssistant = false;
-    AIAssistantPanel m_AIAssistant;
-
     void                RenderVoiceAssistantWindow();
     bool                m_ShowVoiceAssistant = false;
     VoiceAssistantPanel m_VoiceAssistantPanel;
-
-    // ── Ventanas Flotantes Pro (ProyecThor for Professionals) ────────────────
-    void                   RenderProWindows();
-    bool                   m_ShowProCloudSongs = false;
-    bool                   m_ShowProAIChat     = false;
-    bool                   m_ShowProImageGen   = false;
-    bool                   m_ShowCanvaWindow   = false;
-    bool                   m_ShowMuninCloud    = false;
-    bool                   m_ShowHuginStats    = false;
-    ProCloudSongsPanel     m_ProCloudSongsPanel;
-    ProAIChatPanel         m_ProAIChatPanel;
-    ProImageGeneratorPanel m_ProImageGenPanel;
-    std::unique_ptr<MuninCloudPanel> m_MuninCloudPanel;
-    std::unique_ptr<HuginStatsPanel> m_HuginStatsPanel;
-
-    void ToggleCanvaWindow() { m_ShowCanvaWindow = !m_ShowCanvaWindow; }
 
     void        RenderUrlImportModal();
     bool        m_ShowUrlImport        = false;
@@ -357,11 +328,6 @@ private:
 
     bool          m_ShowPatchNotesModal = false;
     void          RenderPatchNotesModal();
-    bool          m_ShowProFeatureModal = false;
-    std::string   m_ProFeatureModalTitle;
-    std::string   m_ProFeatureModalDesc;
-    void          RenderProFeatureModal();
-    void          RenderSessionKickedModal();
     WorkspaceMode m_Mode = WorkspaceMode::Projector;
 
     // Ver LibraryPanel::SetMediaOnlyMode -- se sincroniza cada frame en

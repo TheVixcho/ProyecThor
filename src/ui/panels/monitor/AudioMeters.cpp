@@ -8,7 +8,7 @@ namespace ProyecThor::UI {
 
 using namespace Design;
 
-void AudioMeters::Update(Core::VLCBasePlayer* player, bool isLive, bool isPlaying, bool isMuted, float currentVolume)
+void AudioMeters::Update(Core::MPVBasePlayer* player, bool isLive, bool isPlaying, bool isMuted, float currentVolume)
 {
     float curL = 0.0f;
     float curR = 0.0f;

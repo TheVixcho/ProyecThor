@@ -1,5 +1,5 @@
 #include "PreviewLoadWorker.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include <future>
 #include <memory>
 #include <chrono>
@@ -30,19 +30,19 @@ void PreviewLoadWorker::Request(std::function<void()> action)
     m_Cv.notify_one();
 }
 
-void PreviewLoadWorker::RequestLoad(VLCBasePlayer* player, const std::string& path, bool loop, bool startMuted)
+void PreviewLoadWorker::RequestLoad(MPVBasePlayer* player, const std::string& path, bool loop, bool startMuted)
 {
     if (!player) return;
     Request([player, path, loop, startMuted] { player->Play(path, loop, startMuted); });
 }
 
-void PreviewLoadWorker::RequestStop(VLCBasePlayer* player)
+void PreviewLoadWorker::RequestStop(MPVBasePlayer* player)
 {
     if (!player) return;
     Request([player] { player->Stop(); });
 }
 
-void PreviewLoadWorker::RequestStopSync(VLCBasePlayer* player, int timeoutMs)
+void PreviewLoadWorker::RequestStopSync(MPVBasePlayer* player, int timeoutMs)
 {
     if (!player) return;
     auto prom = std::make_shared<std::promise<void>>();

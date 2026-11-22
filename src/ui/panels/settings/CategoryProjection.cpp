@@ -3,7 +3,6 @@
 #include "ProjectionQualityPresets.h"
 #include "core/PresentationCore.h"
 #include "core/AppPaths.h"
-#include "core/AuthLicenseManager.h"
 #include "ui/framework/FilePicker.h"
 #include <imgui.h>
 #include <filesystem>
@@ -144,10 +143,8 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
                 HelpTooltip("Pantalla Completa (Recomendado): Cubre por completo el monitor seleccionado sin bordes ni barra de título.\n\n"
                             "Modo Ventana: Abre la proyección en una ventana flotante redimensionable con barra de título, ideal para probar en un solo monitor o capturar la ventana en OBS.");
 
-                // Monitores ADICIONALES (Multi-salida) --
-                // Exclusivo de ProyecThor for Professionals.
-                const bool isPro = ProyecThor::Core::AuthLicenseManager::Get().IsPro();
-                if (monitorCount > 1 && isPro) {
+                // Monitores ADICIONALES (Multi-salida)
+                if (monitorCount > 1) {
                     ImGui::Spacing();
                     ImGui::TextDisabled("Multi-salida — Proyectar a varias pantallas a la vez:");
 
@@ -365,7 +362,7 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
 
             // ── Filtro de Desentrelazado ──────────────────────────────────
             ImGui::Spacing();
-            ImGui::TextUnformatted("Filtro de Desentrelazado (libvlc)");
+            ImGui::TextUnformatted("Filtro de Desentrelazado (libmpv)");
 
             struct DeinterlaceOpt {
                 const char* id;
@@ -416,7 +413,7 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
                         "Nota: Se aplica inmediatamente en reproducción activa y futuros vídeos.");
 
             ImGui::Spacing();
-            ImGui::TextUnformatted("Decodificador de Video / Aceleración de Hardware (libvlc)");
+            ImGui::TextUnformatted("Decodificador de Video / Aceleración de Hardware (libmpv)");
 
 #ifdef _WIN32
             struct HwDecoderOpt {
@@ -486,7 +483,7 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
                         "Nota: Se aplica al reproducir el siguiente vídeo o cambiar de fondo.");
 
             ImGui::Spacing();
-            if (ImGui::Checkbox("Forzar ventana nativa VLC también en Fondos de bucle", &p.vlcNativeForFondos)) {
+            if (ImGui::Checkbox("Forzar ventana nativa MPV también en Fondos de bucle", &p.vlcNativeForFondos)) {
                 Core::PresentationCore::Get().SetVLCNativeForFondos(p.vlcNativeForFondos);
                 changed = true;
             }

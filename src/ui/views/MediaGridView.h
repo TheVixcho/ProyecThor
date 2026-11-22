@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 #include "core/MediaCollections.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 
 namespace ProyecThor::UI {
 
@@ -23,12 +23,12 @@ public:
     ~MediaGridView();
 
     void SetUIManager(UIManager* mgr) { m_UIManagerRef = mgr; }
-    void Render(Core::CollectionMediaType type, Core::VLCBasePlayer* previewPlayer);
+    void Render(Core::CollectionMediaType type, Core::MPVBasePlayer* previewPlayer);
 
 private:
     void RenderHeader(Core::CollectionMediaType type, int totalItems);
     void RenderCollectionTabs(Core::CollectionMediaType type, int totalFiles);
-    void RenderCardGrid(Core::CollectionMediaType type, Core::VLCBasePlayer* previewPlayer);
+    void RenderCardGrid(Core::CollectionMediaType type, Core::MPVBasePlayer* previewPlayer);
     void RenderModals(Core::CollectionMediaType type);
 
     UIManager*    m_UIManagerRef = nullptr;

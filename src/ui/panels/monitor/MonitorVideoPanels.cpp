@@ -1,7 +1,7 @@
 #include "MonitorView.h"
 #include "MonitorTheme.h"
 #include "core/PresentationCore.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <algorithm>
@@ -67,7 +67,7 @@ static void DrawExpandIcon(ImDrawList* dl, ImVec2 center, float size, ImU32 col)
     dl->AddLine(br, { br.x - arm, br.y }, col, th); dl->AddLine(br, { br.x, br.y - arm }, col, th);
 }
 
-void MonitorView::RenderPreviewMonitor(Core::VLCBasePlayer* player, float w, float h)
+void MonitorView::RenderPreviewMonitor(Core::MPVBasePlayer* player, float w, float h)
 {
     auto  sel    = Core::PresentationCore::Get().PeekSelection();
     bool  hasTex = false;
@@ -194,7 +194,7 @@ void MonitorView::RenderPreviewMonitor(Core::VLCBasePlayer* player, float w, flo
 //  "estilo reproductor" que YouTube/VLC fullscreen.
 // =============================================================================
 
-void MonitorView::RequestPreviewFullscreen(Core::VLCBasePlayer* player)
+void MonitorView::RequestPreviewFullscreen(Core::MPVBasePlayer* player)
 {
     if (!m_UIManagerRef) return;
 
@@ -226,7 +226,7 @@ void MonitorView::ExitPreviewFullscreen()
     }
 }
 
-void MonitorView::RenderFullscreenToolbar(Core::VLCBasePlayer* player, ImVec2 avail)
+void MonitorView::RenderFullscreenToolbar(Core::MPVBasePlayer* player, ImVec2 avail)
 {
     // ── Auto-ocultar con inactividad del mouse ───────────────────────────
     static float  idleTimer    = 0.0f;
@@ -343,7 +343,7 @@ void MonitorView::RenderFullscreenToolbar(Core::VLCBasePlayer* player, ImVec2 av
     ImGui::PopStyleVar();
 }
 
-void MonitorView::RenderPreviewFullscreenContent(Core::VLCBasePlayer* player)
+void MonitorView::RenderPreviewFullscreenContent(Core::MPVBasePlayer* player)
 {
     // Sin offset de railH: EnterFullscreenEditor(..., hideToolbar=true)
     // saca la toolbar de modos por completo (ver UIManager::RenderAll), asi

@@ -5,6 +5,18 @@
 #include "ui/views/biblia/BibleBookData.h"
 #include "ui/views/biblia/BibleSearch.h"
 #include "ui/views/biblia/BibleTextUtils.h"
+#include <regex>
+
+namespace {
+std::string NumbersToWord(int n) {
+    static const char* kWords[] = {
+        "cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve",
+        "diez", "once", "doce", "trece", "catorce", "quince", "dieciséis", "diecisiete", "dieciocho", "diecinueve", "veinte"
+    };
+    if (n >= 0 && n <= 20) return kWords[n];
+    return std::to_string(n);
+}
+} // namespace
 
 #if defined(_WIN32)
 #define _SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
@@ -744,15 +756,6 @@ std::string SanitizePhraseForXml(const std::string& in) {
     return XmlEscape(collapsed);
 }
 
-std::string NumbersToWord(int n) {
-    static const char* kWords[] = {
-        "cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve",
-        "diez", "once", "doce", "trece", "catorce", "quince", "dieciséis", "diecisiete", "dieciocho", "diecinueve", "veinte"
-    };
-    if (n >= 0 && n <= 20) return kWords[n];
-    return std::to_string(n);
-}
-
 // Clasifica un error del motor. Devuelve true si es FATAL (no tiene sentido reintentar:
 // requiere que el usuario cambie la configuracion de Windows).
 bool ClassifySpeechError(const winrt::hresult_error& err, std::string& outCode) {
@@ -778,7 +781,6 @@ bool ClassifySpeechError(const winrt::hresult_error& err, std::string& outCode) 
 }
 
 } // namespace
-#endif
 
 std::wstring VoiceAssistant::BuildOfflineGrammarXml(const std::wstring& langTag) {
     wchar_t tempPath[MAX_PATH] = { 0 };
@@ -977,6 +979,14 @@ std::vector<std::string> VoiceAssistant::BuildFallbackWordsList() {
     };
     return words;
 }
+#else
+std::wstring VoiceAssistant::BuildOfflineGrammarXml(const std::wstring&) {
+    return L"";
+}
+std::vector<std::string> VoiceAssistant::BuildFallbackWordsList() {
+    return {};
+}
+#endif
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Supervisor del reconocimiento continuo.

@@ -6,7 +6,7 @@
 #include "ui/panels/LibraryPanel.h"
 #include "core/PresentationCore.h"
 #include "core/MediaCollections.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include "ui/framework/AppIcons.h"
 #include "ui/panels/layers/LayersTheme.h"
 #include <imgui.h>
@@ -20,7 +20,7 @@ HomePanel::HomePanel() {
 HomePanel::~HomePanel() {
 }
 
-void HomePanel::RenderFloatingPreview(Core::VLCBasePlayer* player, float w, float h)
+void HomePanel::RenderFloatingPreview(Core::MPVBasePlayer* player, float w, float h)
 {
     m_MonitorView.RenderFloatingPreview(player, w, h);
 }
@@ -28,7 +28,7 @@ void HomePanel::RenderFloatingPreview(Core::VLCBasePlayer* player, float w, floa
 void HomePanel::RenderHomeContent()
 {
     auto selection = Core::PresentationCore::Get().PeekSelection();
-    Core::VLCBasePlayer* previewPlayer = Core::PresentationCore::Get().GetPreviewPlayer();
+    Core::MPVBasePlayer* previewPlayer = Core::PresentationCore::Get().GetPreviewPlayer();
 
     LibraryCategory libCat = LibraryCategory::Songs;
     LibrarySideMode sideMode = LibrarySideMode::Categories;

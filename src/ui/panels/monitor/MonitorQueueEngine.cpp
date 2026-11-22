@@ -2,7 +2,7 @@
 #include "MonitorQueueHelpers.h"
 #include "MonitorQueueIO.h"
 #include "core/PresentationCore.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include "core/settings/SettingsManager.h"
 #include <GLFW/glfw3.h>
 #include <filesystem>
@@ -12,7 +12,7 @@
 namespace ProyecThor::UI {
 using namespace QueueHelpers;
 
-static Core::VLCBasePlayer* ActivePlayer()
+static Core::MPVBasePlayer* ActivePlayer()
 {
     return Core::PresentationCore::Get().GetBackgroundPlayer();
 }

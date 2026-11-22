@@ -22,8 +22,7 @@
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build-linux",
             "environment": [
-                { "name": "LD_LIBRARY_PATH", "value": "${workspaceFolder}/build-linux" },
-                { "name": "VLC_PLUGIN_PATH", "value": "${workspaceFolder}/build-linux/plugins" }
+                { "name": "LD_LIBRARY_PATH", "value": "${workspaceFolder}/build-linux" }
             ],
             "externalConsole": false,
             "MIMode": "gdb",
@@ -45,17 +44,39 @@
             "name": "ProyecThor - Windows con Wine (Linux)",
             "type": "cppdbg",
             "request": "launch",
-            "program": "/bin/bash",
+            "program": "/usr/bin/wine",
             "args": [
-                "-c",
-                "wine ProyecThor.exe"
+                "${workspaceFolder}/build-win/ProyecThor.exe"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build-win",
-            "environment": [],
+            "environment": [
+                { "name": "WINEDEBUG", "value": "-all" }
+            ],
             "externalConsole": false,
             "MIMode": "gdb",
-            "preLaunchTask": "Compilar Windows"
+            "setupCommands": [
+                {
+                    "description": "Ignorar señales internas de Wine (SIGUSR1)",
+                    "text": "handle SIGUSR1 nostop noprint pass",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Ignorar señales internas de Wine (SIGUSR2)",
+                    "text": "handle SIGUSR2 nostop noprint pass",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Ignorar señales internas de Wine (SIG32)",
+                    "text": "handle SIG32 nostop noprint pass",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Habilitar pretty-printing para gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
         },
         {
             "name": "ProyecThor - Windows Nativo (MinGW / GDB)",

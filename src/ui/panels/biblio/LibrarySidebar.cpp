@@ -7,7 +7,6 @@
 #include "ui/panels/home/HomeIcons.h"
 #include "ui/framework/DesignSystem.h"
 #include "core/settings/SettingsManager.h"
-#include "core/AuthLicenseManager.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -344,7 +343,7 @@ static void RenderCategoryButtonsVertical(LibraryContext& ctx)
         { "Paneles",  ProyecThor::UI::AppIcons::DrawIcon_Grid,       kSideMode_Picker    },
     };
 
-    const bool isPro = ProyecThor::Core::AuthLicenseManager::Get().IsPro();
+    const bool isPro = false;
     if (ctx.sideModeInt == kSideMode_Canva && !isPro) {
         ctx.sideModeInt = kSideMode_Categories;
     }
@@ -419,7 +418,7 @@ static void RenderCategoryButtonsHorizontal(LibraryContext& ctx)
     };
 
     int sideCount = 0;
-    const bool isPro = ProyecThor::Core::AuthLicenseManager::Get().IsPro();
+    const bool isPro = false;
     if (ctx.sideModeInt == kSideMode_Canva && !isPro) {
         ctx.sideModeInt = kSideMode_Categories;
     }

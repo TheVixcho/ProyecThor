@@ -1,7 +1,7 @@
 #include "MonitorView.h"
 #include "MonitorTheme.h"
 #include "core/PresentationCore.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include "core/AppPaths.h"
 #include <imgui.h>
 #include <algorithm>
@@ -17,7 +17,7 @@ using namespace Design;
 using namespace Components;
 
 // Columna central: botones TRANSMITIR y LOOP.
-void MonitorView::RenderCenterColumn(float w, float h, Core::VLCBasePlayer* previewPlayer)
+void MonitorView::RenderCenterColumn(float w, float h, Core::MPVBasePlayer* previewPlayer)
 {
     float btnW   = std::max(w - 4.0f, 16.0f);
     float hPad   = (w - btnW) * 0.5f;
@@ -69,7 +69,7 @@ void MonitorView::RenderCenterColumn(float w, float h, Core::VLCBasePlayer* prev
             core.SetBackgroundMedia(finalPath, isVideo, allowAudio);
             m_LivePlaying = true;
 
-            Core::VLCBasePlayer* newBg = Core::PresentationCore::Get().GetBackgroundPlayer();
+            Core::MPVBasePlayer* newBg = Core::PresentationCore::Get().GetBackgroundPlayer();
             if (previewPlayer && previewPlayer != newBg) {
                 previewPlayer->SetPause(true);
                 m_PreviewPlaying = false;

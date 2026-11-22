@@ -118,7 +118,7 @@ inline const std::vector<UpdateVersionInfo>& GetPatchNotesRegistry() {
             "\n"
             "### Motor de Fondos y Video de Respuesta Inmediata\n"
             "• [CORRECCIÓN] Primer Fondo al Instante con un Solo Clic: Solucionada la demora inicial donde el primer fondo de video o imagen tardaba demasiado en aparecer o requería múltiples clics al iniciar el programa.\n"
-            "• [RENDIMIENTO] Sincronización Directa de Capas y Reproductores: Optimización del ciclo de activación en BackgroundLayer, VLCBasePlayer y PresentationCore para subir el primer fotograma decodificado a textura OpenGL en cuanto está disponible.\n"
+            "• [RENDIMIENTO] Sincronización Directa de Capas y Reproductores: Optimización del ciclo de activación en BackgroundLayer, MPVBasePlayer y PresentationCore para subir el primer fotograma decodificado a textura OpenGL en cuanto está disponible.\n"
             "• [MEJORA] Refresco Inmediato en Salida Pública, Stage y Red: Actualización instantánea del estado visual en LiveContentRenderer, ViewPanel, Monitor Central, MediaView, DocumentView y servidor de sincronización LAN al alternar fondos o medios.\n"
             "\n"
             "### Sistema Inteligente Anti-Duplicados & Menú de Selección de Medios\n"

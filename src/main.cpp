@@ -75,9 +75,6 @@
 #include "core/ThumbnailWorker.h"
 #include "core/AppPaths.h"
 #include "core/plugins/PluginManager.h"
-#include "core/AuthLicenseManager.h"
-#include "core/ProAIManager.h"
-#include "core/CanvaClient.h"
 #include "SplashScreen.h"
 
 #ifdef _WIN32
@@ -231,15 +228,6 @@ static void ChangeToExecutableDirectory()
     if (len == 0 || len == MAX_PATH) return;
     std::filesystem::path dir = std::filesystem::path(exePath).parent_path();
     SetCurrentDirectoryW(dir.c_str());
-
-    if (!std::getenv("VLC_PLUGIN_PATH"))
-    {
-        std::filesystem::path localPlugins = dir / "plugins";
-        if (std::filesystem::exists(localPlugins / "access"))
-            _putenv_s("VLC_PLUGIN_PATH", localPlugins.string().c_str());
-        else if (std::filesystem::exists("C:\\Program Files\\VideoLAN\\VLC\\plugins"))
-            _putenv_s("VLC_PLUGIN_PATH", "C:\\Program Files\\VideoLAN\\VLC\\plugins");
-    }
 #else
     char exePath[PATH_MAX] = {};
     ssize_t len = readlink("/proc/self/exe", exePath, sizeof(exePath) - 1);
@@ -248,22 +236,6 @@ static void ChangeToExecutableDirectory()
     std::filesystem::path dir = std::filesystem::path(exePath).parent_path();
     if (chdir(dir.c_str()) != 0)
         std::cerr << "[DIAG] No se pudo cambiar el directorio de trabajo a " << dir << "\n";
-
-    if (!std::getenv("VLC_PLUGIN_PATH"))
-    {
-        if (std::filesystem::exists("/usr/lib/vlc/plugins"))
-            setenv("VLC_PLUGIN_PATH", "/usr/lib/vlc/plugins", 1);
-        else if (std::filesystem::exists("/usr/lib64/vlc/plugins"))
-            setenv("VLC_PLUGIN_PATH", "/usr/lib64/vlc/plugins", 1);
-        else if (std::filesystem::exists("/usr/lib/x86_64-linux-gnu/vlc/plugins"))
-            setenv("VLC_PLUGIN_PATH", "/usr/lib/x86_64-linux-gnu/vlc/plugins", 1);
-        else
-        {
-            std::filesystem::path localPlugins = dir / "plugins";
-            if (std::filesystem::exists(localPlugins))
-                setenv("VLC_PLUGIN_PATH", localPlugins.c_str(), 1);
-        }
-    }
 #endif
 }
 
@@ -1340,11 +1312,6 @@ static void EnsureLinuxEnvironment(int argc, char** argv)
         if (currentLd && *currentLd)
             newLd += ":" + std::string(currentLd);
         setenv("LD_LIBRARY_PATH", newLd.c_str(), 1);
-
-        std::filesystem::path localPlugins = dir / "plugins";
-        if (std::filesystem::exists(localPlugins))
-            setenv("VLC_PLUGIN_PATH", localPlugins.c_str(), 1);
-
         setenv("PROYECTHOR_ENV_READY", "1", 1);
         execv("/proc/self/exe", argv);
     }
@@ -1353,6 +1320,7 @@ static void EnsureLinuxEnvironment(int argc, char** argv)
 
 int main(int argc, char** argv)
 {
+    std::setlocale(LC_NUMERIC, "C");
 #ifdef _WIN32
     InstallCrashDiagnostics();
 #endif
@@ -1513,14 +1481,14 @@ int main(int argc, char** argv)
               mainWindow = CreateMainWindow(splashWindow, mainW, mainH, theme.base);
               if (!mainWindow) return;
 
-              report(0.45f, "Instancias de reproducción libVLC");
+              report(0.45f, "Instancias de reproducción libmpv");
               glfwMakeContextCurrent(mainWindow);
               ProyecThor::Core::PresentationCore::Get().SetMainWindow(mainWindow);
 
               const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
               if (!perf.performanceMode && !perf.lowMemoryMode) {
                   report(0.85f, "Decodificador de miniaturas de video");
-                  ProyecThor::Core::ThumbnailWorker::WarmupVlcEngine();
+                  ProyecThor::Core::ThumbnailWorker::WarmupMediaEngine();
               }
 
               glfwMakeContextCurrent(splashWindow);
@@ -1598,9 +1566,6 @@ int main(int argc, char** argv)
 
               report(0.28f, "Complementos y salidas de proyección");
               ProyecThor::Core::PluginManager::Get().Initialize();
-              ProyecThor::Core::AuthLicenseManager::Get().Initialize();
-              ProyecThor::Core::ProAIManager::Get().Initialize();
-              ProyecThor::Core::CanvaClient::Get().Initialize();
               ProyecThor::Settings::SettingsManager::Get().ApplyProjection();
 
               report(0.45f, "Biblioteca, Canciones, Biblias y Modelos 3D");
@@ -1884,7 +1849,6 @@ int main(int argc, char** argv)
     }
 
     // Lo último una vez cargada la app: consultar la licencia en servidores
-    ProyecThor::Core::AuthLicenseManager::Get().ValidateOnAppLoaded();
 
     std::cerr << "[DIAG] Entrando al loop principal\n";
     RunMainLoop(mainWindow, uiManager, theme);

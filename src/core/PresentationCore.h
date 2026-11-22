@@ -27,7 +27,7 @@ namespace ProyecThor::UI {
 
 namespace ProyecThor::Core {
 
-    class VLCBasePlayer;
+    class MPVBasePlayer;
 
     enum class ItemType { None = -1, Video = 0, Image = 1, Song = 2, Bible = 3, Documents = 4, Audio = 5 };
 
@@ -309,7 +309,7 @@ void SetGlobalMute(bool mute);
         void           SetFillBlurBrightness(float v);
         float          GetFillBlurBrightness() const;
 
-        VLCBasePlayer* GetBackgroundPlayer();
+        MPVBasePlayer* GetBackgroundPlayer();
         void           GetBackgroundVideoSize(int& width, int& height);
         bool           IsBackgroundStaticImage() const;
         void           PurgeMemoryCaches();
@@ -559,7 +559,7 @@ void SetGlobalMute(bool mute);
         bool ConsumeBibleJump(int& outBookNum, int& outChapterNum, int& outVerseNum);
 
         void*          GetPreviewTexture();
-        VLCBasePlayer* GetPreviewPlayer();
+        MPVBasePlayer* GetPreviewPlayer();
         void           SetPreviewMedia(const std::string& path);
         void           StopPreviewMedia();
 

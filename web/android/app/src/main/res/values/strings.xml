@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">ProyecThor</string>
-    <string name="title_activity_main">ProyecThor</string>
-    <string name="package_name">com.thevixcho.proyecthor</string>
-    <string name="custom_url_scheme">com.thevixcho.proyecthor</string>
-</resources>

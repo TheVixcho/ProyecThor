@@ -1,6 +1,6 @@
 #include "LibraryVideoPreview.h"
 #include "LibraryHelpers.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include "core/FileDeletionManager.h"
 #include "MonitorUIHelpers.h"
 #include "ui/framework/bin/StyleGeneralApp.h"
@@ -21,7 +21,7 @@ namespace {
 // escuchar el video mientras se revisa, con su propio slider de volumen.
 // Arranca mudo igual (ver LoadIndex) para no sorprender con audio de golpe
 // al abrir -- el operador decide si le sube el volumen.
-std::unique_ptr<Core::VLCBasePlayer> s_Player;
+std::unique_ptr<Core::MPVBasePlayer> s_Player;
 bool        s_Open    = false;
 int         s_Index   = -1;
 bool        s_Playing = false;
@@ -50,7 +50,7 @@ void LoadIndex(LibraryContext& ctx, int index) {
     if (index < 0 || index >= (int)ctx.items.size()) return;
     s_Index = index;
     if (!s_Player)
-        s_Player = std::make_unique<Core::VLCBasePlayer>();
+        s_Player = std::make_unique<Core::MPVBasePlayer>();
     s_Player->Play(FullVideoPath(ctx.items[index]), /*loop=*/false, /*startMuted=*/true);
     s_Player->SetVolume(static_cast<int>(s_Volume * 100.0f));
     s_Player->SetMute(s_Muted);

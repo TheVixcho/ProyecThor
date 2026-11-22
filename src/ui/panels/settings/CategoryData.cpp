@@ -2,7 +2,6 @@
 #include "SettingsManager.h"
 #include "core/AppPaths.h"
 #include "core/MediaImportManager.h"
-#include "core/AuthLicenseManager.h"
 #include "ui/framework/FilePicker.h"
 #include "ui/framework/DesignSystem.h"
 #include <imgui.h>
@@ -232,7 +231,7 @@ void SettingsPanel::RenderCategoryData()
     //  Subcategoría 2: Carpetas de Escaneo (ProyecThor for Professionals)
     // ─────────────────────────────────────────────────────────────────────────
     if (SectionTitle("Carpetas de Escaneo", "Almacenamiento")) {
-        const bool isPro = ProyecThor::Core::AuthLicenseManager::Get().IsPro();
+        const bool isPro = true;
 
         if (!isPro) {
             // Usuarios estándar: sin carpetas de auto-importación/escaneo externo

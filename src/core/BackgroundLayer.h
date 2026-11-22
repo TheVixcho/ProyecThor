@@ -1,6 +1,6 @@
 #pragma once
 #include <GL/glew.h>
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include "graphics/shaders/PostProcessorFSR.h"
 #include "graphics/shaders/PostProcessorNIS.h"
 #include "graphics/shaders/BackgroundFillBlur.h"
@@ -17,8 +17,8 @@ namespace ProyecThor::Core {
 
     class BackgroundLayer {
     private:
-        VLCBasePlayer m_PlayerA;
-        VLCBasePlayer m_PlayerB;
+        MPVBasePlayer m_PlayerA;
+        MPVBasePlayer m_PlayerB;
         bool          m_ActiveIsA = true;
 
         bool   m_SwapPending      = false;
@@ -98,8 +98,8 @@ namespace ProyecThor::Core {
         // ── Ecualizador en vivo (ver SetLiveEqualizer*) ──────────────────
         bool  m_TargetEqEnabled = false;
         float m_TargetEqPreamp  = 0.0f;
-        float m_TargetEqBands[VLCBasePlayer::kEqualizerBands] = { 0.0f };
-        void  ReapplyLiveEqualizer(VLCBasePlayer& target);
+        float m_TargetEqBands[MPVBasePlayer::kEqualizerBands] = { 0.0f };
+        void  ReapplyLiveEqualizer(MPVBasePlayer& target);
         float m_TransitionProgress = 1.0f;
 
         // Gate real de audio al publico. Solo cuando esta en true el
@@ -124,11 +124,7 @@ namespace ProyecThor::Core {
         // un swap: el audio siempre sale por este dispositivo.
         std::string m_AudioDeviceId;
 
-#ifdef _WIN32
-    bool m_FlipVideoY = false;
-#else
-    bool m_FlipVideoY = true;  // default: VAAPI en Linux suele invertir
-#endif
+        bool m_FlipVideoY = false;
         bool  m_IsVideo = false;
         float m_BgColor[3] = { 0.0f, 0.0f, 0.0f };
 
@@ -199,7 +195,7 @@ namespace ProyecThor::Core {
         // m_RetiringNative/kNativeRetireSeconds en Update()), nunca
         // reutilizado ni vuelto a reproducir.
         struct NativePlayback {
-            VLCBasePlayer           player;
+            MPVBasePlayer           player;
             NativeVideoOutputWindow window;
             double                  retiredAt = 0.0; // 0 = todavia activo, no retirado
 
@@ -295,13 +291,13 @@ namespace ProyecThor::Core {
         // cambiar cualquiera de esos dos). No-op si m_ActiveNative es null.
         void SyncNativeWindowVisibility();
 
-        VLCBasePlayer& Active();
-        VLCBasePlayer& Standby();
+        MPVBasePlayer& Active();
+        MPVBasePlayer& Standby();
         void PerformSwap();
 
     public:
         // forceSilentAudio=true construye ambos players internos como
-        // permanentemente mudos (ver VLCBasePlayer::m_ForceSilent). Se usa
+        // permanentemente mudos (ver MPVBasePlayer::m_ForceSilent). Se usa
         // para la instancia de preview de biblioteca, que por requisito
         // de producto NUNCA debe emitir audio, sin importar que boton la
         // toque.
@@ -392,7 +388,7 @@ namespace ProyecThor::Core {
         // Este es el punto que usan la cola del Monitor y los controles de
         // transporte para llegar al reproductor correcto sin importar el
         // motor.
-        VLCBasePlayer* GetPlayer();
+        MPVBasePlayer* GetPlayer();
         void SeekSync(float pos);
         void GetActiveVideoSize(int& width, int& height);
 
@@ -441,7 +437,7 @@ namespace ProyecThor::Core {
         void SetLiveMute(bool mute);
 
         // Ecualizador de 10 bandas sobre el audio en vivo (ver
-        // VLCBasePlayer::SetEqualizer*). Mismo criterio que SetLiveVolume/
+        // MPVBasePlayer::SetEqualizer*). Mismo criterio que SetLiveVolume/
         // SetLiveMute: se guarda como "target" y se reaplica en cada swap
         // del doble buffer para sobrevivir al crossfade.
         void SetLiveEqualizerEnabled(bool enabled);
@@ -452,7 +448,7 @@ namespace ProyecThor::Core {
         // Enumera los dispositivos de audio disponibles en el sistema
         // (altavoces, HDMI, interfaces USB, etc.) para mostrarlos en un
         // combo/selector de UI.
-        std::vector<VLCBasePlayer::AudioDevice> GetAvailableAudioDevices();
+        std::vector<MPVBasePlayer::AudioDevice> GetAvailableAudioDevices();
 
         // Selecciona el dispositivo por el que debe salir el audio del
         // fondo. deviceId vacio o "default" usa el dispositivo

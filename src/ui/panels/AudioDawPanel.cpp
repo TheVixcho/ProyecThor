@@ -212,7 +212,7 @@ void AudioDawPanel::StartMixPlayback()
     m_TrackPlayers.resize(m_Tracks.size());
     m_TrackActiveClip.assign(m_Tracks.size(), -1);
     for (auto& p : m_TrackPlayers)
-        if (!p) p = std::make_unique<Core::VLCBasePlayer>();
+        if (!p) p = std::make_unique<Core::MPVBasePlayer>();
 
     m_MixPlaying        = true;
     m_MixLastFrameTime  = ImGui::GetTime();

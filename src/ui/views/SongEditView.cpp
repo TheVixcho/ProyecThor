@@ -5,8 +5,6 @@
 #include "ui/framework/DesignSystem.h"
 #include "ui/framework/LoadingSpinner.h"
 #include "ui/panels/home/HomeIcons.h"
-#include "core/ProAIManager.h"
-#include "core/AuthLicenseManager.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -361,7 +359,7 @@ void SongEditView::RenderTopBar(bool& outWantsBack)
     if (DS::GlassIconButton("exceptions", "cards_star", "#", "Excepciones", ImVec2(btnW, DS::ButtonHeight)))
         ImGui::OpenPopup("Excepciones##exceptionsModal");
 
-    if (ProyecThor::Core::AuthLicenseManager::Get().IsPro()) {
+    if (false) {
         ImGui::SameLine(0.0f, 8.0f);
         if (DS::GlassIconButton("aiAssistant", "sparkles", "IA", "Asistente IA para Letras", ImVec2(btnW, DS::ButtonHeight))) {
             m_ShowAIModal = true;
@@ -603,7 +601,7 @@ void SongEditView::RenderLeftPane(float width)
     ImGui::TextUnformatted("Letra");
     ImGui::PopStyleColor();
 
-    if (ProyecThor::Core::AuthLicenseManager::Get().IsPro()) {
+    if (false) {
         ImGui::SameLine(ImGui::GetContentRegionAvail().x - 125.0f);
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.40f, 0.65f, 0.85f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.50f, 0.80f, 1.0f));
@@ -866,215 +864,6 @@ bool SongEditView::Render()
     return true;
 }
 
-void SongEditView::RenderAIEditModal()
-{
-    if (m_ShowAIModal) {
-        ImGui::OpenPopup("Asistente IA para Canción##aiSongModal");
-        m_ShowAIModal = false;
-    }
-
-    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(680.0f, 620.0f), ImGuiCond_Appearing);
-
-    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.08f, 0.09f, 0.12f, 0.98f));
-    ImGui::PushStyleColor(ImGuiCol_Border,  ImVec4(56.0f / 255.0f, 189.0f / 255.0f, 248.0f / 255.0f, 0.35f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, DS::RadiusLarge);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(22.0f, 20.0f));
-
-    if (ImGui::BeginPopupModal("Asistente IA para Canción##aiSongModal", nullptr, ImGuiWindowFlags_NoResize))
-    {
-        auto& proMgr  = ProyecThor::Core::ProAIManager::Get();
-        auto& authMgr = ProyecThor::Core::AuthLicenseManager::Get();
-
-        // 1. Título del Modal
-        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextPrimary));
-        ImGui::TextUnformatted("Asistente IA para Canción");
-        ImGui::PopStyleColor();
-        ImGui::Spacing();
-
-        if (!authMgr.IsPro()) {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.45f, 0.45f, 1.0f));
-            ImGui::TextWrapped("El Asistente IA de canciones es una función exclusiva de ProyecThor for Professionals.");
-            ImGui::PopStyleColor();
-            ImGui::Spacing();
-            ImGui::TextWrapped("Activa tu suscripción Pro en Ajustes > Cuenta para utilizar el corrector y estructurador inteligente.");
-            ImGui::Spacing();
-            ImGui::Spacing();
-            if (DS::GlassButton("Cerrar", ImVec2(100.0f, DS::ButtonHeight))) {
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::EndPopup();
-            ImGui::PopStyleVar(2);
-            ImGui::PopStyleColor(2);
-            return;
-        }
-
-        // 2. Cabecera de Tokens y Gasto
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        ImVec2 topP = ImGui::GetCursorScreenPos();
-        float availW = ImGui::GetContentRegionAvail().x;
-        float barH = 40.0f;
-        dl->AddRectFilled(topP, ImVec2(topP.x + availW, topP.y + barH), IM_COL32(20, 28, 45, 230), DS::RadiusMedium);
-        dl->AddRect(topP, ImVec2(topP.x + availW, topP.y + barH), IM_COL32(56, 189, 248, 140), DS::RadiusMedium);
-
-        ImGui::SetCursorScreenPos(ImVec2(topP.x + 14.0f, topP.y + 11.0f));
-
-        uint64_t availTokens = proMgr.GetAvailableTokens();
-        std::string tokensStr = FormatNumberWithCommas(availTokens);
-
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.70f, 0.90f, 1.0f, 1.0f));
-        ImGui::Text("Tokens totales: %s", tokensStr.c_str());
-        ImGui::PopStyleColor();
-
-        ImGui::SameLine(0.0f, 22.0f);
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.80f, 0.88f, 0.96f, 0.85f));
-        ImGui::Text("Consultas hoy: %d / %d", proMgr.GetDailyQueriesUsed(), proMgr.GetMaxDailyQueries());
-        ImGui::PopStyleColor();
-
-        ImGui::SameLine(0.0f, 22.0f);
-        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextHint));
-        ImGui::Text("Gasto en esta solicitud: %u tokens", m_AILastTokensCost);
-        ImGui::PopStyleColor();
-
-        ImGui::SetCursorScreenPos(ImVec2(topP.x, topP.y + barH + 12.0f));
-
-        // 3. Sugerencias rápidas
-        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextHint));
-        ImGui::TextUnformatted("Sugerencias rápidas:");
-        ImGui::PopStyleColor();
-        ImGui::Dummy(ImVec2(0.0f, 2.0f));
-
-        if (DS::GlassButton("Borrar puntos suspensivos (...)", ImVec2(205.0f, 24.0f))) {
-            strncpy(m_AIPromptBuf, "Borra todos los puntos suspensivos (...) y ajusta la puntuación limpia para proyección.", sizeof(m_AIPromptBuf) - 1);
-        }
-        ImGui::SameLine(0.0f, 6.0f);
-        if (DS::GlassButton("Revisar ortografía y tildes", ImVec2(185.0f, 24.0f))) {
-            strncpy(m_AIPromptBuf, "Revisa y corrige la ortografía, mayúsculas y acentos de toda la canción sin alterar el contenido.", sizeof(m_AIPromptBuf) - 1);
-        }
-        ImGui::SameLine(0.0f, 6.0f);
-        if (DS::GlassButton("Estructurar Estrofas y Coro", ImVec2(195.0f, 24.0f))) {
-            strncpy(m_AIPromptBuf, "Estructura la canción separando claramente estrofas y coro con una línea en blanco entre cada bloque.", sizeof(m_AIPromptBuf) - 1);
-        }
-
-        ImGui::Dummy(ImVec2(0.0f, 6.0f));
-
-        // 4. Input del prompt
-        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
-        ImGui::TextUnformatted("¿Qué cambio deseas realizar en la letra?");
-        ImGui::PopStyleColor();
-
-        if (m_AIIsBusy) ImGui::BeginDisabled();
-        ImGui::SetNextItemWidth(availW - 165.0f);
-        ImGui::InputTextWithHint("##ai_song_prompt", "Ej: Borra todos los ..., corrige la ortografía y tildes...",
-                                 m_AIPromptBuf, sizeof(m_AIPromptBuf));
-
-        ImGui::SameLine(0.0f, 8.0f);
-        bool processClicked = ImGui::Button(m_AIIsBusy ? "Procesando..." : "Corregir con IA", ImVec2(155.0f, 32.0f));
-        if (m_AIIsBusy) ImGui::EndDisabled();
-
-        if (m_AIIsBusy) {
-            ImGui::SameLine(0.0f, 8.0f);
-            DrawLoadingSpinner(dl, ImVec2(ImGui::GetCursorScreenPos().x + 8.0f, ImGui::GetCursorScreenPos().y + 16.0f), 9.0f);
-        }
-
-        if (processClicked && m_AIPromptBuf[0] != '\0' && !m_AIIsBusy) {
-            if (m_Current.lyrics.empty()) {
-                m_AIStatusFeedback = "La canción actual no tiene texto de letra para corregir.";
-                m_AIIsSuccess = false;
-            } else {
-                m_AIIsBusy = true;
-                m_AIStatusFeedback = "Procesando cambios con IA...";
-                m_AIIsSuccess = true;
-
-                std::string promptStr = m_AIPromptBuf;
-                std::string lyricsStr = m_Current.lyrics;
-
-                proMgr.EditLyricsWithAI(lyricsStr, promptStr, [this](bool ok, const std::string& modified, uint32_t tokensUsed, const std::string& err) {
-                    m_AIIsBusy = false;
-                    if (ok) {
-                        m_AICorrectedLyrics = modified;
-                        m_AILastTokensCost = tokensUsed;
-                        m_AIStatusFeedback = "Letra procesada con éxito.";
-                        m_AIIsSuccess = true;
-                    } else {
-                        m_AIStatusFeedback = "Error: " + err;
-                        m_AIIsSuccess = false;
-                    }
-                });
-            }
-        }
-
-        // 5. Feedback de estado
-        if (!m_AIStatusFeedback.empty()) {
-            ImGui::Dummy(ImVec2(0.0f, 4.0f));
-            ImVec4 col = m_AIIsSuccess ? ImVec4(0.40f, 0.85f, 0.55f, 1.0f) : ImVec4(0.95f, 0.40f, 0.40f, 1.0f);
-            ImGui::PushStyleColor(ImGuiCol_Text, col);
-            ImGui::TextUnformatted(m_AIStatusFeedback.c_str());
-            ImGui::PopStyleColor();
-        }
-
-        ImGui::Dummy(ImVec2(0.0f, 6.0f));
-        ImGui::Separator();
-        ImGui::Dummy(ImVec2(0.0f, 4.0f));
-
-        // 6. Área de Vista Previa de la Canción Corregida
-        float previewAreaH = ImGui::GetContentRegionAvail().y - 44.0f;
-        if (previewAreaH < 120.0f) previewAreaH = 120.0f;
-
-        if (!m_AICorrectedLyrics.empty()) {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
-            ImGui::TextUnformatted("Letra corregida (revisa el resultado antes de aplicar):");
-            ImGui::PopStyleColor();
-
-            InputTextMultilineStd("##ai_corrected_preview", &m_AICorrectedLyrics, ImVec2(-1.0f, previewAreaH - 30.0f),
-                                  ImGuiInputTextFlags_AllowTabInput);
-
-            ImGui::Dummy(ImVec2(0.0f, 8.0f));
-
-            // Botón Aplicar Cambios al Editor
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.55f, 0.28f, 0.90f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.24f, 0.70f, 0.35f, 1.0f));
-            if (ImGui::Button("Aplicar Cambios al Editor", ImVec2(210.0f, 30.0f))) {
-                PushUndoSnapshot();
-                m_Current.lyrics = m_AICorrectedLyrics;
-                m_Current.baseLyrics = m_AICorrectedLyrics;
-                MarkDirty();
-                m_AICorrectedLyrics.clear();
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::PopStyleColor(2);
-
-            ImGui::SameLine(0.0f, 10.0f);
-            if (DS::GlassButton("Copiar al portapapeles", ImVec2(180.0f, 30.0f))) {
-                ImGui::SetClipboardText(m_AICorrectedLyrics.c_str());
-            }
-
-            ImGui::SameLine(0.0f, 10.0f);
-            if (DS::GlassButton("Cancelar", ImVec2(100.0f, 30.0f))) {
-                m_AICorrectedLyrics.clear();
-                ImGui::CloseCurrentPopup();
-            }
-        } else {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextHint));
-            ImGui::TextUnformatted("Letra actual original:");
-            ImGui::PopStyleColor();
-
-            std::string tempCopy = m_Current.lyrics;
-            InputTextMultilineStd("##ai_original_preview", &tempCopy, ImVec2(-1.0f, previewAreaH - 30.0f),
-                                  ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_AllowTabInput);
-
-            ImGui::Dummy(ImVec2(0.0f, 8.0f));
-            if (DS::GlassButton("Cerrar", ImVec2(100.0f, 30.0f))) {
-                ImGui::CloseCurrentPopup();
-            }
-        }
-
-        ImGui::EndPopup();
-    }
-    ImGui::PopStyleVar(2);
-    ImGui::PopStyleColor(2);
-}
+void SongEditView::RenderAIEditModal() {}
 
 }
-

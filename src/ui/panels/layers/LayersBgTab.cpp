@@ -9,7 +9,6 @@
 #include "ui/panels/biblio/LibraryMultimedia.h"
 #include "ui/framework/FilePicker.h"
 #include "ui/framework/bin/StyleGeneralApp.h"
-#include "core/AuthLicenseManager.h"
 
 static inline const char* TrBg(const char* es, const char* en, const char* pt) {
     auto lang = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language;
@@ -353,8 +352,8 @@ void LayersBgTab::ReloadList() {
         TryPushEntry(std::move(bg));
     }
 
-    // ProyecThor for Professionals: Escaneo automático de carpetas externas vinculadas sin duplicar
-    if (ProyecThor::Core::AuthLicenseManager::Get().IsPro()) {
+    // Escaneo automático de carpetas externas vinculadas sin duplicar
+    {
         const auto& watched = ProyecThor::Settings::SettingsManager::Get().GetSettings().storage.watchedFolders;
         for (const auto& wf : watched) {
             if (!wf.enabled || wf.path.empty()) continue;

@@ -324,7 +324,9 @@ void VoiceAssistantPanel::RenderMicSelector(Core::VoiceAssistant& va, bool runni
             ImGui::SameLine();
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusSmall);
             if (ImGui::SmallButton("Abrir Grabación")) {
+#if defined(_WIN32)
                 ShellExecuteA(NULL, "open", "control.exe", "mmsys.cpl,,recording", NULL, SW_SHOWNORMAL);
+#endif
             }
             ImGui::PopStyleVar();
         }
@@ -359,14 +361,20 @@ void VoiceAssistantPanel::RenderMicSelector(Core::VoiceAssistant& va, bool runni
             ImGui::BulletText("Opción 1: Activar 'Mezcla estéreo' (Stereo Mix).");
             ImGui::SameLine();
             if (ImGui::SmallButton("Abrir Grabación")) {
+#if defined(_WIN32)
                 ShellExecuteA(NULL, "open", "control.exe", "mmsys.cpl,,recording", NULL, SW_SHOWNORMAL);
+#endif
             }
             ImGui::TextColored(Col(DS::TextHint), "   (Clic derecho en el espacio vacío -> 'Mostrar deshabilitados' -> Activar)");
 
             ImGui::BulletText("Opción 2: Instalar cable virtual gratuito VB-CABLE.");
             ImGui::SameLine();
             if (ImGui::SmallButton("Descargar")) {
+#if defined(_WIN32)
                 ShellExecuteA(NULL, "open", "https://vb-audio.com/Cable/", NULL, NULL, SW_SHOWNORMAL);
+#else
+                std::system("xdg-open 'https://vb-audio.com/Cable/' &");
+#endif
             }
 
             ImGui::EndChild();

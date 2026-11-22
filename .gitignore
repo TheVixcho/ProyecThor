@@ -79,3 +79,10 @@ packaging/Linux/
 
 packaging/windows/dist/
 packaging/windows/Output/
+
+# ── Binarios pesados de SDKs (superan el límite de 100 MB de GitHub) ─────────
+src/vendor/sdk/mpv/libmpv-2.dll
+*.dwo
+
+# Web vive en la rama 'web'
+web/

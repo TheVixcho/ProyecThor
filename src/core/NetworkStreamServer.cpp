@@ -9,7 +9,6 @@
 
 #include "NetworkStreamServer.h"
 #include "httplib.h"
-#include "core/AuthLicenseManager.h"
 
 #include "stb_image_write.h"
 
@@ -444,9 +443,7 @@ std::string NetworkStreamServer::SnapshotToJSON(const StreamSnapshot& s) const
     auto B = [](bool v) -> const char* { return v ? "true" : "false"; };
 
   bool hiQ = (cfg.videoMode != StreamConfig::VideoMode::LowLatency);
-  bool isPro = Core::AuthLicenseManager::Get().IsPro();
-  // Transparencia es un botón aparte, sólo disponible para PRO
-  bool effectiveTransparent = isPro && cfg.transparentMode;
+  bool effectiveTransparent = cfg.transparentMode;
   // Fondo se envía si sendBackground está activo y no hay transparencia
   bool effectiveSendBg      = cfg.sendBackground && !effectiveTransparent;
 
@@ -474,7 +471,7 @@ std::string NetworkStreamServer::SnapshotToJSON(const StreamSnapshot& s) const
       << "\"hasFrame\":"      << B(s.hasFrame && effectiveSendBg) << ","
       << "\"sendBackground\":"<< B(cfg.sendBackground)        << ","
       << "\"transparent\":"   << B(effectiveTransparent)      << ","
-      << "\"isPro\":"         << B(isPro)                     << ","
+      << "\"isPro\":"         << B(true)                      << ","
       << "\"highQuality\":"   << B(hiQ)                        << ","
       << "\"currentText\":\"" << escapeJSON(s.currentText)     << "\","
       << "\"textColor\":["
@@ -558,9 +555,8 @@ std::string NetworkStreamServer::DetectLocalIP()
 // ── BuildHTMLPage ─────────────────────────────────────────────────────────────
 std::string NetworkStreamServer::BuildHTMLPage() const
 {
-    bool isPro = Core::AuthLicenseManager::Get().IsPro();
     StreamConfig cfg = GetConfig();
-    bool initTransparent = isPro && cfg.transparentMode;
+    bool initTransparent = cfg.transparentMode;
     std::string rootClass = initTransparent ? " class=\"alpha-mode\"" : "";
 
     std::ostringstream ss;

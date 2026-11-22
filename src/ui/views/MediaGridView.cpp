@@ -11,7 +11,6 @@
 #include "core/PresentationCore.h"
 #include "core/MediaImportManager.h"
 #include "core/FileDeletionManager.h"
-#include "core/AuthLicenseManager.h"
 #include "ui/views/Audio.h"
 
 #include <imgui.h>
@@ -38,7 +37,7 @@ MediaGridView::~MediaGridView()
 {
 }
 
-void MediaGridView::Render(Core::CollectionMediaType type, Core::VLCBasePlayer* previewPlayer)
+void MediaGridView::Render(Core::CollectionMediaType type, Core::MPVBasePlayer* previewPlayer)
 {
     auto& colMgr = Core::MediaCollectionManager::Get();
     m_ActiveCollection = colMgr.GetActiveCollection(type);
@@ -302,7 +301,7 @@ void MediaGridView::RenderCollectionTabs(Core::CollectionMediaType type, int tot
 
     std::vector<std::string> roots;
     roots.push_back("ProyecThor");
-    if (Core::AuthLicenseManager::Get().IsPro()) {
+    if (true) {
         auto extraRoots = Library::GetAvailableRootLabels(Core::ItemType::Video);
         for (const auto& r : extraRoots) {
             if (r != "ProyecThor" && std::find(roots.begin(), roots.end(), r) == roots.end()) {
@@ -339,7 +338,7 @@ void MediaGridView::RenderCollectionTabs(Core::CollectionMediaType type, int tot
     ImGui::PopStyleColor(4);
 
     // External roots tabs (solo para usuarios PRO con carpetas externas agregadas)
-    if (Core::AuthLicenseManager::Get().IsPro()) {
+    if (true) {
         for (size_t ri = 1; ri < roots.size(); ++ri) {
             const std::string& rName = roots[ri];
             std::string rootKey = "__root__" + rName;
@@ -446,7 +445,7 @@ void MediaGridView::RenderCollectionTabs(Core::CollectionMediaType type, int tot
     ImGui::PopStyleVar(2);
 }
 
-void MediaGridView::RenderCardGrid(Core::CollectionMediaType type, Core::VLCBasePlayer* previewPlayer)
+void MediaGridView::RenderCardGrid(Core::CollectionMediaType type, Core::MPVBasePlayer* previewPlayer)
 {
     std::vector<Library::MMItem> sourceItems;
     if (type == Core::CollectionMediaType::Video)
@@ -1029,7 +1028,7 @@ void MediaGridView::RenderModals(Core::CollectionMediaType type)
 
         std::vector<std::string> roots;
         roots.push_back("ProyecThor");
-        if (Core::AuthLicenseManager::Get().IsPro()) {
+        if (true) {
             auto extraRoots = Library::GetAvailableRootLabels(Core::ItemType::Video);
             for (const auto& r : extraRoots) {
                 if (r != "ProyecThor" && std::find(roots.begin(), roots.end(), r) == roots.end()) {
@@ -1040,7 +1039,7 @@ void MediaGridView::RenderModals(Core::CollectionMediaType type)
 
         std::string chosenRoot = "ProyecThor";
         // Si el usuario es PRO y tiene carpetas de escaneo externas, preguntar la ubicación
-        if (Core::AuthLicenseManager::Get().IsPro() && roots.size() > 1) {
+        if (roots.size() > 1) {
             ImGui::Separator();
             ImGui::Text("¿Dónde deseas crear la carpeta / cola?");
             for (int ri = 0; ri < (int)roots.size(); ++ri) {

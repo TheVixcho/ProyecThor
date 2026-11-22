@@ -1,7 +1,6 @@
 #include "SettingsPanel.h"
 #include "SettingsManager.h"
 #include "core/PresentationCore.h"
-#include "core/AuthLicenseManager.h"
 #include "ui/framework/DesignSystem.h"
 #include "ui/framework/AppIcons.h"
 #include "ui/framework/PatchNotesRenderer.h"
@@ -191,12 +190,11 @@ static void DrawCategoryIcon(ImDrawList* dl, CatIcon icon, ImVec2 c, float r, Im
 struct NavGroup { const char* label; const int items[6]; int count; };
 static const NavGroup k_NavGroups[] = {
     { "SISTEMA Y DATOS", { 7, 8, 12, 9, 11, 6 }, 6 }, // Idioma + Actualizaciones + Notas de versión + Datos + Rendimiento + Teclas
-    { "CUENTA",          { 10                 }, 1 },
     { "APARIENCIA",      { 0                  }, 1 },
     { "PANTALLAS",       { 1, 2, 3            }, 3 }, // Proyección + Conexiones + Pantallas (Stage)
     { "AUDIO",           { 4, 5               }, 2 },
 };
-static constexpr int k_NavGroupCount = 5;
+static constexpr int k_NavGroupCount = 4;
 
 // Soporte completo de idioma para la barra lateral y descripciones de Ajustes
 static inline bool IsEnglishActive() {
@@ -293,19 +291,17 @@ static const char* GetNavGroupTitle(int gIdx) {
     if (IsEnglishActive()) {
         switch (gIdx) {
             case 0:  return "SYSTEM & DATA";
-            case 1:  return "ACCOUNT";
-            case 2:  return "APPEARANCE";
-            case 3:  return "DISPLAYS";
-            case 4:  return "AUDIO";
+            case 1:  return "APPEARANCE";
+            case 2:  return "DISPLAYS";
+            case 3:  return "AUDIO";
             default: return k_NavGroups[gIdx].label;
         }
     } else if (IsPortugueseActive()) {
         switch (gIdx) {
             case 0:  return "SISTEMA E DADOS";
-            case 1:  return "CONTA";
-            case 2:  return "APARÊNCIA";
-            case 3:  return "ECRÃS";
-            case 4:  return "ÁUDIO";
+            case 1:  return "APARÊNCIA";
+            case 2:  return "ECRÃS";
+            case 3:  return "ÁUDIO";
             default: return k_NavGroups[gIdx].label;
         }
     }
@@ -728,9 +724,8 @@ void SettingsPanel::RenderSidebar() {
         }
     };
 
-    const bool isPro = ProyecThor::Core::AuthLicenseManager::Get().IsPro();
-    if (!isPro && m_SelectedCategory == 3) {
-        m_SelectedCategory = 1;
+    if (m_SelectedCategory == 10) {
+        m_SelectedCategory = 0;
     }
 
     const bool searching = m_SearchBuffer[0] != '\0';
@@ -739,7 +734,7 @@ void SettingsPanel::RenderSidebar() {
         std::string query = ToLowerAscii(m_SearchBuffer);
         int matches = 0;
         for (int i = 0; i < k_CategoryCount; i++) {
-            if (i == 3 && !isPro) continue;
+            if (i == 10) continue;
             std::string label = ToLowerAscii(GetCatLabel(i));
             std::string desc  = ToLowerAscii(GetCatDesc(i));
             if (label.find(query) == std::string::npos && desc.find(query) == std::string::npos)
@@ -768,7 +763,6 @@ void SettingsPanel::RenderSidebar() {
 
             for (int gi = 0; gi < group.count; gi++) {
                 int catIdx = group.items[gi];
-                if (catIdx == 3 && !isPro) continue;
                 RenderCategoryRow(catIdx);
             }
         }
@@ -855,20 +849,13 @@ void SettingsPanel::RenderContent() {
         case 0: RenderCategoryTheme();       break;
         case 1: RenderCategoryProjection();  break;
         case 2: RenderCategoryConnections(); break;
-        case 3:
-            if (ProyecThor::Core::AuthLicenseManager::Get().IsPro()) {
-                RenderCategoryStage();
-            } else {
-                RenderCategoryProjection();
-            }
-            break;
+        case 3: RenderCategoryStage();       break;
         case 4: RenderCategoryAudio();       break;
         case 5: RenderCategorySongs();       break;
         case 6: RenderCategoryShortcuts();   break;
         case 7: RenderCategoryLanguage();    break;
         case 8: RenderCategoryUpdates();     break;
         case 9: RenderCategoryData();        break;
-        case 10: RenderCategoryAccount();    break;
         case 11: RenderCategoryPerformance(); break;
         case 12: RenderCategoryPatchNotes();  break;
         default: ImGui::TextDisabled("%s", Tr("Categoría no implementada.", "Category not implemented.", "Categoria não implementada.")); break;

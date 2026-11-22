@@ -2,7 +2,6 @@
 #include "SettingsManager.h"
 #include "core/AppPaths.h"
 #include "core/AppLog.h"
-#include "core/CloudflareUpdater.h"
 #include "ui/framework/FilePicker.h"
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -231,120 +230,24 @@ static void DoCheckUpdate(const std::string& currentVersion,
                            bool autoInstallIfAvailable = false) {
     s_Status = UpdateStatus::Checking;
 
-    // 0. Consultar repositorio oficial en Cloudflare R2 si está configurado
-    std::string cfBase = ProyecThor::Settings::SettingsManager::Get().GetSettings().updates.cloudflareBaseUrl;
-    cfBase = ProyecThor::Core::CloudflareUpdater::NormalizeBaseUrl(cfBase);
-
-    if (!cfBase.empty()) {
-        std::string nextVer = ProyecThor::Core::CloudflareUpdater::GetNextPatchVersion(currentVersion);
-        std::string exeName = ProyecThor::Core::CloudflareUpdater::GetExeFilename(nextVer);
-        std::string targetUrl = cfBase + "/" + exeName;
-
-        ProyecThor::Core::AppLog::Inf("Updater", "Buscando actualización en Cloudflare: " + cfBase);
-
-#if defined(_WIN32)
-        std::wstring wUrl(targetUrl.begin(), targetUrl.end());
-        std::wstring cfHost, cfPath;
-        ParseURL(wUrl, cfHost, cfPath);
-
-        // A. Probar primero si hay un version.json en Cloudflare
-        std::wstring vPath = cfPath;
-        auto slash = vPath.rfind(L'/');
-        if (slash != std::wstring::npos) vPath = vPath.substr(0, slash);
-        vPath += L"/version.json";
-
-        std::string jsonBody = FetchURL(cfHost, vPath);
-        if (!jsonBody.empty()) {
-            std::string tag = ExtractJsonString(jsonBody, "version");
-            if (tag.empty()) tag = ExtractJsonString(jsonBody, "tag_name");
-            if (!tag.empty() && (tag.front() == 'v' || tag.front() == 'V')) tag = tag.substr(1);
-
-            if (!tag.empty() && IsNewer(currentVersion, tag)) {
-                s_LatestVersion = tag;
-                s_DownloadUrl = ExtractJsonString(jsonBody, "download_url");
-                if (s_DownloadUrl.empty()) s_DownloadUrl = ExtractJsonString(jsonBody, "browser_download_url");
-                if (s_DownloadUrl.empty()) s_DownloadUrl = cfBase + "/" + ProyecThor::Core::CloudflareUpdater::GetExeFilename(tag);
-
-                s_Status = UpdateStatus::Available;
-                ProyecThor::Core::AppLog::Inf("Updater", "Nueva versión encontrada en Cloudflare: v" + tag);
-
-                auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-                char timeBuf[32];
-                strftime(timeBuf, sizeof(timeBuf), "%d/%m/%Y %H:%M", localtime(&now));
-                ProyecThor::Settings::SettingsManager::Get().GetSettings().updates.lastChecked = timeBuf;
-
-                if (autoInstallIfAvailable && !s_DownloadUrl.empty()) {
-                    DoDownloadAndInstall(s_DownloadUrl);
-                } else if (showPopupIfAvailable && !s_DownloadUrl.empty()) {
-                    s_ShowModal = true;
-                }
-                return;
-            }
-        }
-
-        // B. Sondeo inteligente multicandidato en Cloudflare (detecta 1.1.4, 1.1.5, 1.2.0, saltos de versión, etc.)
-        std::vector<std::string> candidates = ProyecThor::Core::CloudflareUpdater::GetCandidateVersions(currentVersion);
-        std::string bestVer;
-        std::string bestUrl;
-        float bestSize = 0.0f;
-
-        for (const auto& cand : candidates) {
-            auto probe = ProyecThor::Core::CloudflareUpdater::ProbeExecutableSync(cfBase, cand);
-            if (probe.success) {
-                if (bestVer.empty() || IsNewer(bestVer, cand)) {
-                    bestVer = cand;
-                    bestUrl = probe.detectedUrl;
-                    bestSize = probe.fileSizeMB;
-                }
-            }
-        }
-
-        if (!bestVer.empty()) {
-            s_LatestVersion = bestVer;
-            s_DownloadUrl = bestUrl;
-            s_Status = UpdateStatus::Available;
-            ProyecThor::Core::AppLog::Inf("Updater", "Nueva versión más reciente detectada en Cloudflare: v" + bestVer + " (" + bestUrl + ")");
-
-            auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-            char timeBuf[32];
-            strftime(timeBuf, sizeof(timeBuf), "%d/%m/%Y %H:%M", localtime(&now));
-            ProyecThor::Settings::SettingsManager::Get().GetSettings().updates.lastChecked = timeBuf;
-
-            if (autoInstallIfAvailable && !s_DownloadUrl.empty()) {
-                DoDownloadAndInstall(s_DownloadUrl);
-            } else if (showPopupIfAvailable && !s_DownloadUrl.empty()) {
-                s_ShowModal = true;
-            }
-            return;
-        }
-#endif
-    }
+    ProyecThor::Core::AppLog::Inf("Updater", "Buscando actualización en GitHub Releases (TheVixcho/ProyecThor)...");
 
     std::string body;
 #if defined(_WIN32)
-    // 1. Consultar endpoint oficial en Firebase Hosting (proyecthor.web.app/downloads/version.json)
-    body = FetchURL(L"proyecthor.web.app", L"/downloads/version.json");
-
-    // 2. Fallback a GitHub Releases si el servidor web no respondió
-    if (body.empty()) {
-        std::wstring host = L"api.github.com";
-        std::wstring path = (channel == "beta")
-            ? L"/repos/TheVixcho/ProyecThor/releases?per_page=1"
-            : L"/repos/TheVixcho/ProyecThor/releases/latest";
-        body = FetchURL(host, path);
-    }
+    std::wstring host = L"api.github.com";
+    std::wstring path = (channel == "beta")
+        ? L"/repos/TheVixcho/ProyecThor/releases?per_page=1"
+        : L"/repos/TheVixcho/ProyecThor/releases/latest";
+    body = FetchURL(host, path);
 #else
-    body = FetchURL("proyecthor.web.app", "/downloads/version.json");
-    if (body.empty()) {
-        std::string host = "api.github.com";
-        std::string path = (channel == "beta")
-            ? "/repos/TheVixcho/ProyecThor/releases?per_page=1"
-            : "/repos/TheVixcho/ProyecThor/releases/latest";
-        body = FetchURL(host, path);
-    }
+    std::string host = "api.github.com";
+    std::string path = (channel == "beta")
+        ? "/repos/TheVixcho/ProyecThor/releases?per_page=1"
+        : "/repos/TheVixcho/ProyecThor/releases/latest";
+    body = FetchURL(host, path);
 #endif
     if (body.empty()) {
-        s_ErrorMsg = "No se pudo conectar al servidor.";
+        s_ErrorMsg = "No se pudo conectar con GitHub Releases.";
         s_Status   = UpdateStatus::Error;
         return;
     }
@@ -354,22 +257,25 @@ static void DoCheckUpdate(const std::string& currentVersion,
         tag = ExtractJsonString(body, "version");
     }
     if (tag.empty()) {
-        s_ErrorMsg = "Respuesta inesperada del servidor.";
-        s_Status   = UpdateStatus::Error;
+        s_ErrorMsg = "No hay releases publicados aún en GitHub.";
+        s_Status   = UpdateStatus::UpToDate;
         return;
     }
-    if (tag[0] == 'v') tag = tag.substr(1);
+    if (tag[0] == 'v' || tag[0] == 'V') tag = tag.substr(1);
 
 #if defined(_WIN32)
-    s_DownloadUrl    = ExtractAssetDownloadUrl(body, "ProyecThor_Setup.exe");
+    s_DownloadUrl = ExtractAssetDownloadUrl(body, "ProyecThor_Setup_" + tag + ".exe");
+    if (s_DownloadUrl.empty()) {
+        s_DownloadUrl = ExtractAssetDownloadUrl(body, "ProyecThor_Setup.exe");
+    }
     if (s_DownloadUrl.empty()) {
         s_DownloadUrl = ExtractJsonString(body, "browser_download_url");
     }
     if (s_DownloadUrl.empty()) {
-        s_DownloadUrl = ExtractJsonString(body, "download_url");
+        s_DownloadUrl = ExtractJsonString(body, "html_url");
     }
 #else
-    s_DownloadUrl    = ExtractAssetDownloadUrl(body, "ProyecThor-x86_64.AppImage");
+    s_DownloadUrl = ExtractAssetDownloadUrl(body, "ProyecThor-x86_64.AppImage");
     if (s_DownloadUrl.empty()) {
         s_DownloadUrl = ExtractAssetDownloadUrl(body, "ProyecThor.AppImage");
     }
@@ -380,7 +286,7 @@ static void DoCheckUpdate(const std::string& currentVersion,
         s_DownloadUrl = ExtractJsonString(body, "browser_download_url");
     }
     if (s_DownloadUrl.empty()) {
-        s_DownloadUrl = ExtractJsonString(body, "download_url");
+        s_DownloadUrl = ExtractJsonString(body, "html_url");
     }
 #endif
     s_LatestVersion  = tag;

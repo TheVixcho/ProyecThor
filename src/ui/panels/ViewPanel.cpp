@@ -4,7 +4,6 @@
 #include "DesignSystem.h"
 #include "ui/framework/bin/StyleGeneralApp.h"
 #include "core/PresentationCore.h"
-#include "core/AuthLicenseManager.h"
 #include "core/settings/SettingsManager.h"
 #include "ui/views/Announcements.h"
 #include "ui/views/Audio.h"
@@ -1009,7 +1008,7 @@ void ViewPanel::RenderMonitorHeader(float w, float h)
 
     auto& core      = Core::PresentationCore::Get();
     auto  state     = core.GetState();
-    const bool isPro = ProyecThor::Core::AuthLicenseManager::Get().IsPro();
+    const bool isPro = true;
     if (!isPro && m_PreviewSource == PreviewSource::Stage) {
         m_PreviewSource = PreviewSource::Publico;
     }
@@ -1173,7 +1172,7 @@ void ViewPanel::Render()
         // Loop de Carpeta de Videos en Fondo si está activa
         if (!m_FolderPlaylistVideos.empty()) {
             auto& core = Core::PresentationCore::Get();
-            if (Core::VLCBasePlayer* bg = core.GetBackgroundPlayer()) {
+            if (Core::MPVBasePlayer* bg = core.GetBackgroundPlayer()) {
                 if (bg->ConsumeEndReached()) {
                     m_FolderPlaylistIndex = (m_FolderPlaylistIndex + 1) % m_FolderPlaylistVideos.size();
                     core.SetBackgroundMedia(m_FolderPlaylistVideos[m_FolderPlaylistIndex], true, false);
@@ -3119,7 +3118,7 @@ void ViewPanel::RenderLiveTransport(float w, float h)
 
     auto& core  = Core::PresentationCore::Get();
     const auto& state = core.GetState();
-    Core::VLCBasePlayer* bg = core.GetBackgroundPlayer();
+    Core::MPVBasePlayer* bg = core.GetBackgroundPlayer();
 
     UI::AudioPanel* musicPanel = core.GetAudioPanelRef();
     const bool audioLive = musicPanel && musicPanel->IsLiveBackground() &&
@@ -3544,7 +3543,7 @@ void ViewPanel::RenderContent(float panelW, float panelH)
 
     if (m_PreviewSource == PreviewSource::Stage)
     {
-        const bool isPro = ProyecThor::Core::AuthLicenseManager::Get().IsPro();
+        const bool isPro = true;
         if (!isPro)
         {
             m_PreviewSource = PreviewSource::Publico;
@@ -3573,7 +3572,7 @@ void ViewPanel::RenderContent(float panelW, float panelH)
                             core.GetBackgroundPlayer() != nullptr;
     if (showMeters)
     {
-        Core::VLCBasePlayer* liveBg = core.GetBackgroundPlayer();
+        Core::MPVBasePlayer* liveBg = core.GetBackgroundPlayer();
         bool liveMuted   = core.GetLiveMute();
         float liveVolume = static_cast<float>(core.GetLiveVolume()) * 0.01f;
         bool livePlaying = liveBg && !liveBg->IsPaused();

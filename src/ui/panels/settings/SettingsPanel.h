@@ -88,7 +88,6 @@ namespace ProyecThor::UI::Settings {
         void RenderCategoryShortcuts();
         void RenderCategorySongs();
         void RenderCategoryData();
-        void RenderCategoryAccount();
         void RenderCategoryPerformance();
         void RenderCategoryPatchNotes();
 

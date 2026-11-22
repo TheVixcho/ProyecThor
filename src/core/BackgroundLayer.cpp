@@ -171,12 +171,12 @@ void main() {
         }
     } // anonymous namespace
 
-    // useHardwareDecode=false: el parametro de VLCBasePlayer existe
+    // useHardwareDecode=false: el parametro de MPVBasePlayer existe
     // justamente para diagnosticar "contencion de sesiones de decode de
-    // hardware" (ver el comentario en VLCBasePlayer.h) — muchas GPU de
+    // hardware" (ver el comentario en MPVBasePlayer.h) — muchas GPU de
     // consumo (tipico en NVIDIA GeForce) limitan cuantas sesiones NVDEC/
     // VAAPI concurrentes se pueden abrir a la vez. Esta app abre varios
-    // VLCBasePlayer en simultaneo (Active+Standby de Fondos/Overlays/Cola
+    // MPVBasePlayer en simultaneo (Active+Standby de Fondos/Overlays/Cola
     // del Monitor, mas preview, mas overlay), y pedirle decode por
     // hardware a todos a la vez puede pasarse de ese limite: el sintoma es
     // exactamente "no aparece ningun frame nuevo" o glitches visuales al
@@ -320,15 +320,15 @@ void main() {
         m_PosterH = 0;
     }
 
-    VLCBasePlayer& BackgroundLayer::Active()  { return m_ActiveIsA ? m_PlayerA : m_PlayerB; }
-    VLCBasePlayer& BackgroundLayer::Standby() { return m_ActiveIsA ? m_PlayerB : m_PlayerA; }
+    MPVBasePlayer& BackgroundLayer::Active()  { return m_ActiveIsA ? m_PlayerA : m_PlayerB; }
+    MPVBasePlayer& BackgroundLayer::Standby() { return m_ActiveIsA ? m_PlayerB : m_PlayerA; }
 
     void BackgroundLayer::Update()
     {
         // Destruye los NativePlayback retirados (ver RetireActiveNative())
         // una vez que paso tiempo de sobra para que su detach+stop
         // encolado en m_NativeLoader haya terminado — recien AHI es seguro
-        // destruir su ventana (hilo principal, GLFW) y su VLCBasePlayer
+        // destruir su ventana (hilo principal, GLFW) y su MPVBasePlayer
         // (cuyo destructor llama Stop() de nuevo, inofensivo si ya esta
         // parado). Corre siempre, sin importar el motor actual.
         if (!m_RetiringNative.empty())
@@ -410,7 +410,7 @@ void main() {
             if (!Standby().IsPaused())
             {
                 if (m_PrefetchReadyAt == 0.0 &&
-                    Standby().GetLoadState() == VLCBasePlayer::LoadState::Ready)
+                    Standby().GetLoadState() == MPVBasePlayer::LoadState::Ready)
                 {
                     m_PrefetchReadyAt = NowSeconds();
                 }
@@ -430,17 +430,17 @@ void main() {
 
         if (m_SwapPending)
         {
-            VLCBasePlayer& standby = Standby();
+            MPVBasePlayer& standby = Standby();
             auto standbyState = standby.GetLoadState();
 
-            bool ready   = standbyState == VLCBasePlayer::LoadState::Ready;
+            bool ready   = standbyState == MPVBasePlayer::LoadState::Ready;
             // Un error real (codec no soportado, archivo corrupto, ruta rota)
             // nunca va a convertirse en Ready por mas que se espere — swapear
             // de inmediato hace visible el fin-de-clip/error ya seteado en
             // este player (ver OnVlcEvent), asi MonitorQueueEngine::Update()
             // lo detecta y salta al siguiente item en el mismo frame, en vez
             // de quedar pegado.
-            bool errored = standbyState == VLCBasePlayer::LoadState::Error;
+            bool errored = standbyState == MPVBasePlayer::LoadState::Error;
             double now   = NowSeconds();
 
             if (errored)
@@ -528,7 +528,7 @@ void main() {
         // aca tambien.
         if (m_PingPongEnabled && m_IsVideo && !m_ContentAllowsAudio && !m_SwapPending)
         {
-            VLCBasePlayer& active = Active();
+            MPVBasePlayer& active = Active();
             double now = NowSeconds();
 
             if (!m_PingPongReverse)
@@ -847,7 +847,7 @@ void main() {
         return Standby().HasVideoFrame();
     }
 
-    VLCBasePlayer* BackgroundLayer::GetPlayer()
+    MPVBasePlayer* BackgroundLayer::GetPlayer()
     {
         // Punto unico usado por la cola del Monitor (MonitorQueueEngine::
         // Update -> ConsumeEndReached/ConsumeHadError, sin lo cual la cola
@@ -1051,7 +1051,7 @@ void main() {
             // en Linux X11 libVLC requiere que la ventana este mapeada para inicializar
             // XVideo/GLX sin errores de BadDrawable/XvBadPort.
             void* handle = m_IsLiveToPublic ? fresh->window.Show(m_LastKnownMonitorIndex) : nullptr;
-            VLCBasePlayer* newPlayerPtr = &fresh->player;
+            MPVBasePlayer* newPlayerPtr = &fresh->player;
 
             // Adjuntar la ventana tiene que pasar ANTES de Play() (la doc
             // de libVLC dice que set_hwnd/set_xwindow "toma efecto cuando
@@ -1099,7 +1099,7 @@ void main() {
         if (!m_SwapPending && m_IsVideo && path == Active().GetCurrentPath())
         {
             if (Active().GetPosition() >= 0.95f || !Active().IsPlaying() ||
-                Active().GetLoadState() != VLCBasePlayer::LoadState::Ready)
+                Active().GetLoadState() != MPVBasePlayer::LoadState::Ready)
             {
                 Active().Stop();
                 Active().Play(path, wantNativeLoop, !allowAudio);
@@ -1335,9 +1335,9 @@ void main() {
 
     void BackgroundLayer::PerformSwap()
     {
-        VLCBasePlayer& oldActive = Active();
+        MPVBasePlayer& oldActive = Active();
         m_ActiveIsA = !m_ActiveIsA;
-        VLCBasePlayer& newActive = Active();
+        MPVBasePlayer& newActive = Active();
 
         // Ahora el swap respeta el permiso asociado al contenido que se esta
         // por mostrar, no solo el estado global "al aire".
@@ -1493,7 +1493,7 @@ void main() {
     {
         if (!np) return;
 
-        VLCBasePlayer* p = &np->player;
+        MPVBasePlayer* p = &np->player;
         p->SetAudioActive(false);
         p->SetMute(true);
         p->SetVolume(0);
@@ -1525,8 +1525,8 @@ void main() {
         if (!m_NativeRevealPending || !m_ActiveNative) return;
 
         auto loadState = m_ActiveNative->player.GetLoadState();
-        bool ready     = (loadState == VLCBasePlayer::LoadState::Ready);
-        bool errored   = (loadState == VLCBasePlayer::LoadState::Error);
+        bool ready     = (loadState == MPVBasePlayer::LoadState::Ready);
+        bool errored   = (loadState == MPVBasePlayer::LoadState::Error);
         bool timedOut  = (NowSeconds() - m_NativeRevealStart) > kNativeRevealGiveUpSeconds;
 
         if (errored)
@@ -1582,7 +1582,7 @@ void main() {
             void* handle = m_NativeRevealPending
                 ? m_ActiveNative->window.CreateHidden(m_LastKnownMonitorIndex)
                 : m_ActiveNative->window.Show(m_LastKnownMonitorIndex);
-            VLCBasePlayer* p = &m_ActiveNative->player;
+            MPVBasePlayer* p = &m_ActiveNative->player;
 
             // Gate de audio recalculado ADENTRO del lambda con valores
             // frescos (atomics) al momento de ejecutar, no capturados de
@@ -1602,7 +1602,7 @@ void main() {
         else
         {
             m_ActiveNative->window.Hide();
-            VLCBasePlayer* p = &m_ActiveNative->player;
+            MPVBasePlayer* p = &m_ActiveNative->player;
 
             m_NativeLoader.Request([p]() {
                 p->SetAudioActive(false);
@@ -1697,7 +1697,7 @@ void main() {
         if (!m_IsLiveToPublic) return;
 
         bool allow = m_ContentAllowsAudio.load(std::memory_order_relaxed);
-        VLCBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
+        MPVBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
         target.SetAudioActive(allow && !mute);
         target.SetMute(mute || !allow);
         target.SetVolume((allow && !mute) ? m_TargetVolume.load() : 0);
@@ -1705,10 +1705,10 @@ void main() {
 
     // ── Ecualizador en vivo ──────────────────────────────────────────────
 
-    void BackgroundLayer::ReapplyLiveEqualizer(VLCBasePlayer& target)
+    void BackgroundLayer::ReapplyLiveEqualizer(MPVBasePlayer& target)
     {
         target.SetEqualizerPreamp(m_TargetEqPreamp);
-        for (int b = 0; b < VLCBasePlayer::kEqualizerBands; b++)
+        for (int b = 0; b < MPVBasePlayer::kEqualizerBands; b++)
             target.SetEqualizerBand(b, m_TargetEqBands[b]);
         target.SetEqualizerEnabled(m_TargetEqEnabled);
     }
@@ -1717,7 +1717,7 @@ void main() {
     {
         m_TargetEqEnabled = enabled;
         if (!m_IsLiveToPublic) return;
-        VLCBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
+        MPVBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
         target.SetEqualizerEnabled(enabled);
     }
 
@@ -1725,22 +1725,22 @@ void main() {
     {
         m_TargetEqPreamp = preampDb;
         if (!m_IsLiveToPublic) return;
-        VLCBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
+        MPVBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
         target.SetEqualizerPreamp(preampDb);
     }
 
     void BackgroundLayer::SetLiveEqualizerBand(int index, float ampDb)
     {
-        if (index < 0 || index >= VLCBasePlayer::kEqualizerBands) return;
+        if (index < 0 || index >= MPVBasePlayer::kEqualizerBands) return;
         m_TargetEqBands[index] = ampDb;
         if (!m_IsLiveToPublic) return;
-        VLCBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
+        MPVBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
         target.SetEqualizerBand(index, ampDb);
     }
 
     // ── Dispositivo de salida de audio ──────────────────────────────────
 
-    std::vector<VLCBasePlayer::AudioDevice> BackgroundLayer::GetAvailableAudioDevices()
+    std::vector<MPVBasePlayer::AudioDevice> BackgroundLayer::GetAvailableAudioDevices()
     {
         // Cualquiera de los dos players sirve para enumerar: ambos corren
         // en el mismo proceso y ven los mismos dispositivos del sistema.
@@ -1779,7 +1779,7 @@ void main() {
         m_PlayerA.Reinit();
         m_PlayerB.Reinit();
         if (m_ActiveNative && m_IsLiveToPublic) {
-            m_ActiveNative->player.ApplyDeinterlace(VLCBasePlayer::GetDefaultDeinterlace());
+            m_ActiveNative->player.ApplyDeinterlace(MPVBasePlayer::GetDefaultDeinterlace());
         }
     }
 

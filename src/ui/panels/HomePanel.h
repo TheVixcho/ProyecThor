@@ -8,10 +8,10 @@
 #include "ui/views/SongView.h"
 #include "ui/views/DocumentView.h"
 #include "ui/views/MediaGridView.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include "ui/views/Audio.h"
 
-namespace ProyecThor::Core { class VLCBasePlayer; }
+namespace ProyecThor::Core { class MPVBasePlayer; }
 
 namespace ProyecThor::UI {
 
@@ -27,7 +27,7 @@ public:
     void SetAudioPanel(AudioPanel* ap) { m_AudioPanelRef = ap; }
     bool IsBibleSearchActive() const { return m_BibleView.IsSearchOrOverlayActive(); }
 
-    void RenderFloatingPreview(Core::VLCBasePlayer* player, float w, float h);
+    void RenderFloatingPreview(Core::MPVBasePlayer* player, float w, float h);
     MonitorView* GetMonitorView() { return &m_MonitorView; }
 
     bool IsFondosCollapsed() const { return m_FondosCollapsed; }

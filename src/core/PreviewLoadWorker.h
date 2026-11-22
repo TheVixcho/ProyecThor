@@ -10,7 +10,7 @@
 
 namespace ProyecThor::Core {
 
-class VLCBasePlayer;
+class MPVBasePlayer;
 
 // ── PreviewLoadWorker ────────────────────────────────────────────────────────
 // Ejecuta acciones arbitrarias, en orden, en un hilo dedicado — pensado para
@@ -58,9 +58,9 @@ public:
     // Conveniencia para el caso simple (Preview: un solo Play()/Stop(),
     // sin nada mas que combinar). player debe seguir siendo valido
     // mientras exista este worker.
-    void RequestLoad(VLCBasePlayer* player, const std::string& path, bool loop, bool startMuted);
-    void RequestStop(VLCBasePlayer* player);
-    void RequestStopSync(VLCBasePlayer* player, int timeoutMs = 1000);
+    void RequestLoad(MPVBasePlayer* player, const std::string& path, bool loop, bool startMuted);
+    void RequestStop(MPVBasePlayer* player);
+    void RequestStopSync(MPVBasePlayer* player, int timeoutMs = 1000);
     void Flush(int timeoutMs = 1000);
 
 private:

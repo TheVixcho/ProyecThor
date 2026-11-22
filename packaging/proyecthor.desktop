@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=ProyecThor
-Comment=Reproductor multimedia con VLC + OpenGL
+Comment=Reproductor multimedia con libmpv + OpenGL
 Exec=proyecthor %U
 Icon=proyecthor
 Terminal=false

@@ -62,17 +62,8 @@ REM Asegurar DLLs requeridas en build-win
 if exist "src\vendor\sdk\pdfium\bin\pdfium.dll" (
     if not exist "build-win\pdfium.dll" copy /Y "src\vendor\sdk\pdfium\bin\pdfium.dll" "build-win\pdfium.dll" >nul
 )
-if exist "src\vendor\sdk\vlc\libvlc.dll" (
-    if not exist "build-win\libvlc.dll" copy /Y "src\vendor\sdk\vlc\libvlc.dll" "build-win\libvlc.dll" >nul
-    if not exist "build-win\libvlccore.dll" copy /Y "src\vendor\sdk\vlc\libvlccore.dll" "build-win\libvlccore.dll" >nul
-) else if exist "C:\Program Files\VideoLAN\VLC\libvlc.dll" (
-    if not exist "build-win\libvlc.dll" copy /Y "C:\Program Files\VideoLAN\VLC\libvlc.dll" "build-win\libvlc.dll" >nul
-    if not exist "build-win\libvlccore.dll" copy /Y "C:\Program Files\VideoLAN\VLC\libvlccore.dll" "build-win\libvlccore.dll" >nul
-)
-if not exist "build-win\plugins\access" (
-    if exist "C:\Program Files\VideoLAN\VLC\plugins" (
-        xcopy /E /I /Y /Q "C:\Program Files\VideoLAN\VLC\plugins" "build-win\plugins" >nul
-    )
+if exist "src\vendor\sdk\mpv\libmpv-2.dll" (
+    if not exist "build-win\libmpv-2.dll" copy /Y "src\vendor\sdk\mpv\libmpv-2.dll" "build-win\libmpv-2.dll" >nul
 )
 
 REM Empaquetado opcional con NSIS si se invoca con "package"

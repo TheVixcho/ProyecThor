@@ -87,8 +87,7 @@ add_compile_definitions(IMGUI_USE_WCHAR32 IMGUI_DEFINE_MATH_OPERATORS)
 set(IMGUI_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/src/external/imgui-docking")
 set(GLFW_SDK   "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/glfw")
 set(GLEW_DIR   "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/glew")
-set(VLC_SDK    "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/vlc")
-set(VLC_SDK_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/vlc-linux")
+set(MPV_SDK    "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/mpv")
 set(PDFIUM_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/pdfium")
 set(PDFIUM_SDK_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/pdfium-linux")
 set(WEBVIEW2_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/webview2")
@@ -306,18 +305,20 @@ target_include_directories(ProyecThor PRIVATE
     "${IMGUI_DIR}/backends"
     "${GLFW_SDK}/include"
     "${GLEW_DIR}/include"
-    "${VLC_SDK}/include"
 
     "${HTTPLIB_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/bin"
 )
 
 if(WIN32)
-    target_include_directories(ProyecThor PRIVATE "${PDFIUM_SDK}/include" "${WEBVIEW2_SDK}/include")
+    target_include_directories(ProyecThor PRIVATE
+        "${PDFIUM_SDK}/include"
+        "${WEBVIEW2_SDK}/include"
+        "${MPV_SDK}/include"
+    )
 else()
     target_include_directories(ProyecThor PRIVATE
         "${PDFIUM_SDK_LINUX}/include"
-        "${VLC_SDK_LINUX}/include"
     )
 endif()
 
@@ -348,14 +349,23 @@ if(WIN32)
 
     if(MSVC)
         set(GLFW_WIN_LIB "${GLFW_SDK}/lib-vc2022/glfw3.lib")
+        set(MPV_WIN_LIB  "${MPV_SDK}/lib/mpv.lib")
     else()
         set(GLFW_WIN_LIB "${GLFW_SDK}/lib-mingw-w64/libglfw3.a")
+        set(MPV_WIN_LIB  "${MPV_SDK}/lib/libmpv.dll.a")
     endif()
+
+    if(NOT EXISTS "${MPV_WIN_LIB}")
+        message(FATAL_ERROR
+            "No se encontro libmpv en ${MPV_WIN_LIB}\n"
+            "Verifica que el SDK de libmpv este en: ${MPV_SDK}"
+        )
+    endif()
+    message(STATUS "libmpv encontrado (Windows): ${MPV_WIN_LIB}")
 
     target_link_libraries(ProyecThor PRIVATE
         "${GLFW_WIN_LIB}"
-        "${VLC_SDK}/lib/libvlc.lib"
-        "${VLC_SDK}/lib/libvlccore.lib"
+        "${MPV_WIN_LIB}"
         "${PDFIUM_LIB}"
         "${WEBVIEW2_SDK}/x64/WebView2Loader.dll.lib"
         opengl32
@@ -431,18 +441,21 @@ else()
         message(STATUS "OpenCV NO encontrado: Captura seguira usando la camara simulada de prueba")
     endif()
 
-    set(VLC_LIB_LINUX "${VLC_SDK_LINUX}/lib/libvlc.so")
-
-    if(NOT EXISTS "${VLC_LIB_LINUX}")
-        message(FATAL_ERROR
-            "No se encontro libvlc.so en ${VLC_SDK_LINUX}/lib\n"
-            "Coloca ahi los .so de VLC (libvlc.so, libvlccore.so),\n"
-            "la carpeta plugins/ y sus headers en:\n"
-            "${VLC_SDK_LINUX}/include"
-        )
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(MPV mpv)
     endif()
-
-    message(STATUS "libVLC encontrado (Linux): ${VLC_LIB_LINUX}")
+    if(MPV_FOUND)
+        message(STATUS "libmpv encontrado via pkg-config (${MPV_VERSION}): ${MPV_LIBRARIES}")
+        target_include_directories(ProyecThor PRIVATE ${MPV_INCLUDE_DIRS})
+        set(MPV_LINK_TARGET ${MPV_LIBRARIES})
+    else()
+        find_library(MPV_LIB_LINUX NAMES mpv libmpv REQUIRED)
+        find_path(MPV_INC_LINUX NAMES mpv/client.h REQUIRED)
+        message(STATUS "libmpv encontrado (Linux): ${MPV_LIB_LINUX}")
+        target_include_directories(ProyecThor PRIVATE "${MPV_INC_LINUX}")
+        set(MPV_LINK_TARGET "${MPV_LIB_LINUX}")
+    endif()
 
     set(PDFIUM_LIB_LINUX "${PDFIUM_SDK_LINUX}/lib/libpdfium.so")
 
@@ -461,7 +474,7 @@ else()
     target_link_libraries(ProyecThor PRIVATE
         glfw
         OpenGL::GL
-        "${VLC_LIB_LINUX}"
+        ${MPV_LINK_TARGET}
         "${PDFIUM_LIB_LINUX}"
         pthread
         dl
@@ -493,34 +506,12 @@ if(WIN32)
         )
     endif()
 
-    if(EXISTS "${VLC_SDK}/libvlc.dll")
+    if(EXISTS "${MPV_SDK}/libmpv-2.dll")
         add_custom_command(TARGET ProyecThor POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${VLC_SDK}/libvlc.dll"
+                "${MPV_SDK}/libmpv-2.dll"
                 "$<TARGET_FILE_DIR:ProyecThor>"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${VLC_SDK}/libvlccore.dll"
-                "$<TARGET_FILE_DIR:ProyecThor>"
-            COMMENT "Copiando DLLs de VLC al directorio de salida"
-        )
-    elseif(EXISTS "C:/Program Files/VideoLAN/VLC/libvlc.dll")
-        add_custom_command(TARGET ProyecThor POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "C:/Program Files/VideoLAN/VLC/libvlc.dll"
-                "$<TARGET_FILE_DIR:ProyecThor>"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "C:/Program Files/VideoLAN/VLC/libvlccore.dll"
-                "$<TARGET_FILE_DIR:ProyecThor>"
-            COMMENT "Copiando DLLs de VLC del sistema al directorio de salida"
-        )
-    endif()
-
-    if(EXISTS "${VLC_SDK}/plugins")
-        add_custom_command(TARGET ProyecThor POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${VLC_SDK}/plugins"
-                "$<TARGET_FILE_DIR:ProyecThor>/plugins"
-            COMMENT "Copiando plugins de VLC"
+            COMMENT "Copiando libmpv-2.dll al directorio de salida"
         )
     endif()
 
@@ -559,25 +550,12 @@ else()
 endif()
 
 if(NOT WIN32)
-    file(GLOB VLC_LINUX_SO_FILES "${VLC_SDK_LINUX}/lib/lib*.so*")
     add_custom_command(TARGET ProyecThor POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${PDFIUM_SDK_LINUX}/lib/libpdfium.so"
             "$<TARGET_FILE_DIR:ProyecThor>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${VLC_LINUX_SO_FILES}
-            "$<TARGET_FILE_DIR:ProyecThor>"
-        COMMENT "Copiando libpdfium.so y librerias de VLC al directorio de build"
+        COMMENT "Copiando libpdfium.so al directorio de build"
     )
-
-    if(EXISTS "${VLC_SDK_LINUX}/plugins")
-        add_custom_command(TARGET ProyecThor POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${VLC_SDK_LINUX}/plugins"
-                "$<TARGET_FILE_DIR:ProyecThor>/plugins"
-            COMMENT "Copiando plugins de VLC (Linux) al directorio de build"
-        )
-    endif()
 endif()
 
 if(NOT WIN32)
@@ -599,17 +577,6 @@ if(NOT WIN32)
         DESTINATION ${PROYECTHOR_INSTALL_DIR}
     )
 
-    file(GLOB VLC_LINUX_SO_FILES "${VLC_SDK_LINUX}/lib/lib*.so*")
-    install(FILES ${VLC_LINUX_SO_FILES}
-        DESTINATION ${PROYECTHOR_INSTALL_DIR}
-    )
-
-    if(EXISTS "${VLC_SDK_LINUX}/plugins")
-        install(DIRECTORY "${VLC_SDK_LINUX}/plugins"
-            DESTINATION ${PROYECTHOR_INSTALL_DIR}
-        )
-    endif()
-
     install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shaders"
         DESTINATION ${PROYECTHOR_INSTALL_DIR}
     )
@@ -626,7 +593,6 @@ else
     INSTALL_DIR=\"${CMAKE_INSTALL_PREFIX}/${PROYECTHOR_INSTALL_DIR}\"
 fi
 cd \"\$INSTALL_DIR\" || exit 1
-export VLC_PLUGIN_PATH=\"\$INSTALL_DIR/plugins\"
 exec ./ProyecThor \"\$@\"
 ")
     install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/proyecthor-wrapper.sh"

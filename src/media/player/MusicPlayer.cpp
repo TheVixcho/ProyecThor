@@ -1,14 +1,17 @@
 #include "MusicPlayer.h"
 #include "media/audio/WindowsAudioSession.h"
 
-#include <vlc/vlc.h>
+#include <mpv/client.h>
 
 #include <algorithm>
 #include <chrono>
+#include <clocale>
 #include <cmath>
+#include <cstdio>
 #include <filesystem>
+#include <iomanip>
 #include <iostream>
-#include <vector>
+#include <sstream>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -45,20 +48,55 @@ double NowSeconds()
 
 MusicPlayer::MusicPlayer()
 {
-    // Todo el arranque de libVLC (carga de plugins, ~cientos de ms) ocurre en
-    // el hilo de trabajo para no retrasar el inicio de la aplicacion.
-    m_Worker = std::thread([this]() { WorkerLoop(); });
+    std::setlocale(LC_NUMERIC, "C");
+
+    m_Mpv = mpv_create();
+    if (!m_Mpv) {
+        std::cerr << "[MusicPlayer] No se pudo crear la instancia de libmpv.\n";
+        return;
+    }
+
+    mpv_set_option_string(m_Mpv, "terminal", "no");
+    mpv_set_option_string(m_Mpv, "msg-level", "all=error");
+    mpv_set_option_string(m_Mpv, "vid", "no");
+    mpv_set_option_string(m_Mpv, "vo", "null");
+    mpv_set_option_string(m_Mpv, "osd-level", "0");
+    mpv_set_option_string(m_Mpv, "idle", "yes");
+    mpv_set_option_string(m_Mpv, "keep-open", "no");
+    mpv_set_option_string(m_Mpv, "ytdl", "no");
+    mpv_set_option_string(m_Mpv, "volume-max", "200");
+    mpv_set_option_string(m_Mpv, "audio-exclusive", "no");
+
+    if (mpv_initialize(m_Mpv) < 0) {
+        std::cerr << "[MusicPlayer] Error al inicializar libmpv.\n";
+        mpv_terminate_destroy(m_Mpv);
+        m_Mpv = nullptr;
+        return;
+    }
+
+    mpv_observe_property(m_Mpv, 1, "time-pos", MPV_FORMAT_DOUBLE);
+    mpv_observe_property(m_Mpv, 2, "duration", MPV_FORMAT_DOUBLE);
+    mpv_observe_property(m_Mpv, 3, "pause",    MPV_FORMAT_FLAG);
+
+    ApplyVolume();
+    ApplyEqualizer();
+
+    m_EventThread = std::thread([this]() { EventLoop(); });
 }
 
 MusicPlayer::~MusicPlayer()
 {
-    {
-        std::lock_guard<std::mutex> lk(m_CmdMutex);
-        m_Quit = true;
+    m_Quit.store(true, std::memory_order_release);
+    if (m_Mpv) {
+        mpv_wakeup(m_Mpv);
     }
-    m_CmdCv.notify_all();
-    if (m_Worker.joinable())
-        m_Worker.join();
+    if (m_EventThread.joinable()) {
+        m_EventThread.join();
+    }
+    if (m_Mpv) {
+        mpv_terminate_destroy(m_Mpv);
+        m_Mpv = nullptr;
+    }
 
 #ifdef _WIN32
     if (m_MeterPtr) {
@@ -70,229 +108,141 @@ MusicPlayer::~MusicPlayer()
 #endif
 }
 
-void MusicPlayer::WorkerLoop()
+void MusicPlayer::EventLoop()
 {
-    const char* args[] = {
-        "--no-video",
-        "--no-xlib",
-        "--quiet",
-        "--no-osd",
-        "--no-video-title-show",
-        "--file-caching=300",
-        "--app-name=ProyecThor",
-        "--app-id=ProyecThor",
-        "--no-mmdevice-volume-save",
-    };
-    m_Instance = libvlc_new(static_cast<int>(sizeof(args) / sizeof(args[0])), args);
-    if (!m_Instance)
-        m_Instance = libvlc_new(0, nullptr);
-    if (!m_Instance) {
-        std::cerr << "[MusicPlayer] No se pudo crear la instancia de libVLC.\n";
-    } else {
-        libvlc_media_player_t* mp = libvlc_media_player_new(m_Instance);
-        if (mp) {
-            libvlc_media_player_set_role(mp, libvlc_role_Music);
-            libvlc_event_manager_t* em = libvlc_media_player_event_manager(mp);
-            libvlc_event_attach(em, libvlc_MediaPlayerEndReached,       &MusicPlayer::OnVlcEvent, this);
-            libvlc_event_attach(em, libvlc_MediaPlayerEncounteredError, &MusicPlayer::OnVlcEvent, this);
-            libvlc_event_attach(em, libvlc_MediaPlayerPlaying,          &MusicPlayer::OnVlcEvent, this);
-            m_Mp.store(mp);
-            ApplyVolume();
-            ApplyEqualizer();
+    while (!m_Quit.load(std::memory_order_acquire) && m_Mpv) {
+        mpv_event* ev = mpv_wait_event(m_Mpv, 0.25);
+        if (!ev || ev->event_id == MPV_EVENT_NONE)
+            continue;
+
+        switch (ev->event_id) {
+        case MPV_EVENT_SHUTDOWN:
+            return;
+
+        case MPV_EVENT_FILE_LOADED:
+            m_Playing.store(true, std::memory_order_relaxed);
+            break;
+
+        case MPV_EVENT_END_FILE: {
+            auto* ef = static_cast<mpv_event_end_file*>(ev->data);
+            m_Playing.store(false, std::memory_order_relaxed);
+            if (!ef) break;
+            if (ef->reason == MPV_END_FILE_REASON_EOF) {
+                m_EndReached.store(true, std::memory_order_relaxed);
+            } else if (ef->reason == MPV_END_FILE_REASON_ERROR) {
+                std::cerr << "[MusicPlayer] Error de libmpv: " << mpv_error_string(ef->error) << "\n";
+                m_HadError.store(true, std::memory_order_relaxed);
+                m_EndReached.store(true, std::memory_order_relaxed);
+            }
+            break;
+        }
+
+        case MPV_EVENT_PROPERTY_CHANGE: {
+            auto* prop = static_cast<mpv_event_property*>(ev->data);
+            if (!prop || !prop->data) break;
+            switch (ev->reply_userdata) {
+            case 1: // time-pos
+                if (prop->format == MPV_FORMAT_DOUBLE) {
+                    double sec = *static_cast<double*>(prop->data);
+                    m_TimeMs.store(std::max<int64_t>(0, static_cast<int64_t>(sec * 1000.0)), std::memory_order_relaxed);
+                }
+                break;
+            case 2: // duration
+                if (prop->format == MPV_FORMAT_DOUBLE) {
+                    double sec = *static_cast<double*>(prop->data);
+                    m_LengthMs.store(std::max<int64_t>(0, static_cast<int64_t>(sec * 1000.0)), std::memory_order_relaxed);
+                }
+                break;
+            case 3: // pause
+                if (prop->format == MPV_FORMAT_FLAG) {
+                    int flag = *static_cast<int*>(prop->data);
+                    m_Paused.store(flag != 0, std::memory_order_relaxed);
+                }
+                break;
+            default:
+                break;
+            }
+            break;
+        }
+
+        default:
+            break;
         }
     }
-
-    std::unique_lock<std::mutex> lk(m_CmdMutex);
-    while (true) {
-        m_CmdCv.wait(lk, [this]() { return m_Quit || m_PendingCmd.type != Cmd::None; });
-        if (m_Quit) break;
-
-        Cmd cmd = std::move(m_PendingCmd);
-        m_PendingCmd = Cmd{};
-        lk.unlock();
-
-        if (cmd.type == Cmd::PlayPath)          ExecutePlay(cmd);
-        else if (cmd.type == Cmd::StopPlayback) ExecuteStop();
-
-        lk.lock();
-    }
-    lk.unlock();
-
-    if (libvlc_media_player_t* mp = m_Mp.exchange(nullptr)) {
-        libvlc_media_player_stop(mp);
-        libvlc_media_player_release(mp);
-    }
-    if (m_Instance) {
-        libvlc_release(m_Instance);
-        m_Instance = nullptr;
-    }
-}
-
-void MusicPlayer::SubmitCmd(Cmd&& cmd)
-{
-    cmd.gen = ++m_ReqGen;
-    {
-        std::lock_guard<std::mutex> lk(m_CmdMutex);
-        m_PendingCmd = std::move(cmd);   // el ultimo comando reemplaza al pendiente
-    }
-    m_CmdCv.notify_one();
 }
 
 void MusicPlayer::Play(const std::string& utf8Path)
 {
-    if (utf8Path.empty()) return;
+    if (utf8Path.empty() || !m_Mpv) return;
+
+    uint64_t gen = ++m_ReqGen;
     m_EndReached.store(false, std::memory_order_relaxed);
     m_HadError.store(false, std::memory_order_relaxed);
     m_Paused.store(false, std::memory_order_relaxed);
-    m_PendingSeek.store(-1.0f, std::memory_order_relaxed);
+    m_TimeMs.store(0, std::memory_order_relaxed);
+    m_LengthMs.store(0, std::memory_order_relaxed);
 
-    Cmd c;
-    c.type = Cmd::PlayPath;
-    c.path = utf8Path;
-    SubmitCmd(std::move(c));
-}
+    const bool isUrl = (utf8Path.rfind("http", 0) == 0 || utf8Path.rfind("rtsp", 0) == 0);
+    std::string finalPath = isUrl ? utf8Path : ResolveLocalPath(utf8Path);
 
-void MusicPlayer::Stop()
-{
-    m_EndReached.store(false, std::memory_order_relaxed);
-    m_Paused.store(false, std::memory_order_relaxed);
-
-    Cmd c;
-    c.type = Cmd::StopPlayback;
-    SubmitCmd(std::move(c));
-}
-
-void MusicPlayer::ExecutePlay(const Cmd& cmd)
-{
-    libvlc_media_player_t* mp = m_Mp.load();
-    if (!mp || !m_Instance) {
-        m_HadError.store(true, std::memory_order_relaxed);
-        m_EndReached.store(true, std::memory_order_relaxed);
-        return;
-    }
-    if (cmd.gen != m_ReqGen.load()) return;   // ya hay una orden mas nueva
-
-    m_LiveGen.store(0);
-    m_ApplyPending.store(false, std::memory_order_relaxed);
-    libvlc_media_player_stop(mp);             // bloquea solo a este hilo
-
-    libvlc_media_t* media = nullptr;
-    if (cmd.path.rfind("http", 0) == 0 || cmd.path.rfind("rtsp", 0) == 0)
-        media = libvlc_media_new_location(m_Instance, cmd.path.c_str());
-    else
-        media = libvlc_media_new_path(m_Instance, ResolveLocalPath(cmd.path).c_str());
-
-    if (!media) {
-        std::cerr << "[MusicPlayer] No se pudo abrir: " << cmd.path << "\n";
-        m_LiveGen.store(cmd.gen);
-        m_HadError.store(true, std::memory_order_relaxed);
-        m_EndReached.store(true, std::memory_order_relaxed);
-        return;
-    }
-
-    libvlc_media_add_option(media, ":no-video");
-    libvlc_media_add_option(media, ":avcodec-hw=none");
-    // Una pausa pedida antes de que la pista arranque no se pierde.
-    if (m_Paused.load(std::memory_order_relaxed))
-        libvlc_media_add_option(media, ":start-paused");
-
-    m_EndReached.store(false, std::memory_order_relaxed);
-    m_HadError.store(false, std::memory_order_relaxed);
-
-    // Se marca antes de play(): si el archivo falla de inmediato el evento de
-    // error ya cuenta como de esta pista.
-    m_LiveGen.store(cmd.gen);
-
-    libvlc_media_player_set_media(mp, media);
-    libvlc_media_release(media);
-    libvlc_media_player_play(mp);
+    int unpause = 0;
+    mpv_set_property_async(m_Mpv, 0, "pause", MPV_FORMAT_FLAG, &unpause);
     ApplyVolume();
+
+    const char* cmd[] = { "loadfile", finalPath.c_str(), "replace", nullptr };
+    int rc = mpv_command_async(m_Mpv, gen, cmd);
+    if (rc < 0) {
+        std::cerr << "[MusicPlayer] Error al cargar pista: " << mpv_error_string(rc) << "\n";
+        m_HadError.store(true, std::memory_order_relaxed);
+        m_EndReached.store(true, std::memory_order_relaxed);
+    }
 #ifdef _WIN32
     ProyecThor::Audio::EnsureProcessAudioUnmutedAndMaxVolume();
 #endif
 }
 
-void MusicPlayer::ExecuteStop()
+void MusicPlayer::Stop()
 {
-    libvlc_media_player_t* mp = m_Mp.load();
-    m_LiveGen.store(0);
-    if (!mp) return;
-    libvlc_media_player_stop(mp);
-    libvlc_media_player_set_media(mp, nullptr);
-}
+    ++m_ReqGen;
+    m_EndReached.store(false, std::memory_order_relaxed);
+    m_Paused.store(false, std::memory_order_relaxed);
+    m_Playing.store(false, std::memory_order_relaxed);
+    m_TimeMs.store(0, std::memory_order_relaxed);
 
-void MusicPlayer::OnVlcEvent(const libvlc_event_t* evt, void* userData)
-{
-    auto* self = static_cast<MusicPlayer*>(userData);
-    if (!self) return;
-
-    switch (evt->type) {
-    case libvlc_MediaPlayerEndReached:
-    case libvlc_MediaPlayerEncounteredError:
-    {
-        if (self->m_LiveGen.load() == 0 || self->m_LiveGen.load() != self->m_ReqGen.load())
-            return;   // evento de una pista que ya fue reemplazada
-        if (evt->type == libvlc_MediaPlayerEncounteredError) {
-            const char* msg = libvlc_errmsg();
-            std::cerr << "[MusicPlayer] Error de libVLC: " << (msg ? msg : "desconocido") << "\n";
-            self->m_HadError.store(true, std::memory_order_relaxed);
-        }
-        self->m_EndReached.store(true, std::memory_order_relaxed);
-        break;
-    }
-    case libvlc_MediaPlayerPlaying:
-        // La salida de audio recien existe aqui. No se llama a libVLC desde su
-        // propio hilo de eventos (riesgo de bloqueo): se marca y el estado
-        // (volumen / mute / pausa / seek pendientes) se reaplica en el siguiente
-        // sondeo de la UI (GetTime).
-        self->m_ApplyPending.store(true, std::memory_order_release);
-        break;
-    default:
-        break;
+    if (m_Mpv) {
+        const char* cmd[] = { "stop", nullptr };
+        mpv_command_async(m_Mpv, 0, cmd);
     }
 }
 
 void MusicPlayer::SetPause(bool paused)
 {
     m_Paused.store(paused, std::memory_order_relaxed);
-    if (libvlc_media_player_t* mp = m_Mp.load())
-        libvlc_media_player_set_pause(mp, paused ? 1 : 0);
+    if (m_Mpv) {
+        int flag = paused ? 1 : 0;
+        mpv_set_property_async(m_Mpv, 0, "pause", MPV_FORMAT_FLAG, &flag);
+    }
 }
 
 void MusicPlayer::SetPosition(float normalized)
 {
+    if (!m_Mpv) return;
     normalized = std::clamp(normalized, 0.0f, 1.0f);
-    libvlc_media_player_t* mp = m_Mp.load();
-    if (!mp) return;
-    const libvlc_state_t st = libvlc_media_player_get_state(mp);
-    if (st == libvlc_Playing || st == libvlc_Paused) {
-        libvlc_media_player_set_position(mp, normalized);
-    } else {
-        // Aun abriendo: libVLC ignoraria el seek. Se aplica al empezar a sonar.
-        m_PendingSeek.store(normalized, std::memory_order_relaxed);
-        m_ApplyPending.store(true, std::memory_order_release);
-    }
+    double pct = static_cast<double>(normalized) * 100.0;
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%.4f", pct);
+    const char* cmd[] = { "seek", buf, "absolute-percent", nullptr };
+    mpv_command_async(m_Mpv, 0, cmd);
 }
 
 int64_t MusicPlayer::GetTime() const
 {
-    libvlc_media_player_t* mp = m_Mp.load();
-    if (!mp) return 0;
-    if (m_ApplyPending.exchange(false, std::memory_order_acq_rel)) {
-        const_cast<MusicPlayer*>(this)->ApplyVolume();
-        const float seek = m_PendingSeek.exchange(-1.0f, std::memory_order_relaxed);
-        if (seek >= 0.0f)
-            libvlc_media_player_set_position(mp, seek);
-        if (m_Paused.load(std::memory_order_relaxed) && libvlc_media_player_is_playing(mp))
-            libvlc_media_player_set_pause(mp, 1);
-    }
-    return std::max<int64_t>(0, libvlc_media_player_get_time(mp));
+    return m_TimeMs.load(std::memory_order_relaxed);
 }
 
 int64_t MusicPlayer::GetLength() const
 {
-    libvlc_media_player_t* mp = m_Mp.load();
-    return mp ? std::max<int64_t>(0, libvlc_media_player_get_length(mp)) : 0;
+    return m_LengthMs.load(std::memory_order_relaxed);
 }
 
 void MusicPlayer::SetVolume(int percent)
@@ -309,23 +259,15 @@ void MusicPlayer::SetMute(bool mute)
 
 void MusicPlayer::ApplyVolume()
 {
-    libvlc_media_player_t* mp = m_Mp.load();
-    if (!mp) return;
+    if (!m_Mpv) return;
 
     const bool muted = m_Muted.load(std::memory_order_relaxed);
-    if (muted)
-    {
-        // Silenciar a nivel interno de VLC sin mutear la sesión de Windows
-        libvlc_audio_set_track(mp, -1);
-    }
-    else
-    {
-        libvlc_audio_set_mute(mp, 0);
-        if (libvlc_audio_get_track(mp) == -1)
-        {
-            libvlc_audio_set_track(mp, 1);
-        }
-        libvlc_audio_set_volume(mp, m_Volume.load(std::memory_order_relaxed));
+    int muteFlag = muted ? 1 : 0;
+    mpv_set_property_async(m_Mpv, 0, "mute", MPV_FORMAT_FLAG, &muteFlag);
+
+    if (!muted) {
+        double vol = static_cast<double>(m_Volume.load(std::memory_order_relaxed));
+        mpv_set_property_async(m_Mpv, 0, "volume", MPV_FORMAT_DOUBLE, &vol);
 #ifdef _WIN32
         ProyecThor::Audio::EnsureProcessAudioUnmutedAndMaxVolume();
 #endif
@@ -334,21 +276,28 @@ void MusicPlayer::ApplyVolume()
 
 void MusicPlayer::ApplyEqualizer()
 {
-    libvlc_media_player_t* mp = m_Mp.load();
-    if (!mp) return;
+    if (!m_Mpv) return;
 
     std::lock_guard<std::mutex> lk(m_EqMutex);
     if (!m_EqEnabled) {
-        libvlc_media_player_set_equalizer(mp, nullptr);
+        mpv_set_property_string(m_Mpv, "af", "");
         return;
     }
-    libvlc_equalizer_t* eq = libvlc_audio_equalizer_new();
-    if (!eq) return;
-    libvlc_audio_equalizer_set_preamp(eq, m_EqPreamp);
-    for (int b = 0; b < kEqualizerBands; ++b)
-        libvlc_audio_equalizer_set_amp_at_index(eq, m_EqBands[b], static_cast<unsigned>(b));
-    libvlc_media_player_set_equalizer(mp, eq);
-    libvlc_audio_equalizer_release(eq);
+
+    static constexpr int kBandFreqs[kEqualizerBands] = {
+        60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000
+    };
+
+    std::ostringstream ss;
+    ss.imbue(std::locale::classic());
+    ss << std::fixed << std::setprecision(2);
+    ss << "lavfi=[volume=" << m_EqPreamp << "dB";
+    for (int b = 0; b < kEqualizerBands; ++b) {
+        ss << ",equalizer=f=" << kBandFreqs[b] << ":t=o:w=1:g=" << m_EqBands[b];
+    }
+    ss << "]";
+    std::string filterStr = ss.str();
+    mpv_set_property_string(m_Mpv, "af", filterStr.c_str());
 }
 
 void MusicPlayer::SetEqualizerEnabled(bool enabled)
@@ -384,9 +333,8 @@ void MusicPlayer::GetAudioLevels(float& left, float& right)
 {
     left = right = 0.0f;
 
-    libvlc_media_player_t* mp = m_Mp.load();
-    const bool active = mp && !m_Paused.load(std::memory_order_relaxed) &&
-                        libvlc_media_player_is_playing(mp) != 0 &&
+    const bool active = m_Mpv && !m_Paused.load(std::memory_order_relaxed) &&
+                        m_Playing.load(std::memory_order_relaxed) &&
                         !m_Muted.load(std::memory_order_relaxed);
     if (!active) {
         m_LastL *= 0.85f; m_LastR *= 0.85f;
@@ -429,13 +377,11 @@ void MusicPlayer::GetAudioLevels(float& left, float& right)
             left = l;    right = r;
             return;
         }
-        // El dispositivo cambio / dejo de ser valido: reacquirir en el proximo ciclo.
         meter->Release();
         m_MeterPtr = nullptr;
     }
 #endif
 
-    // Sin medidor: ligera animacion para que el visualizador no quede muerto.
     const float t = static_cast<float>(NowSeconds());
     const float v = 0.35f + 0.25f * std::sin(t * 7.3f) + 0.15f * std::sin(t * 13.1f + 1.7f);
     m_LastL = m_LastR = std::clamp(v, 0.05f, 1.0f);

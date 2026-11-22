@@ -6,7 +6,7 @@
 #include <imgui.h>
 #include "ui/views/ImageView.h"
 #include "ui/framework/SpinningDisc.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include "graphics/shaders/PostProcessorFSR.h"
 #include "MonitorQueueEngine.h"
 
@@ -19,8 +19,8 @@ public:
     MonitorView()  = default;
     ~MonitorView() = default;
 
-    void Render(Core::VLCBasePlayer* player);
-    void RenderFloatingPreview(Core::VLCBasePlayer* player, float w, float h);
+    void Render(Core::MPVBasePlayer* player);
+    void RenderFloatingPreview(Core::MPVBasePlayer* player, float w, float h);
 
     // Necesario para el boton de pantalla completa del Preview (ver
     // RequestPreviewFullscreen -> UIManager::EnterFullscreenEditor). Mismo
@@ -46,24 +46,24 @@ public:
     void SavePlayQueue();
 
 private:
-    void RenderPreviewMonitor(Core::VLCBasePlayer* player, float w, float h);
-    void RenderCenterColumn(float w, float h, Core::VLCBasePlayer* previewPlayer);
-    void RenderPreviewControls(Core::VLCBasePlayer* player, float w);
+    void RenderPreviewMonitor(Core::MPVBasePlayer* player, float w, float h);
+    void RenderCenterColumn(float w, float h, Core::MPVBasePlayer* previewPlayer);
+    void RenderPreviewControls(Core::MPVBasePlayer* player, float w);
     void RenderQueue(float totalW);
 
     // Timeline + botones de transporte (skip/replay/play-pause/forward/stop)
     // -- compartido entre RenderPreviewControls (barra acoplada normal) y
     // RenderFullscreenToolbar (barra flotante auto-oculta), antes duplicado
     // en los dos lugares.
-    void RenderTransportRow(Core::VLCBasePlayer* player, float innerW);
+    void RenderTransportRow(Core::MPVBasePlayer* player, float innerW);
 
     // Boton mute/unmute del audio de Preview -- ver m_PreviewAudioEnabled.
-    void RenderPreviewAudioToggle(Core::VLCBasePlayer* player, float btnSize);
+    void RenderPreviewAudioToggle(Core::MPVBasePlayer* player, float btnSize);
 
     // ── Pantalla completa del Preview ────────────────────────────────────
-    void RequestPreviewFullscreen(Core::VLCBasePlayer* player);
-    void RenderPreviewFullscreenContent(Core::VLCBasePlayer* player);
-    void RenderFullscreenToolbar(Core::VLCBasePlayer* player, ImVec2 avail);
+    void RequestPreviewFullscreen(Core::MPVBasePlayer* player);
+    void RenderPreviewFullscreenContent(Core::MPVBasePlayer* player);
+    void RenderFullscreenToolbar(Core::MPVBasePlayer* player, ImVec2 avail);
     // Unico punto de salida (boton "X" y Esc lo llaman a este) -- ademas de
     // ExitFullscreenEditor(), restaura la ventana del sistema operativo si
     // fue ESTE flujo el que la puso en fullscreen (ver m_EnteredOSFullscreen).
@@ -94,7 +94,7 @@ private:
     UIManager* m_UIManagerRef = nullptr;
 
     // Audio del Preview -- APAGADO por default: el player de Preview es
-    // forceSilent=true de fabrica (ver VLCBasePlayer/PresentationCoreImpl),
+    // forceSilent=true de fabrica (ver MPVBasePlayer/PresentationCoreImpl),
     // pensado para nunca duplicar lo que ya suena en vivo. Este toggle es
     // la UNICA forma de que el operador lo escuche a proposito (ver
     // RenderPreviewAudioToggle) -- se apaga solo (m_PreviewAudioEnabled se

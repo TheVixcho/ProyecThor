@@ -4,7 +4,6 @@
 #include "core/settings/SettingsManager.h"
 #include "core/settings/StageLayoutTemplates.h"
 #include "core/PresentationCore.h"
-#include "core/AuthLicenseManager.h"
 #include <imgui.h>
 #include <GLFW/glfw3.h>
 #include <algorithm>
@@ -135,8 +134,7 @@ void StageDisplayPanel::RenderContent() {
 void StageDisplayPanel::RenderActivationCard() {
     auto& core = Core::PresentationCore::Get();
     auto& sd   = ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay;
-    auto& authMgr = ProyecThor::Core::AuthLicenseManager::Get();
-    const bool isPro = authMgr.IsPro();
+    const bool isPro = true;
 
     int monitorCount = 0;
     glfwGetMonitors(&monitorCount);
@@ -360,13 +358,6 @@ void StageDisplayPanel::CycleStageMonitor(int direction) {
 }
 
 void StageDisplayPanel::ToggleStageDisplay(bool active) {
-    auto& authMgr = ProyecThor::Core::AuthLicenseManager::Get();
-    if (!authMgr.IsPro()) {
-        std::cerr << "[StageDisplayPanel] El monitor de escenario requiere ProyecThor for Professionals.\n";
-        Core::PresentationCore::Get().SetStaging(false);
-        return;
-    }
-
     auto& core = Core::PresentationCore::Get();
     auto& sd   = ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay;
     if (active) {

@@ -11,7 +11,6 @@
 #include "core/PresentationCore.h"
 #include "core/FileDeletionManager.h"
 #include "core/MediaImportManager.h"
-#include "core/AuthLicenseManager.h"
 #include "core/settings/SettingsManager.h"
 #include "ui/panels/layers/LayersBgTab.h"
 #include "ui/views/Audio.h"
@@ -100,7 +99,7 @@ std::string GetMMItemRootLabel(const MMItem& it) {
 std::vector<std::string> GetAvailableRootLabels(Core::ItemType /*type*/) {
     std::vector<std::string> roots;
     roots.push_back("ProyecThor");
-    if (ProyecThor::Core::AuthLicenseManager::Get().IsPro()) {
+    {
         const auto& watched = ProyecThor::Settings::SettingsManager::Get().GetSettings().storage.watchedFolders;
         for (const auto& wf : watched) {
             if (!wf.enabled || wf.path.empty()) continue;
@@ -200,8 +199,8 @@ void RefreshMultimediaLists()
         else            s_Audios.push_back({ fname, Core::ItemType::Audio, fpath, rootLabel });
     }
 
-    // 3. ProyecThor for Professionals: Escaneo automático de carpetas externas vinculadas sin duplicar
-    if (ProyecThor::Core::AuthLicenseManager::Get().IsPro()) {
+    // 3. Escaneo automático de carpetas externas vinculadas sin duplicar
+    {
         for (const auto& wf : storage.watchedFolders) {
             if (!wf.enabled || wf.path.empty()) continue;
             std::error_code ec;

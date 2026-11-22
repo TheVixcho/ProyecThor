@@ -90,7 +90,7 @@ public:
                                    std::function<void(const std::string&)> onLog = nullptr);
 
     // Métodos de alto nivel desacoplados del núcleo:
-    // 1. Resolución de URL de video directo (reemplazo de yt-dlp en VLCBasePlayer)
+    // 1. Resolución de URL de video directo (reemplazo de yt-dlp en MPVBasePlayer)
     std::string ResolveStreamUrl(const std::string& url);
 
     // 2. Extracción de letra/subtítulos (reemplazo de yt-dlp en SubtitleImporter)

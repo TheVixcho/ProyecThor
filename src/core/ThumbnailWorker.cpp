@@ -1,13 +1,14 @@
 #include "ThumbnailWorker.h"
 #include "AppPaths.h"
-#include "MuninDRM.h"
 #include "core/settings/SettingsManager.h"
 #include "stb_image.h"
 #include "stb_image_write.h"
-#include <vlc/vlc.h>
+#include <mpv/client.h>
+#include <mpv/render.h>
 
 #include <algorithm>
 #include <chrono>
+#include <clocale>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -15,75 +16,6 @@
 namespace ProyecThor::Core {
 
 namespace {
-
-// ── Captura headless de un frame via callbacks de video de libVLC ────────
-// Mismo patron que VLCBasePlayer (vlc_format/vlc_lock/vlc_unlock): al
-// registrar estos callbacks, libVLC nunca crea una ventana de salida propia
-// — el pixel data va directo a este buffer en memoria.
-struct FrameCtx {
-    std::mutex            mutex;
-    std::vector<uint8_t>  buf;
-    unsigned              width  = 0;
-    unsigned              height = 0;
-    bool                  gotFrame = false;
-};
-
-unsigned FormatCB(void** opaque, char* chroma, unsigned* width, unsigned* height,
-                   unsigned* pitches, unsigned* lines)
-{
-    auto* ctx = static_cast<FrameCtx*>(*opaque);
-    std::memcpy(chroma, "RGBA", 4);
-
-    // Escalamos directamente en libVLC al tamaño de miniatura para no reservar
-    // búferes de 1080p/4K en RAM solo por una miniatura.
-    const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
-    const unsigned maxW = perf.lowMemoryMode ? 256u : (perf.performanceMode ? 320u : 512u);
-    const unsigned maxH = perf.lowMemoryMode ? 144u : (perf.performanceMode ? 180u : 288u);
-    if (*width > 0 && *height > 0 && (*width > maxW || *height > maxH)) {
-        const double scale = std::min(static_cast<double>(maxW) / static_cast<double>(*width),
-                                      static_cast<double>(maxH) / static_cast<double>(*height));
-        *width  = std::max(16u, (static_cast<unsigned>(*width  * scale + 0.5) + 1u) & ~1u);
-        *height = std::max(16u, (static_cast<unsigned>(*height * scale + 0.5) + 1u) & ~1u);
-    }
-
-    *pitches = (*width) * 4;
-    *lines   = *height;
-
-    std::lock_guard<std::mutex> lk(ctx->mutex);
-    ctx->width    = *width;
-    ctx->height   = *height;
-    ctx->buf.assign(static_cast<size_t>(*pitches) * (*lines), 0);
-    ctx->gotFrame = false;
-    return 1;
-}
-
-void* LockCB(void* opaque, void** planes)
-{
-    auto* ctx = static_cast<FrameCtx*>(opaque);
-    ctx->mutex.lock();
-    *planes = ctx->buf.data();
-    return nullptr;
-}
-
-void UnlockCB(void* opaque, void* /*picture*/, void* const* /*planes*/)
-{
-    auto* ctx = static_cast<FrameCtx*>(opaque);
-    ctx->gotFrame = true;
-    ctx->mutex.unlock();
-}
-
-void DisplayCB(void* /*opaque*/, void* /*picture*/) {}
-
-// Instancia libVLC compartida y perezosa, solo para miniaturas — evita
-// pagar el costo de escanear el cache de plugins en cada miniatura.
-libvlc_instance_t* GetThumbVlcInstance()
-{
-    static libvlc_instance_t* inst = []() -> libvlc_instance_t* {
-        const char* args[] = { "--no-xlib", "--quiet", "--no-osd" };
-        return libvlc_new(sizeof(args) / sizeof(args[0]), args);
-    }();
-    return inst;
-}
 
 std::filesystem::path ResolveFsPath(const std::string& path)
 {
@@ -95,54 +27,109 @@ std::filesystem::path ResolveFsPath(const std::string& path)
     return std::filesystem::path(path);
 }
 
-// Decodifica el primer frame real de "path" a RGBA crudo. Corre en el hilo
-// del worker — nunca en el hilo de UI/GL.
+// Decodifica el primer frame real de "path" a RGBA crudo via libmpv (SW render).
+// Corre en el hilo del worker — nunca abre ventanas ni requiere contexto GL.
 bool DecodeFirstFrame(const std::string& path, std::vector<uint8_t>& outPixels,
                        unsigned& outW, unsigned& outH, int maxWaitMs = 2000)
 {
-    libvlc_instance_t* inst = GetThumbVlcInstance();
-    if (!inst) return false;
+    std::setlocale(LC_NUMERIC, "C");
 
-    const std::string vlcUtf8Path = ResolveFsPath(path).make_preferred().u8string();
-    libvlc_media_t* media = libvlc_media_new_path(inst, vlcUtf8Path.c_str());
-    if (!media) return false;
-    libvlc_media_add_option(media, ":file-caching=80");
-    libvlc_media_add_option(media, ":no-audio");
+    mpv_handle* mpv = mpv_create();
+    if (!mpv) return false;
 
-    libvlc_media_player_t* mp = libvlc_media_player_new_from_media(media);
-    libvlc_media_release(media);
-    if (!mp) return false;
+    mpv_set_option_string(mpv, "terminal", "no");
+    mpv_set_option_string(mpv, "msg-level", "all=no");
+    mpv_set_option_string(mpv, "vo", "libmpv");
+    mpv_set_option_string(mpv, "audio", "no");
+    mpv_set_option_string(mpv, "aid", "no");
+    mpv_set_option_string(mpv, "sid", "no");
+    mpv_set_option_string(mpv, "hwdec", "no");
+    mpv_set_option_string(mpv, "osd-level", "0");
+    mpv_set_option_string(mpv, "idle", "yes");
+    mpv_set_option_string(mpv, "ytdl", "no");
+    mpv_set_option_string(mpv, "video-timing-offset", "0");
+    mpv_set_option_string(mpv, "sws-fast", "yes");
 
-    FrameCtx ctx;
-    libvlc_video_set_format_callbacks(mp, FormatCB, nullptr);
-    libvlc_video_set_callbacks(mp, LockCB, UnlockCB, DisplayCB, &ctx);
-    libvlc_audio_set_mute(mp, 1);
+    if (mpv_initialize(mpv) < 0) {
+        mpv_terminate_destroy(mpv);
+        return false;
+    }
 
+    mpv_render_param createParams[] = {
+        { MPV_RENDER_PARAM_API_TYPE, const_cast<char*>(MPV_RENDER_API_TYPE_SW) },
+        { MPV_RENDER_PARAM_INVALID, nullptr }
+    };
+    mpv_render_context* rctx = nullptr;
+    if (mpv_render_context_create(&rctx, mpv, createParams) < 0 || !rctx) {
+        mpv_terminate_destroy(mpv);
+        return false;
+    }
+
+    const std::string utf8Path = ResolveFsPath(path).make_preferred().u8string();
+    const char* cmd[] = { "loadfile", utf8Path.c_str(), "replace", nullptr };
     bool ok = false;
-    if (libvlc_media_player_play(mp) == 0) {
-        // Pedir el frame demasiado pronto (antes de que arranque el decode
-        // real) todavia no tiene nada que devolver — se espera a que el
-        // callback de formato + al menos un lock/unlock hayan corrido.
+
+    if (mpv_command(mpv, cmd) >= 0) {
         int waited = 0;
-        while (waited < maxWaitMs) {
-            bool got;
-            { std::lock_guard<std::mutex> lk(ctx.mutex); got = ctx.gotFrame && ctx.width > 0; }
-            if (got) break;
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        bool failed = false;
+        int64_t vw = 0, vh = 0;
+
+        while (waited < maxWaitMs && !failed) {
+            mpv_event* ev = mpv_wait_event(mpv, 0.01);
+            if (ev) {
+                if (ev->event_id == MPV_EVENT_END_FILE) {
+                    auto* ef = static_cast<mpv_event_end_file*>(ev->data);
+                    if (ef && ef->reason == MPV_END_FILE_REASON_ERROR)
+                        failed = true;
+                }
+            }
+
+            uint64_t flags = mpv_render_context_update(rctx);
+            if ((flags & MPV_RENDER_UPDATE_FRAME) != 0) {
+                if (mpv_get_property(mpv, "dwidth", MPV_FORMAT_INT64, &vw) >= 0 &&
+                    mpv_get_property(mpv, "dheight", MPV_FORMAT_INT64, &vh) >= 0 &&
+                    vw > 0 && vh > 0) {
+                    break;
+                }
+            }
             waited += 10;
         }
 
-        std::lock_guard<std::mutex> lk(ctx.mutex);
-        if (ctx.gotFrame && ctx.width > 0 && ctx.height > 0) {
-            outPixels = ctx.buf;
-            outW = ctx.width;
-            outH = ctx.height;
-            ok = true;
+        if (!failed && vw > 0 && vh > 0) {
+            const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+            const unsigned maxW = perf.lowMemoryMode ? 256u : (perf.performanceMode ? 320u : 512u);
+            const unsigned maxH = perf.lowMemoryMode ? 144u : (perf.performanceMode ? 180u : 288u);
+            unsigned tw = static_cast<unsigned>(vw);
+            unsigned th = static_cast<unsigned>(vh);
+            if (tw > maxW || th > maxH) {
+                const double scale = std::min(static_cast<double>(maxW) / tw,
+                                              static_cast<double>(maxH) / th);
+                tw = std::max(16u, (static_cast<unsigned>(tw * scale + 0.5) + 1u) & ~1u);
+                th = std::max(16u, (static_cast<unsigned>(th * scale + 0.5) + 1u) & ~1u);
+            }
+
+            size_t stride = static_cast<size_t>(tw) * 4u;
+            std::vector<uint8_t> pixels(stride * th, 0);
+            int swSize[2] = { static_cast<int>(tw), static_cast<int>(th) };
+            mpv_render_param renderParams[] = {
+                { MPV_RENDER_PARAM_SW_SIZE,    swSize },
+                { MPV_RENDER_PARAM_SW_FORMAT,  const_cast<char*>("rgba") },
+                { MPV_RENDER_PARAM_SW_STRIDE,  &stride },
+                { MPV_RENDER_PARAM_SW_POINTER, pixels.data() },
+                { MPV_RENDER_PARAM_INVALID,    nullptr }
+            };
+
+            if (mpv_render_context_render(rctx, renderParams) >= 0) {
+                outPixels = std::move(pixels);
+                outW = tw;
+                outH = th;
+                ok = true;
+            }
         }
     }
 
-    libvlc_media_player_stop(mp);
-    libvlc_media_player_release(mp);
+    mpv_render_context_free(rctx);
+    mpv_terminate_destroy(mpv);
     return ok;
 }
 
@@ -170,13 +157,9 @@ void WritePngUtf8Safe(const std::string& path, int w, int h, const uint8_t* rgba
 
 } // namespace
 
-void ThumbnailWorker::WarmupVlcEngine()
+void ThumbnailWorker::WarmupMediaEngine()
 {
-    (void)GetThumbVlcInstance();
-
-    // Precarga en RAM las DLLs de demux + avcodec + swscale + vmem de libVLC
-    // decodificando 1 fotograma del video local más liviano disponible durante
-    // el SplashScreen (evita el tirón en frío al activar el primer fondo).
+    // libmpv no requiere escaneo de plugins externo al arranque; precarga minima de 1 frame si existe video local.
     auto isVideoExt = [](const std::filesystem::path& p) {
         std::string ext = p.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(),
@@ -292,22 +275,8 @@ bool ThumbnailWorker::LoadThumbnailPixelsFromDisk(const std::string& path,
     if (!in.read(reinterpret_cast<char*>(raw.data()), fileSz))
         return false;
 
-    // Desencriptación en memoria si el archivo está protegido con MuninDRM
-    std::vector<uint8_t> decrypted;
-    const uint8_t* decodePtr = raw.data();
-    size_t decodeLen = raw.size();
-
-    if (MuninDRM::IsEncrypted(raw.data(), raw.size())) {
-        if (MuninDRM::DecryptBuffer(raw.data(), raw.size(), decrypted)) {
-            decodePtr = decrypted.data();
-            decodeLen = decrypted.size();
-        } else {
-            return false;
-        }
-    }
-
     int w = 0, h = 0, n = 0;
-    unsigned char* decoded = stbi_load_from_memory(decodePtr, static_cast<int>(decodeLen), &w, &h, &n, 4);
+    unsigned char* decoded = stbi_load_from_memory(raw.data(), static_cast<int>(raw.size()), &w, &h, &n, 4);
     if (!decoded || w <= 0 || h <= 0) {
         if (decoded) stbi_image_free(decoded);
         return false;

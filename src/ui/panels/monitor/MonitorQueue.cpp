@@ -71,7 +71,7 @@ void MonitorView::RenderQueue(float w)
     // corre incondicionalmente desde MonitorView::Update() (ver
     // HomePanel::Render(), pump incondicional junto a OClock::Update()).
     {
-        Core::VLCBasePlayer* queuePlayer = Core::PresentationCore::Get().GetBackgroundPlayer();
+        Core::MPVBasePlayer* queuePlayer = Core::PresentationCore::Get().GetBackgroundPlayer();
         m_LivePlaying = m_QueueEngine.IsActive() && queuePlayer && !queuePlayer->IsPaused();
     }
 
@@ -203,7 +203,7 @@ void MonitorView::RenderQueue(float w)
     int64_t activeCurMs = -1;
     if (currentIdx >= 0)
     {
-        Core::VLCBasePlayer* bg = Core::PresentationCore::Get().GetBackgroundPlayer();
+        Core::MPVBasePlayer* bg = Core::PresentationCore::Get().GetBackgroundPlayer();
         if (bg) {
             activeLenMs = bg->GetLength();
             activeCurMs = bg->GetTime();

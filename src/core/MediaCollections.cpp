@@ -1,7 +1,7 @@
 #include "MediaCollections.h"
 #include "core/AppPaths.h"
 #include "core/PresentationCore.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include "ui/panels/biblio/LibraryHelpers.h"
 #include "ui/panels/biblio/LibraryMultimedia.h"
 #include "ui/views/Audio.h"

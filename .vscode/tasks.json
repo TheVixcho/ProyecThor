@@ -49,7 +49,6 @@
             "label": "Ejecutar con Wine",
             "type": "shell",
             "command": "bash ./scripts/build.sh windows-run",
-            "dependsOn": "Compilar Windows",
             "problemMatcher": [],
             "detail": "Compila (si es necesario) y ejecuta ProyecThor.exe bajo Wine en Linux"
         },

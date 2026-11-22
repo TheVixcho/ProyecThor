@@ -128,12 +128,6 @@ HERE="$(dirname "$(readlink -f "$0")")"
 export PATH="${HERE}/usr/bin:${PATH}"
 export LD_LIBRARY_PATH="${HERE}/usr/lib/proyecthor:${HERE}/usr/lib64/proyecthor:${HERE}/usr/lib:${HERE}/usr/lib64:${LD_LIBRARY_PATH}"
 
-if [ -d "${HERE}/usr/lib/proyecthor/plugins" ]; then
-    export VLC_PLUGIN_PATH="${HERE}/usr/lib/proyecthor/plugins"
-elif [ -d "${HERE}/usr/lib64/proyecthor/plugins" ]; then
-    export VLC_PLUGIN_PATH="${HERE}/usr/lib64/proyecthor/plugins"
-fi
-
 if [ -d "${HERE}/usr/lib/proyecthor" ]; then
     cd "${HERE}/usr/lib/proyecthor"
 elif [ -d "${HERE}/usr/lib64/proyecthor" ]; then
