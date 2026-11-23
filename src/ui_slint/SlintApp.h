@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -120,6 +121,43 @@ private:
         std::string path;
     };
 
+    struct ScreenOutputState {
+        int         id = 0; // 0=Público, 1=LAN, 2=Stage, >=3=Sala Extra
+        std::string name;
+        std::string roleBadge;
+        bool        isCustomRoom = false;
+
+        std::string rawText;
+        std::string rawRef;
+        std::string displayText;
+        std::string displayRef;
+        bool        isBible = false;
+
+        std::string  bgName = "Sin fondo";
+        std::string  bgPath;
+        bool         hasBgImage = false;
+        bool         bgIsStatic = false;
+        bool         bgIsVideo  = false;
+        slint::Image bgImage;
+        slint::Image bgThumb;
+        bool         hasBgThumb = false;
+        slint::Color bgSolidColor = slint::Color::from_rgb_uint8(3, 3, 4);
+        float        bgSolidRgb[3] = { 0.0f, 0.0f, 0.0f };
+
+        std::string  overlayName = "Sin overlay";
+        std::string  overlayPath;
+        bool         hasOverlayImage = false;
+        slint::Image overlayImage;
+        slint::Image overlayThumb;
+        bool         hasOverlayThumb = false;
+
+        bool        showClock = false;
+        std::string alertText;
+        bool        showPleca = false;
+        std::string plecaTitle;
+        std::string plecaSub;
+    };
+
     void InitAssetsAndSplash();
     void FinishSplash();
     void BindCallbacks();
@@ -213,9 +251,32 @@ private:
     void AddMusicScanFolder(const std::string& folderPath);
     void RemoveMusicScanFolder(int idx);
     void RefreshMusicScanFoldersModel();
+    void ExtractMusicWaveformAsync(const std::string& audioPath);
+    void UpdateMusicWaveformAndDynamicEq();
+    void ApplyMusicEqualizer(bool force = true);
+    void ApplyMusicEqPreset(int presetIdx);
 
     // Library Hub (Tab 13 - main unified landing view)
     void RefreshLibraryHub();
+
+    // Multi-Screen / Multi-Room Matrix & Photoshop-Style Real Active Layers
+    void InitMultiScreens();
+    bool IsScreenTargeted(int screenIdx) const;
+    std::string GetActiveClockOverlayString() const;
+    void SyncClockOverlay();
+    void SyncScreenOutputs();
+    void SyncLanFromScreenState();
+    void SyncInspectedScreenToPreview();
+    void RefreshActiveLayersModel();
+    void RefreshScreenMatrixModel();
+    void RemoveActiveLayer(const std::string& layerId);
+    void RemoveLayerOnScreen(int screenIdx, const std::string& layerId);
+    void ToggleLayerOnScreen(int screenIdx, const std::string& layerId);
+    void SendCurrentSelectionToScreen(int screenIdx);
+    void ClonePublicToScreen(int screenIdx);
+    void ClearAllOnScreen(int screenIdx);
+    void CreateExtraScreen(const std::string& name);
+    void DeleteExtraScreen(int screenIdx);
 
     // Documents (Tab 10 - PDF/Image pages)
     void ScanDocuments();
@@ -355,6 +416,26 @@ private:
     std::shared_ptr<slint::VectorModel<slint::SharedString>> m_SongPlaylistNamesModel;
     std::shared_ptr<slint::VectorModel<slint::SharedString>> m_SystemFontsModel;
     std::shared_ptr<slint::VectorModel<QueueItem>>           m_OverlayQueueModel;
+    std::shared_ptr<slint::VectorModel<ActiveLayerItem>>     m_ActiveLayersModel;
+    std::shared_ptr<slint::VectorModel<ScreenMatrixItem>>    m_ScreenMatrixModel;
+    std::shared_ptr<slint::VectorModel<float>>               m_MusicLiveWaveModel;
+    std::shared_ptr<slint::VectorModel<float>>               m_MusicTrackWaveModel;
+
+    std::mutex                             m_SpectrumMutex;
+    std::vector<std::array<float, 12>>     m_TrackSpectrumFrames; // Real 20Hz (50ms) 12-band FFT spectrum of current song
+    float                                  m_TrackSpectrumPeak = 0.08f;
+    float                                  m_LiveWaveSmoothed[12] = {};
+    std::vector<float>                     m_MusicTrackEnvelope;
+    float                                  m_MusicTrackAvgEnergy = 0.5f;
+    bool                                   m_WaveIdleSettled     = true;
+    float                                  m_DynEqOffsets[5]     = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+    float                                  m_DynEqApplied[5]     = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+    int                                    m_DynEqTickCounter    = 0;
+    std::atomic<uint64_t>                  m_WaveExtractGen{0};
+
+    std::vector<ScreenOutputState> m_Screens;
+    int                            m_OutputTargetMode   = 0; // 0=Todas, 1=Solo Público, 2=Solo LAN, 3=Solo Stage, >=4=Sala
+    int                            m_InspectedScreenIdx = 0; // 0=Público, 1=LAN, 2=Stage, >=3=Sala
 
     std::vector<std::string>       m_AllSystemFonts;
     std::string                    m_DefaultSansFont;

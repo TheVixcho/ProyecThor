@@ -114,11 +114,23 @@ SlintApp::SlintApp()
     , m_SongPlaylistNamesModel(std::make_shared<slint::VectorModel<slint::SharedString>>())
     , m_SystemFontsModel(std::make_shared<slint::VectorModel<slint::SharedString>>())
     , m_OverlayQueueModel(std::make_shared<slint::VectorModel<QueueItem>>())
+    , m_ActiveLayersModel(std::make_shared<slint::VectorModel<ActiveLayerItem>>())
+    , m_ScreenMatrixModel(std::make_shared<slint::VectorModel<ScreenMatrixItem>>())
+    , m_MusicLiveWaveModel(std::make_shared<slint::VectorModel<float>>())
+    , m_MusicTrackWaveModel(std::make_shared<slint::VectorModel<float>>())
     , m_MusicPlayer(true)
     , m_HoverPlayer(true)
 {
     for (int i = 0; i < 8; ++i) {
         m_Pads[i].name = "Pad " + std::to_string(i + 1);
+    }
+    for (int i = 0; i < 12; ++i) {
+        m_LiveWaveSmoothed[i] = 0.08f;
+        m_MusicLiveWaveModel->push_back(0.08f);
+    }
+    m_MusicTrackEnvelope.assign(56, 0.14f);
+    for (int i = 0; i < 56; ++i) {
+        m_MusicTrackWaveModel->push_back(0.14f);
     }
 
     // Configure lightweight hover preview player (320x180, silent) & independent Music player
@@ -134,6 +146,8 @@ SlintApp::SlintApp()
     m_Main->set_music_tracks(m_MusicTracksModel);
     m_Main->set_music_grid_rows(m_MusicGridRowsModel);
     m_Main->set_music_scan_folders(m_MusicScanFoldersModel);
+    m_Main->set_music_live_wave(m_MusicLiveWaveModel);
+    m_Main->set_music_track_waveform(m_MusicTrackWaveModel);
     m_Main->set_hub_recent_songs(m_HubSongsModel);
     m_Main->set_hub_recent_media(m_HubMediaModel);
     m_Main->set_hub_recent_music(m_HubMusicModel);
@@ -141,6 +155,8 @@ SlintApp::SlintApp()
     m_Main->set_doc_pages(m_DocPagesModel);
     m_Main->set_queue_items(m_QueueModel);
     m_Main->set_overlay_queue_items(m_OverlayQueueModel);
+    m_Main->set_active_layers(m_ActiveLayersModel);
+    m_Main->set_screen_matrix_items(m_ScreenMatrixModel);
     m_Main->set_song_playlist_names(m_SongPlaylistNamesModel);
     m_Main->set_system_font_names(m_SystemFontsModel);
     m_Main->set_pads(m_PadsModel);
@@ -184,6 +200,7 @@ SlintApp::SlintApp()
         return slint::CloseRequestResponse::HideWindow;
     });
 
+    InitMultiScreens();
     BindCallbacks();
     ScanSystemFonts();
     LoadPersistedState();
@@ -202,6 +219,8 @@ SlintApp::SlintApp()
     SyncProjectorStyle();
     SyncTilesState();
     ApplyShaders();
+    SyncClockOverlay();
+    SyncScreenOutputs();
     AppendDebugLog("ProyecThor Slint v" + std::string(PROYECTHOR_VERSION_STRING) + " inicializado.");
 
     // Configure Mobile Server defaults
@@ -402,6 +421,8 @@ void SlintApp::BindCallbacks() {
         m_Main->set_bible_version_menu_open(false);
         m_Main->set_scale_menu_open(false);
         m_Main->set_library_menu_open(false);
+        m_Main->set_design_menu_open(false);
+        m_Main->set_net_menu_open(false);
         m_ActiveTab = tab;
         m_SearchQuery.clear();
         m_Main->set_search_query("");
@@ -418,6 +439,8 @@ void SlintApp::BindCallbacks() {
             if (!m_MusicScanned) ScanMusicTracks();
         } else if (tab == 12) {
             RefreshDebugInfo();
+        } else if (tab == 14) {
+            RefreshScreenMatrixModel();
         }
     });
 
@@ -522,14 +545,15 @@ void SlintApp::BindCallbacks() {
             m_LiveIsBible = true;
             std::string disp = m_Main->get_text_uppercase() ? ToUpperUtf8(m_RawLiveText) : m_RawLiveText;
             std::string dispRef = m_Main->get_index_uppercase() ? ToUpperUtf8(m_RawLiveRef) : m_RawLiveRef;
-            m_Main->set_live_is_bible(true);
-            m_Projector->set_live_is_bible(true);
-            m_Main->set_live_text(slint::SharedString(disp));
-            m_Main->set_live_ref(slint::SharedString(dispRef));
-            m_Projector->set_live_text(slint::SharedString(disp));
-            m_Projector->set_live_ref(slint::SharedString(dispRef));
-            m_Stage->set_live_text(slint::SharedString(disp));
-            m_Stage->set_live_ref(slint::SharedString(dispRef));
+            for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+                if (!IsScreenTargeted(i)) continue;
+                m_Screens[i].isBible     = true;
+                m_Screens[i].rawText     = m_RawLiveText;
+                m_Screens[i].rawRef      = m_RawLiveRef;
+                m_Screens[i].displayText = disp;
+                m_Screens[i].displayRef  = dispRef;
+            }
+            SyncScreenOutputs();
             TriggerSlideTransition();
         }
     });
@@ -540,14 +564,15 @@ void SlintApp::BindCallbacks() {
             m_LiveIsBible = true;
             std::string disp = m_Main->get_text_uppercase() ? ToUpperUtf8(m_RawLiveText) : m_RawLiveText;
             std::string dispRef = m_Main->get_index_uppercase() ? ToUpperUtf8(m_RawLiveRef) : m_RawLiveRef;
-            m_Main->set_live_is_bible(true);
-            m_Projector->set_live_is_bible(true);
-            m_Main->set_live_text(slint::SharedString(disp));
-            m_Main->set_live_ref(slint::SharedString(dispRef));
-            m_Projector->set_live_text(slint::SharedString(disp));
-            m_Projector->set_live_ref(slint::SharedString(dispRef));
-            m_Stage->set_live_text(slint::SharedString(disp));
-            m_Stage->set_live_ref(slint::SharedString(dispRef));
+            for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+                if (!IsScreenTargeted(i)) continue;
+                m_Screens[i].isBible     = true;
+                m_Screens[i].rawText     = m_RawLiveText;
+                m_Screens[i].rawRef      = m_RawLiveRef;
+                m_Screens[i].displayText = disp;
+                m_Screens[i].displayRef  = dispRef;
+            }
+            SyncScreenOutputs();
             TriggerSlideTransition();
         }
     });
@@ -668,8 +693,10 @@ void SlintApp::BindCallbacks() {
         m_Main->set_music_position(0.0f);
         m_Main->set_music_time_label("00:00 / 00:00");
         m_Main->set_music_now_playing("Sin pista en reproducción");
+        m_Main->set_music_now_subtitle("Selecciona una pista para reproducir");
         m_Main->set_has_music_now_cover(false);
         RefreshMusicModel();
+        RefreshActiveLayersModel();
     });
     m_Main->on_music_prev([this]() {
         if (m_MusicEntries.empty()) return;
@@ -700,6 +727,24 @@ void SlintApp::BindCallbacks() {
     m_Main->on_browse_music_folder([this]() { BrowseMusicFolderAsync(); });
     m_Main->on_add_music_folder([this](slint::SharedString p) { AddMusicScanFolder(std::string(p)); });
     m_Main->on_remove_music_folder([this](int idx) { RemoveMusicScanFolder(idx); });
+    m_Main->on_music_eq_changed([this]() {
+        ApplyMusicEqualizer(true);
+        SavePersistedState();
+    });
+    m_Main->on_music_eq_preset_selected([this](int idx) {
+        ApplyMusicEqPreset(idx);
+        SavePersistedState();
+    });
+    m_Main->on_music_dynamic_eq_toggled([this](bool enabled) {
+        if (!enabled) {
+            for (int b = 0; b < 5; ++b) { m_DynEqOffsets[b] = 0.0f; m_DynEqApplied[b] = 0.0f; }
+            m_Main->set_music_dynamic_eq_status("Inactiva — activa para nivelación y balance espectral adaptativo");
+        } else {
+            m_Main->set_music_dynamic_eq_status("⚡ EQ Dinámica Activa • Analizando señal y balance espectral en vivo...");
+        }
+        ApplyMusicEqualizer(true);
+        SavePersistedState();
+    });
 
     // Library Hub (Tab 13) quick jump actions
     m_Main->on_hub_open_song([this](slint::SharedString path) {
@@ -866,13 +911,20 @@ void SlintApp::BindCallbacks() {
     });
 
     m_Main->on_send_public_alert([this](slint::SharedString msg) {
-        m_HasActivePublicAlert = !std::string(msg).empty();
-        m_Main->set_active_public_alert(msg);
+        std::string sMsg(msg);
+        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+            if (!IsScreenTargeted(i)) continue;
+            m_Screens[i].alertText = sMsg;
+        }
+        m_HasActivePublicAlert = false;
+        for (const auto& sc : m_Screens) {
+            if (!sc.alertText.empty()) { m_HasActivePublicAlert = true; break; }
+        }
         m_AlertTickerPos  = 0.0f;
         m_AlertPulsePhase = 0.0f;
-        if (!m_AudienceFrozen) {
-            m_Projector->set_alert_text(msg);
-            SyncAlertConfig();
+        SyncAlertConfig();
+        SyncScreenOutputs();
+        if (!m_AudienceFrozen && !m_Screens[0].alertText.empty()) {
             if (m_Main->get_alert_anim_mode() == 2) {
                 m_Projector->set_alert_visible(false);
                 slint::ComponentWeakHandle<ProjectorWindow> weakProj(m_Projector);
@@ -888,35 +940,102 @@ void SlintApp::BindCallbacks() {
     });
     m_Main->on_send_stage_alert([this](slint::SharedString msg) {
         m_Main->set_active_stage_alert(msg);
+        if (m_Screens.size() > 2) m_Screens[2].alertText = std::string(msg);
         m_Stage->set_stage_alert(msg);
+        SyncScreenOutputs();
     });
     m_Main->on_alert_config_changed([this]() { SyncAlertConfig(); });
     m_Main->on_clear_alerts([this]() {
+        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+            if (!IsScreenTargeted(i)) continue;
+            m_Screens[i].alertText.clear();
+        }
         m_HasActivePublicAlert = false;
-        m_Main->set_active_public_alert("");
-        m_Main->set_active_stage_alert("");
-        if (!m_AudienceFrozen) m_Projector->set_alert_text("");
-        m_Stage->set_stage_alert("");
+        for (const auto& sc : m_Screens) {
+            if (!sc.alertText.empty()) { m_HasActivePublicAlert = true; break; }
+        }
+        if (IsScreenTargeted(2)) {
+            m_Main->set_active_stage_alert("");
+            m_Stage->set_stage_alert("");
+        }
+        SyncScreenOutputs();
     });
 
-    // Clock & Timer
+    // Clock & Timer (FIXED: immediate SyncClockOverlay + per-screen routing support!)
     m_Main->on_timer_set_minutes([this](int mins) {
         m_TimerInitialSec   = std::max(1, mins) * 60;
         m_TimerRemainingSec = m_TimerInitialSec;
         m_Main->set_timer_display_text(slint::SharedString(FormatCountdownSec(m_TimerRemainingSec)));
+        SyncClockOverlay();
+        RefreshActiveLayersModel();
+        RefreshScreenMatrixModel();
     });
     m_Main->on_timer_toggle([this]() {
         m_TimerRunning = !m_TimerRunning;
         m_Main->set_timer_running(m_TimerRunning);
+        SyncClockOverlay();
+        RefreshActiveLayersModel();
+        RefreshScreenMatrixModel();
     });
     m_Main->on_timer_reset([this]() {
         m_TimerRunning = false;
         m_TimerRemainingSec = m_TimerInitialSec;
         m_Main->set_timer_running(false);
         m_Main->set_timer_display_text(slint::SharedString(FormatCountdownSec(m_TimerRemainingSec)));
+        SyncClockOverlay();
+        RefreshActiveLayersModel();
+        RefreshScreenMatrixModel();
     });
     m_Main->on_clock_overlay_toggled([this](bool show) {
-        m_Projector->set_show_clock_overlay(show);
+        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+            if (!IsScreenTargeted(i)) continue;
+            m_Screens[i].showClock = show;
+        }
+        SyncClockOverlay();
+        SyncScreenOutputs();
+    });
+
+    // Photoshop-Style Real Active Layers & Multi-Screen / Multi-Room Matrix
+    m_Main->on_remove_active_layer([this](slint::SharedString id) {
+        RemoveActiveLayer(std::string(id));
+    });
+    m_Main->on_select_output_target([this](int mode) {
+        m_OutputTargetMode = std::max(0, mode);
+        m_Main->set_output_target_mode(m_OutputTargetMode);
+        if (m_OutputTargetMode >= 1 && (m_OutputTargetMode - 1) < static_cast<int>(m_Screens.size())) {
+            m_InspectedScreenIdx = m_OutputTargetMode - 1;
+            m_Main->set_inspected_screen_idx(m_InspectedScreenIdx);
+        }
+        SyncInspectedScreenToPreview();
+        RefreshActiveLayersModel();
+        RefreshScreenMatrixModel();
+    });
+    m_Main->on_inspect_screen([this](int scrIdx) {
+        if (scrIdx >= 0 && scrIdx < static_cast<int>(m_Screens.size())) {
+            m_InspectedScreenIdx = scrIdx;
+            m_Main->set_inspected_screen_idx(m_InspectedScreenIdx);
+            SyncInspectedScreenToPreview();
+            RefreshActiveLayersModel();
+            RefreshScreenMatrixModel();
+        }
+    });
+    m_Main->on_screen_toggle_layer([this](int scrIdx, slint::SharedString layerId) {
+        ToggleLayerOnScreen(scrIdx, std::string(layerId));
+    });
+    m_Main->on_screen_send_current([this](int scrIdx) {
+        SendCurrentSelectionToScreen(scrIdx);
+    });
+    m_Main->on_screen_clone_public([this](int scrIdx) {
+        ClonePublicToScreen(scrIdx);
+    });
+    m_Main->on_screen_clear_all([this](int scrIdx) {
+        ClearAllOnScreen(scrIdx);
+    });
+    m_Main->on_create_extra_screen([this](slint::SharedString name) {
+        CreateExtraScreen(std::string(name));
+    });
+    m_Main->on_delete_extra_screen([this](int scrIdx) {
+        DeleteExtraScreen(scrIdx);
     });
 
     // Pads
@@ -976,9 +1095,13 @@ void SlintApp::BindCallbacks() {
     m_Main->on_overlay_layer_add_to_queue([this](int idx) { AddOverlayLayerToQueue(idx); });
     m_Main->on_dock_solid_color_selected([this](int idx) { SelectSolidBgColor(idx); });
     m_Main->on_custom_overlay_toggled([this](slint::SharedString t, slint::SharedString s, bool show) {
-        m_Projector->set_live_overlay_title(t);
-        m_Projector->set_live_overlay_sub(s);
-        m_Projector->set_show_custom_overlay(show);
+        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+            if (!IsScreenTargeted(i)) continue;
+            m_Screens[i].showPleca  = show;
+            m_Screens[i].plecaTitle = std::string(t);
+            m_Screens[i].plecaSub   = std::string(s);
+        }
+        SyncScreenOutputs();
     });
     m_Main->on_open_legacy_imgui([this]() { LaunchLegacyImGui(); });
     m_Main->on_fsr_changed([this](bool) {
@@ -1150,36 +1273,29 @@ void SlintApp::ProjectSlide(int index) {
 
     m_LiveIsBible = (m_ActiveTab == 1);
     m_RawLiveText = std::string(slide->body);
-    m_RawLiveRef  = m_LiveIsBible ? std::string(slide->ref_text) : "";
+    m_RawLiveRef  = std::string(slide->ref_text);
 
     std::string displayStr = m_Main->get_text_uppercase() ? ToUpperUtf8(m_RawLiveText) : m_RawLiveText;
     std::string displayRef = (m_LiveIsBible && m_Main->get_index_uppercase()) ? ToUpperUtf8(m_RawLiveRef) : m_RawLiveRef;
-    slint::SharedString dispText(displayStr);
-    slint::SharedString dispRef(displayRef);
 
-    m_Main->set_live_is_bible(m_LiveIsBible);
-    m_Main->set_live_text(dispText);
-    m_Main->set_live_ref(dispRef);
-    if (!m_AudienceFrozen) {
-        m_Projector->set_live_is_bible(m_LiveIsBible);
-        m_Projector->set_live_text(dispText);
-        m_Projector->set_live_ref(dispRef);
+    for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+        if (!IsScreenTargeted(i)) continue;
+        m_Screens[i].isBible     = m_LiveIsBible;
+        m_Screens[i].rawText     = m_RawLiveText;
+        m_Screens[i].rawRef      = m_RawLiveRef;
+        m_Screens[i].displayText = displayStr;
+        m_Screens[i].displayRef  = displayRef;
     }
-    m_Stage->set_live_text(dispText);
-    m_Stage->set_live_ref(m_LiveIsBible ? dispRef : slide->ref_text);
-    {
-        std::lock_guard<std::mutex> lk(m_LiveSnapMutex);
-        m_SnapText = displayStr;
-        m_SnapRef  = displayRef;
-        ++m_SnapTransTrigger;
-        ++m_StreamVersion;
-    }
+
     if (m_ActiveTab == 1) {
         PushBibleHistory(std::string(slide->badge), std::string(slide->body), std::string(slide->ref_text));
     }
     SyncStageNextSlide();
     SyncTilesState();
-    TriggerSlideTransition();
+    SyncScreenOutputs();
+    if (IsScreenTargeted(0)) {
+        TriggerSlideTransition();
+    }
 }
 
 void SlintApp::SyncStageNextSlide() {
@@ -1196,58 +1312,82 @@ void SlintApp::SyncStageNextSlide() {
 }
 
 void SlintApp::ClearText() {
-    m_RawLiveText.clear();
-    m_RawLiveRef.clear();
-    m_LiveIsBible = false;
-    m_Main->set_live_is_bible(false);
-    m_Main->set_live_text("");
-    m_Main->set_live_ref("");
-    m_Main->set_active_slide_index(-1);
-    if (!m_AudienceFrozen) {
-        m_Projector->set_live_is_bible(false);
-        m_Projector->set_live_text("");
-        m_Projector->set_live_ref("");
+    if (IsScreenTargeted(0)) {
+        m_RawLiveText.clear();
+        m_RawLiveRef.clear();
+        m_LiveIsBible = false;
+        m_Main->set_active_slide_index(-1);
     }
-    m_Stage->set_live_text("");
-    m_Stage->set_live_ref("");
-    m_Stage->set_next_text("");
-    {
-        std::lock_guard<std::mutex> lk(m_LiveSnapMutex);
-        m_SnapText.clear();
-        m_SnapRef.clear();
-        ++m_StreamVersion;
+    for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+        if (!IsScreenTargeted(i)) continue;
+        m_Screens[i].rawText.clear();
+        m_Screens[i].rawRef.clear();
+        m_Screens[i].displayText.clear();
+        m_Screens[i].displayRef.clear();
+        m_Screens[i].isBible = false;
     }
+    if (IsScreenTargeted(2)) {
+        m_Stage->set_next_text("");
+    }
+    SyncScreenOutputs();
 }
 
 void SlintApp::ClearBackground() {
-    m_Player.Stop();
-    m_CurrentBgPath.clear();
-    m_HasStaticImage = false;
-    m_HasVideoBg = false;
-    ClearLanFrame();
-    m_Main->set_bg_is_static_image(false);
-    m_Main->set_has_live_preview_image(false);
-    m_Main->set_live_bg_name("Sin fondo");
-    if (!m_AudienceFrozen) {
-        m_Projector->set_bg_is_static_image(false);
-        m_Projector->set_has_bg_image(false);
+    for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+        if (!IsScreenTargeted(i)) continue;
+        m_Screens[i].bgName       = "Sin fondo";
+        m_Screens[i].bgPath.clear();
+        m_Screens[i].hasBgImage   = false;
+        m_Screens[i].bgIsStatic   = false;
+        m_Screens[i].bgIsVideo    = false;
+        m_Screens[i].hasBgThumb   = false;
+        m_Screens[i].bgSolidColor = slint::Color::from_rgb_uint8(3, 3, 4);
+        m_Screens[i].bgSolidRgb[0] = 0.0f;
+        m_Screens[i].bgSolidRgb[1] = 0.0f;
+        m_Screens[i].bgSolidRgb[2] = 0.0f;
     }
-    m_Main->set_media_position(0.0f);
-    m_Main->set_media_time_label("00:00 / 00:00");
+
+    bool anyVideoStillUsed = false;
+    for (const auto& sc : m_Screens) {
+        if (sc.bgIsVideo) { anyVideoStillUsed = true; break; }
+    }
+    if (!anyVideoStillUsed) {
+        m_Player.Stop();
+        m_CurrentBgPath.clear();
+        m_HasStaticImage = false;
+        m_HasVideoBg = false;
+        m_Main->set_media_position(0.0f);
+        m_Main->set_media_time_label("00:00 / 00:00");
+    }
+    if (IsScreenTargeted(1)) {
+        ClearLanFrame();
+    }
+    SyncScreenOutputs();
 }
 
 void SlintApp::ClearOverlay() {
-    m_ActiveOverlayPath.clear();
-    m_Main->set_has_live_overlay_image(false);
-    m_Main->set_live_overlay_name("Sin overlay");
-    if (!m_AudienceFrozen) {
-        m_Projector->set_has_overlay_image(false);
+    if (IsScreenTargeted(0)) {
+        m_ActiveOverlayPath.clear();
+    }
+    for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+        if (!IsScreenTargeted(i)) continue;
+        m_Screens[i].overlayName = "Sin overlay";
+        m_Screens[i].overlayPath.clear();
+        m_Screens[i].hasOverlayImage = false;
+        m_Screens[i].hasOverlayThumb = false;
     }
     RefreshOverlayQueueModel();
     RefreshOverlayLayers();
+    SyncScreenOutputs();
 }
 
 void SlintApp::ClearAll() {
+    for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+        if (!IsScreenTargeted(i)) continue;
+        m_Screens[i].showClock = false;
+        m_Screens[i].alertText.clear();
+        m_Screens[i].showPleca = false;
+    }
     ClearText();
     ClearBackground();
     ClearOverlay();
@@ -1378,20 +1518,16 @@ void SlintApp::SyncProjectorStyle() {
         m_Projector->set_transition_dur(static_cast<int64_t>(m_Main->get_transition_duration_ms()));
     }
 
-    // Re-apply uppercase toggles independently to current live text & Bible ref
-    if (!m_RawLiveText.empty()) {
-        std::string disp = m_Main->get_text_uppercase() ? ToUpperUtf8(m_RawLiveText) : m_RawLiveText;
-        slint::SharedString s(disp);
-        m_Main->set_live_text(s);
-        if (!m_AudienceFrozen) m_Projector->set_live_text(s);
-        m_Stage->set_live_text(s);
+    // Re-apply uppercase toggles independently to current live text & Bible ref across all screens
+    for (auto& sc : m_Screens) {
+        if (!sc.rawText.empty()) {
+            sc.displayText = m_Main->get_text_uppercase() ? ToUpperUtf8(sc.rawText) : sc.rawText;
+        }
+        if (!sc.rawRef.empty()) {
+            sc.displayRef = (sc.isBible && m_Main->get_index_uppercase()) ? ToUpperUtf8(sc.rawRef) : sc.rawRef;
+        }
     }
-    if (m_LiveIsBible && !m_RawLiveRef.empty()) {
-        std::string dispRef = m_Main->get_index_uppercase() ? ToUpperUtf8(m_RawLiveRef) : m_RawLiveRef;
-        slint::SharedString sr(dispRef);
-        m_Main->set_live_ref(sr);
-        if (!m_AudienceFrozen) m_Projector->set_live_ref(sr);
-    }
+    SyncScreenOutputs();
 
     {
         std::lock_guard<std::mutex> lk(m_LiveSnapMutex);
@@ -2563,21 +2699,27 @@ void SlintApp::AddSelectedOverlayToQueue() {
 void SlintApp::ToggleOverlayQueueItem(int index) {
     if (index < 0 || index >= static_cast<int>(m_OverlayQueue.size())) return;
     const auto& o = m_OverlayQueue[index];
-    if (m_ActiveOverlayPath == o.path && m_Main->get_has_live_overlay_image()) {
+    int refScr = (m_InspectedScreenIdx >= 0 && m_InspectedScreenIdx < static_cast<int>(m_Screens.size())) ? m_InspectedScreenIdx : 0;
+    if (m_Screens[refScr].overlayPath == o.path && m_Screens[refScr].hasOverlayImage) {
         ClearOverlay();
         return;
     }
     m_ActiveOverlayPath = o.path;
     auto img = slint::Image::load_from_path(slint::SharedString(o.path));
-    m_Main->set_live_overlay_image(img);
-    m_Main->set_has_live_overlay_image(true);
-    m_Main->set_live_overlay_name(slint::SharedString(o.title));
-    if (!m_AudienceFrozen) {
-        m_Projector->set_overlay_image(img);
-        m_Projector->set_has_overlay_image(true);
+    slint::Image thumb;
+    bool hasThumb = LoadOrCreateThumbnail(o.path, false, thumb);
+    for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+        if (!IsScreenTargeted(i)) continue;
+        m_Screens[i].overlayName     = o.title;
+        m_Screens[i].overlayPath     = o.path;
+        m_Screens[i].hasOverlayImage = true;
+        m_Screens[i].overlayImage    = img;
+        m_Screens[i].hasOverlayThumb = hasThumb;
+        if (hasThumb) m_Screens[i].overlayThumb = thumb;
     }
     RefreshOverlayQueueModel();
     RefreshOverlayLayers();
+    SyncScreenOutputs();
 }
 
 void SlintApp::RefreshOverlayQueueModel() {
@@ -2805,6 +2947,17 @@ void SlintApp::LoadPersistedState() {
                 }
             }
         }
+        m_Main->set_music_eq_enabled(j.value("musicEqEnabled", false));
+        m_Main->set_music_dynamic_eq(j.value("musicDynamicEq", false));
+        m_Main->set_music_eq_preset(j.value("musicEqPreset", 0));
+        m_Main->set_music_eq_60(j.value("musicEq60", 0.0f));
+        m_Main->set_music_eq_230(j.value("musicEq230", 0.0f));
+        m_Main->set_music_eq_910(j.value("musicEq910", 0.0f));
+        m_Main->set_music_eq_3600(j.value("musicEq3600", 0.0f));
+        m_Main->set_music_eq_12000(j.value("musicEq12000", 0.0f));
+        if (m_Main->get_music_dynamic_eq()) {
+            m_Main->set_music_dynamic_eq_status("⚡ EQ Dinámica Activa • Balance espectral adaptativo listo");
+        }
         std::string savedPin = j.value("mobilePin", std::string(""));
         if (savedPin.size() == 6) {
             m_MobileServer.SetPairingPin(savedPin);
@@ -2885,6 +3038,14 @@ void SlintApp::SavePersistedState() {
     j["performanceMode"] = m_Main->get_performance_mode();
     j["themeIdx"]        = m_ActiveThemeIdx;
     j["musicScanFolders"] = m_MusicScanFolders;
+    j["musicEqEnabled"]   = m_Main->get_music_eq_enabled();
+    j["musicDynamicEq"]   = m_Main->get_music_dynamic_eq();
+    j["musicEqPreset"]    = m_Main->get_music_eq_preset();
+    j["musicEq60"]        = m_Main->get_music_eq_60();
+    j["musicEq230"]       = m_Main->get_music_eq_230();
+    j["musicEq910"]       = m_Main->get_music_eq_910();
+    j["musicEq3600"]      = m_Main->get_music_eq_3600();
+    j["musicEq12000"]     = m_Main->get_music_eq_12000();
     j["mobilePin"]       = m_MobileServer.GetPairingPin();
 
     nlohmann::json padsArr = nlohmann::json::array();
@@ -2916,9 +3077,18 @@ void SlintApp::OnTick() {
     if (m_HasVideoBg) {
         slint::Image frame;
         if (m_Player.PollFrame(frame)) {
-            m_Main->set_live_preview_image(frame);
-            m_Main->set_has_live_preview_image(true);
-            if (!m_AudienceFrozen) {
+            for (auto& sc : m_Screens) {
+                if (sc.bgIsVideo) {
+                    sc.bgImage    = frame;
+                    sc.hasBgImage = true;
+                }
+            }
+            if (m_InspectedScreenIdx >= 0 && m_InspectedScreenIdx < static_cast<int>(m_Screens.size()) &&
+                m_Screens[m_InspectedScreenIdx].bgIsVideo) {
+                m_Main->set_live_preview_image(frame);
+                m_Main->set_has_live_preview_image(true);
+            }
+            if (!m_AudienceFrozen && !m_Screens.empty() && m_Screens[0].bgIsVideo) {
                 m_Projector->set_bg_image(frame);
                 m_Projector->set_has_bg_image(true);
             }
@@ -2957,7 +3127,8 @@ void SlintApp::OnTick() {
         }
     }
 
-    // 1d. Sync Independent Music Player (Tab 9 — respects ScrubBar drag + throttled writes)
+    // 1d. Sync Independent Music Player + Live Audio Waveform + ProyecThor Dynamic EQ
+    UpdateMusicWaveformAndDynamicEq();
     if (m_MusicPlayer.IsPlaying()) {
         if (!m_Main->get_music_seeking()) {
             float pos = m_MusicPlayer.GetPosition();
@@ -3042,23 +3213,6 @@ void SlintApp::OnTick() {
     if (++m_TickCounter >= 30) {
         m_TickCounter = 0;
 
-        auto now = std::chrono::system_clock::now();
-        std::time_t tt = std::chrono::system_clock::to_time_t(now);
-        std::tm localTm{};
-#ifdef _WIN32
-        localtime_s(&localTm, &tt);
-#else
-        localtime_r(&tt, &localTm);
-#endif
-        char buf[16];
-        std::strftime(buf, sizeof(buf), "%H:%M:%S", &localTm);
-        slint::SharedString nowStr(buf);
-
-        m_Main->set_clock_now_text(nowStr);
-        if (m_StageVisible) {
-            m_Stage->set_clock_text(nowStr);
-        }
-
         if (m_TimerRunning && m_TimerRemainingSec > 0) {
             --m_TimerRemainingSec;
             if (m_TimerRemainingSec == 0) {
@@ -3066,16 +3220,13 @@ void SlintApp::OnTick() {
                 m_Main->set_timer_running(false);
             }
         }
-        std::string timerStr = FormatCountdownSec(m_TimerRemainingSec);
-        m_Main->set_timer_display_text(slint::SharedString(timerStr));
-
-        if (m_StageVisible) {
-            m_Stage->set_timer_text(m_TimerRunning ? slint::SharedString(timerStr) : "");
+        SyncClockOverlay();
+        if (m_InspectedScreenIdx >= 0 && m_InspectedScreenIdx < static_cast<int>(m_Screens.size()) &&
+            m_Screens[m_InspectedScreenIdx].showClock) {
+            RefreshActiveLayersModel();
         }
-
-        if (m_Main->get_show_clock_on_public()) {
-            m_Projector->set_clock_overlay_text(
-                m_Main->get_timer_mode_countdown() ? slint::SharedString(timerStr) : nowStr);
+        if (m_ActiveTab == 14) {
+            RefreshScreenMatrixModel();
         }
 
         if (m_ChatServer.IsRunning()) {
@@ -3359,51 +3510,70 @@ void SlintApp::ProjectSelectedMedia() {
     if (entry.isOverlay) {
         m_ActiveOverlayPath = entry.path;
         auto img = slint::Image::load_from_path(slint::SharedString(entry.path));
-        m_Main->set_live_overlay_image(img);
-        m_Main->set_has_live_overlay_image(true);
-        m_Main->set_live_overlay_name(slint::SharedString(entry.title));
-        if (!m_AudienceFrozen) {
-            m_Projector->set_overlay_image(img);
-            m_Projector->set_has_overlay_image(true);
+        slint::Image thumb;
+        bool hasThumb = LoadOrCreateThumbnail(entry.path, false, thumb);
+        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+            if (!IsScreenTargeted(i)) continue;
+            m_Screens[i].overlayName     = entry.title;
+            m_Screens[i].overlayPath     = entry.path;
+            m_Screens[i].hasOverlayImage = true;
+            m_Screens[i].overlayImage    = img;
+            m_Screens[i].hasOverlayThumb = hasThumb;
+            if (hasThumb) m_Screens[i].overlayThumb = thumb;
         }
         RefreshOverlayQueueModel();
         RefreshOverlayLayers();
+        SyncScreenOutputs();
     } else if (entry.isImage) {
         m_VideoQueuePlaying = false;
         m_Main->set_video_queue_playing(false);
-        m_Player.Stop();
-        m_HasVideoBg = false;
         m_CurrentBgPath = entry.path;
-        m_Main->set_live_bg_name(slint::SharedString(entry.title));
-        slint::Image img;
+        slint::Image img, thumb;
         RenderScaledStaticImage(entry.path, img);
-        m_Main->set_live_preview_image(img);
-        m_Main->set_has_live_preview_image(true);
-        m_Main->set_bg_is_static_image(true);
-        if (!m_AudienceFrozen) {
-            m_Projector->set_bg_image(img);
-            m_Projector->set_has_bg_image(true);
-            m_Projector->set_bg_is_static_image(true);
+        bool hasThumb = LoadOrCreateThumbnail(entry.path, false, thumb);
+        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+            if (!IsScreenTargeted(i)) continue;
+            m_Screens[i].bgName     = entry.title;
+            m_Screens[i].bgPath     = entry.path;
+            m_Screens[i].hasBgImage = true;
+            m_Screens[i].bgIsStatic = true;
+            m_Screens[i].bgIsVideo  = false;
+            m_Screens[i].bgImage    = img;
+            m_Screens[i].hasBgThumb = hasThumb;
+            if (hasThumb) m_Screens[i].bgThumb = thumb;
         }
-        m_HasStaticImage = true;
-        if (IsLanRunning()) UpdateLanStaticFrame(img);
+        bool anyVid = false;
+        for (const auto& sc : m_Screens) if (sc.bgIsVideo) { anyVid = true; break; }
+        if (!anyVid) { m_Player.Stop(); m_HasVideoBg = false; }
+        m_HasStaticImage = m_Screens[0].bgIsStatic;
+        if (IsScreenTargeted(1) && IsLanRunning()) UpdateLanStaticFrame(img);
+        SyncScreenOutputs();
     } else {
         bool isBg = (m_ActiveTab == 3);
         if (!isBg) {
             m_VideoQueuePlaying = false;
             m_Main->set_video_queue_playing(false);
         }
-        m_HasStaticImage = false;
-        m_HasVideoBg     = entry.isVideo;
         m_CurrentBgPath  = entry.path;
-        m_Main->set_bg_is_static_image(false);
-        if (!m_AudienceFrozen) m_Projector->set_bg_is_static_image(false);
-        m_Main->set_live_bg_name(slint::SharedString(entry.title));
+        m_HasVideoBg     = entry.isVideo;
+        slint::Image thumb;
+        bool hasThumb = LoadOrCreateThumbnail(entry.path, entry.isVideo, thumb);
+        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+            if (!IsScreenTargeted(i)) continue;
+            m_Screens[i].bgName     = entry.title;
+            m_Screens[i].bgPath     = entry.path;
+            m_Screens[i].bgIsStatic = false;
+            m_Screens[i].bgIsVideo  = entry.isVideo;
+            m_Screens[i].hasBgThumb = hasThumb;
+            if (hasThumb) m_Screens[i].bgThumb = thumb;
+        }
+        m_HasStaticImage = m_Screens[0].bgIsStatic;
         m_Main->set_media_loop(isBg);
         m_Player.Play(entry.path, isBg, isBg);
         ApplyShaders();
         m_Main->set_media_paused(false);
         m_Main->set_media_muted(isBg);
+        SyncScreenOutputs();
     }
 }
 
@@ -3459,28 +3629,47 @@ void SlintApp::PlayVideoQueueIndex(int idx) {
 
     const auto& item = m_VideoQueue[idx];
     m_CurrentBgPath = item.path;
-    m_Main->set_live_bg_name(slint::SharedString("Cola: " + item.title));
+    slint::Image thumb;
+    bool hasThumb = LoadOrCreateThumbnail(item.path, !item.isImage, thumb);
 
     if (item.isImage) {
-        m_Player.Stop();
-        m_HasVideoBg     = false;
-        m_HasStaticImage = true;
         slint::Image img;
         RenderScaledStaticImage(item.path, img);
-        m_Main->set_live_preview_image(img);
-        m_Main->set_has_live_preview_image(true);
-        m_Projector->set_bg_image(img);
-        m_Projector->set_has_bg_image(true);
-        if (IsLanRunning()) UpdateLanStaticFrame(img);
+        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+            if (!IsScreenTargeted(i)) continue;
+            m_Screens[i].bgName     = "Cola: " + item.title;
+            m_Screens[i].bgPath     = item.path;
+            m_Screens[i].hasBgImage = true;
+            m_Screens[i].bgIsStatic = true;
+            m_Screens[i].bgIsVideo  = false;
+            m_Screens[i].bgImage    = img;
+            m_Screens[i].hasBgThumb = hasThumb;
+            if (hasThumb) m_Screens[i].bgThumb = thumb;
+        }
+        bool anyVid = false;
+        for (const auto& sc : m_Screens) if (sc.bgIsVideo) { anyVid = true; break; }
+        if (!anyVid) { m_Player.Stop(); m_HasVideoBg = false; }
+        m_HasStaticImage = m_Screens[0].bgIsStatic;
+        if (IsScreenTargeted(1) && IsLanRunning()) UpdateLanStaticFrame(img);
     } else {
-        m_HasStaticImage = false;
         m_HasVideoBg     = true;
+        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+            if (!IsScreenTargeted(i)) continue;
+            m_Screens[i].bgName     = "Cola: " + item.title;
+            m_Screens[i].bgPath     = item.path;
+            m_Screens[i].bgIsStatic = false;
+            m_Screens[i].bgIsVideo  = true;
+            m_Screens[i].hasBgThumb = hasThumb;
+            if (hasThumb) m_Screens[i].bgThumb = thumb;
+        }
+        m_HasStaticImage = m_Screens[0].bgIsStatic;
         m_Main->set_media_loop(false);
         m_Main->set_media_muted(false);
         m_Main->set_media_paused(false);
         m_Player.Play(item.path, false, false);
     }
     RefreshVideoQueueModel();
+    SyncScreenOutputs();
 }
 
 void SlintApp::MoveVideoQueueItem(int from, int to) {
@@ -4063,33 +4252,47 @@ void SlintApp::SelectDockBackground(int index) {
     const auto& entry = m_BgDockEntries[index];
 
     m_CurrentBgPath = entry.path;
-    m_Main->set_live_bg_name(slint::SharedString(entry.title));
+    slint::Image thumb;
+    bool hasThumb = LoadOrCreateThumbnail(entry.path, entry.isVideo, thumb);
+
     if (entry.isImage) {
-        m_Player.Stop();
-        m_HasVideoBg = false;
-        m_HasStaticImage = true;
         slint::Image img;
         RenderScaledStaticImage(entry.path, img);
-        m_Main->set_live_preview_image(img);
-        m_Main->set_has_live_preview_image(true);
-        m_Main->set_bg_is_static_image(true);
-        if (!m_AudienceFrozen) {
-            m_Projector->set_bg_image(img);
-            m_Projector->set_has_bg_image(true);
-            m_Projector->set_bg_is_static_image(true);
+        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+            if (!IsScreenTargeted(i)) continue;
+            m_Screens[i].bgName     = entry.title;
+            m_Screens[i].bgPath     = entry.path;
+            m_Screens[i].hasBgImage = true;
+            m_Screens[i].bgIsStatic = true;
+            m_Screens[i].bgIsVideo  = false;
+            m_Screens[i].bgImage    = img;
+            m_Screens[i].hasBgThumb = hasThumb;
+            if (hasThumb) m_Screens[i].bgThumb = thumb;
         }
-        if (IsLanRunning()) UpdateLanStaticFrame(img);
+        bool anyVid = false;
+        for (const auto& sc : m_Screens) if (sc.bgIsVideo) { anyVid = true; break; }
+        if (!anyVid) { m_Player.Stop(); m_HasVideoBg = false; }
+        m_HasStaticImage = m_Screens[0].bgIsStatic;
+        if (IsScreenTargeted(1) && IsLanRunning()) UpdateLanStaticFrame(img);
     } else {
-        m_HasStaticImage = false;
         m_HasVideoBg = true;
-        m_Main->set_bg_is_static_image(false);
-        if (!m_AudienceFrozen) m_Projector->set_bg_is_static_image(false);
+        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+            if (!IsScreenTargeted(i)) continue;
+            m_Screens[i].bgName     = entry.title;
+            m_Screens[i].bgPath     = entry.path;
+            m_Screens[i].bgIsStatic = false;
+            m_Screens[i].bgIsVideo  = true;
+            m_Screens[i].hasBgThumb = hasThumb;
+            if (hasThumb) m_Screens[i].bgThumb = thumb;
+        }
+        m_HasStaticImage = m_Screens[0].bgIsStatic;
         m_Main->set_media_loop(true);
         m_Main->set_media_muted(true);
         m_Main->set_media_paused(false);
         m_Player.Play(entry.path, true, true);
         ApplyShaders();
     }
+    SyncScreenOutputs();
 }
 
 void SlintApp::RefreshOverlayLayers() {
@@ -4101,7 +4304,9 @@ void SlintApp::RefreshOverlayLayers() {
         fs::path("assets/overlays")
     };
 
-    bool live = m_Main->get_has_live_overlay_image();
+    int refScr = (m_InspectedScreenIdx >= 0 && m_InspectedScreenIdx < static_cast<int>(m_Screens.size())) ? m_InspectedScreenIdx : 0;
+    bool live = !m_Screens.empty() && m_Screens[refScr].hasOverlayImage;
+    std::string activePath = !m_Screens.empty() ? m_Screens[refScr].overlayPath : m_ActiveOverlayPath;
     std::vector<std::string> seen;
     for (const auto& dir : dirs) {
         std::error_code ec;
@@ -4116,7 +4321,7 @@ void SlintApp::RefreshOverlayLayers() {
 
             MediaEntry m;
             m.title     = entry.path().stem().string();
-            m.subtitle  = (live && m_ActiveOverlayPath == fullPath) ? "● ACTIVO" : "Overlay PNG";
+            m.subtitle  = (live && activePath == fullPath) ? "● ACTIVO" : "Overlay PNG";
             m.path      = fullPath;
             m.isOverlay = true;
             m_OverlayLayerEntries.push_back(m);
@@ -4136,21 +4341,27 @@ void SlintApp::RefreshOverlayLayers() {
 void SlintApp::SelectOverlayLayer(int index) {
     if (index < 0 || index >= static_cast<int>(m_OverlayLayerEntries.size())) return;
     const auto& entry = m_OverlayLayerEntries[index];
-    if (m_ActiveOverlayPath == entry.path && m_Main->get_has_live_overlay_image()) {
+    int refScr = (m_InspectedScreenIdx >= 0 && m_InspectedScreenIdx < static_cast<int>(m_Screens.size())) ? m_InspectedScreenIdx : 0;
+    if (!m_Screens.empty() && m_Screens[refScr].overlayPath == entry.path && m_Screens[refScr].hasOverlayImage) {
         ClearOverlay();
         return;
     }
     m_ActiveOverlayPath = entry.path;
     auto img = slint::Image::load_from_path(slint::SharedString(entry.path));
-    m_Main->set_live_overlay_image(img);
-    m_Main->set_has_live_overlay_image(true);
-    m_Main->set_live_overlay_name(slint::SharedString(entry.title));
-    if (!m_AudienceFrozen) {
-        m_Projector->set_overlay_image(img);
-        m_Projector->set_has_overlay_image(true);
+    slint::Image thumb;
+    bool hasThumb = LoadOrCreateThumbnail(entry.path, false, thumb);
+    for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+        if (!IsScreenTargeted(i)) continue;
+        m_Screens[i].overlayName     = entry.title;
+        m_Screens[i].overlayPath     = entry.path;
+        m_Screens[i].hasOverlayImage = true;
+        m_Screens[i].overlayImage    = img;
+        m_Screens[i].hasOverlayThumb = hasThumb;
+        if (hasThumb) m_Screens[i].overlayThumb = thumb;
     }
     RefreshOverlayQueueModel();
     RefreshOverlayLayers();
+    SyncScreenOutputs();
 }
 
 void SlintApp::AddOverlayLayerToQueue(int index) {
@@ -4179,29 +4390,31 @@ void SlintApp::SelectSolidBgColor(int colorIdx) {
         {"Esmeralda",  7,   34,  25},
         {"Violeta",    23,  10,  43}
     };
-    int i = std::clamp(colorIdx, 0, 5);
-    m_Player.Stop();
-    m_HasVideoBg = false;
-    m_HasStaticImage = false;
-    m_CurrentBgPath.clear();
-    auto c = slint::Color::from_rgb_uint8(kSolids[i].r, kSolids[i].g, kSolids[i].b);
-    m_Main->set_has_live_preview_image(false);
-    m_Main->set_bg_is_static_image(false);
-    m_Main->set_live_bg_solid_color(c);
-    m_Main->set_live_bg_name(slint::SharedString(std::string("Color: ") + kSolids[i].name));
-    if (!m_AudienceFrozen) {
-        m_Projector->set_has_bg_image(false);
-        m_Projector->set_bg_is_static_image(false);
-        m_Projector->set_bg_solid_color(c);
+    int idx = std::clamp(colorIdx, 0, 5);
+    auto c = slint::Color::from_rgb_uint8(kSolids[idx].r, kSolids[idx].g, kSolids[idx].b);
+    for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+        if (!IsScreenTargeted(i)) continue;
+        m_Screens[i].bgName        = std::string("Color: ") + kSolids[idx].name;
+        m_Screens[i].bgPath.clear();
+        m_Screens[i].hasBgImage    = false;
+        m_Screens[i].bgIsStatic    = false;
+        m_Screens[i].bgIsVideo     = false;
+        m_Screens[i].hasBgThumb    = false;
+        m_Screens[i].bgSolidColor  = c;
+        m_Screens[i].bgSolidRgb[0] = kSolids[idx].r / 255.0f;
+        m_Screens[i].bgSolidRgb[1] = kSolids[idx].g / 255.0f;
+        m_Screens[i].bgSolidRgb[2] = kSolids[idx].b / 255.0f;
     }
-    ClearLanFrame();
-    {
-        std::lock_guard<std::mutex> lk(m_LiveSnapMutex);
-        m_SnapBgColor[0] = kSolids[i].r / 255.0f;
-        m_SnapBgColor[1] = kSolids[i].g / 255.0f;
-        m_SnapBgColor[2] = kSolids[i].b / 255.0f;
-        ++m_StreamVersion;
+    bool anyVid = false;
+    for (const auto& sc : m_Screens) if (sc.bgIsVideo) { anyVid = true; break; }
+    if (!anyVid) {
+        m_Player.Stop();
+        m_HasVideoBg = false;
+        m_CurrentBgPath.clear();
     }
+    m_HasStaticImage = m_Screens[0].bgIsStatic;
+    if (IsScreenTargeted(1)) ClearLanFrame();
+    SyncScreenOutputs();
 }
 
 void SlintApp::LaunchLegacyImGui() {
@@ -4287,11 +4500,18 @@ void SlintApp::StartCaptureDevice(int index) {
     m_HasStaticImage = false;
     m_HasVideoBg     = true;
     m_CurrentBgPath  = dev.uri;
-    m_Main->set_live_bg_name(slint::SharedString("Captura: " + dev.name));
+    for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+        if (!IsScreenTargeted(i)) continue;
+        m_Screens[i].bgName     = "Captura: " + dev.name;
+        m_Screens[i].bgPath     = dev.uri;
+        m_Screens[i].bgIsStatic = false;
+        m_Screens[i].bgIsVideo  = true;
+    }
     m_Main->set_capture_status(slint::SharedString("Capturando en vivo: " + dev.name + " (" + dev.uri + ")"));
     m_Main->set_media_paused(false);
     m_Main->set_media_muted(true);
     m_Player.PlayLiveStream(dev.uri, false, true, true);
+    SyncScreenOutputs();
 }
 
 // ── Network Hub: Full ImGui StreamingPanel + FrameEncodeWorker LAN Engine ────
@@ -4349,6 +4569,7 @@ void SlintApp::WireLanServerProviders(ProyecThor::Core::NetworkStreamServer& srv
 void SlintApp::UpdateLanFrameCapture() {
     if (!IsLanRunning() || m_LanConfig.transparentMode || !m_LanConfig.sendBackground) return;
     if (!m_HasVideoBg) return;
+    if (m_Screens.size() > 1 && !m_Screens[1].bgIsVideo) return;
 
     int fps = 30;
     if (m_LanConfig.videoMode == ProyecThor::Core::StreamConfig::VideoMode::LowLatency) {
@@ -4850,6 +5071,7 @@ void SlintApp::PlayMusicTrack(int idx) {
     m_Main->set_music_playing(true);
     m_Main->set_music_paused(false);
     m_Main->set_music_now_playing(slint::SharedString(trk.title));
+    m_Main->set_music_now_subtitle(slint::SharedString(trk.subtitle));
     slint::Image cov;
     if (ExtractMusicCoverArt(trk.path, cov)) {
         m_Main->set_music_now_cover(cov);
@@ -4857,8 +5079,385 @@ void SlintApp::PlayMusicTrack(int idx) {
     } else {
         m_Main->set_has_music_now_cover(false);
     }
+    ApplyMusicEqualizer(true);
+    ExtractMusicWaveformAsync(trk.path);
     RefreshMusicModel();
+    RefreshActiveLayersModel();
     AppendDebugLog("Reproduciendo música: " + trk.title);
+}
+
+void SlintApp::ExtractMusicWaveformAsync(const std::string& audioPath) {
+    if (audioPath.empty()) return;
+    const uint64_t gen = m_WaveExtractGen.fetch_add(1) + 1;
+
+    // Reset real spectrum buffer immediately for the new track
+    {
+        std::lock_guard<std::mutex> lk(m_SpectrumMutex);
+        m_TrackSpectrumFrames.clear();
+        m_TrackSpectrumPeak = 0.06f;
+    }
+
+    std::thread([this, audioPath, gen]() {
+        // Real 256-point Radix-2 Cooley-Tukey FFT on 16kHz mono PCM (50ms = 800 samples/frame -> 20 real FFT frames/sec!)
+        constexpr int kSampleRate = 16000;
+        constexpr int kFrameSamples = 800; // 50ms per real spectrum frame
+        constexpr int kFftN = 256;
+        constexpr int kWaveBins = 56;
+        constexpr float kPi = 3.14159265358979323846f;
+
+        // Precompute Hann window + bit-reversal table
+        float hann[kFftN];
+        for (int i = 0; i < kFftN; ++i) {
+            hann[i] = 0.5f * (1.0f - std::cos((2.0f * kPi * static_cast<float>(i)) / static_cast<float>(kFftN - 1)));
+        }
+
+        // 12 logarithmic frequency bands spanning 62.5Hz .. 8000Hz (bin k = k * 62.5 Hz)
+        static const int kBandRanges[12][2] = {
+            { 1, 1 },   //  62 Hz  (Sub)
+            { 2, 2 },   // 125 Hz  (Kick/Bass)
+            { 3, 4 },   // 187-250 Hz (Warm Bass)
+            { 5, 6 },   // 312-375 Hz (Low Mid)
+            { 7, 10 },  // 437-625 Hz (Body)
+            { 11, 15 }, // 687-937 Hz (Mid)
+            { 16, 22 }, // 1.0-1.4 kHz (Vocal Core)
+            { 23, 32 }, // 1.4-2.0 kHz (Vocal Upper)
+            { 33, 46 }, // 2.1-2.9 kHz (Presence)
+            { 47, 66 }, // 2.9-4.1 kHz (Clarity)
+            { 67, 94 }, // 4.2-5.9 kHz (Brilliance)
+            { 95, 127 } // 5.9-7.9 kHz (Air/Cymbals)
+        };
+        // Perceptual tilt so high-frequency cymbals/air match sub-bass visually (pink-noise compensation)
+        static const float kBandTilt[12] = {
+            0.78f, 0.88f, 0.96f, 1.05f, 1.15f, 1.25f, 1.38f, 1.55f, 1.75f, 2.00f, 2.30f, 2.65f
+        };
+
+        auto computeRealFftBands = [&](const int16_t* pcm, std::array<float, 12>& outBands) {
+            float re[kFftN];
+            float im[kFftN];
+            // Sample centered 256-sample window inside the 800-sample 50ms frame
+            const int offset = (kFrameSamples - kFftN) / 2;
+            for (int i = 0; i < kFftN; ++i) {
+                re[i] = (static_cast<float>(pcm[offset + i]) / 32768.0f) * hann[i];
+                im[i] = 0.0f;
+            }
+            // Bit-reversal permutation
+            for (int i = 1, j = 0; i < kFftN; ++i) {
+                int bit = kFftN >> 1;
+                for (; j & bit; bit >>= 1) j ^= bit;
+                j ^= bit;
+                if (i < j) {
+                    std::swap(re[i], re[j]);
+                    std::swap(im[i], im[j]);
+                }
+            }
+            // Iterative Radix-2 FFT butterflies
+            for (int len = 2; len <= kFftN; len <<= 1) {
+                float ang = -2.0f * kPi / static_cast<float>(len);
+                float wlenRe = std::cos(ang);
+                float wlenIm = std::sin(ang);
+                for (int i = 0; i < kFftN; i += len) {
+                    float wRe = 1.0f, wIm = 0.0f;
+                    int half = len >> 1;
+                    for (int j = 0; j < half; ++j) {
+                        int u = i + j;
+                        int v = i + j + half;
+                        float tRe = re[v] * wRe - im[v] * wIm;
+                        float tIm = re[v] * wIm + im[v] * wRe;
+                        re[v] = re[u] - tRe;
+                        im[v] = im[u] - tIm;
+                        re[u] += tRe;
+                        im[u] += tIm;
+                        float nextWRe = wRe * wlenRe - wIm * wlenIm;
+                        wIm = wRe * wlenIm + wIm * wlenRe;
+                        wRe = nextWRe;
+                    }
+                }
+            }
+            // Extract true RMS magnitude per logarithmic frequency band
+            for (int b = 0; b < 12; ++b) {
+                int lo = kBandRanges[b][0];
+                int hi = kBandRanges[b][1];
+                float sumSq = 0.0f;
+                for (int k = lo; k <= hi; ++k) {
+                    sumSq += re[k] * re[k] + im[k] * im[k];
+                }
+                float mag = std::sqrt(sumSq / static_cast<float>(hi - lo + 1)) / (static_cast<float>(kFftN) * 0.25f);
+                outBands[b] = mag * kBandTilt[b];
+            }
+        };
+
+        std::vector<float> frameRms;
+        frameRms.reserve(4096);
+        std::vector<std::array<float, 12>> batch;
+        batch.reserve(16);
+
+#ifdef _WIN32
+        std::string cmd = "ffmpeg -v error -i \"" + audioPath + "\" -ac 1 -ar " + std::to_string(kSampleRate) + " -f s16le - 2>nul";
+        FILE* pipe = _popen(cmd.c_str(), "rb");
+#else
+        std::string cmd = "ffmpeg -v error -i \"" + audioPath + "\" -ac 1 -ar " + std::to_string(kSampleRate) + " -f s16le - 2>/dev/null";
+        FILE* pipe = popen(cmd.c_str(), "r");
+#endif
+        if (pipe) {
+            int16_t pcmBuf[kFrameSamples];
+            while (m_WaveExtractGen.load() == gen) {
+                size_t got = std::fread(pcmBuf, sizeof(int16_t), kFrameSamples, pipe);
+                if (got < static_cast<size_t>(kFftN)) break;
+                if (got < static_cast<size_t>(kFrameSamples)) {
+                    std::memset(pcmBuf + got, 0, (kFrameSamples - got) * sizeof(int16_t));
+                }
+
+                // Exact frame RMS for the full-song waveform scrubbar
+                double sumSq = 0.0;
+                for (size_t i = 0; i < got; ++i) {
+                    double s = static_cast<double>(pcmBuf[i]) / 32768.0;
+                    sumSq += s * s;
+                }
+                frameRms.push_back(static_cast<float>(std::sqrt(sumSq / static_cast<double>(got))));
+
+                // Real 12-band FFT spectrum for this 50ms slice of the song
+                std::array<float, 12> bands{};
+                computeRealFftBands(pcmBuf, bands);
+                float localMax = 0.0f;
+                for (float v : bands) localMax = std::max(localMax, v);
+                batch.push_back(bands);
+
+                // Stream progressively every 10 frames (~0.5s of audio) so real waves start dancing immediately!
+                if (batch.size() >= 10) {
+                    std::lock_guard<std::mutex> lk(m_SpectrumMutex);
+                    if (m_WaveExtractGen.load() != gen) break;
+                    for (const auto& f : batch) {
+                        for (float v : f) m_TrackSpectrumPeak = std::max(m_TrackSpectrumPeak, v);
+                        m_TrackSpectrumFrames.push_back(f);
+                    }
+                    batch.clear();
+                }
+            }
+#ifdef _WIN32
+            _pclose(pipe);
+#else
+            pclose(pipe);
+#endif
+        }
+
+        if (m_WaveExtractGen.load() != gen) return;
+
+        // Flush remaining frames
+        if (!batch.empty()) {
+            std::lock_guard<std::mutex> lk(m_SpectrumMutex);
+            for (const auto& f : batch) {
+                for (float v : f) m_TrackSpectrumPeak = std::max(m_TrackSpectrumPeak, v);
+                m_TrackSpectrumFrames.push_back(f);
+            }
+        }
+
+        // Build high-res 56-bar real full-track waveform envelope
+        std::vector<float> bins(kWaveBins, 0.12f);
+        float avgE = 0.45f;
+        if (!frameRms.empty()) {
+            float maxE = 0.001f;
+            for (int b = 0; b < kWaveBins; ++b) {
+                size_t start = (static_cast<size_t>(b) * frameRms.size()) / kWaveBins;
+                size_t end   = std::max(start + 1, (static_cast<size_t>(b + 1) * frameRms.size()) / kWaveBins);
+                end = std::min(end, frameRms.size());
+                float acc = 0.0f;
+                for (size_t k = start; k < end; ++k) acc += frameRms[k];
+                float v = acc / static_cast<float>(std::max<size_t>(1, end - start));
+                bins[b] = v;
+                if (v > maxE) maxE = v;
+            }
+            float sumNorm = 0.0f;
+            for (int b = 0; b < kWaveBins; ++b) {
+                float norm = std::pow(std::clamp(bins[b] / maxE, 0.0f, 1.0f), 0.72f);
+                bins[b] = std::clamp(0.08f + norm * 0.92f, 0.08f, 1.0f);
+                sumNorm += bins[b];
+            }
+            avgE = sumNorm / static_cast<float>(kWaveBins);
+        }
+
+        slint::invoke_from_event_loop([this, gen, bins = std::move(bins), avgE]() {
+            if (m_WaveExtractGen.load() != gen) return;
+            m_MusicTrackEnvelope  = bins;
+            m_MusicTrackAvgEnergy = std::max(0.12f, avgE);
+            m_MusicTrackWaveModel->clear();
+            for (float v : m_MusicTrackEnvelope) {
+                m_MusicTrackWaveModel->push_back(v);
+            }
+        });
+    }).detach();
+}
+
+void SlintApp::ApplyMusicEqualizer(bool force) {
+    bool eqOn  = m_Main->get_music_eq_enabled();
+    bool dynOn = m_Main->get_music_dynamic_eq();
+
+    float base[5] = {
+        eqOn ? m_Main->get_music_eq_60()    : 0.0f,
+        eqOn ? m_Main->get_music_eq_230()   : 0.0f,
+        eqOn ? m_Main->get_music_eq_910()   : 0.0f,
+        eqOn ? m_Main->get_music_eq_3600()  : 0.0f,
+        eqOn ? m_Main->get_music_eq_12000() : 0.0f
+    };
+
+    float finalBands[5];
+    for (int i = 0; i < 5; ++i) {
+        finalBands[i] = std::clamp(base[i] + (dynOn ? m_DynEqOffsets[i] : 0.0f), -12.0f, 12.0f);
+    }
+
+    if (!force && dynOn) {
+        float maxDelta = 0.0f;
+        for (int i = 0; i < 5; ++i) {
+            maxDelta = std::max(maxDelta, std::abs(finalBands[i] - m_DynEqApplied[i]));
+        }
+        if (maxDelta < 0.45f) return;
+    }
+
+    for (int i = 0; i < 5; ++i) m_DynEqApplied[i] = finalBands[i];
+
+    if (m_MusicPlayer.IsPlaying() || m_CurrentMusicIdx >= 0) {
+        m_MusicPlayer.SetMusicAudioFx(
+            eqOn, dynOn,
+            finalBands[0], finalBands[1], finalBands[2], finalBands[3], finalBands[4]);
+    }
+}
+
+void SlintApp::ApplyMusicEqPreset(int presetIdx) {
+    m_Main->set_music_eq_enabled(true);
+    m_Main->set_music_eq_preset(presetIdx);
+    switch (presetIdx) {
+        case 1: // Alabanza (Warm lows + open highs)
+            m_Main->set_music_eq_60(4.0f);  m_Main->set_music_eq_230(2.0f);
+            m_Main->set_music_eq_910(1.0f); m_Main->set_music_eq_3600(3.0f); m_Main->set_music_eq_12000(4.5f);
+            break;
+        case 2: // Voz / Predicación
+            m_Main->set_music_eq_60(-4.0f); m_Main->set_music_eq_230(-1.5f);
+            m_Main->set_music_eq_910(4.0f); m_Main->set_music_eq_3600(3.5f); m_Main->set_music_eq_12000(1.5f);
+            break;
+        case 3: // Acústico
+            m_Main->set_music_eq_60(1.5f);  m_Main->set_music_eq_230(2.5f);
+            m_Main->set_music_eq_910(1.5f); m_Main->set_music_eq_3600(2.5f); m_Main->set_music_eq_12000(3.0f);
+            break;
+        case 4: // Bajos Profundos
+            m_Main->set_music_eq_60(7.0f);  m_Main->set_music_eq_230(4.0f);
+            m_Main->set_music_eq_910(0.0f); m_Main->set_music_eq_3600(1.0f); m_Main->set_music_eq_12000(2.0f);
+            break;
+        case 5: // Estudio (Hi-Fi)
+            m_Main->set_music_eq_60(2.0f);  m_Main->set_music_eq_230(0.5f);
+            m_Main->set_music_eq_910(0.0f); m_Main->set_music_eq_3600(2.0f); m_Main->set_music_eq_12000(3.5f);
+            break;
+        default: // 0: Plano
+            m_Main->set_music_eq_60(0.0f);  m_Main->set_music_eq_230(0.0f);
+            m_Main->set_music_eq_910(0.0f); m_Main->set_music_eq_3600(0.0f); m_Main->set_music_eq_12000(0.0f);
+            break;
+    }
+    ApplyMusicEqualizer(true);
+}
+
+void SlintApp::UpdateMusicWaveformAndDynamicEq() {
+    const bool active = m_MusicPlayer.IsPlaying() && !m_MusicPlayer.IsPaused();
+    if (!active) {
+        if (!m_WaveIdleSettled) {
+            bool allCalm = true;
+            for (int i = 0; i < 12; ++i) {
+                m_LiveWaveSmoothed[i] += (0.08f - m_LiveWaveSmoothed[i]) * 0.25f;
+                if (std::abs(m_LiveWaveSmoothed[i] - 0.08f) > 0.008f) allCalm = false;
+                m_MusicLiveWaveModel->set_row_data(i, m_LiveWaveSmoothed[i]);
+            }
+            m_WaveIdleSettled = allCalm;
+        }
+        return;
+    }
+
+    m_WaveIdleSettled = false;
+
+    // Sample 100% REAL millisecond-synced 12-band FFT spectrum of the currently playing song!
+    const int64_t timeMs = std::max<int64_t>(0, m_MusicPlayer.GetTimeMs());
+    std::array<float, 12> rawBands{};
+    float normPeak = 0.08f;
+    bool hasRealSpectrum = false;
+    {
+        std::lock_guard<std::mutex> lk(m_SpectrumMutex);
+        if (!m_TrackSpectrumFrames.empty()) {
+            hasRealSpectrum = true;
+            normPeak = std::max(0.04f, m_TrackSpectrumPeak * 0.82f);
+            float exactFrame = static_cast<float>(timeMs) / 50.0f; // 50ms per FFT frame
+            int maxIdx = static_cast<int>(m_TrackSpectrumFrames.size()) - 1;
+            int i0 = std::clamp(static_cast<int>(std::floor(exactFrame)), 0, maxIdx);
+            int i1 = std::clamp(i0 + 1, 0, maxIdx);
+            float frac = std::clamp(exactFrame - static_cast<float>(i0), 0.0f, 1.0f);
+            for (int b = 0; b < 12; ++b) {
+                rawBands[b] = m_TrackSpectrumFrames[i0][b] * (1.0f - frac)
+                            + m_TrackSpectrumFrames[i1][b] * frac;
+            }
+        }
+    }
+
+    const bool eqActive = m_Main->get_music_eq_enabled() || m_Main->get_music_dynamic_eq();
+    const float eqGains[5] = {
+        eqActive ? ((m_Main->get_music_eq_enabled() ? m_Main->get_music_eq_60()    : 0.0f) + (m_Main->get_music_dynamic_eq() ? m_DynEqOffsets[0] : 0.0f)) : 0.0f,
+        eqActive ? ((m_Main->get_music_eq_enabled() ? m_Main->get_music_eq_230()   : 0.0f) + (m_Main->get_music_dynamic_eq() ? m_DynEqOffsets[1] : 0.0f)) : 0.0f,
+        eqActive ? ((m_Main->get_music_eq_enabled() ? m_Main->get_music_eq_910()   : 0.0f) + (m_Main->get_music_dynamic_eq() ? m_DynEqOffsets[2] : 0.0f)) : 0.0f,
+        eqActive ? ((m_Main->get_music_eq_enabled() ? m_Main->get_music_eq_3600()  : 0.0f) + (m_Main->get_music_dynamic_eq() ? m_DynEqOffsets[3] : 0.0f)) : 0.0f,
+        eqActive ? ((m_Main->get_music_eq_enabled() ? m_Main->get_music_eq_12000() : 0.0f) + (m_Main->get_music_dynamic_eq() ? m_DynEqOffsets[4] : 0.0f)) : 0.0f
+    };
+
+    float volFactor = std::clamp(m_Main->get_music_volume() / 100.0f, 0.12f, 1.25f);
+    float lowSum = 0.0f, midSum = 0.0f, highSum = 0.0f;
+
+    for (int i = 0; i < 12; ++i) {
+        float targetAmp = 0.08f;
+        if (hasRealSpectrum) {
+            int eqIdx = std::clamp((i * 5) / 12, 0, 4);
+            float eqScale = std::pow(10.0f, eqGains[eqIdx] / 28.0f);
+            // Perceptual dB compression (pow 0.62) so both quiet acoustic passages and loud drums read clearly
+            float norm = std::pow(std::clamp(rawBands[i] / normPeak, 0.0f, 1.25f), 0.62f);
+            targetAmp = std::clamp(0.06f + norm * 0.94f * eqScale * volFactor, 0.06f, 1.0f);
+        }
+        // Real studio RTA ballistics: fast attack (0.72) for kicks/snares, smooth release (0.28)
+        float coeff = (targetAmp > m_LiveWaveSmoothed[i]) ? 0.72f : 0.28f;
+        m_LiveWaveSmoothed[i] += (targetAmp - m_LiveWaveSmoothed[i]) * coeff;
+        m_MusicLiveWaveModel->set_row_data(i, m_LiveWaveSmoothed[i]);
+
+        if (i < 3)      lowSum  += m_LiveWaveSmoothed[i];
+        else if (i < 8) midSum  += m_LiveWaveSmoothed[i];
+        else            highSum += m_LiveWaveSmoothed[i];
+    }
+
+    // ProyecThor Dynamic EQ Real-Time Spectral Controller (evaluates real FFT low/mid/high balance every ~0.4s)
+    if (m_Main->get_music_dynamic_eq() && hasRealSpectrum && (++m_DynEqTickCounter >= 12)) {
+        m_DynEqTickCounter = 0;
+        float lowAvg  = lowSum / 3.0f;
+        float midAvg  = midSum / 5.0f;
+        float highAvg = highSum / 4.0f;
+        float totalE  = (lowAvg + midAvg + highAvg) / 3.0f;
+
+        float target[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+        std::string statusMsg;
+
+        if (totalE < 0.34f) {
+            // Pasaje suave / íntimo real: realce psicoacústico cálido
+            target[0] = 2.4f; target[1] = 1.2f; target[2] = 0.8f; target[3] = 1.4f; target[4] = 2.0f;
+            statusMsg = "⚡ EQ Dinámica • Realce Íntimo (Pasaje suave: +2.4dB Graves / +2.0dB Brillo)";
+        } else if (midAvg > lowAvg * 1.28f && totalE > 0.58f) {
+            // Picos en medios/presencia: suaviza dureza y refuerza base
+            target[0] = 1.2f; target[1] = 0.4f; target[2] = -0.6f; target[3] = -1.8f; target[4] = 0.4f;
+            statusMsg = "⚡ EQ Dinámica • Control de Presencia (-1.8dB 3.6kHz / Refuerzo cálido)";
+        } else if (lowAvg > midAvg * 1.35f && totalE > 0.62f) {
+            // Subgraves muy cargados: limpia graves y abre claridad vocal
+            target[0] = -1.8f; target[1] = -0.8f; target[2] = 0.8f; target[3] = 1.2f; target[4] = 1.0f;
+            statusMsg = "⚡ EQ Dinámica • Control de Graves (-1.8dB 60Hz / +1.2dB Claridad)";
+        } else {
+            // Balance espectral equilibrado
+            target[0] = 0.6f; target[1] = 0.0f; target[2] = 0.4f; target[3] = 0.6f; target[4] = 0.9f;
+            statusMsg = "⚡ EQ Dinámica • Balance Espectral Real (FFT 12 Bandas + dynaudnorm)";
+        }
+
+        for (int b = 0; b < 5; ++b) {
+            m_DynEqOffsets[b] += (target[b] - m_DynEqOffsets[b]) * 0.45f;
+        }
+        m_Main->set_music_dynamic_eq_status(slint::SharedString(statusMsg));
+        ApplyMusicEqualizer(false);
+    }
 }
 
 void SlintApp::RefreshMusicModel() {
@@ -5144,23 +5743,28 @@ void SlintApp::ProjectDocPage(int pageIdx) {
     m_ActiveDocPageIdx = pageIdx;
     const std::string& p = m_DocPagePaths[pageIdx];
 
-    m_Player.Stop();
-    m_HasVideoBg     = false;
-    m_HasStaticImage = true;
     m_CurrentBgPath  = p;
-    slint::Image img;
+    slint::Image img, thumb;
     RenderScaledStaticImage(p, img);
+    bool hasThumb = LoadOrCreateThumbnail(p, false, thumb);
 
-    m_Main->set_live_bg_name(slint::SharedString("Doc Pág. " + std::to_string(pageIdx + 1)));
-    m_Main->set_bg_is_static_image(true);
-    m_Main->set_live_preview_image(img);
-    m_Main->set_has_live_preview_image(true);
-    if (!m_AudienceFrozen) {
-        m_Projector->set_bg_is_static_image(true);
-        m_Projector->set_bg_image(img);
-        m_Projector->set_has_bg_image(true);
+    for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+        if (!IsScreenTargeted(i)) continue;
+        m_Screens[i].bgName     = "Doc Pág. " + std::to_string(pageIdx + 1);
+        m_Screens[i].bgPath     = p;
+        m_Screens[i].hasBgImage = true;
+        m_Screens[i].bgIsStatic = true;
+        m_Screens[i].bgIsVideo  = false;
+        m_Screens[i].bgImage    = img;
+        m_Screens[i].hasBgThumb = hasThumb;
+        if (hasThumb) m_Screens[i].bgThumb = thumb;
     }
-    if (IsLanRunning()) UpdateLanStaticFrame(img);
+    bool anyVid = false;
+    for (const auto& sc : m_Screens) if (sc.bgIsVideo) { anyVid = true; break; }
+    if (!anyVid) { m_Player.Stop(); m_HasVideoBg = false; }
+    m_HasStaticImage = m_Screens[0].bgIsStatic;
+    if (IsScreenTargeted(1) && IsLanRunning()) UpdateLanStaticFrame(img);
+    SyncScreenOutputs();
 }
 
 // ── Changelog, Debug & Wi-Fi Firewall Diagnostics ────────────────────────────
@@ -5269,6 +5873,653 @@ void SlintApp::OpenFirewallPortsAsync() {
             }
         });
     }).detach();
+}
+
+// ── Multi-Screen / Multi-Room Matrix & Photoshop-Style Real Active Layers ────
+void SlintApp::InitMultiScreens() {
+    m_Screens.clear();
+
+    ScreenOutputState pub;
+    pub.id           = 0;
+    pub.name         = "Público Principal";
+    pub.roleBadge    = "HDMI / VENTANA";
+    pub.isCustomRoom = false;
+    m_Screens.push_back(std::move(pub));
+
+    ScreenOutputState lan;
+    lan.id           = 1;
+    lan.name         = "LAN / Smart TV (8080)";
+    lan.roleBadge    = "RED WI-FI / LAN";
+    lan.isCustomRoom = false;
+    m_Screens.push_back(std::move(lan));
+
+    ScreenOutputState stg;
+    stg.id           = 2;
+    stg.name         = "Stage / Escenario";
+    stg.roleBadge    = "MONITOR ESCENARIO";
+    stg.isCustomRoom = false;
+    m_Screens.push_back(std::move(stg));
+
+    ScreenOutputState room2;
+    room2.id           = 3;
+    room2.name         = "Sala 2 / Lobby";
+    room2.roleBadge    = "SALA INDEPENDIENTE";
+    room2.isCustomRoom = true;
+    m_Screens.push_back(std::move(room2));
+
+    m_OutputTargetMode   = 0;
+    m_InspectedScreenIdx = 0;
+    m_Main->set_output_target_mode(0);
+    m_Main->set_inspected_screen_idx(0);
+    m_Main->set_inspected_screen_name("Público");
+}
+
+bool SlintApp::IsScreenTargeted(int screenIdx) const {
+    if (screenIdx < 0 || screenIdx >= static_cast<int>(m_Screens.size())) return false;
+    if (m_OutputTargetMode == 0) return true; // 0 = Todas las pantallas
+    return screenIdx == (m_OutputTargetMode - 1);
+}
+
+std::string SlintApp::GetActiveClockOverlayString() const {
+    auto now = std::chrono::system_clock::now();
+    std::time_t tt = std::chrono::system_clock::to_time_t(now);
+    std::tm localTm{};
+#ifdef _WIN32
+    localtime_s(&localTm, &tt);
+#else
+    localtime_r(&tt, &localTm);
+#endif
+    char buf[16];
+    std::strftime(buf, sizeof(buf), "%H:%M:%S", &localTm);
+    std::string nowStr(buf);
+    std::string timerStr = FormatCountdownSec(m_TimerRemainingSec);
+    return m_Main->get_timer_mode_countdown() ? timerStr : nowStr;
+}
+
+void SlintApp::SyncClockOverlay() {
+    auto now = std::chrono::system_clock::now();
+    std::time_t tt = std::chrono::system_clock::to_time_t(now);
+    std::tm localTm{};
+#ifdef _WIN32
+    localtime_s(&localTm, &tt);
+#else
+    localtime_r(&tt, &localTm);
+#endif
+    char buf[16];
+    std::strftime(buf, sizeof(buf), "%H:%M:%S", &localTm);
+    std::string nowStr(buf);
+    std::string timerStr = FormatCountdownSec(m_TimerRemainingSec);
+    std::string activeClock = m_Main->get_timer_mode_countdown() ? timerStr : nowStr;
+
+    m_Main->set_clock_now_text(slint::SharedString(nowStr));
+    m_Main->set_timer_display_text(slint::SharedString(timerStr));
+    m_Main->set_preview_clock_text(slint::SharedString(activeClock));
+
+    if (!m_Screens.empty()) {
+        if (!m_AudienceFrozen) {
+            m_Projector->set_show_clock_overlay(m_Screens[0].showClock);
+            m_Projector->set_clock_overlay_text(slint::SharedString(activeClock));
+        }
+    }
+    if (m_Screens.size() > 2) {
+        m_Stage->set_clock_text(slint::SharedString(nowStr));
+        bool showStgTimer = m_TimerRunning || m_Screens[2].showClock;
+        m_Stage->set_timer_text(showStgTimer ? slint::SharedString(activeClock) : "");
+    }
+    if (m_InspectedScreenIdx >= 0 && m_InspectedScreenIdx < static_cast<int>(m_Screens.size())) {
+        m_Main->set_preview_show_clock(m_Screens[m_InspectedScreenIdx].showClock);
+        m_Main->set_show_clock_on_public(m_Screens[m_InspectedScreenIdx].showClock);
+    }
+    SyncLanFromScreenState();
+}
+
+void SlintApp::SyncLanFromScreenState() {
+    if (m_Screens.size() <= 1) return;
+    const auto& lan = m_Screens[1];
+    std::string activeClock = GetActiveClockOverlayString();
+
+    std::string composedText;
+    if (lan.showClock && !activeClock.empty()) {
+        composedText = "⏱ " + activeClock;
+    }
+    if (!lan.displayText.empty()) {
+        if (!composedText.empty()) composedText += "\n";
+        composedText += lan.displayText;
+    }
+    if (lan.showPleca && !lan.plecaTitle.empty()) {
+        if (!composedText.empty()) composedText += "\n";
+        composedText += lan.plecaTitle;
+        if (!lan.plecaSub.empty()) composedText += " — " + lan.plecaSub;
+    }
+    if (!lan.alertText.empty()) {
+        if (!composedText.empty()) composedText += "\n";
+        composedText += "★ " + lan.alertText + " ★";
+    }
+
+    {
+        std::lock_guard<std::mutex> lk(m_LiveSnapMutex);
+        if (m_SnapText != composedText || m_SnapRef != lan.displayRef) {
+            ++m_SnapTransTrigger;
+        }
+        m_SnapText       = composedText;
+        m_SnapRef        = lan.displayRef;
+        m_SnapBgColor[0] = lan.bgSolidRgb[0];
+        m_SnapBgColor[1] = lan.bgSolidRgb[1];
+        m_SnapBgColor[2] = lan.bgSolidRgb[2];
+        m_SnapProjecting = m_ProjectorVisible || !composedText.empty() || lan.hasBgImage || lan.bgIsVideo;
+        ++m_StreamVersion;
+    }
+}
+
+void SlintApp::SyncInspectedScreenToPreview() {
+    if (m_Screens.empty()) return;
+    int idx = std::clamp(m_InspectedScreenIdx, 0, static_cast<int>(m_Screens.size()) - 1);
+    const auto& sc = m_Screens[idx];
+
+    std::string shortName = (idx == 0) ? "Público"
+                          : (idx == 1) ? "LAN (8080)"
+                          : (idx == 2) ? "Stage"
+                          : sc.name;
+    m_Main->set_inspected_screen_name(slint::SharedString(shortName));
+    m_Main->set_live_is_bible(sc.isBible);
+    m_Main->set_live_text(slint::SharedString(sc.displayText));
+    m_Main->set_live_ref(slint::SharedString(sc.displayRef));
+
+    m_Main->set_live_bg_name(slint::SharedString(sc.bgName));
+    m_Main->set_live_bg_solid_color(sc.bgSolidColor);
+    m_Main->set_bg_is_static_image(sc.bgIsStatic);
+    m_Main->set_preview_has_video_bg(sc.bgIsVideo);
+    m_Main->set_has_live_preview_image(sc.hasBgImage);
+    if (sc.hasBgImage) {
+        m_Main->set_live_preview_image(sc.bgImage);
+    }
+
+    m_Main->set_live_overlay_name(slint::SharedString(sc.overlayName));
+    m_Main->set_has_live_overlay_image(sc.hasOverlayImage);
+    if (sc.hasOverlayImage) {
+        m_Main->set_live_overlay_image(sc.overlayImage);
+    }
+
+    m_Main->set_preview_show_clock(sc.showClock);
+    m_Main->set_show_clock_on_public(sc.showClock);
+    m_Main->set_preview_clock_text(slint::SharedString(GetActiveClockOverlayString()));
+
+    m_Main->set_preview_show_pleca(sc.showPleca);
+    m_Main->set_preview_pleca_title(slint::SharedString(sc.plecaTitle));
+    m_Main->set_preview_pleca_sub(slint::SharedString(sc.plecaSub));
+    m_Main->set_custom_overlay_active(sc.showPleca);
+
+    m_Main->set_active_public_alert(slint::SharedString(sc.alertText));
+}
+
+void SlintApp::SyncScreenOutputs() {
+    if (m_Screens.empty()) return;
+
+    // 1. Screen 0 -> ProjectorWindow (Público Principal)
+    if (!m_AudienceFrozen) {
+        const auto& pub = m_Screens[0];
+        m_Projector->set_live_is_bible(pub.isBible);
+        m_Projector->set_live_text(slint::SharedString(pub.displayText));
+        m_Projector->set_live_ref(slint::SharedString(pub.displayRef));
+        m_Projector->set_bg_solid_color(pub.bgSolidColor);
+        m_Projector->set_bg_is_static_image(pub.bgIsStatic);
+        m_Projector->set_has_bg_image(pub.hasBgImage);
+        if (pub.hasBgImage) {
+            m_Projector->set_bg_image(pub.bgImage);
+        }
+        m_Projector->set_has_overlay_image(pub.hasOverlayImage);
+        if (pub.hasOverlayImage) {
+            m_Projector->set_overlay_image(pub.overlayImage);
+        }
+        m_Projector->set_show_clock_overlay(pub.showClock);
+        m_Projector->set_clock_overlay_text(slint::SharedString(GetActiveClockOverlayString()));
+        m_Projector->set_alert_text(slint::SharedString(pub.alertText));
+        m_Projector->set_show_custom_overlay(pub.showPleca);
+        m_Projector->set_live_overlay_title(slint::SharedString(pub.plecaTitle));
+        m_Projector->set_live_overlay_sub(slint::SharedString(pub.plecaSub));
+    }
+
+    // 2. Screen 1 -> NetworkStreamServer (LAN / Smart TV 8080)
+    SyncLanFromScreenState();
+
+    // 3. Screen 2 -> StageWindow (Escenario)
+    if (m_Screens.size() > 2) {
+        const auto& stg = m_Screens[2];
+        m_Stage->set_live_text(slint::SharedString(stg.displayText));
+        m_Stage->set_live_ref(slint::SharedString(stg.displayRef));
+        m_Stage->set_stage_alert(slint::SharedString(stg.alertText));
+        std::string activeClock = GetActiveClockOverlayString();
+        bool showStgTimer = m_TimerRunning || stg.showClock;
+        m_Stage->set_timer_text(showStgTimer ? slint::SharedString(activeClock) : "");
+    }
+
+    // 4. Inspected Screen -> Vista en Vivo + Capas Activas + Matriz Multi-Pantalla
+    SyncInspectedScreenToPreview();
+    RefreshActiveLayersModel();
+    RefreshScreenMatrixModel();
+}
+
+void SlintApp::RefreshActiveLayersModel() {
+    m_ActiveLayersModel->clear();
+    if (m_Screens.empty()) return;
+    int idx = std::clamp(m_InspectedScreenIdx, 0, static_cast<int>(m_Screens.size()) - 1);
+    const auto& sc = m_Screens[idx];
+
+    auto singleLine = [](const std::string& s) {
+        std::string out;
+        out.reserve(std::min<size_t>(s.size(), 64));
+        for (char c : s) {
+            if (c == '\n' || c == '\r') {
+                if (!out.empty() && out.back() != ' ') out += " / ";
+            } else {
+                out += c;
+            }
+            if (out.size() >= 64) break;
+        }
+        return out;
+    };
+
+    // Layer 1 (Top): Clock / Countdown Timer
+    if (sc.showClock) {
+        ActiveLayerItem item;
+        item.id       = "clock";
+        item.kind     = "TIEMPO";
+        std::string clk = GetActiveClockOverlayString();
+        item.title    = slint::SharedString((m_Main->get_timer_mode_countdown() ? "Cuenta Regresiva: " : "Hora Actual: ") + clk);
+        item.subtitle = slint::SharedString("Overlay de Tiempo • " + sc.name);
+        item.accent   = slint::Color::from_rgb_uint8(56, 189, 248);
+        item.has_thumbnail = false;
+        m_ActiveLayersModel->push_back(item);
+    }
+
+    // Layer 2: Alert / Letrero Animado
+    if (!sc.alertText.empty()) {
+        ActiveLayerItem item;
+        item.id       = "alert";
+        item.kind     = "AVISO";
+        item.title    = slint::SharedString(singleLine(sc.alertText));
+        item.subtitle = slint::SharedString("Letrero en Pantalla • " + sc.name);
+        item.accent   = slint::Color::from_rgb_uint8(244, 63, 94);
+        item.has_thumbnail = false;
+        m_ActiveLayersModel->push_back(item);
+    }
+
+    // Layer 3: Pleca / Lower-Third
+    if (sc.showPleca && !sc.plecaTitle.empty()) {
+        ActiveLayerItem item;
+        item.id       = "pleca";
+        item.kind     = "PLECA";
+        item.title    = slint::SharedString(sc.plecaTitle);
+        item.subtitle = slint::SharedString(sc.plecaSub.empty() ? ("Lower-Third • " + sc.name) : sc.plecaSub);
+        item.accent   = slint::Color::from_rgb_uint8(168, 85, 247);
+        item.has_thumbnail = false;
+        m_ActiveLayersModel->push_back(item);
+    }
+
+    // Layer 4: Overlay PNG Transparente
+    if (sc.hasOverlayImage) {
+        ActiveLayerItem item;
+        item.id       = "overlay";
+        item.kind     = "OVERLAY";
+        item.title    = slint::SharedString(sc.overlayName);
+        item.subtitle = slint::SharedString("Gráfico PNG Transparente • " + sc.name);
+        item.accent   = slint::Color::from_rgb_uint8(45, 212, 191);
+        item.has_thumbnail = true;
+        item.thumbnail     = sc.hasOverlayThumb ? sc.overlayThumb : sc.overlayImage;
+        m_ActiveLayersModel->push_back(item);
+    }
+
+    // Layer 5: Lyrics / Bible Verse
+    if (!sc.displayText.empty()) {
+        ActiveLayerItem item;
+        item.id       = "text";
+        item.kind     = slint::SharedString(sc.isBible ? "BIBLIA" : "LETRAS");
+        item.title    = slint::SharedString(singleLine(sc.displayText));
+        item.subtitle = slint::SharedString(sc.displayRef.empty() ? ("Texto proyectado • " + sc.name) : (sc.displayRef + " • " + sc.name));
+        item.accent   = slint::Color::from_rgb_uint8(34, 197, 94);
+        item.has_thumbnail = false;
+        m_ActiveLayersModel->push_back(item);
+    }
+
+    // Layer 6: Background (Video / Static Image / Custom Solid Color)
+    if (sc.bgIsVideo || sc.bgIsStatic || sc.bgName != "Sin fondo") {
+        ActiveLayerItem item;
+        item.id       = "bg";
+        item.kind     = slint::SharedString(sc.bgIsVideo ? "VIDEO" : (sc.bgIsStatic ? "IMAGEN" : "COLOR"));
+        item.title    = slint::SharedString(sc.bgName);
+        item.subtitle = slint::SharedString((sc.bgIsVideo ? "Fondo Video en Vivo • " : "Fondo Activo • ") + sc.name);
+        item.accent   = slint::Color::from_rgb_uint8(245, 158, 11);
+        item.has_thumbnail = sc.hasBgThumb || sc.hasBgImage;
+        if (sc.hasBgThumb)      item.thumbnail = sc.bgThumb;
+        else if (sc.hasBgImage) item.thumbnail = sc.bgImage;
+        m_ActiveLayersModel->push_back(item);
+    }
+
+    // Layer 7: Independent Music Player (Global Audio Layer)
+    if (m_Main->get_music_playing()) {
+        ActiveLayerItem item;
+        item.id       = "music";
+        item.kind     = "MÚSICA";
+        item.title    = m_Main->get_music_now_playing();
+        item.subtitle = "Reproductor de Audio Independiente";
+        item.accent   = slint::Color::from_rgb_uint8(236, 72, 153);
+        item.has_thumbnail = m_Main->get_has_music_now_cover();
+        if (item.has_thumbnail) item.thumbnail = m_Main->get_music_now_cover();
+        m_ActiveLayersModel->push_back(item);
+    }
+}
+
+void SlintApp::RefreshScreenMatrixModel() {
+    m_ScreenMatrixModel->clear();
+    std::string clk = GetActiveClockOverlayString();
+
+    for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+        const auto& sc = m_Screens[i];
+        ScreenMatrixItem item;
+        item.id             = i;
+        item.name           = slint::SharedString(sc.name);
+        item.role_badge     = slint::SharedString(sc.roleBadge);
+        item.is_live        = (i == 0) ? m_ProjectorVisible
+                            : (i == 1) ? IsLanRunning()
+                            : (i == 2) ? m_StageVisible
+                            : (!sc.displayText.empty() || sc.hasBgImage || sc.showClock || !sc.alertText.empty());
+        item.is_targeted    = IsScreenTargeted(i);
+        item.is_inspected   = (i == m_InspectedScreenIdx);
+        item.is_custom_room = sc.isCustomRoom;
+        item.bg_color       = sc.bgSolidColor;
+        item.has_bg_image   = sc.hasBgImage;
+        if (sc.hasBgImage) item.bg_image = sc.bgImage;
+        item.bg_name        = slint::SharedString(sc.bgName);
+        item.has_overlay_image = sc.hasOverlayImage;
+        if (sc.hasOverlayImage) item.overlay_image = sc.overlayImage;
+        item.overlay_name   = slint::SharedString(sc.overlayName);
+        item.live_text      = slint::SharedString(sc.displayText);
+        item.live_ref       = slint::SharedString(sc.displayRef);
+        item.live_is_bible  = sc.isBible;
+        item.show_clock     = sc.showClock;
+        item.clock_text     = slint::SharedString(clk);
+        item.alert_text     = slint::SharedString(sc.alertText);
+        item.show_pleca     = sc.showPleca;
+        item.pleca_title    = slint::SharedString(sc.plecaTitle);
+
+        int activeCount = 0;
+        if (sc.showClock)          ++activeCount;
+        if (!sc.displayText.empty()) ++activeCount;
+        if (sc.bgName != "Sin fondo") ++activeCount;
+        if (sc.hasOverlayImage)    ++activeCount;
+        if (!sc.alertText.empty()) ++activeCount;
+        if (sc.showPleca)          ++activeCount;
+        item.queue_summary = slint::SharedString(
+            std::to_string(activeCount) + " capa(s) activa(s) • " +
+            (sc.displayRef.empty() ? sc.bgName : sc.displayRef));
+        m_ScreenMatrixModel->push_back(item);
+    }
+}
+
+void SlintApp::RemoveLayerOnScreen(int screenIdx, const std::string& layerId) {
+    if (layerId == "music") {
+        m_MusicPlayer.Stop();
+        m_CurrentMusicIdx = -1;
+        m_Main->set_music_playing(false);
+        m_Main->set_music_paused(false);
+        m_Main->set_music_position(0.0f);
+        m_Main->set_music_time_label("00:00 / 00:00");
+        m_Main->set_music_now_playing("Sin pista en reproducción");
+        m_Main->set_has_music_now_cover(false);
+        RefreshMusicModel();
+        RefreshActiveLayersModel();
+        return;
+    }
+    if (screenIdx < 0 || screenIdx >= static_cast<int>(m_Screens.size())) return;
+    auto& sc = m_Screens[screenIdx];
+
+    if (layerId == "clock") {
+        sc.showClock = false;
+    } else if (layerId == "alert") {
+        sc.alertText.clear();
+        if (screenIdx == 2) {
+            m_Main->set_active_stage_alert("");
+            m_Stage->set_stage_alert("");
+        }
+    } else if (layerId == "pleca") {
+        sc.showPleca = false;
+    } else if (layerId == "overlay") {
+        sc.overlayName = "Sin overlay";
+        sc.overlayPath.clear();
+        sc.hasOverlayImage = false;
+        sc.hasOverlayThumb = false;
+        if (screenIdx == 0) m_ActiveOverlayPath.clear();
+        RefreshOverlayQueueModel();
+        RefreshOverlayLayers();
+    } else if (layerId == "text") {
+        sc.rawText.clear();
+        sc.rawRef.clear();
+        sc.displayText.clear();
+        sc.displayRef.clear();
+        sc.isBible = false;
+        if (screenIdx == 0) {
+            m_RawLiveText.clear();
+            m_RawLiveRef.clear();
+            m_LiveIsBible = false;
+            m_Main->set_active_slide_index(-1);
+        }
+    } else if (layerId == "bg") {
+        sc.bgName       = "Sin fondo";
+        sc.bgPath.clear();
+        sc.hasBgImage   = false;
+        sc.bgIsStatic   = false;
+        sc.bgIsVideo    = false;
+        sc.hasBgThumb   = false;
+        sc.bgSolidColor = slint::Color::from_rgb_uint8(3, 3, 4);
+        sc.bgSolidRgb[0] = 0.0f;
+        sc.bgSolidRgb[1] = 0.0f;
+        sc.bgSolidRgb[2] = 0.0f;
+        if (screenIdx == 1) ClearLanFrame();
+    }
+
+    bool anyVideoStillUsed = false;
+    for (const auto& s : m_Screens) {
+        if (s.bgIsVideo) { anyVideoStillUsed = true; break; }
+    }
+    if (!anyVideoStillUsed && m_HasVideoBg) {
+        m_Player.Stop();
+        m_CurrentBgPath.clear();
+        m_HasStaticImage = false;
+        m_HasVideoBg = false;
+        m_Main->set_media_position(0.0f);
+        m_Main->set_media_time_label("00:00 / 00:00");
+    }
+}
+
+void SlintApp::RemoveActiveLayer(const std::string& layerId) {
+    if (layerId == "music") {
+        RemoveLayerOnScreen(0, "music");
+        return;
+    }
+    // If inspecting a specific screen (or targeting a specific screen), remove from that screen;
+    // if in "Todas" mode and inspecting Público (0), remove from all screens.
+    if (m_OutputTargetMode == 0 && m_InspectedScreenIdx == 0) {
+        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+            RemoveLayerOnScreen(i, layerId);
+        }
+    } else {
+        RemoveLayerOnScreen(m_InspectedScreenIdx, layerId);
+    }
+    SyncClockOverlay();
+    SyncScreenOutputs();
+}
+
+void SlintApp::ToggleLayerOnScreen(int screenIdx, const std::string& layerId) {
+    if (screenIdx < 0 || screenIdx >= static_cast<int>(m_Screens.size())) return;
+    auto& sc = m_Screens[screenIdx];
+
+    if (layerId == "clock") {
+        sc.showClock = !sc.showClock;
+    } else if (layerId == "text") {
+        if (!sc.displayText.empty()) {
+            RemoveLayerOnScreen(screenIdx, "text");
+        } else {
+            int curSlide = m_Main->get_active_slide_index();
+            if (curSlide >= 0 && curSlide < static_cast<int>(m_SlidesModel->row_count())) {
+                if (auto s = m_SlidesModel->row_data(curSlide)) {
+                    sc.isBible     = (m_ActiveTab == 1);
+                    sc.rawText     = std::string(s->body);
+                    sc.rawRef      = std::string(s->ref_text);
+                    sc.displayText = m_Main->get_text_uppercase() ? ToUpperUtf8(sc.rawText) : sc.rawText;
+                    sc.displayRef  = (sc.isBible && m_Main->get_index_uppercase()) ? ToUpperUtf8(sc.rawRef) : sc.rawRef;
+                }
+            } else if (!m_Screens[0].displayText.empty()) {
+                sc.isBible     = m_Screens[0].isBible;
+                sc.rawText     = m_Screens[0].rawText;
+                sc.rawRef      = m_Screens[0].rawRef;
+                sc.displayText = m_Screens[0].displayText;
+                sc.displayRef  = m_Screens[0].displayRef;
+            }
+        }
+    } else if (layerId == "bg") {
+        if (sc.bgName != "Sin fondo") {
+            RemoveLayerOnScreen(screenIdx, "bg");
+        } else if (m_Screens[0].bgName != "Sin fondo") {
+            sc.bgName     = m_Screens[0].bgName;
+            sc.bgPath     = m_Screens[0].bgPath;
+            sc.hasBgImage = m_Screens[0].hasBgImage;
+            sc.bgIsStatic = m_Screens[0].bgIsStatic;
+            sc.bgIsVideo  = m_Screens[0].bgIsVideo;
+            sc.bgImage    = m_Screens[0].bgImage;
+            sc.hasBgThumb = m_Screens[0].hasBgThumb;
+            sc.bgThumb    = m_Screens[0].bgThumb;
+            sc.bgSolidColor = m_Screens[0].bgSolidColor;
+            for (int c = 0; c < 3; ++c) sc.bgSolidRgb[c] = m_Screens[0].bgSolidRgb[c];
+            if (screenIdx == 1 && sc.bgIsStatic && sc.hasBgImage && IsLanRunning()) {
+                UpdateLanStaticFrame(sc.bgImage);
+            }
+        }
+    } else if (layerId == "alert") {
+        if (!sc.alertText.empty()) {
+            RemoveLayerOnScreen(screenIdx, "alert");
+        } else {
+            std::string inp = std::string(m_Main->get_alert_input());
+            if (inp.empty() && !m_Screens[0].alertText.empty()) inp = m_Screens[0].alertText;
+            if (inp.empty()) inp = "Aviso en " + sc.name;
+            sc.alertText = inp;
+            m_HasActivePublicAlert = true;
+        }
+    }
+    SyncClockOverlay();
+    SyncScreenOutputs();
+}
+
+void SlintApp::SendCurrentSelectionToScreen(int screenIdx) {
+    if (screenIdx < 0 || screenIdx >= static_cast<int>(m_Screens.size())) return;
+    int prevTarget = m_OutputTargetMode;
+    m_OutputTargetMode = screenIdx + 1; // Route exclusively to screenIdx
+
+    int curSlide = m_Main->get_active_slide_index();
+    if ((m_ActiveTab == 0 || m_ActiveTab == 1) && curSlide >= 0 && curSlide < static_cast<int>(m_SlidesModel->row_count())) {
+        ProjectSlide(curSlide);
+    } else if ((m_ActiveTab == 2 || m_ActiveTab == 3) && m_HasSelectedPreviewEntry) {
+        ProjectSelectedMedia();
+    } else if (m_ActiveTab == 10 && m_ActiveDocPageIdx >= 0) {
+        ProjectDocPage(m_ActiveDocPageIdx);
+    } else if (!m_Screens[0].displayText.empty() || m_Screens[0].bgName != "Sin fondo") {
+        ClonePublicToScreen(screenIdx);
+    }
+
+    m_OutputTargetMode = prevTarget;
+    m_InspectedScreenIdx = screenIdx;
+    m_Main->set_inspected_screen_idx(m_InspectedScreenIdx);
+    SyncScreenOutputs();
+}
+
+void SlintApp::ClonePublicToScreen(int screenIdx) {
+    if (screenIdx <= 0 || screenIdx >= static_cast<int>(m_Screens.size())) return;
+    const auto& pub = m_Screens[0];
+    auto& dst       = m_Screens[screenIdx];
+
+    dst.rawText         = pub.rawText;
+    dst.rawRef          = pub.rawRef;
+    dst.displayText     = pub.displayText;
+    dst.displayRef      = pub.displayRef;
+    dst.isBible         = pub.isBible;
+    dst.bgName          = pub.bgName;
+    dst.bgPath          = pub.bgPath;
+    dst.hasBgImage      = pub.hasBgImage;
+    dst.bgIsStatic      = pub.bgIsStatic;
+    dst.bgIsVideo       = pub.bgIsVideo;
+    dst.bgImage         = pub.bgImage;
+    dst.hasBgThumb      = pub.hasBgThumb;
+    dst.bgThumb         = pub.bgThumb;
+    dst.bgSolidColor    = pub.bgSolidColor;
+    for (int c = 0; c < 3; ++c) dst.bgSolidRgb[c] = pub.bgSolidRgb[c];
+    dst.overlayName     = pub.overlayName;
+    dst.overlayPath     = pub.overlayPath;
+    dst.hasOverlayImage = pub.hasOverlayImage;
+    dst.overlayImage    = pub.overlayImage;
+    dst.hasOverlayThumb = pub.hasOverlayThumb;
+    dst.overlayThumb    = pub.overlayThumb;
+    dst.showClock       = pub.showClock;
+    dst.alertText       = pub.alertText;
+    dst.showPleca       = pub.showPleca;
+    dst.plecaTitle      = pub.plecaTitle;
+    dst.plecaSub        = pub.plecaSub;
+
+    if (screenIdx == 1 && dst.bgIsStatic && dst.hasBgImage && IsLanRunning()) {
+        UpdateLanStaticFrame(dst.bgImage);
+    }
+    SyncClockOverlay();
+    SyncScreenOutputs();
+}
+
+void SlintApp::ClearAllOnScreen(int screenIdx) {
+    if (screenIdx < 0 || screenIdx >= static_cast<int>(m_Screens.size())) return;
+    RemoveLayerOnScreen(screenIdx, "clock");
+    RemoveLayerOnScreen(screenIdx, "alert");
+    RemoveLayerOnScreen(screenIdx, "pleca");
+    RemoveLayerOnScreen(screenIdx, "overlay");
+    RemoveLayerOnScreen(screenIdx, "text");
+    RemoveLayerOnScreen(screenIdx, "bg");
+    SyncClockOverlay();
+    SyncScreenOutputs();
+}
+
+void SlintApp::CreateExtraScreen(const std::string& rawName) {
+    std::string clean = rawName;
+    while (!clean.empty() && clean.front() == ' ') clean.erase(clean.begin());
+    while (!clean.empty() && clean.back() == ' ')  clean.pop_back();
+    if (clean.empty()) {
+        clean = "Sala " + std::to_string(m_Screens.size());
+    }
+
+    ScreenOutputState room;
+    room.id           = static_cast<int>(m_Screens.size());
+    room.name         = clean;
+    room.roleBadge    = "SALA INDEPENDIENTE";
+    room.isCustomRoom = true;
+    m_Screens.push_back(std::move(room));
+
+    m_InspectedScreenIdx = static_cast<int>(m_Screens.size()) - 1;
+    m_OutputTargetMode   = m_InspectedScreenIdx + 1;
+    m_Main->set_inspected_screen_idx(m_InspectedScreenIdx);
+    m_Main->set_output_target_mode(m_OutputTargetMode);
+    SyncScreenOutputs();
+    AppendDebugLog("Nueva sala creada: " + clean);
+}
+
+void SlintApp::DeleteExtraScreen(int screenIdx) {
+    if (screenIdx < 3 || screenIdx >= static_cast<int>(m_Screens.size())) return;
+    m_Screens.erase(m_Screens.begin() + screenIdx);
+    for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+        m_Screens[i].id = i;
+    }
+    if (m_InspectedScreenIdx >= static_cast<int>(m_Screens.size())) {
+        m_InspectedScreenIdx = 0;
+        m_Main->set_inspected_screen_idx(0);
+    }
+    if (m_OutputTargetMode > static_cast<int>(m_Screens.size())) {
+        m_OutputTargetMode = 0;
+        m_Main->set_output_target_mode(0);
+    }
+    SyncScreenOutputs();
 }
 
 } // namespace ProyecThor::SlintUI

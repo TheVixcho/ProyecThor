@@ -279,6 +279,66 @@ export component IconButton inherits Rectangle {
     }
 }
 
+export component IslandIconButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> label: "";
+    in property <bool> active: false;
+    in property <bool> danger: false;
+    in property <bool> accent-filled: false;
+    callback clicked();
+
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    background: root.danger
+        ? (ta.pressed ? Theme.danger.transparentize(0.35) : (ta.has-hover ? Theme.danger.transparentize(0.55) : Theme.danger-soft))
+        : (root.accent-filled
+            ? (ta.pressed ? Theme.accent.darker(0.15) : (ta.has-hover ? Theme.accent-strong : Theme.accent))
+            : (root.active
+                ? Theme.accent.transparentize(0.74)
+                : (ta.pressed ? Theme.bg-surface-1 : (ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-2))));
+    border-width: 1px;
+    border-color: root.danger
+        ? (ta.has-hover ? Theme.danger : Theme.danger.transparentize(0.45))
+        : (root.accent-filled
+            ? Theme.accent-strong
+            : (root.active ? Theme.border-accent : (ta.has-hover ? Theme.border-medium : Theme.border-subtle)));
+
+    animate background   { duration: 120ms; easing: ease-out; }
+    animate border-color { duration: 120ms; easing: ease-out; }
+
+    if root.label == "" : Image {
+        source: root.icon;
+        width: ta.pressed ? 12.5px : 14px;
+        height: ta.pressed ? 12.5px : 14px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        colorize: root.accent-filled ? Theme.accent-fg
+                : (root.danger ? #fca5a5
+                : (root.active ? Theme.accent-strong
+                : (ta.has-hover ? Theme.text-primary : Theme.text-secondary)));
+        animate width  { duration: 90ms; easing: ease-out; }
+        animate height { duration: 90ms; easing: ease-out; }
+    }
+
+    if root.label != "" : Text {
+        text: root.label;
+        color: root.accent-filled ? Theme.accent-fg
+             : (root.danger ? #fca5a5
+             : (root.active ? Theme.accent-strong
+             : (ta.has-hover ? Theme.text-primary : Theme.text-secondary)));
+        font-size: 11px;
+        font-weight: 800;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
 export component ScrubBar inherits Rectangle {
     in-out property <float> value: 0.0; // 0.0 .. 1.0
     out property <bool> dragging: ta.pressed;

@@ -367,6 +367,45 @@ void SlintVideoPlayer::SetAudioEqualizer(bool enabled, float bassDb, float midDb
     mpv_set_property_string(m_Mpv, "af", buf);
 }
 
+void SlintVideoPlayer::SetMusicAudioFx(bool eqEnabled, bool dynamicEq,
+                                       float b60, float b230, float b910, float b3600, float b12000) {
+    EnsureInit();
+    if (!m_Mpv) return;
+    if (!eqEnabled && !dynamicEq) {
+        mpv_set_property_string(m_Mpv, "af", "");
+        return;
+    }
+
+    std::string af;
+    auto appendAf = [&af](const std::string& f) {
+        if (f.empty()) return;
+        if (!af.empty()) af += ",";
+        af += f;
+    };
+
+    // Real-time 5-band parametric equalizer (applied when EQ or Dynamic EQ is active)
+    auto cl = [](float v) { return std::clamp(v, -12.0f, 12.0f); };
+    if (eqEnabled || dynamicEq) {
+        char eqBuf[512];
+        std::snprintf(eqBuf, sizeof(eqBuf),
+            "equalizer=f=60:t=q:w=1.1:g=%.1f,"
+            "equalizer=f=230:t=q:w=1.2:g=%.1f,"
+            "equalizer=f=910:t=q:w=1.2:g=%.1f,"
+            "equalizer=f=3600:t=q:w=1.2:g=%.1f,"
+            "equalizer=f=12000:t=q:w=1.1:g=%.1f",
+            cl(b60), cl(b230), cl(b910), cl(b3600), cl(b12000));
+        appendAf(eqBuf);
+    }
+
+    // ProyecThor Dynamic EQ DSP: real-time adaptive loudness & smooth peak control
+    if (dynamicEq) {
+        appendAf("dynaudnorm=f=150:g=15:p=0.90:m=5.0:s=10");
+    }
+
+    std::string lavfi = "lavfi=[" + af + "]";
+    mpv_set_property_string(m_Mpv, "af", lavfi.c_str());
+}
+
 bool SlintVideoPlayer::PollFrame(slint::Image& outImage) {
     const bool force = m_ForceRedraw.exchange(false, std::memory_order_acq_rel);
     const bool dirty = m_FrameDirty.exchange(false, std::memory_order_acq_rel);

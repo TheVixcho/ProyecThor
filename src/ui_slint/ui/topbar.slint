@@ -13,6 +13,8 @@ export component TopBar inherits Rectangle {
     in property <bool> audience-frozen: false;
     in-out property <bool> scale-menu-open: false;
     in-out property <bool> library-menu-open: false;
+    in-out property <bool> design-menu-open: false;
+    in-out property <bool> net-menu-open: false;
     in property <int> bg-scale-mode: 0; // 0=Recortar/Llenar, 1=Estirar, 2=Original
 
     property <string> hover-tip: "";
@@ -44,7 +46,7 @@ export component TopBar inherits Rectangle {
             spacing: 10px;
             alignment: start;
 
-            // Isla 1: Principal — Biblioteca (despliega menús dedicados), Biblia y Capturadora
+            // Isla 1: Principal — Biblioteca (menú desplegable) y Capturadora (aparte)
             ToolbarIsland {
                 y: (parent.height - self.height) / 2;
                 HorizontalLayout {
@@ -53,34 +55,34 @@ export component TopBar inherits Rectangle {
 
                     CircleIslandButton {
                         icon: @image-url("icons/folder.svg");
-                        tooltip: "Biblioteca (Canciones, Multimedia, Música, Documentos)";
+                        tooltip: "Biblioteca";
                         accent-color: #38bdf8;
-                        active: root.library-menu-open || root.active-tab == 13 || root.active-tab == 0 || root.active-tab == 2 || root.active-tab == 9 || root.active-tab == 10;
+                        active: root.library-menu-open || root.active-tab == 13 || root.active-tab == 0 || root.active-tab == 1 || root.active-tab == 2 || root.active-tab == 9 || root.active-tab == 10;
                         clicked => {
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.scale-menu-open = false;
                             root.library-menu-open = !root.library-menu-open;
                         }
                         hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
                     }
                     CircleIslandButton {
-                        icon: @image-url("icons/book.svg");
-                        tooltip: "Biblia";
-                        accent-color: #fbbf24;
-                        active: root.active-tab == 1;
-                        clicked => { root.library-menu-open = false; root.active-tab = 1; }
-                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
-                    }
-                    CircleIslandButton {
                         icon: @image-url("icons/camera.svg");
-                        tooltip: "Capturadora y Cámaras USB / HDMI";
+                        tooltip: "Capturadora";
                         accent-color: #f97316;
                         active: root.active-tab == 8;
-                        clicked => { root.library-menu-open = false; root.active-tab = 8; }
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.active-tab = 8;
+                        }
                         hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
                     }
                 }
             }
 
-            // Isla 2: Diseño (Estilos, Shaders, Transiciones, Tiles, Pads)
+            // Isla 2: Estilos y Diseño (menú desplegable unificado) + Tiles (aparte)
             ToolbarIsland {
                 y: (parent.height - self.height) / 2;
                 HorizontalLayout {
@@ -89,26 +91,15 @@ export component TopBar inherits Rectangle {
 
                     CircleIslandButton {
                         icon: @image-url("icons/palette.svg");
-                        tooltip: "Estilos de Letras";
+                        tooltip: "Estilos, Shaders, Transiciones y Pads";
                         accent-color: #a855f7;
-                        active: root.active-tab == 4 && root.design-subtab == 0;
-                        clicked => { root.active-tab = 4; root.design-subtab = 0; }
-                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
-                    }
-                    CircleIslandButton {
-                        icon: @image-url("icons/sliders.svg");
-                        tooltip: "Shaders, Filtros y Ecualizador";
-                        accent-color: #38bdf8;
-                        active: root.active-tab == 4 && root.design-subtab == 1;
-                        clicked => { root.active-tab = 4; root.design-subtab = 1; }
-                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
-                    }
-                    CircleIslandButton {
-                        icon: @image-url("icons/shuffle.svg");
-                        tooltip: "Transiciones";
-                        accent-color: #f43f5e;
-                        active: root.active-tab == 4 && root.design-subtab == 2;
-                        clicked => { root.active-tab = 4; root.design-subtab = 2; }
+                        active: root.design-menu-open || (root.active-tab == 4 && root.design-subtab != 3) || root.active-tab == 6;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.net-menu-open = false;
+                            root.scale-menu-open = false;
+                            root.design-menu-open = !root.design-menu-open;
+                        }
                         hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
                     }
                     CircleIslandButton {
@@ -116,21 +107,19 @@ export component TopBar inherits Rectangle {
                         tooltip: "Tiles (Pantalla Dividida)";
                         accent-color: #3b82f6;
                         active: root.active-tab == 4 && root.design-subtab == 3;
-                        clicked => { root.active-tab = 4; root.design-subtab = 3; }
-                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
-                    }
-                    CircleIslandButton {
-                        icon: @image-url("icons/grid.svg");
-                        tooltip: "Pads de Escena";
-                        accent-color: #818cf8;
-                        active: root.active-tab == 6;
-                        clicked => { root.active-tab = 6; }
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.active-tab = 4;
+                            root.design-subtab = 3;
+                        }
                         hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
                     }
                 }
             }
 
-            // Isla 3: Redes, Escanear, Ajustes, Ayuda/Novedades, Debug
+            // Isla 3: Redes (menú desplegable unificado), Escanear, Ajustes, Ayuda/Novedades, Debug
             ToolbarIsland {
                 y: (parent.height - self.height) / 2;
                 HorizontalLayout {
@@ -141,15 +130,25 @@ export component TopBar inherits Rectangle {
                         icon: @image-url("icons/wifi.svg");
                         tooltip: "Centro de Redes (LAN, Smart TV, Chat, Celular, Reloj, OSC)";
                         accent-color: #10b981;
-                        active: root.active-tab == 5;
-                        clicked => { root.active-tab = 5; }
+                        active: root.net-menu-open || root.active-tab == 5;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.scale-menu-open = false;
+                            root.net-menu-open = !root.net-menu-open;
+                        }
                         hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
                     }
                     CircleIslandButton {
                         icon: @image-url("icons/refresh.svg");
                         tooltip: "Escanear Bibliotecas (Actualización Manual)";
                         accent-color: #2dd4bf;
-                        clicked => { root.scan-libraries(); }
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.scan-libraries();
+                        }
                         hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
                     }
                     CircleIslandButton {
@@ -157,7 +156,12 @@ export component TopBar inherits Rectangle {
                         tooltip: "Ajustes y Temas";
                         accent-color: Theme.accent-strong;
                         active: root.active-tab == 7;
-                        clicked => { root.active-tab = 7; }
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.active-tab = 7;
+                        }
                         hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
                     }
                     CircleIslandButton {
@@ -165,7 +169,12 @@ export component TopBar inherits Rectangle {
                         tooltip: "Ayuda y Novedades (Changelog)";
                         accent-color: #60a5fa;
                         active: root.active-tab == 11;
-                        clicked => { root.active-tab = 11; }
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.active-tab = 11;
+                        }
                         hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
                     }
                     CircleIslandButton {
@@ -173,7 +182,12 @@ export component TopBar inherits Rectangle {
                         tooltip: "Consola Debug y Diagnóstico";
                         accent-color: #f87171;
                         active: root.active-tab == 12;
-                        clicked => { root.active-tab = 12; }
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.active-tab = 12;
+                        }
                         hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
                     }
                 }
@@ -199,7 +213,7 @@ export component TopBar inherits Rectangle {
             }
         }
 
-        // ── Isla 4 (Derecha): Escalado/FSR, Freeze, Público, Stage, Borrar Todo ──
+        // ── Isla 4 (Derecha): Matriz Multi-Pantalla, Escalado/FSR, Freeze, Público, Stage, Borrar Todo ──
         ToolbarIsland {
             horizontal-stretch: 0;
             y: (parent.height - self.height) / 2;
@@ -207,6 +221,14 @@ export component TopBar inherits Rectangle {
                 padding: 3px;
                 spacing: 4px;
 
+                CircleIslandButton {
+                    icon: @image-url("icons/layers.svg");
+                    tooltip: "Matriz Multi-Pantalla y Salas (Público, LAN, Stage, Salas)";
+                    accent-color: #38bdf8;
+                    active: root.active-tab == 14;
+                    clicked => { root.library-menu-open = false; root.active-tab = 14; }
+                    hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                }
                 CircleIslandButton {
                     icon: @image-url("icons/maximize.svg");
                     tooltip: root.bg-scale-mode == 1 ? "Escalado: Estirar (FSR)"

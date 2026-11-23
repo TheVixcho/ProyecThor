@@ -49,6 +49,7 @@ public:
     void SetLanCaptureEnabled(bool enabled);
     void SetVideoFilters(int brightness, int contrast, int saturation, int gamma, bool blur, int colorPreset, bool fsrSharpen = false);
     void SetAudioEqualizer(bool enabled, float bassDb, float midDb, float trebleDb);
+    void SetMusicAudioFx(bool eqEnabled, bool dynamicEq, float b60, float b230, float b910, float b3600, float b12000);
 
     // Renders latest frame into outImage if dirty; returns true when updated.
     bool PollFrame(slint::Image& outImage);
