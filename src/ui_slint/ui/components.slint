@@ -27,24 +27,30 @@ export component CircleIslandButton inherits Rectangle {
     width: 34px;
     height: 34px;
     border-radius: 17px;
-    background: root.active
-        ? root.accent-color.transparentize(0.65)
-        : (ta.has-hover ? root.accent-color.transparentize(0.74) : #ffffff0a);
-    border-width: root.active ? 1.5px : 1px;
-    border-color: root.active
-        ? root.accent-color.transparentize(0.10)
-        : (ta.has-hover ? root.accent-color.transparentize(0.45) : #ffffff16);
+    background: ta.pressed
+        ? root.accent-color.transparentize(0.45)
+        : (root.active
+            ? root.accent-color.transparentize(0.64)
+            : (ta.has-hover ? root.accent-color.transparentize(0.76) : #ffffff08));
+    border-width: root.active ? 1.6px : 1px;
+    border-color: ta.pressed
+        ? root.accent-color
+        : (root.active
+            ? root.accent-color.transparentize(0.08)
+            : (ta.has-hover ? root.accent-color.transparentize(0.40) : #ffffff16));
 
-    animate background { duration: 120ms; easing: ease-out; }
-    animate border-color { duration: 120ms; easing: ease-out; }
+    animate background   { duration: 150ms; easing: ease-out; }
+    animate border-color { duration: 150ms; easing: ease-out; }
 
     Image {
         source: root.icon;
-        width: 17px;
-        height: 17px;
+        width: ta.pressed ? 15px : (ta.has-hover ? 18px : 16.5px);
+        height: ta.pressed ? 15px : (ta.has-hover ? 18px : 16.5px);
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         colorize: (root.active || ta.has-hover) ? root.accent-color : Theme.text-secondary;
+        animate width  { duration: 110ms; easing: ease-out; }
+        animate height { duration: 110ms; easing: ease-out; }
     }
 
     ta := TouchArea {
@@ -171,42 +177,58 @@ export component GlassButton inherits Rectangle {
     in property <bool> has-icon: false;
     in property <bool> primary: false;
     in property <bool> danger: false;
+    in property <bool> compact: false;
     callback clicked();
 
-    height: 33px;
+    height: root.compact ? 28px : 32px;
     border-radius: Theme.radius-md;
     background: root.danger
-        ? (ta.has-hover ? Theme.danger.transparentize(0.62) : Theme.danger-soft)
+        ? (ta.pressed ? Theme.danger.transparentize(0.45) : (ta.has-hover ? Theme.danger.transparentize(0.60) : Theme.danger-soft))
         : (root.primary
-            ? (ta.has-hover ? #e4e4e7 : Theme.accent)
-            : (ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-2));
+            ? (ta.pressed ? Theme.accent.darker(0.15) : (ta.has-hover ? Theme.accent-strong : Theme.accent))
+            : (ta.pressed ? Theme.bg-surface-1 : (ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-2)));
     border-width: 1px;
     border-color: root.danger
-        ? Theme.danger.transparentize(0.45)
-        : (root.primary ? Theme.accent-strong : Theme.border-subtle);
+        ? (ta.has-hover ? Theme.danger : Theme.danger.transparentize(0.45))
+        : (root.primary
+            ? Theme.accent-strong
+            : (ta.has-hover ? Theme.border-medium : Theme.border-subtle));
+    clip: true;
 
-    animate background { duration: 120ms; }
+    animate background   { duration: 130ms; easing: ease-out; }
+    animate border-color { duration: 130ms; easing: ease-out; }
+
+    // Subtle top specular highlight for macOS/ProPresenter depth
+    Rectangle {
+        y: 0;
+        width: 100%;
+        height: 1px;
+        background: root.primary ? #ffffff45 : #ffffff12;
+    }
 
     HorizontalLayout {
-        padding-left: 12px;
-        padding-right: 12px;
-        spacing: 6px;
+        padding-left: root.compact ? 8px : 11px;
+        padding-right: root.compact ? 8px : 11px;
+        spacing: root.compact ? 4px : 5px;
         alignment: center;
 
         if root.has-icon : Image {
             source: root.icon;
-            width: 14px;
-            height: 14px;
+            width: ta.pressed ? 12px : (root.compact ? 12.5px : 13.5px);
+            height: ta.pressed ? 12px : (root.compact ? 12.5px : 13.5px);
             y: (parent.height - self.height) / 2;
             colorize: root.primary ? Theme.accent-fg : (root.danger ? #fca5a5 : Theme.text-primary);
+            animate width  { duration: 90ms; easing: ease-out; }
+            animate height { duration: 90ms; easing: ease-out; }
         }
 
         if root.label != "" : Text {
             text: root.label;
             color: root.primary ? Theme.accent-fg : (root.danger ? #fca5a5 : Theme.text-primary);
-            font-size: 12px;
+            font-size: root.compact ? 11px : 11.5px;
             font-weight: 600;
             vertical-alignment: center;
+            overflow: elide;
         }
     }
 
@@ -222,26 +244,33 @@ export component IconButton inherits Rectangle {
     in property <bool> danger: false;
     callback clicked();
 
-    width: 33px;
-    height: 33px;
+    width: 32px;
+    height: 32px;
     border-radius: Theme.radius-md;
     background: root.danger
-        ? (ta.has-hover ? Theme.danger.transparentize(0.65) : Theme.danger-soft)
-        : (root.active
-            ? Theme.bg-surface-hover
-            : (ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-2));
+        ? (ta.pressed ? Theme.danger.transparentize(0.45) : (ta.has-hover ? Theme.danger.transparentize(0.62) : Theme.danger-soft))
+        : (ta.pressed
+            ? Theme.bg-surface-1
+            : (root.active
+                ? Theme.bg-surface-hover
+                : (ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-2)));
     border-width: 1px;
     border-color: root.danger
-        ? Theme.danger.transparentize(0.45)
-        : (root.active ? Theme.border-accent : Theme.border-subtle);
+        ? (ta.has-hover ? Theme.danger : Theme.danger.transparentize(0.45))
+        : (root.active ? Theme.border-accent : (ta.has-hover ? Theme.border-medium : Theme.border-subtle));
+
+    animate background   { duration: 130ms; easing: ease-out; }
+    animate border-color { duration: 130ms; easing: ease-out; }
 
     Image {
         source: root.icon;
-        width: 15px;
-        height: 15px;
+        width: ta.pressed ? 13px : (ta.has-hover ? 15.5px : 14.5px);
+        height: ta.pressed ? 13px : (ta.has-hover ? 15.5px : 14.5px);
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         colorize: root.danger ? #fca5a5 : (root.active || ta.has-hover ? Theme.text-primary : Theme.text-secondary);
+        animate width  { duration: 100ms; easing: ease-out; }
+        animate height { duration: 100ms; easing: ease-out; }
     }
 
     ta := TouchArea {
@@ -250,63 +279,141 @@ export component IconButton inherits Rectangle {
     }
 }
 
+export component ScrubBar inherits Rectangle {
+    in-out property <float> value: 0.0; // 0.0 .. 1.0
+    out property <bool> dragging: ta.pressed;
+    callback seeked(float);
+
+    height: 18px;
+    background: transparent;
+
+    // Track rail
+    Rectangle {
+        y: (parent.height - self.height) / 2;
+        width: 100%;
+        height: ta.has-hover || ta.pressed ? 6px : 4px;
+        border-radius: 2px;
+        background: Theme.bg-surface-2;
+        border-width: 1px;
+        border-color: Theme.border-subtle;
+        clip: true;
+        animate height { duration: 90ms; }
+
+        Rectangle {
+            x: 0;
+            width: parent.width * Math.clamp(root.value, 0.0, 1.0);
+            height: 100%;
+            background: Theme.accent-strong;
+        }
+    }
+
+    // Crisp studio playhead thumb
+    Rectangle {
+        width: ta.pressed ? 12px : (ta.has-hover ? 10px : 8px);
+        height: self.width;
+        border-radius: 2px;
+        x: Math.clamp(Math.clamp(root.value, 0.0, 1.0) * parent.width - self.width / 2, 0px, Math.max(0px, parent.width - self.width));
+        y: (parent.height - self.height) / 2;
+        background: #ffffff;
+        border-width: 1px;
+        border-color: Theme.accent-strong;
+        animate width { duration: 90ms; }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(ev) => {
+            if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
+                if (root.width > 1px) {
+                    root.value = Math.clamp(self.mouse-x / root.width, 0.0, 1.0);
+                    root.seeked(root.value);
+                }
+            } else if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left) {
+                if (root.width > 1px) {
+                    root.value = Math.clamp(self.mouse-x / root.width, 0.0, 1.0);
+                    root.seeked(root.value);
+                }
+            }
+        }
+        moved => {
+            if (self.pressed && root.width > 1px) {
+                root.value = Math.clamp(self.mouse-x / root.width, 0.0, 1.0);
+                root.seeked(root.value);
+            }
+        }
+    }
+}
+
 export component SlideTile inherits Rectangle {
     in property <string> badge;
     in property <string> body;
     in property <bool> active: false;
+    in property <length> card-height: 92px;
+    in property <length> body-font-size: 12.5px;
     callback clicked();
 
-    min-height: 104px;
-    border-radius: Theme.radius-md;
+    height: root.card-height;
+    border-radius: 4px;
     background: root.active
         ? Theme.bg-surface-hover
         : (ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1);
     border-width: root.active ? 2px : 1px;
     border-color: root.active
-        ? Theme.accent
+        ? Theme.accent-strong
         : (ta.has-hover ? Theme.border-medium : Theme.border-subtle);
+    clip: true;
 
-    animate background { duration: 110ms; }
-    animate border-color { duration: 110ms; }
+    animate background { duration: 100ms; }
+    animate border-color { duration: 100ms; }
 
     VerticalLayout {
-        padding: 12px;
-        spacing: 6px;
+        padding: 0px;
+        spacing: 0px;
 
-        HorizontalLayout {
-            Rectangle {
-                height: 20px;
-                border-radius: 5px;
-                background: root.active ? Theme.accent : Theme.bg-surface-2;
-                HorizontalLayout {
-                    padding-left: 8px;
-                    padding-right: 8px;
-                    Text {
-                        text: root.badge;
-                        color: root.active ? #09090b : Theme.text-secondary;
-                        font-size: 11px;
-                        font-weight: 700;
-                        vertical-alignment: center;
-                    }
+        // Compact broadcast header bar
+        Rectangle {
+            height: 22px;
+            background: root.active ? Theme.accent : Theme.bg-surface-2;
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                alignment: space-between;
+                Text {
+                    text: root.badge;
+                    color: root.active ? Theme.accent-fg : Theme.text-secondary;
+                    font-size: 10px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                    overflow: elide;
                 }
-            }
-            Rectangle { horizontal-stretch: 1; }
-            if root.active : Text {
-                text: "● EN VIVO";
-                color: Theme.live-green;
-                font-size: 10.5px;
-                font-weight: 700;
-                vertical-alignment: center;
+                if root.active : Text {
+                    text: "● LIVE";
+                    color: Theme.accent-fg;
+                    font-size: 9.5px;
+                    font-weight: 800;
+                    vertical-alignment: center;
+                }
             }
         }
 
-        Text {
-            text: root.body;
-            color: Theme.text-primary;
-            font-size: 13px;
-            wrap: word-wrap;
-            overflow: elide;
+        // Crisp lyric body box
+        Rectangle {
             vertical-stretch: 1;
+            clip: true;
+            Text {
+                x: 8px;
+                y: 4px;
+                width: parent.width - 16px;
+                height: parent.height - 8px;
+                text: root.body;
+                color: Theme.text-primary;
+                font-size: root.body-font-size;
+                font-weight: 500;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                wrap: word-wrap;
+                overflow: elide;
+            }
         }
     }
 
@@ -498,5 +605,118 @@ export component ThemeSwatchButton inherits Rectangle {
     ta := TouchArea {
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
+    }
+}
+
+export component StyleGalleryCard inherits Rectangle {
+    in property <string> style-name;
+    in property <string> style-summary;
+    in property <color> preview-text-color: #ffffff;
+    in property <bool> preview-box-bg: false;
+    in property <bool> active: false;
+    callback apply-style();
+    callback edit-style();
+    callback duplicate-style();
+    callback delete-style();
+
+    height: 118px;
+    border-radius: Theme.radius-md;
+    background: root.active
+        ? Theme.bg-surface-hover
+        : (card-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1);
+    border-width: root.active ? 2px : 1px;
+    border-color: root.active ? Theme.live-green : (card-ta.has-hover ? Theme.border-accent : Theme.border-subtle);
+
+    card-ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.apply-style(); }
+    }
+
+    HorizontalLayout {
+        padding: 10px;
+        spacing: 12px;
+
+        Rectangle {
+            width: 156px;
+            border-radius: 8px;
+            background: #050507;
+            border-width: 1px;
+            border-color: Theme.border-subtle;
+            clip: true;
+
+            Rectangle {
+                width: 84%;
+                height: 54%;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                border-radius: 5px;
+                background: root.preview-box-bg ? #00000099 : transparent;
+
+                Text {
+                    text: "Aa Bb Cc\nEjemplo";
+                    color: root.preview-text-color;
+                    font-size: 13px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: space-between;
+            spacing: 4px;
+
+            HorizontalLayout {
+                alignment: space-between;
+                Text {
+                    text: root.style-name;
+                    color: Theme.text-primary;
+                    font-size: 14px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                if root.active : Text {
+                    text: "● ACTIVO";
+                    color: Theme.live-green;
+                    font-size: 10.5px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+            }
+
+            Text {
+                text: root.style-summary;
+                color: Theme.text-secondary;
+                font-size: 11px;
+                overflow: elide;
+            }
+
+            HorizontalLayout {
+                spacing: 6px;
+                GlassButton {
+                    label: root.active ? "Aplicado" : "Aplicar";
+                    primary: !root.active;
+                    clicked => { root.apply-style(); }
+                }
+                GlassButton {
+                    label: "Editar";
+                    icon: @image-url("icons/edit.svg");
+                    has-icon: true;
+                    clicked => { root.edit-style(); }
+                }
+                IconButton {
+                    icon: @image-url("icons/plus.svg");
+                    clicked => { root.duplicate-style(); }
+                }
+                IconButton {
+                    icon: @image-url("icons/trash.svg");
+                    danger: true;
+                    clicked => { root.delete-style(); }
+                }
+            }
+        }
     }
 }

@@ -79,12 +79,13 @@ StreamConfig NetworkStreamServer::GetConfig() const
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
-bool NetworkStreamServer::Start(int port)
+bool NetworkStreamServer::Start(int port, const std::string& advertisedIp)
 {
     if (m_Running.load()) return true;
 
     m_Port    = port;
-    m_BaseURL = "http://" + DetectLocalIP() + ":" + std::to_string(port);
+    std::string ip = advertisedIp.empty() ? DetectLocalIP() : advertisedIp;
+    m_BaseURL = "http://" + ip + ":" + std::to_string(port);
     std::cout << "[NetworkStream] URL generada: " << m_BaseURL << "\n";
 
     std::promise<bool> startedPromise;
@@ -261,7 +262,7 @@ void NetworkStreamServer::ServerThreadFunc(int port, std::promise<bool> startedP
     });
 
     // ── GET /frame  (JPEG único — modo LowLatency) ────────────────────────────
-    svr.Get("/frame", [this](const httplib::Request& req, httplib::Response& res)
+    auto serveSingleFrame = [this](const httplib::Request& /*req*/, httplib::Response& res)
     {
         std::vector<uint8_t> jpegData;
         {
@@ -303,6 +304,7 @@ void NetworkStreamServer::ServerThreadFunc(int port, std::promise<bool> startedP
             };
             res.set_header("Access-Control-Allow-Origin", "*");
             res.set_header("Cache-Control", "no-cache");
+            res.set_header("transferMode.dlna.org", "Interactive");
             res.set_content(
                 std::string(reinterpret_cast<const char*>(kBlack1x1), sizeof(kBlack1x1)),
                 "image/jpeg");
@@ -311,17 +313,22 @@ void NetworkStreamServer::ServerThreadFunc(int port, std::promise<bool> startedP
 
         res.set_header("Access-Control-Allow-Origin", "*");
         res.set_header("Cache-Control", "no-cache, no-store");
+        res.set_header("transferMode.dlna.org", "Interactive");
         res.set_content(
             std::string(reinterpret_cast<const char*>(jpegData.data()), jpegData.size()),
             "image/jpeg");
-    });
+    };
+    svr.Get("/frame", serveSingleFrame);
+    svr.Get("/live.jpg", serveSingleFrame);
 
-    // ── GET /stream  (MJPEG — modo HighQuality) ───────────────────────────────
-    svr.Get("/stream", [this](const httplib::Request& req, httplib::Response& res)
-{
-    res.set_header("Access-Control-Allow-Origin", "*");
-    res.set_header("Cache-Control", "no-cache");
-    res.set_header("Connection", "keep-alive");
+    // ── GET /stream & /live.mjpg (MJPEG — Smart TV DLNA + HighQuality) ────────
+    auto serveMjpeg = [this](const httplib::Request& /*req*/, httplib::Response& res)
+    {
+        res.set_header("Access-Control-Allow-Origin", "*");
+        res.set_header("Cache-Control", "no-cache");
+        res.set_header("Connection", "keep-alive");
+        res.set_header("transferMode.dlna.org", "Streaming");
+        res.set_header("contentFeatures.dlna.org", "DLNA.ORG_OP=00;DLNA.ORG_CI=0");
 
     const std::string boundary = "PTframe";
 
@@ -386,7 +393,9 @@ void NetworkStreamServer::ServerThreadFunc(int port, std::promise<bool> startedP
             return false;
         }
     );
-});
+    };
+    svr.Get("/stream", serveMjpeg);
+    svr.Get("/live.mjpg", serveMjpeg);
     // ── Error handler ─────────────────────────────────────────────────────────
     svr.set_error_handler([](const httplib::Request& req, httplib::Response& res) {
         res.status = 404;

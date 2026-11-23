@@ -699,10 +699,13 @@ if(PROYECTHOR_BUILD_SLINT)
                 src/ui_slint/SlintMobileServer.cpp
                 src/core/io/BibleXmlIO.cpp
                 src/core/NetworkStreamServer.cpp
+                src/core/FrameEncodeWorker.cpp
                 src/core/ChatMessageStore.cpp
                 src/core/OSCSender.cpp
+                src/core/SmartTvCaster.cpp
                 src/vendor/qrcodegen/qrcodegen.cpp
                 src/vendor/stb/stb_image_write_impl.cpp
+                src/vendor/stb/stb_image_impl.cpp
                 ${RESOURCE_FILE}
             )
         else()
@@ -713,10 +716,13 @@ if(PROYECTHOR_BUILD_SLINT)
                 src/ui_slint/SlintMobileServer.cpp
                 src/core/io/BibleXmlIO.cpp
                 src/core/NetworkStreamServer.cpp
+                src/core/FrameEncodeWorker.cpp
                 src/core/ChatMessageStore.cpp
                 src/core/OSCSender.cpp
+                src/core/SmartTvCaster.cpp
                 src/vendor/qrcodegen/qrcodegen.cpp
                 src/vendor/stb/stb_image_write_impl.cpp
+                src/vendor/stb/stb_image_impl.cpp
             )
         endif()
 

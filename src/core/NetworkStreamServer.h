@@ -110,7 +110,7 @@ public:
     void SetConfig(const StreamConfig& cfg);
     StreamConfig GetConfig() const;
 
-    bool Start(int port = 8080);
+    bool Start(int port = 8080, const std::string& advertisedIp = "");
     void Stop();
 
     bool        IsRunning()  const { return m_Running.load(); }
