@@ -1,34 +1,34 @@
 :root {
-  /* Grises neutros (sin tinte azulado) -- look plano tipo panel de
-     control, no "espacial". El color queda reservado al acento y a
-     detalles puntuales, no al fondo. */
-  --bg: #0c0d0f;
-  --bg-soft: #101113;
-  --surface: #17181b;
-  --surface-2: #1e2023;
-  --border: rgba(255, 255, 255, 0.09);
-  --border-strong: rgba(255, 255, 255, 0.18);
+  /* Modo claro corporativo */
+  --bg: #ffffff;
+  --bg-soft: #f5f7fa;
+  --surface: #ffffff;
+  --surface-2: #eef2f6;
+  --border: #e1e6ed;
+  --border-strong: #c8d1dc;
 
-  --text: #eceef0;
-  --text-dim: #9a9da3;
-  --text-faint: #67696e;
+  --text: #111827;
+  --text-dim: #4b5563;
+  --text-faint: #6b7280;
 
-  --blue: #2f7de6;
-  --blue-light: #5b9bef;
-  --coral: #e2664c;
-  --coral-light: #ef8468;
-  --mint: #4fd8b8;
+  --blue: #1a56db;
+  --blue-light: #2563eb;
+  --blue-soft: rgba(26, 86, 219, 0.08);
+  --coral: #d9482b;
+  --coral-light: #e05a3f;
+  --mint: #0d9488;
 
-  --gradient-text: linear-gradient(90deg, var(--blue-light), var(--mint));
+  --gradient-text: linear-gradient(90deg, var(--blue), var(--mint));
 
-  --radius-sm: 3px;
+  --radius-sm: 4px;
   --radius-md: 6px;
-  --radius-lg: 8px;
+  --radius-lg: 10px;
 
-  --shadow-lg: 0 12px 28px -12px rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0 2px 8px -2px rgba(15, 23, 42, 0.06);
+  --shadow-lg: 0 18px 40px -16px rgba(15, 23, 42, 0.16);
 
-  color-scheme: dark;
-  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color-scheme: light;
+  font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
 }
 
 * {
@@ -78,6 +78,6 @@ button {
 }
 
 ::selection {
-  background: rgba(28, 140, 232, 0.35);
-  color: #fff;
+  background: rgba(26, 86, 219, 0.18);
+  color: #111827;
 }

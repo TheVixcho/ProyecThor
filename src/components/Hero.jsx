@@ -26,30 +26,6 @@ export default function Hero({ strings }) {
             </a>
           </div>
         </div>
-
-        <div className="hero-visual" aria-hidden="true">
-          <div className="mock-window">
-            <div className="mock-titlebar">
-              <span className="mock-dot" />
-              <span className="mock-dot" />
-              <span className="mock-dot" />
-              <span className="mock-title">ProyecThor — Vista en Vivo</span>
-            </div>
-            <div className="mock-body">
-              <div className="mock-rail">
-                <span className="mock-rail-item active" />
-                <span className="mock-rail-item" />
-                <span className="mock-rail-item" />
-                <span className="mock-rail-item" />
-              </div>
-              <div className="mock-stage">
-                <span className="mock-stage-text">EN VIVO</span>
-                <div className="mock-stage-bar" />
-                <div className="mock-stage-bar short" />
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </section>
   )
