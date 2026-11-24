@@ -72,6 +72,7 @@ jobs:
     name: Windows MSVC + Instalador (.exe)
     needs: resolve-meta
     runs-on: windows-latest
+    timeout-minutes: 25
     steps:
       - name: Checkout del repositorio
         uses: actions/checkout@v4
@@ -89,35 +90,56 @@ jobs:
             src/vendor/sdk/slint-win
             src/vendor/sdk/mpv/libmpv-2.dll
             extrabuild/ffmpeg.exe
-          key: win-sdks-slint${{ env.SLINT_VERSION }}-v1
+          key: win-sdks-slint${{ env.SLINT_VERSION }}-v2
 
-      - name: Descargar Slint C++ SDK ${{ env.SLINT_VERSION }} (MSVC x64)
+      - name: Descargar y extraer Slint C++ SDK ${{ env.SLINT_VERSION }} (MSVC x64)
         if: steps.cache-win-sdks.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
           $slintDir = Join-Path $PWD "src\vendor\sdk\slint-win"
           if (-not (Test-Path "$slintDir\lib\cmake\Slint\SlintConfig.cmake")) {
             $url = "https://github.com/slint-ui/slint/releases/download/v${{ env.SLINT_VERSION }}/Slint-cpp-${{ env.SLINT_VERSION }}-win64-MSVC-AMD64.exe"
             $installer = "$env:TEMP\Slint-cpp-win64.exe"
-            Write-Host "Descargando $url ..."
-            Invoke-WebRequest -Uri $url -OutFile $installer
+            Write-Host "Descargando $url con curl.exe..."
+            & curl.exe -fSL --retry 3 -o $installer $url
+            if ($LASTEXITCODE -ne 0) { throw "curl.exe fallo descargando Slint SDK ($LASTEXITCODE)" }
+
+            # Extraer con innoextract (100% desatendido, sin UI ni bloqueos de instalador)
+            $innoZip = "$env:TEMP\innoextract.zip"
+            $innoDir = "$env:TEMP\innoextract-bin"
+            $extractDir = "$env:TEMP\slint-extract"
+            Remove-Item -Recurse -Force $innoDir, $extractDir -ErrorAction SilentlyContinue
+            & curl.exe -fSL --retry 3 -o $innoZip "https://github.com/dscharrer/innoextract/releases/download/1.9/innoextract-1.9-windows.zip"
+            if ($LASTEXITCODE -ne 0) { throw "curl.exe fallo descargando innoextract ($LASTEXITCODE)" }
+            Expand-Archive -Path $innoZip -DestinationPath $innoDir -Force
+            $innoExe = (Get-ChildItem -Path $innoDir -Recurse -Filter "innoextract.exe" | Select-Object -First 1).FullName
+            & $innoExe -q -d $extractDir $installer
+            if ($LASTEXITCODE -ne 0) { throw "innoextract fallo con codigo $LASTEXITCODE" }
+
+            $cfg = Get-ChildItem -Path $extractDir -Recurse -Filter "SlintConfig.cmake" | Select-Object -First 1
+            if (-not $cfg) { throw "No se encontro SlintConfig.cmake dentro de $extractDir" }
+            $sdkRoot = Split-Path (Split-Path (Split-Path $cfg.DirectoryName -Parent) -Parent) -Parent
+            Remove-Item -Recurse -Force $slintDir -ErrorAction SilentlyContinue
             New-Item -ItemType Directory -Force -Path $slintDir | Out-Null
-            $proc = Start-Process -FilePath $installer -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$slintDir" -Wait -PassThru
-            if ($proc.ExitCode -ne 0) {
-              throw "Error al instalar Slint C++ SDK (exit code $($proc.ExitCode))"
-            }
-            Remove-Item -Force $installer -ErrorAction SilentlyContinue
+            Copy-Item -Recurse -Force "$sdkRoot\*" $slintDir
+            Remove-Item -Recurse -Force $innoDir, $extractDir, $innoZip, $installer -ErrorAction SilentlyContinue
           }
           if (-not (Test-Path "$slintDir\lib\cmake\Slint\SlintConfig.cmake")) {
             throw "No se encontro SlintConfig.cmake en $slintDir"
           }
+          if (-not (Test-Path "$slintDir\bin\slint_cpp.dll")) {
+            throw "No se encontro slint_cpp.dll en $slintDir\bin"
+          }
+          Write-Host "[OK] Slint C++ SDK listo en $slintDir"
 
       - name: Descargar libmpv-2.dll para Windows x64
         if: steps.cache-win-sdks.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
           $dst = "src\vendor\sdk\mpv\libmpv-2.dll"
           if (-not (Test-Path $dst)) {
             $headers = @{ "User-Agent" = "ProyecThor-CI"; "Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}" }
@@ -129,7 +151,8 @@ jobs:
             if (-not $asset) { throw "No se encontro mpv-dev-x86_64 en shinchiro/mpv-winbuild-cmake" }
             $archive = "$env:TEMP\mpv-dev.7z"
             Write-Host "Descargando $($asset.browser_download_url) ..."
-            Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $archive
+            & curl.exe -fSL --retry 3 -o $archive $asset.browser_download_url
+            if ($LASTEXITCODE -ne 0) { throw "curl.exe fallo descargando mpv ($LASTEXITCODE)" }
             $tmpDir = "$env:TEMP\mpv-extract"
             Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
             & 7z x $archive "-o$tmpDir" -y | Out-Null
@@ -144,11 +167,13 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
           New-Item -ItemType Directory -Force -Path "extrabuild" | Out-Null
           $dst = "extrabuild\ffmpeg.exe"
           if (-not (Test-Path $dst)) {
             $zip = "$env:TEMP\ffmpeg-win.zip"
-            Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile $zip
+            & curl.exe -fSL --retry 3 -o $zip "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+            if ($LASTEXITCODE -ne 0) { throw "curl.exe fallo descargando ffmpeg ($LASTEXITCODE)" }
             $tmpDir = "$env:TEMP\ffmpeg-extract"
             Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
             Expand-Archive -Path $zip -DestinationPath $tmpDir -Force
@@ -231,6 +256,7 @@ jobs:
     name: Linux Ubuntu 22.04 + AppImage (.AppImage)
     needs: resolve-meta
     runs-on: ubuntu-22.04
+    timeout-minutes: 25
     steps:
       - name: Checkout del repositorio
         uses: actions/checkout@v4
@@ -245,7 +271,8 @@ jobs:
             libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev \
             libwayland-dev libxkbcommon-dev wayland-protocols extra-cmake-modules \
             libpipewire-0.3-dev libdbus-1-dev libssl-dev libopencv-dev \
-            libglib2.0-dev libfuse2 xvfb
+            libglib2.0-dev libinput-dev libudev-dev libgbm-dev libdrm-dev \
+            libfontconfig1-dev libfreetype-dev libfuse2 xvfb
 
       - name: Cachear Slint C++ SDK ${{ env.SLINT_VERSION }} y herramientas AppImage
         id: cache-linux-tools
@@ -316,6 +343,7 @@ jobs:
 
           # Empaquetar librerías compartidas (libmpv, libslint_cpp, libpdfium, códecs) sin sistema base glibc/GL/Wayland/X11
           cp packaging/proyecthor.png /tmp/io.github.thevixcho.ProyecThor.png
+          LD_LIBRARY_PATH="$(pwd)/build-appimage/AppDir/usr/lib/proyecthor:${LD_LIBRARY_PATH:-}" \
           NO_STRIP=1 ./.ci-tools/linuxdeploy-x86_64.AppImage --appimage-extract-and-run \
             --appdir build-appimage/AppDir \
             -e build-appimage/AppDir/usr/lib/proyecthor/ProyecThorSlint \
