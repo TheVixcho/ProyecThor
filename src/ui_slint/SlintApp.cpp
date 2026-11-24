@@ -1164,16 +1164,26 @@ void SlintApp::BindCallbacks() {
         SavePersistedState();
     });
     m_Main->on_check_github_updates([this]() { CheckGitHubUpdatesAsync(); });
-    m_Main->on_open_kofi_donations([this]() {
-        AppendDebugLog("Abriendo Ko-fi en el navegador: https://ko-fi.com/vixcho");
-        std::thread([]() {
+    auto openExternalUrl = [this](const std::string& url) {
+        AppendDebugLog("Abriendo enlace externo en el navegador: " + url);
+        std::thread([url]() {
 #ifdef _WIN32
-            ShellExecuteA(nullptr, "open", "https://ko-fi.com/vixcho", nullptr, nullptr, SW_SHOWNORMAL);
+            ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 #else
-            int rc = std::system("xdg-open 'https://ko-fi.com/vixcho' >/dev/null 2>&1 &");
+            std::string cmd = "xdg-open '" + url + "' >/dev/null 2>&1 &";
+            int rc = std::system(cmd.c_str());
             (void)rc;
 #endif
         }).detach();
+    };
+    m_Main->on_open_kofi_donations([openExternalUrl]() {
+        openExternalUrl("https://ko-fi.com/vixcho");
+    });
+    m_Main->on_open_website([openExternalUrl]() {
+        openExternalUrl("https://thevixcho.github.io/ProyecThor/");
+    });
+    m_Main->on_open_discord([openExternalUrl]() {
+        openExternalUrl("https://discord.gg/FKqgPDZpBF");
     });
     m_Main->on_item_action_play([this](int kind, slint::SharedString path) {
         HandleItemPlay(kind, std::string(path));

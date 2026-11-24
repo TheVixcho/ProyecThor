@@ -815,6 +815,8 @@ export component MainWindow inherits Window {
     callback visual-effects-changed();
     callback check-github-updates();
     callback open-kofi-donations();
+    callback open-website();
+    callback open-discord();
 
     // Unified Library File Management (Play/Screen, Queue, Rename, Delete)
     callback item-action-play(int, string);
@@ -5399,9 +5401,49 @@ export component MainWindow inherits Window {
                                     border-color: Theme.border-subtle;
                                     VerticalLayout {
                                         padding: 15px;
+                                        spacing: 10px;
+                                        Text { text: "Soporte Oficial y Comunidad"; color: Theme.accent-strong; font-size: 13.5px; font-weight: 700; }
+                                        Text {
+                                            text: "¿Necesitas ayuda, quieres reportar un error o compartir ideas? Visita nuestro sitio web oficial o únete a la comunidad en Discord.";
+                                            color: Theme.text-secondary;
+                                            font-size: 12px;
+                                            wrap: word-wrap;
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 8px;
+                                            GlassButton {
+                                                label: "Sitio Web Oficial";
+                                                primary: true;
+                                                clicked => { root.open-website(); }
+                                            }
+                                            GlassButton {
+                                                label: "Discord (Soporte y Comunidad)";
+                                                clicked => { root.open-discord(); }
+                                            }
+                                            GlassButton {
+                                                label: "Apoyar en Ko-fi";
+                                                clicked => { root.open-kofi-donations(); }
+                                            }
+                                        }
+                                        Text {
+                                            text: "Web: https://thevixcho.github.io/ProyecThor/   •   Discord: https://discord.gg/FKqgPDZpBF";
+                                            color: Theme.text-muted;
+                                            font-size: 11px;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
+                                    VerticalLayout {
+                                        padding: 15px;
                                         spacing: 8px;
                                         Text { text: "Flujo Profesional en Vivo"; color: Theme.accent-strong; font-size: 13.5px; font-weight: 700; }
-                                        Text { text: "• Freeze (❄): Congela completamente la ventana secundaria (texto, video, fondos y alertas) mientras buscas la siguiente canción o versículo."; color: Theme.text-primary; font-size: 12px; wrap: word-wrap; }
+                                        Text { text: "• Freeze (❄): Congela completamente la ventana secundaria (texto, video, fondos y alertas) mientras buscas la siguiente canción o diapositiva."; color: Theme.text-primary; font-size: 12px; wrap: word-wrap; }
                                         Text { text: "• Escalado / FSR (⤢): Cambia entre Recortar/Llenar, Estirar 16:9 o Tamaño Original, y activa el realce de nitidez FSR."; color: Theme.text-primary; font-size: 12px; wrap: word-wrap; }
                                         Text { text: "• Panel Capas (Derecha): Controla Fondos en Bucle (hover para vista previa), Overlays PNG y Notas/Avisos animados sin cambiar de pestaña."; color: Theme.text-primary; font-size: 12px; wrap: word-wrap; }
                                         Text { text: "• Escanear Bibliotecas (↻): Las bibliotecas se cachean en memoria para ahorrar CPU; pulsa Escanear cuando agregues archivos manualmente."; color: Theme.text-primary; font-size: 12px; wrap: word-wrap; }

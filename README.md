@@ -4,7 +4,7 @@
 
 ProyecThor is a high-performance, open-source multimedia playback and projection engine built in **C++** and **Slint**. Engineered for instant response, multi-layer compositing, and rock-solid stability under live production pressure in theaters, conferences, churches, and live events.
 
-[Website]([https://proyecthor.web.app](https://thevixcho.github.io/ProyecThor/)) &nbsp;•&nbsp; [Download Release](https://github.com/TheVixcho/ProyecThor/releases) &nbsp;•&nbsp; [Discord Community](https://discord.gg/FKqgPDZpBF) &nbsp;•&nbsp; [Report a Bug](https://github.com/TheVixcho/ProyecThor/issues) &nbsp;•&nbsp; [Plugins & SDK](./plugins/README.md)
+[Website](https://thevixcho.github.io/ProyecThor/) &nbsp;•&nbsp; [Download Release](https://github.com/TheVixcho/ProyecThor/releases) &nbsp;•&nbsp; [Discord Community](https://discord.gg/FKqgPDZpBF) &nbsp;•&nbsp; [Report a Bug](https://github.com/TheVixcho/ProyecThor/issues) &nbsp;•&nbsp; [Plugins & SDK](./plugins/README.md)
 
 ---
 
