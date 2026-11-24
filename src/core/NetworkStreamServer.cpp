@@ -474,6 +474,14 @@ std::string NetworkStreamServer::SnapshotToJSON(const StreamSnapshot& s) const
       << "\"margins\":["      << s.margins[0] << "," << s.margins[1] << ","
                                << s.margins[2] << "," << s.margins[3] << "],"
       << "\"fontFamily\":\""  << escapeJSON(s.fontFamily)     << "\","
+      << "\"fontWeight\":"    << s.fontWeight                 << ","
+      << "\"textShadow\":"    << B(s.textShadow)              << ","
+      << "\"textOutline\":"   << B(s.textOutline)             << ","
+      << "\"textGlow\":"      << B(s.textGlow)                << ","
+      << "\"textNeon\":"      << B(s.textNeon)                << ","
+      << "\"text3d\":"        << B(s.text3d)                  << ","
+      << "\"textUnderline\":" << B(s.textUnderline)           << ","
+      << "\"textBoxBg\":"     << B(s.textBoxBg)               << ","
       << "\"refW\":"          << s.refW                       << ","
       << "\"refH\":"          << s.refH                       << ","
       << "\"isBgVideo\":"     << B(s.isBgVideo)                << ","
@@ -737,6 +745,7 @@ const statusText    = document.getElementById('status-text');
 
 let currentVersion     = 0;
 let currentFontVersion = -1;
+let customFontReady    = false;
 let retryDelay         = 1000;
 let highQuality        = false;
 let mjpegActive        = false;
@@ -746,15 +755,36 @@ let lastRefH             = 1080;
 // ── Carga dinámica de la fuente real del usuario vía FontFace API ───────────
 // Si el servidor no tiene fuente custom activa ("Predeterminada"), /font
 // devuelve 404 y simplemente seguimos con el fallback sans-serif del CSS.
-async function ensureFontLoaded(fontVersion) {
+async function ensureFontLoaded(fontVersion, fontFamily) {
   if (fontVersion === currentFontVersion) return;
   currentFontVersion = fontVersion;
+  customFontReady = false;
+  for (const f of Array.from(document.fonts)) {
+    if (f.family === 'UserFont') document.fonts.delete(f);
+  }
+  if (!fontFamily || fontFamily === 'Predeterminada') {
+    applyTextFontFamily(fontFamily);
+    return;
+  }
   try {
     const face = new FontFace('UserFont', `url(/font?v=${fontVersion})`);
     const loaded = await face.load();
     document.fonts.add(loaded);
+    customFontReady = true;
   } catch (e) {
-    // Sin fuente custom disponible: se mantiene el fallback del sistema.
+    customFontReady = false;
+  }
+  applyTextFontFamily(fontFamily);
+}
+
+function applyTextFontFamily(fontFamily) {
+  const sys = "'Segoe UI', system-ui, -apple-system, sans-serif";
+  if (!fontFamily || fontFamily === 'Predeterminada') {
+    mainText.style.fontFamily = sys;
+  } else if (customFontReady) {
+    mainText.style.fontFamily = `'UserFont', "${fontFamily.replace(/"/g, '')}", ${sys}`;
+  } else {
+    mainText.style.fontFamily = `"${fontFamily.replace(/"/g, '')}", ${sys}`;
   }
 }
 
@@ -818,7 +848,8 @@ function applyState(s) {
   const { drawW, drawH } = layoutViewport(s.refW, s.refH);
   const scale = drawW / s.refW; // ← idéntico a "scale" en ViewPanel::RenderContent
 
-  ensureFontLoaded(s.fontVersion);
+  ensureFontLoaded(s.fontVersion, s.fontFamily);
+  applyTextFontFamily(s.fontFamily);
 
   const isAlpha = (s.transparent === true);
   if (isAlpha) {
@@ -876,15 +907,52 @@ function applyState(s) {
   textContainer.style.width  = Math.max(10, drawW - marginL - marginR) + 'px';
   textContainer.style.height = Math.max(10, drawH - marginT - marginB) + 'px';
 
-  // ── Tamaño de texto real, escalado — sin clamp/vw artificial ─────────────
+  // ── Tamaño de texto real, peso, color y efectos visuales ─────────────────
   mainText.style.fontSize = (s.textSize * scale) + 'px';
+  mainText.style.fontWeight = String(s.fontWeight || 700);
+  mainText.style.textDecoration = s.textUnderline ? 'underline' : 'none';
+
+  if (s.textBoxBg) {
+    textContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.62)';
+    textContainer.style.borderRadius = Math.max(4, Math.round(10 * scale)) + 'px';
+    textContainer.style.padding = Math.max(4, Math.round(16 * scale)) + 'px';
+  } else {
+    textContainer.style.backgroundColor = 'transparent';
+    textContainer.style.borderRadius = '0px';
+    textContainer.style.padding = '0px';
+  }
 
   // Color y opacidad
   const r = Math.round(s.textColor[0]*255);
   const g = Math.round(s.textColor[1]*255);
   const b = Math.round(s.textColor[2]*255);
   const a = s.textColor[3].toFixed(3);
-  mainText.style.color = `rgba(${r},${g},${b},${a})`;
+  mainText.style.color = s.textNeon ? '#e0f2fe' : `rgba(${r},${g},${b},${a})`;
+
+  // Efectos: Sombra, Contorno, Glow, Neón, 3D
+  const shadows = [];
+  if (s.textGlow) {
+    shadows.push(`0 0 ${Math.max(4, 14*scale)}px rgba(56,189,248,0.85)`);
+    shadows.push(`0 0 ${Math.max(8, 28*scale)}px rgba(56,189,248,0.45)`);
+  }
+  if (s.textNeon) {
+    shadows.push(`0 0 ${Math.max(4, 10*scale)}px rgba(34,211,238,0.95)`);
+    shadows.push(`0 0 ${Math.max(10, 24*scale)}px rgba(6,182,212,0.8)`);
+  }
+  if (s.text3d) {
+    const d1 = Math.max(1, 2*scale), d2 = Math.max(2, 4*scale);
+    shadows.push(`${d1}px ${d1+scale}px 0 #27272a`);
+    shadows.push(`${d2}px ${d2+scale}px 0 #09090b`);
+  }
+  if (s.textOutline) {
+    const o = Math.max(1, 2*scale);
+    shadows.push(`-${o}px 0 0 rgba(0,0,0,0.94)`, `${o}px 0 0 rgba(0,0,0,0.94)`,
+                 `0 -${o}px 0 rgba(0,0,0,0.94)`, `0 ${o}px 0 rgba(0,0,0,0.94)`);
+  }
+  if (s.textShadow) {
+    shadows.push(`${Math.max(1, 2*scale)}px ${Math.max(2, 3*scale)}px ${Math.max(4, 12*scale)}px rgba(0,0,0,0.92)`);
+  }
+  mainText.style.textShadow = shadows.length ? shadows.join(', ') : 'none';
 
   // Alineación horizontal
   textContainer.classList.remove('h-left','h-center','h-right');

@@ -8,13 +8,18 @@ project(ProyecThor
 )
 
 # ── Acelerador de compilación con caché (ccache) para desarrollo y debug ───
-find_program(CCACHE_PROGRAM ccache)
-if(CCACHE_PROGRAM)
-    message(STATUS "ccache detectado: ${CCACHE_PROGRAM} (compilación acelerada con caché habilitada)")
-    set(CMAKE_C_COMPILER_LAUNCHER   "${CCACHE_PROGRAM}")
-    set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
-    set(ENV{CCACHE_SLOPPINESS} "pch_defines,time_macros")
-    set(ENV{CCACHE_PCH_EXTERNAL_CHECKSUM} "true")
+# En MSVC (especialmente runners Windows con Strawberry Perl ccache) se omite por
+# defecto para evitar incompatibilidades con PCH (/Yu) y PDB (/FS).
+option(PROYECTHOR_USE_CCACHE "Usar ccache si esta disponible (no-MSVC)" ON)
+if(PROYECTHOR_USE_CCACHE AND NOT MSVC)
+    find_program(CCACHE_PROGRAM ccache)
+    if(CCACHE_PROGRAM)
+        message(STATUS "ccache detectado: ${CCACHE_PROGRAM} (compilación acelerada con caché habilitada)")
+        set(CMAKE_C_COMPILER_LAUNCHER   "${CCACHE_PROGRAM}")
+        set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+        set(ENV{CCACHE_SLOPPINESS} "pch_defines,time_macros")
+        set(ENV{CCACHE_PCH_EXTERNAL_CHECKSUM} "true")
+    endif()
 endif()
 
 if(NOT CMAKE_BUILD_TYPE)
@@ -252,13 +257,21 @@ target_compile_definitions(ProyecThor PRIVATE
     CPPHTTPLIB_NO_EXCEPTIONS
 )
 
-find_package(OpenSSL QUIET)
-if(OpenSSL_FOUND)
-    message(STATUS "OpenSSL encontrado (${OPENSSL_VERSION}): Asistente de IA (HTTPS saliente) habilitado")
-    target_compile_definitions(ProyecThor PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
-    set(PROYECTHOR_HAS_OPENSSL TRUE)
+# cpp-httplib solo se usa para servidores/clientes HTTP en red local (LAN/Mobile/SingleInstance);
+# HTTPS saliente usa WinHTTP en Windows y curl en Linux. Mantener OpenSSL desactivado por defecto
+# evita dependencias rotas con OpenSSL de MinGW/Strawberry en MSVC y conflictos ABI en AppImage.
+option(PROYECTHOR_ENABLE_OPENSSL "Habilitar soporte OpenSSL (HTTPS) en cpp-httplib" OFF)
+if(PROYECTHOR_ENABLE_OPENSSL)
+    find_package(OpenSSL QUIET)
+    if(OpenSSL_FOUND)
+        message(STATUS "OpenSSL encontrado (${OPENSSL_VERSION}): HTTPS en cpp-httplib habilitado")
+        target_compile_definitions(ProyecThor PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
+        set(PROYECTHOR_HAS_OPENSSL TRUE)
+    else()
+        message(STATUS "OpenSSL NO encontrado: compilando sin CPPHTTPLIB_OPENSSL_SUPPORT")
+        set(PROYECTHOR_HAS_OPENSSL FALSE)
+    endif()
 else()
-    message(STATUS "OpenSSL NO encontrado: el Asistente de IA no podra conectarse")
     set(PROYECTHOR_HAS_OPENSSL FALSE)
 endif()
 
@@ -397,8 +410,8 @@ if(WIN32)
     )
     if(PROYECTHOR_HAS_OPENSSL)
         target_link_libraries(ProyecThor PRIVATE
-            ssl
-            crypto
+            OpenSSL::SSL
+            OpenSSL::Crypto
             crypt32
             bcrypt
             ws2_32

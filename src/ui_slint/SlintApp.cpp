@@ -544,15 +544,9 @@ void SlintApp::BindCallbacks() {
             m_RawLiveText = std::string(item->body);
             m_RawLiveRef  = std::string(item->ref_text);
             m_LiveIsBible = true;
-            std::string disp = m_Main->get_text_uppercase() ? ToUpperUtf8(m_RawLiveText) : m_RawLiveText;
-            std::string dispRef = m_Main->get_index_uppercase() ? ToUpperUtf8(m_RawLiveRef) : m_RawLiveRef;
             for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
                 if (!IsScreenTargeted(i)) continue;
-                m_Screens[i].isBible     = true;
-                m_Screens[i].rawText     = m_RawLiveText;
-                m_Screens[i].rawRef      = m_RawLiveRef;
-                m_Screens[i].displayText = disp;
-                m_Screens[i].displayRef  = dispRef;
+                SetScreenLiveText(m_Screens[i], m_RawLiveText, m_RawLiveRef, true);
             }
             SyncScreenOutputs();
             TriggerSlideTransition();
@@ -563,15 +557,9 @@ void SlintApp::BindCallbacks() {
             m_RawLiveText = std::string(item->body);
             m_RawLiveRef  = std::string(item->ref_text);
             m_LiveIsBible = true;
-            std::string disp = m_Main->get_text_uppercase() ? ToUpperUtf8(m_RawLiveText) : m_RawLiveText;
-            std::string dispRef = m_Main->get_index_uppercase() ? ToUpperUtf8(m_RawLiveRef) : m_RawLiveRef;
             for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
                 if (!IsScreenTargeted(i)) continue;
-                m_Screens[i].isBible     = true;
-                m_Screens[i].rawText     = m_RawLiveText;
-                m_Screens[i].rawRef      = m_RawLiveRef;
-                m_Screens[i].displayText = disp;
-                m_Screens[i].displayRef  = dispRef;
+                SetScreenLiveText(m_Screens[i], m_RawLiveText, m_RawLiveRef, true);
             }
             SyncScreenOutputs();
             TriggerSlideTransition();
@@ -883,6 +871,8 @@ void SlintApp::BindCallbacks() {
     m_Main->on_duplicate_custom_style([this](int idx) { DuplicateCustomStyle(idx); });
     m_Main->on_load_custom_style([this](int idx) { LoadCustomStyle(idx); });
     m_Main->on_delete_custom_style([this](int idx) { DeleteCustomStyle(idx); });
+    m_Main->on_select_style_target([this](int mode) { SelectStyleTarget(mode); });
+    m_Main->on_apply_style_to_screen([this](int styleIdx, int screenIdx) { ApplyCustomStyleToScreen(styleIdx, screenIdx); });
     m_Main->on_text_color_rgb_changed([this](float r, float g, float b) {
         SetTextColorRGB(static_cast<uint8_t>(std::clamp(r, 0.0f, 255.0f)),
                         static_cast<uint8_t>(std::clamp(g, 0.0f, 255.0f)),
@@ -1276,16 +1266,9 @@ void SlintApp::ProjectSlide(int index) {
     m_RawLiveText = std::string(slide->body);
     m_RawLiveRef  = std::string(slide->ref_text);
 
-    std::string displayStr = m_Main->get_text_uppercase() ? ToUpperUtf8(m_RawLiveText) : m_RawLiveText;
-    std::string displayRef = (m_LiveIsBible && m_Main->get_index_uppercase()) ? ToUpperUtf8(m_RawLiveRef) : m_RawLiveRef;
-
     for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
         if (!IsScreenTargeted(i)) continue;
-        m_Screens[i].isBible     = m_LiveIsBible;
-        m_Screens[i].rawText     = m_RawLiveText;
-        m_Screens[i].rawRef      = m_RawLiveRef;
-        m_Screens[i].displayText = displayStr;
-        m_Screens[i].displayRef  = displayRef;
+        SetScreenLiveText(m_Screens[i], m_RawLiveText, m_RawLiveRef, m_LiveIsBible);
     }
 
     if (m_ActiveTab == 1) {
@@ -1396,6 +1379,7 @@ void SlintApp::ClearAll() {
 
 void SlintApp::ScanSystemFonts() {
     m_AllSystemFonts.clear();
+    m_SystemFontFiles.clear();
 #ifdef _WIN32
     m_DefaultSansFont  = "Arial";
     m_DefaultSerifFont = "Georgia";
@@ -1420,15 +1404,25 @@ void SlintApp::ScanSystemFonts() {
     if (m_DefaultSerifFont.empty()) m_DefaultSerifFont = "Noto Serif";
     if (m_DefaultMonoFont.empty())  m_DefaultMonoFont  = "Noto Sans Mono";
 
-    std::string raw = RunCommandCapture("fc-list : family 2>/dev/null");
+    std::string raw = RunCommandCapture("fc-list : family style file 2>/dev/null");
     std::istringstream iss(raw);
     std::string line;
     std::vector<std::string> unique;
+    std::unordered_map<std::string, int> fontScore;
     while (std::getline(iss, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        auto firstColon = line.find(':');
+        if (firstColon == std::string::npos) continue;
+        std::string filePath = trimLine(line.substr(0, firstColon));
+        std::string rest     = line.substr(firstColon + 1);
+        auto stylePos        = rest.find(":style=");
+        std::string famPart  = (stylePos != std::string::npos) ? rest.substr(0, stylePos) : rest;
+        std::string stylePart = (stylePos != std::string::npos) ? rest.substr(stylePos + 7) : "";
+
         // fc-list can output comma-separated aliases per line; take primary family
-        auto comma = line.find(',');
-        if (comma != std::string::npos) line = line.substr(0, comma);
-        std::string fam = trimLine(line);
+        auto comma = famPart.find(',');
+        if (comma != std::string::npos) famPart = famPart.substr(0, comma);
+        std::string fam = trimLine(famPart);
         if (fam.empty()) continue;
         std::string low = ToLowerUtf8(fam);
         if (low.find(".pcf") != std::string::npos || low.find("cursor") != std::string::npos ||
@@ -1436,7 +1430,24 @@ void SlintApp::ScanSystemFonts() {
             low.find("emoji") != std::string::npos || low.find("dingbat") != std::string::npos) {
             continue;
         }
-        unique.push_back(std::move(fam));
+        unique.push_back(fam);
+
+        // Cache best .ttf / .otf file per family for LAN @font-face serving
+        std::string lowFile = ToLowerUtf8(filePath);
+        if (lowFile.size() >= 4 &&
+            (lowFile.rfind(".ttf") == lowFile.size() - 4 || lowFile.rfind(".otf") == lowFile.size() - 4)) {
+            std::string lowStyle = ToLowerUtf8(stylePart);
+            int score = 1;
+            if (lowStyle.find("regular") != std::string::npos) score = 5;
+            else if (lowStyle.find("medium") != std::string::npos) score = 4;
+            else if (lowStyle.find("bold") != std::string::npos) score = 3;
+            if (lowStyle.find("italic") != std::string::npos || lowStyle.find("oblique") != std::string::npos) score -= 2;
+            auto it = fontScore.find(fam);
+            if (it == fontScore.end() || score > it->second) {
+                fontScore[fam] = score;
+                m_SystemFontFiles[fam] = filePath;
+            }
+        }
     }
     std::sort(unique.begin(), unique.end());
     unique.erase(std::unique(unique.begin(), unique.end()), unique.end());
@@ -1463,11 +1474,76 @@ std::string SlintApp::ResolveFontPreset(int presetIdx) const {
     }
 }
 
-void SlintApp::SyncProjectorStyle() {
-    static const int kFontWeights[] = { 400, 700, 900 };
-    int wtIdx     = std::clamp(m_Main->get_font_weight_idx(), 0, 2);
-    int idxWtIdx  = std::clamp(m_Main->get_index_font_weight_idx(), 0, 2);
+std::string SlintApp::ResolveStyleFontName(const SavedTextStyle& st, bool indexBox) const {
+    if (indexBox) {
+        if (!st.indexFontName.empty()) return st.indexFontName;
+        return ResolveFontPreset(st.indexFontFamIdx);
+    }
+    if (!st.fontName.empty()) return st.fontName;
+    return ResolveFontPreset(st.fontFamIdx);
+}
 
+std::string SlintApp::ResolveFontFilePath(const std::string& family) const {
+    if (family.empty() || family == "Predeterminada") return "";
+    auto it = m_SystemFontFiles.find(family);
+    if (it != m_SystemFontFiles.end()) return it->second;
+    return "";
+}
+
+void SlintApp::SetScreenLiveText(ScreenOutputState& sc, const std::string& rawText, const std::string& rawRef, bool isBible) {
+    sc.isBible     = isBible;
+    sc.rawText     = rawText;
+    sc.rawRef      = rawRef;
+    sc.displayText = sc.textStyle.uppercase ? ToUpperUtf8(rawText) : rawText;
+    sc.displayRef  = (isBible && sc.textStyle.indexUppercase) ? ToUpperUtf8(rawRef) : rawRef;
+}
+
+void SlintApp::ApplyStyleToProjector(const SavedTextStyle& st) {
+    static const int kFontWeights[] = { 400, 700, 900 };
+    int wtIdx    = std::clamp(st.fontWtIdx, 0, 2);
+    int idxWtIdx = std::clamp(st.indexFontWtIdx, 0, 2);
+    std::string mainFont = ResolveStyleFontName(st, false);
+    std::string idxFont  = ResolveStyleFontName(st, true);
+
+    m_Projector->set_text_size(st.textSize);
+    m_Projector->set_text_align(st.textAlign);
+    m_Projector->set_text_valign(st.textValign);
+    m_Projector->set_text_shadow(st.shadow);
+    m_Projector->set_text_outline(st.outline);
+    m_Projector->set_text_glow(st.glow);
+    m_Projector->set_text_neon(st.neon);
+    m_Projector->set_text_3d(st.text3d);
+    m_Projector->set_text_underline(st.underline);
+    m_Projector->set_text_box_bg(st.boxBg);
+    m_Projector->set_text_color(slint::Color::from_rgb_uint8(st.colorR, st.colorG, st.colorB));
+    m_Projector->set_font_family_name(slint::SharedString(mainFont));
+    m_Projector->set_font_weight_val(kFontWeights[wtIdx]);
+    m_Projector->set_text_margin_h(st.marginH);
+    m_Projector->set_lyrics_pos_x(st.lyricsPosX);
+    m_Projector->set_lyrics_pos_y(st.lyricsPosY);
+    m_Projector->set_lyrics_width(st.lyricsWidth);
+    m_Projector->set_lyrics_height(st.lyricsHeight);
+
+    m_Projector->set_index_box_enabled(st.indexEnabled);
+    m_Projector->set_index_pos_x(st.indexPosX);
+    m_Projector->set_index_pos_y(st.indexPosY);
+    m_Projector->set_index_width(st.indexWidth);
+    m_Projector->set_index_height(st.indexHeight);
+    m_Projector->set_index_size(st.indexSize);
+    m_Projector->set_index_align(st.indexAlign);
+    m_Projector->set_index_color(slint::Color::from_rgb_uint8(st.indexColorR, st.indexColorG, st.indexColorB));
+    m_Projector->set_index_font_family_name(slint::SharedString(idxFont));
+    m_Projector->set_index_font_weight_val(kFontWeights[idxWtIdx]);
+    m_Projector->set_index_shadow(st.indexShadow);
+    m_Projector->set_index_outline(st.indexOutline);
+    m_Projector->set_index_glow(st.indexGlow);
+    m_Projector->set_index_box_bg(st.indexBoxBg);
+
+    m_Projector->set_transition_type(m_Main->get_transition_type());
+    m_Projector->set_transition_dur(static_cast<int64_t>(m_Main->get_transition_duration_ms()));
+}
+
+void SlintApp::SyncProjectorStyle() {
     std::string mainFont(m_Main->get_font_family_name());
     if (mainFont.empty() && m_Main->get_font_family_idx() > 0) {
         mainFont = ResolveFontPreset(m_Main->get_font_family_idx());
@@ -1479,78 +1555,24 @@ void SlintApp::SyncProjectorStyle() {
         m_Main->set_index_font_family_name(slint::SharedString(idxFont));
     }
 
-    if (!m_AudienceFrozen) {
-        m_Projector->set_text_size(m_Main->get_text_size());
-        m_Projector->set_text_align(m_Main->get_text_align());
-        m_Projector->set_text_valign(m_Main->get_text_valign());
-        m_Projector->set_text_shadow(m_Main->get_text_shadow());
-        m_Projector->set_text_outline(m_Main->get_text_outline());
-        m_Projector->set_text_glow(m_Main->get_text_glow());
-        m_Projector->set_text_neon(m_Main->get_text_neon());
-        m_Projector->set_text_3d(m_Main->get_text_3d());
-        m_Projector->set_text_underline(m_Main->get_text_underline());
-        m_Projector->set_text_box_bg(m_Main->get_text_box_bg());
-        m_Projector->set_text_color(m_Main->get_text_color());
-        m_Projector->set_font_family_name(slint::SharedString(mainFont));
-        m_Projector->set_font_weight_val(kFontWeights[wtIdx]);
-        m_Projector->set_text_margin_h(m_Main->get_text_margin_h());
-        m_Projector->set_lyrics_pos_x(m_Main->get_lyrics_pos_x());
-        m_Projector->set_lyrics_pos_y(m_Main->get_lyrics_pos_y());
-        m_Projector->set_lyrics_width(m_Main->get_lyrics_width());
-        m_Projector->set_lyrics_height(m_Main->get_lyrics_height());
-
-        // Independent Bible Index Box style (100% decoupled from Lyrics)
-        m_Projector->set_index_box_enabled(m_Main->get_index_box_enabled());
-        m_Projector->set_index_pos_x(m_Main->get_index_pos_x());
-        m_Projector->set_index_pos_y(m_Main->get_index_pos_y());
-        m_Projector->set_index_width(m_Main->get_index_width());
-        m_Projector->set_index_height(m_Main->get_index_height());
-        m_Projector->set_index_size(m_Main->get_index_size());
-        m_Projector->set_index_align(m_Main->get_index_align());
-        m_Projector->set_index_color(m_Main->get_index_color());
-        m_Projector->set_index_font_family_name(slint::SharedString(idxFont));
-        m_Projector->set_index_font_weight_val(kFontWeights[idxWtIdx]);
-        m_Projector->set_index_shadow(m_Main->get_index_shadow());
-        m_Projector->set_index_outline(m_Main->get_index_outline());
-        m_Projector->set_index_glow(m_Main->get_index_glow());
-        m_Projector->set_index_box_bg(m_Main->get_index_box_bg());
-
-        m_Projector->set_transition_type(m_Main->get_transition_type());
-        m_Projector->set_transition_dur(static_cast<int64_t>(m_Main->get_transition_duration_ms()));
+    if (m_Main->get_style_editor_open()) {
+        // While editing in Style Editor, live-preview onto Projector only if targeting All or Público
+        if (!m_AudienceFrozen && (m_StyleTargetMode == 0 || m_StyleTargetMode == 1)) {
+            ApplyStyleToProjector(CaptureCurrentStyleFromUI(""));
+        }
+        return;
     }
 
-    // Re-apply uppercase toggles independently to current live text & Bible ref across all screens
+    // Normal mode: every screen uses its own independent SavedTextStyle
     for (auto& sc : m_Screens) {
         if (!sc.rawText.empty()) {
-            sc.displayText = m_Main->get_text_uppercase() ? ToUpperUtf8(sc.rawText) : sc.rawText;
+            sc.displayText = sc.textStyle.uppercase ? ToUpperUtf8(sc.rawText) : sc.rawText;
         }
         if (!sc.rawRef.empty()) {
-            sc.displayRef = (sc.isBible && m_Main->get_index_uppercase()) ? ToUpperUtf8(sc.rawRef) : sc.rawRef;
+            sc.displayRef = (sc.isBible && sc.textStyle.indexUppercase) ? ToUpperUtf8(sc.rawRef) : sc.rawRef;
         }
     }
     SyncScreenOutputs();
-
-    {
-        std::lock_guard<std::mutex> lk(m_LiveSnapMutex);
-        m_SnapTextSize   = m_Main->get_text_size();
-        m_SnapTextAlign  = m_Main->get_text_align();
-        m_SnapTextValign = m_Main->get_text_valign();
-        m_SnapTextColor[0] = std::clamp(m_Main->get_text_color_r() / 255.0f, 0.0f, 1.0f);
-        m_SnapTextColor[1] = std::clamp(m_Main->get_text_color_g() / 255.0f, 0.0f, 1.0f);
-        m_SnapTextColor[2] = std::clamp(m_Main->get_text_color_b() / 255.0f, 0.0f, 1.0f);
-        m_SnapTextColor[3] = 1.0f;
-        float posX = std::clamp(m_Main->get_lyrics_pos_x(), 0.05f, 0.95f);
-        float posY = std::clamp(m_Main->get_lyrics_pos_y(), 0.05f, 0.95f);
-        float w    = std::clamp(m_Main->get_lyrics_width(), 0.15f, 1.0f);
-        float h    = std::clamp(m_Main->get_lyrics_height(), 0.08f, 1.0f);
-        m_SnapMargins[0] = std::max(0.0f, (posX - w * 0.5f) * 1920.0f);
-        m_SnapMargins[1] = std::max(0.0f, (posY - h * 0.5f) * 1080.0f);
-        m_SnapMargins[2] = std::max(0.0f, (1.0f - (posX + w * 0.5f)) * 1920.0f);
-        m_SnapMargins[3] = std::max(0.0f, (1.0f - (posY + h * 0.5f)) * 1080.0f);
-        m_SnapTransType  = m_Main->get_transition_type();
-        m_SnapTransDur   = m_Main->get_transition_duration_ms() / 1000.0f;
-        ++m_StreamVersion;
-    }
 }
 
 SlintApp::SavedTextStyle SlintApp::CaptureCurrentStyleFromUI(const std::string& name) const {
@@ -1640,9 +1662,90 @@ void SlintApp::ApplyStyleStructToUI(const SavedTextStyle& st) {
     SetTextColorRGB(st.colorR, st.colorG, st.colorB);
 }
 
+std::string SlintApp::GetStyleTargetShortLabel(int targetMode) const {
+    if (targetMode <= 0) return "Todas las pantallas";
+    int scrIdx = targetMode - 1;
+    if (scrIdx == 0) return "Público";
+    if (scrIdx == 1) return "LAN (8080)";
+    if (scrIdx == 2) return "Stage";
+    if (scrIdx >= 0 && scrIdx < static_cast<int>(m_Screens.size())) return m_Screens[scrIdx].name;
+    return "Todas las pantallas";
+}
+
+void SlintApp::SelectStyleTarget(int targetMode) {
+    m_StyleTargetMode = std::clamp(targetMode, 0, static_cast<int>(m_Screens.size()));
+    m_Main->set_style_target_mode(m_StyleTargetMode);
+    m_Main->set_style_target_label(slint::SharedString(GetStyleTargetShortLabel(m_StyleTargetMode)));
+    if (m_StyleTargetMode >= 1) {
+        int scrIdx = m_StyleTargetMode - 1;
+        if (scrIdx < static_cast<int>(m_Screens.size())) {
+            m_Main->set_active_saved_style_idx(m_Screens[scrIdx].assignedStyleIdx);
+            m_InspectedScreenIdx = scrIdx;
+            m_Main->set_inspected_screen_idx(scrIdx);
+            SyncInspectedScreenToPreview();
+            RefreshActiveLayersModel();
+            RefreshScreenMatrixModel();
+        }
+    } else if (!m_Screens.empty()) {
+        int firstIdx = m_Screens[0].assignedStyleIdx;
+        bool allSame = true;
+        for (const auto& sc : m_Screens) {
+            if (sc.assignedStyleIdx != firstIdx) { allSame = false; break; }
+        }
+        m_Main->set_active_saved_style_idx(allSame ? firstIdx : -1);
+    }
+    RefreshSavedStylesModel();
+}
+
+void SlintApp::ApplyStyleToScreen(int screenIdx, const SavedTextStyle& st, int styleIdx) {
+    if (screenIdx < 0 || screenIdx >= static_cast<int>(m_Screens.size())) return;
+    auto& sc = m_Screens[screenIdx];
+    sc.textStyle        = st;
+    sc.assignedStyleIdx = styleIdx;
+    if (!sc.rawText.empty()) {
+        sc.displayText = sc.textStyle.uppercase ? ToUpperUtf8(sc.rawText) : sc.rawText;
+    }
+    if (!sc.rawRef.empty()) {
+        sc.displayRef = (sc.isBible && sc.textStyle.indexUppercase) ? ToUpperUtf8(sc.rawRef) : sc.rawRef;
+    }
+}
+
+void SlintApp::ApplyCustomStyleToScreen(int styleIdx, int screenIdx) {
+    if (styleIdx < 0 || styleIdx >= static_cast<int>(m_SavedStyles.size())) return;
+    const auto& st = m_SavedStyles[styleIdx];
+    if (screenIdx < 0) {
+        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+            ApplyStyleToScreen(i, st, styleIdx);
+        }
+    } else if (screenIdx < static_cast<int>(m_Screens.size())) {
+        ApplyStyleToScreen(screenIdx, st, styleIdx);
+    } else {
+        return;
+    }
+
+    if (screenIdx < 0 || screenIdx == 0) {
+        ApplyStyleStructToUI(st);
+    } else if (m_StyleTargetMode >= 1 && (m_StyleTargetMode - 1) == screenIdx) {
+        m_Main->set_active_saved_style_idx(styleIdx);
+    }
+    if (screenIdx >= 0 && screenIdx < static_cast<int>(m_Screens.size())) {
+        m_InspectedScreenIdx = screenIdx;
+        m_Main->set_inspected_screen_idx(screenIdx);
+    }
+    SyncScreenOutputs();
+    RefreshSavedStylesModel();
+    SavePersistedState();
+}
+
 void SlintApp::OpenNewStyleEditor() {
     m_StyleBeforeEdit = CaptureCurrentStyleFromUI("");
     m_EditingStyleIdx = -1;
+    int seedIdx = (m_StyleTargetMode >= 1 && (m_StyleTargetMode - 1) < static_cast<int>(m_Screens.size()))
+        ? (m_StyleTargetMode - 1)
+        : 0;
+    if (seedIdx >= 0 && seedIdx < static_cast<int>(m_Screens.size())) {
+        ApplyStyleStructToUI(m_Screens[seedIdx].textStyle);
+    }
     m_Main->set_editing_style_name("Mi Estilo " + slint::SharedString(std::to_string(m_SavedStyles.size() + 1)));
     m_Main->set_style_editor_box(0);
     m_Main->set_style_editor_open(true);
@@ -1692,14 +1795,30 @@ void SlintApp::SaveStyleEditor(const std::string& rawName) {
     SaveThemeFileToDisk(st);
     m_Main->set_style_editor_open(false);
     m_Main->set_active_saved_style_idx(savedIdx);
+
+    // Apply saved style to targeted screen(s) AND refresh any screen already using this edited style
+    if (m_StyleTargetMode <= 0) {
+        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+            ApplyStyleToScreen(i, st, savedIdx);
+        }
+    } else {
+        int targetScr = m_StyleTargetMode - 1;
+        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+            if (i == targetScr || (m_EditingStyleIdx >= 0 && m_Screens[i].assignedStyleIdx == savedIdx)) {
+                ApplyStyleToScreen(i, st, savedIdx);
+            }
+        }
+    }
+
+    SyncScreenOutputs();
     RefreshSavedStylesModel();
-    SyncProjectorStyle();
     SavePersistedState();
 }
 
 void SlintApp::CancelStyleEditor() {
     ApplyStyleStructToUI(m_StyleBeforeEdit);
     m_Main->set_style_editor_open(false);
+    SyncScreenOutputs();
 }
 
 void SlintApp::DuplicateCustomStyle(int idx) {
@@ -1715,8 +1834,8 @@ void SlintApp::DuplicateCustomStyle(int idx) {
 void SlintApp::LoadCustomStyle(int idx) {
     if (idx < 0 || idx >= static_cast<int>(m_SavedStyles.size())) return;
     m_Main->set_active_saved_style_idx(idx);
-    ApplyStyleStructToUI(m_SavedStyles[idx]);
-    SavePersistedState();
+    int screenTarget = (m_StyleTargetMode <= 0) ? -1 : (m_StyleTargetMode - 1);
+    ApplyCustomStyleToScreen(idx, screenTarget);
 }
 
 void SlintApp::DeleteCustomStyle(int idx) {
@@ -1725,18 +1844,36 @@ void SlintApp::DeleteCustomStyle(int idx) {
     fs::remove(fs::path(ProyecThor::GetAppDataRoot()) / "themes" / (SanitizeFilename(m_SavedStyles[idx].name) + ".theme"), ec);
     m_SavedStyles.erase(m_SavedStyles.begin() + idx);
     if (m_Main->get_active_saved_style_idx() == idx) m_Main->set_active_saved_style_idx(-1);
+    else if (m_Main->get_active_saved_style_idx() > idx) m_Main->set_active_saved_style_idx(m_Main->get_active_saved_style_idx() - 1);
+    for (auto& sc : m_Screens) {
+        if (sc.assignedStyleIdx == idx) sc.assignedStyleIdx = -1;
+        else if (sc.assignedStyleIdx > idx) sc.assignedStyleIdx -= 1;
+    }
     RefreshSavedStylesModel();
+    RefreshScreenMatrixModel();
     SavePersistedState();
 }
 
 void SlintApp::RefreshSavedStylesModel() {
     m_SavedStyleCardsModel->clear();
     static const char* kFamNames[] = { "Default", "Sans", "Serif", "Mono" };
-    for (const auto& st : m_SavedStyles) {
+    static const int kFontWeights[] = { 400, 700, 900 };
+
+    auto shortScreenName = [](int i, const ScreenOutputState& sc) -> std::string {
+        if (i == 0) return "Público";
+        if (i == 1) return "LAN";
+        if (i == 2) return "Stage";
+        return sc.name;
+    };
+
+    for (int sidx = 0; sidx < static_cast<int>(m_SavedStyles.size()); ++sidx) {
+        const auto& st = m_SavedStyles[sidx];
         StyleCardItem card;
-        card.name       = slint::SharedString(st.name);
-        card.text_color = slint::Color::from_rgb_uint8(st.colorR, st.colorG, st.colorB);
-        card.box_bg     = st.boxBg;
+        card.name             = slint::SharedString(st.name);
+        card.text_color       = slint::Color::from_rgb_uint8(st.colorR, st.colorG, st.colorB);
+        card.box_bg           = st.boxBg;
+        card.font_family_name = slint::SharedString(ResolveStyleFontName(st, false));
+        card.font_weight_val  = kFontWeights[std::clamp(st.fontWtIdx, 0, 2)];
 
         std::string fontLabel = !st.fontName.empty()
             ? st.fontName
@@ -1750,6 +1887,32 @@ void SlintApp::RefreshSavedStylesModel() {
         if (st.boxBg)     sum += " • Caja";
         if (st.indexEnabled) sum += " • +Índice";
         card.summary = slint::SharedString(sum);
+
+        auto targetsModel = std::make_shared<slint::VectorModel<StyleScreenTarget>>();
+        std::string assignedLbl;
+        bool activeOnTarget = false;
+        bool allUsing = !m_Screens.empty();
+        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+            bool isAssigned = (m_Screens[i].assignedStyleIdx == sidx);
+            if (!isAssigned) allUsing = false;
+            if (isAssigned) {
+                if (!assignedLbl.empty()) assignedLbl += ", ";
+                assignedLbl += shortScreenName(i, m_Screens[i]);
+            }
+            if (m_StyleTargetMode == i + 1 && isAssigned) {
+                activeOnTarget = true;
+            }
+            StyleScreenTarget tgt;
+            tgt.screen_id = i;
+            tgt.label     = slint::SharedString(shortScreenName(i, m_Screens[i]));
+            tgt.active    = isAssigned;
+            targetsModel->push_back(tgt);
+        }
+        if (m_StyleTargetMode <= 0 && allUsing) activeOnTarget = true;
+        card.active_on_target       = activeOnTarget;
+        card.assigned_screens_label = slint::SharedString(assignedLbl);
+        card.screen_targets         = targetsModel;
+
         m_SavedStyleCardsModel->push_back(card);
     }
 }
@@ -2009,7 +2172,8 @@ void SlintApp::SyncTilesState() {
     if (cur >= 0 && idx2 >= 0 && idx2 < count) {
         if (auto s2 = m_SlidesModel->row_data(idx2)) {
             std::string body = std::string(s2->body);
-            if (m_Main->get_text_uppercase()) body = ToUpperUtf8(body);
+            bool upper = !m_Screens.empty() ? m_Screens[0].textStyle.uppercase : m_Main->get_text_uppercase();
+            if (upper) body = ToUpperUtf8(body);
             m_Projector->set_tile2_text(slint::SharedString(body));
             m_Projector->set_tile2_ref(s2->ref_text);
             return;
@@ -2270,30 +2434,11 @@ void SlintApp::ToggleFreeze() {
 }
 
 void SlintApp::ResyncProjectorFromLive() {
-    SyncProjectorStyle();
     ApplyShaders();
     ApplyScalingMode(m_BgScaleMode);
     SyncAlertConfig();
     SyncTilesState();
-
-    m_Projector->set_live_is_bible(m_LiveIsBible);
-    m_Projector->set_live_text(m_Main->get_live_text());
-    m_Projector->set_live_ref(m_Main->get_live_ref());
-    m_Projector->set_bg_solid_color(m_Main->get_live_bg_solid_color());
-    m_Projector->set_has_bg_image(m_Main->get_has_live_preview_image());
-    if (m_Main->get_has_live_preview_image()) {
-        m_Projector->set_bg_image(m_Main->get_live_preview_image());
-    }
-    m_Projector->set_bg_is_static_image(m_HasStaticImage);
-    m_Projector->set_has_overlay_image(m_Main->get_has_live_overlay_image());
-    if (m_Main->get_has_live_overlay_image()) {
-        m_Projector->set_overlay_image(m_Main->get_live_overlay_image());
-    }
-    m_Projector->set_alert_text(m_Main->get_active_public_alert());
-    m_Projector->set_show_clock_overlay(m_Main->get_show_clock_on_public());
-    m_Projector->set_live_overlay_title(m_Main->get_custom_overlay_title());
-    m_Projector->set_live_overlay_sub(m_Main->get_custom_overlay_sub());
-    m_Projector->set_show_custom_overlay(m_Main->get_custom_overlay_active());
+    SyncScreenOutputs();
 }
 
 void SlintApp::ApplyScalingMode(int mode) {
@@ -2791,12 +2936,20 @@ void SlintApp::TriggerPad(int index) {
     m_Main->set_text_valign(p.textValign);
     SelectTextColor(p.textColorIdx);
 
-    m_Main->set_live_text(slint::SharedString(p.text));
-    m_Main->set_live_ref(slint::SharedString(p.ref));
-    m_Projector->set_live_text(slint::SharedString(p.text));
-    m_Projector->set_live_ref(slint::SharedString(p.ref));
-    m_Stage->set_live_text(slint::SharedString(p.text));
-    m_Stage->set_live_ref(slint::SharedString(p.ref));
+    if (!m_Screens.empty()) {
+        m_Screens[0].textStyle.textSize   = p.textSize;
+        m_Screens[0].textStyle.textAlign  = p.textAlign;
+        m_Screens[0].textStyle.textValign = p.textValign;
+        m_Screens[0].textStyle.colorR     = static_cast<uint8_t>(std::clamp(m_Main->get_text_color_r(), 0.0f, 255.0f));
+        m_Screens[0].textStyle.colorG     = static_cast<uint8_t>(std::clamp(m_Main->get_text_color_g(), 0.0f, 255.0f));
+        m_Screens[0].textStyle.colorB     = static_cast<uint8_t>(std::clamp(m_Main->get_text_color_b(), 0.0f, 255.0f));
+        m_Screens[0].assignedStyleIdx     = -1;
+        SetScreenLiveText(m_Screens[0], p.text, p.ref, false);
+    }
+    if (m_Screens.size() > 2) {
+        SetScreenLiveText(m_Screens[2], p.text, p.ref, false);
+    }
+    SyncScreenOutputs();
 
     if (!p.bgPath.empty()) {
         m_CurrentBgPath = p.bgPath;
@@ -2844,6 +2997,27 @@ void SlintApp::RefreshPadsModel() {
 }
 
 // ── Persistence (settings_slint.json) ────────────────────────────────────────
+template <typename StyleT>
+static nlohmann::json SavedStyleToJson(const StyleT& st) {
+    return {
+        {"name", st.name}, {"textSize", st.textSize}, {"marginH", st.marginH},
+        {"lyricsPosX", st.lyricsPosX}, {"lyricsPosY", st.lyricsPosY},
+        {"lyricsWidth", st.lyricsWidth}, {"lyricsHeight", st.lyricsHeight},
+        {"indexEnabled", st.indexEnabled}, {"indexPosX", st.indexPosX}, {"indexPosY", st.indexPosY},
+        {"indexWidth", st.indexWidth}, {"indexHeight", st.indexHeight}, {"indexSize", st.indexSize}, {"indexAlign", st.indexAlign},
+        {"indexFontFamIdx", st.indexFontFamIdx}, {"indexFontName", st.indexFontName}, {"indexFontWtIdx", st.indexFontWtIdx},
+        {"indexColorR", st.indexColorR}, {"indexColorG", st.indexColorG}, {"indexColorB", st.indexColorB},
+        {"indexShadow", st.indexShadow}, {"indexOutline", st.indexOutline}, {"indexGlow", st.indexGlow},
+        {"indexBoxBg", st.indexBoxBg}, {"indexUppercase", st.indexUppercase},
+        {"textAlign", st.textAlign}, {"textValign", st.textValign},
+        {"colorR", st.colorR}, {"colorG", st.colorG}, {"colorB", st.colorB},
+        {"fontFamIdx", st.fontFamIdx}, {"fontName", st.fontName}, {"fontWtIdx", st.fontWtIdx},
+        {"shadow", st.shadow}, {"outline", st.outline}, {"glow", st.glow},
+        {"neon", st.neon}, {"text3d", st.text3d}, {"underline", st.underline},
+        {"uppercase", st.uppercase}, {"boxBg", st.boxBg}
+    };
+}
+
 void SlintApp::LoadPersistedState() {
     fs::path path = fs::path(ProyecThor::GetAppDataRoot()) / "settings_slint.json";
     std::ifstream f(path);
@@ -2874,57 +3048,88 @@ void SlintApp::LoadPersistedState() {
         m_Main->set_tiles_layout(j.value("tilesLayout", 0));
         m_Main->set_text_box_bg(j.value("textBoxBg", false));
 
+        auto parseStyleJson = [](const nlohmann::json& js, const SavedTextStyle& base) {
+            SavedTextStyle st = base;
+            st.name            = js.value("name", base.name);
+            st.textSize        = js.value("textSize", base.textSize);
+            st.marginH         = js.value("marginH", base.marginH);
+            st.lyricsPosX      = js.value("lyricsPosX", base.lyricsPosX);
+            st.lyricsPosY      = js.value("lyricsPosY", base.lyricsPosY);
+            st.lyricsWidth     = js.value("lyricsWidth", base.lyricsWidth);
+            st.lyricsHeight    = js.value("lyricsHeight", base.lyricsHeight);
+            st.indexEnabled    = js.value("indexEnabled", base.indexEnabled);
+            st.indexPosX       = js.value("indexPosX", base.indexPosX);
+            st.indexPosY       = js.value("indexPosY", base.indexPosY);
+            st.indexWidth      = js.value("indexWidth", base.indexWidth);
+            st.indexHeight     = js.value("indexHeight", base.indexHeight);
+            st.indexSize       = js.value("indexSize", base.indexSize);
+            st.indexAlign      = js.value("indexAlign", base.indexAlign);
+            st.indexFontFamIdx = js.value("indexFontFamIdx", base.indexFontFamIdx);
+            st.indexFontName   = js.value("indexFontName", base.indexFontName);
+            st.indexFontWtIdx  = js.value("indexFontWtIdx", base.indexFontWtIdx);
+            st.indexColorR     = static_cast<uint8_t>(js.value("indexColorR", static_cast<int>(base.indexColorR)));
+            st.indexColorG     = static_cast<uint8_t>(js.value("indexColorG", static_cast<int>(base.indexColorG)));
+            st.indexColorB     = static_cast<uint8_t>(js.value("indexColorB", static_cast<int>(base.indexColorB)));
+            st.indexShadow     = js.value("indexShadow", base.indexShadow);
+            st.indexOutline    = js.value("indexOutline", base.indexOutline);
+            st.indexGlow       = js.value("indexGlow", base.indexGlow);
+            st.indexBoxBg      = js.value("indexBoxBg", base.indexBoxBg);
+            st.indexUppercase  = js.value("indexUppercase", base.indexUppercase);
+            st.textAlign       = js.value("textAlign", base.textAlign);
+            st.textValign      = js.value("textValign", base.textValign);
+            st.colorR          = static_cast<uint8_t>(js.value("colorR", static_cast<int>(base.colorR)));
+            st.colorG          = static_cast<uint8_t>(js.value("colorG", static_cast<int>(base.colorG)));
+            st.colorB          = static_cast<uint8_t>(js.value("colorB", static_cast<int>(base.colorB)));
+            st.fontFamIdx      = js.value("fontFamIdx", base.fontFamIdx);
+            st.fontName        = js.value("fontName", base.fontName);
+            st.fontWtIdx       = js.value("fontWtIdx", base.fontWtIdx);
+            st.shadow          = js.value("shadow", base.shadow);
+            st.outline         = js.value("outline", base.outline);
+            st.glow            = js.value("glow", base.glow);
+            st.neon            = js.value("neon", base.neon);
+            st.text3d          = js.value("text3d", base.text3d);
+            st.underline       = js.value("underline", base.underline);
+            st.uppercase       = js.value("uppercase", base.uppercase);
+            st.boxBg           = js.value("boxBg", base.boxBg);
+            return st;
+        };
+
         if (j.contains("savedStyles") && j["savedStyles"].is_array()) {
             m_SavedStyles.clear();
+            SavedTextStyle defaults;
             for (const auto& js : j["savedStyles"]) {
-                SavedTextStyle st;
-                st.name         = js.value("name", "");
-                st.textSize     = js.value("textSize", 60.0f);
-                st.marginH      = js.value("marginH", 64.0f);
-                st.lyricsPosX   = js.value("lyricsPosX", 0.5f);
-                st.lyricsPosY   = js.value("lyricsPosY", 0.5f);
-                st.lyricsWidth  = js.value("lyricsWidth", 0.90f);
-                st.lyricsHeight = js.value("lyricsHeight", 0.55f);
-                st.indexEnabled    = js.value("indexEnabled", true);
-                st.indexPosX       = js.value("indexPosX", 0.5f);
-                st.indexPosY       = js.value("indexPosY", 0.86f);
-                st.indexWidth      = js.value("indexWidth", 0.50f);
-                st.indexHeight     = js.value("indexHeight", 0.14f);
-                st.indexSize       = js.value("indexSize", 30.0f);
-                st.indexAlign      = js.value("indexAlign", 1);
-                st.indexFontFamIdx = js.value("indexFontFamIdx", 0);
-                st.indexFontName   = js.value("indexFontName", std::string(""));
-                st.indexFontWtIdx  = js.value("indexFontWtIdx", 1);
-                st.indexColorR     = static_cast<uint8_t>(js.value("indexColorR", 251));
-                st.indexColorG     = static_cast<uint8_t>(js.value("indexColorG", 191));
-                st.indexColorB     = static_cast<uint8_t>(js.value("indexColorB", 36));
-                st.indexShadow     = js.value("indexShadow", true);
-                st.indexOutline    = js.value("indexOutline", false);
-                st.indexGlow       = js.value("indexGlow", false);
-                st.indexBoxBg      = js.value("indexBoxBg", true);
-                st.indexUppercase  = js.value("indexUppercase", false);
-                st.textAlign    = js.value("textAlign", 1);
-                st.textValign   = js.value("textValign", 1);
-                st.colorR       = static_cast<uint8_t>(js.value("colorR", 255));
-                st.colorG       = static_cast<uint8_t>(js.value("colorG", 255));
-                st.colorB       = static_cast<uint8_t>(js.value("colorB", 255));
-                st.fontFamIdx   = js.value("fontFamIdx", 0);
-                st.fontName     = js.value("fontName", std::string(""));
-                st.fontWtIdx    = js.value("fontWtIdx", 1);
-                st.shadow       = js.value("shadow", true);
-                st.outline      = js.value("outline", false);
-                st.glow         = js.value("glow", false);
-                st.neon         = js.value("neon", false);
-                st.text3d       = js.value("text3d", false);
-                st.underline    = js.value("underline", false);
-                st.uppercase    = js.value("uppercase", false);
-                st.boxBg        = js.value("boxBg", false);
+                SavedTextStyle st = parseStyleJson(js, defaults);
                 if (!st.name.empty()) m_SavedStyles.push_back(st);
             }
         }
         int colIdx = j.value("textColorIdx", 0);
         m_Main->set_text_color_idx(colIdx);
         m_Main->set_text_color(TextColorFromIndex(colIdx));
+
+        SavedTextStyle globalFallback = CaptureCurrentStyleFromUI("");
+        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+            m_Screens[i].textStyle = globalFallback;
+            if (i == 2) m_Screens[i].textStyle.textSize = 40.0f; // Stage classic default
+            m_Screens[i].assignedStyleIdx = -1;
+        }
+        if (j.contains("screenStyles") && j["screenStyles"].is_array()) {
+            const auto& arr = j["screenStyles"];
+            for (int i = 0; i < static_cast<int>(std::min<size_t>(arr.size(), m_Screens.size())); ++i) {
+                const auto& item = arr[i];
+                if (item.contains("style") && item["style"].is_object()) {
+                    m_Screens[i].textStyle = parseStyleJson(item["style"], m_Screens[i].textStyle);
+                }
+                int aIdx = item.value("assignedStyleIdx", -1);
+                if (aIdx >= 0 && aIdx < static_cast<int>(m_SavedStyles.size())) {
+                    m_Screens[i].assignedStyleIdx = aIdx;
+                } else {
+                    m_Screens[i].assignedStyleIdx = -1;
+                }
+            }
+        }
+        m_StyleTargetMode = std::clamp(j.value("styleTargetMode", 0), 0, static_cast<int>(m_Screens.size()));
+        m_Main->set_style_target_mode(m_StyleTargetMode);
+        m_Main->set_style_target_label(slint::SharedString(GetStyleTargetShortLabel(m_StyleTargetMode)));
         m_Main->set_fullscreen_output(j.value("fullscreen", true));
         m_Main->set_fsr_enabled(j.value("fsr", true));
         m_BgScaleMode = std::clamp(j.value("bgScaleMode", 0), 0, 2);
@@ -3010,25 +3215,21 @@ void SlintApp::SavePersistedState() {
 
     nlohmann::json stylesArr = nlohmann::json::array();
     for (const auto& st : m_SavedStyles) {
-        stylesArr.push_back({
-            {"name", st.name}, {"textSize", st.textSize}, {"marginH", st.marginH},
-            {"lyricsPosX", st.lyricsPosX}, {"lyricsPosY", st.lyricsPosY},
-            {"lyricsWidth", st.lyricsWidth}, {"lyricsHeight", st.lyricsHeight},
-            {"indexEnabled", st.indexEnabled}, {"indexPosX", st.indexPosX}, {"indexPosY", st.indexPosY},
-            {"indexWidth", st.indexWidth}, {"indexHeight", st.indexHeight}, {"indexSize", st.indexSize}, {"indexAlign", st.indexAlign},
-            {"indexFontFamIdx", st.indexFontFamIdx}, {"indexFontName", st.indexFontName}, {"indexFontWtIdx", st.indexFontWtIdx},
-            {"indexColorR", st.indexColorR}, {"indexColorG", st.indexColorG}, {"indexColorB", st.indexColorB},
-            {"indexShadow", st.indexShadow}, {"indexOutline", st.indexOutline}, {"indexGlow", st.indexGlow},
-            {"indexBoxBg", st.indexBoxBg}, {"indexUppercase", st.indexUppercase},
-            {"textAlign", st.textAlign}, {"textValign", st.textValign},
-            {"colorR", st.colorR}, {"colorG", st.colorG}, {"colorB", st.colorB},
-            {"fontFamIdx", st.fontFamIdx}, {"fontName", st.fontName}, {"fontWtIdx", st.fontWtIdx},
-            {"shadow", st.shadow}, {"outline", st.outline}, {"glow", st.glow},
-            {"neon", st.neon}, {"text3d", st.text3d}, {"underline", st.underline},
-            {"uppercase", st.uppercase}, {"boxBg", st.boxBg}
+        stylesArr.push_back(SavedStyleToJson(st));
+    }
+    j["savedStyles"]     = stylesArr;
+    j["styleTargetMode"] = m_StyleTargetMode;
+
+    nlohmann::json scrStylesArr = nlohmann::json::array();
+    for (const auto& sc : m_Screens) {
+        scrStylesArr.push_back({
+            {"id", sc.id},
+            {"name", sc.name},
+            {"assignedStyleIdx", sc.assignedStyleIdx},
+            {"style", SavedStyleToJson(sc.textStyle)}
         });
     }
-    j["savedStyles"] = stylesArr;
+    j["screenStyles"]    = scrStylesArr;
     j["textColorIdx"]    = m_Main->get_text_color_idx();
     j["fullscreen"]      = m_Main->get_fullscreen_output();
     j["fsr"]             = m_Main->get_fsr_enabled();
@@ -4562,7 +4763,15 @@ void SlintApp::WireLanServerProviders(ProyecThor::Core::NetworkStreamServer& srv
         s.textAlignment      = m_SnapTextAlign;
         s.vAlignment         = m_SnapTextValign;
         s.autoScale          = false;
-        s.fontFamily         = "Predeterminada";
+        s.fontFamily         = m_SnapFontFamily;
+        s.fontWeight         = m_SnapFontWeight;
+        s.textShadow         = m_SnapTextShadow;
+        s.textOutline        = m_SnapTextOutline;
+        s.textGlow           = m_SnapTextGlow;
+        s.textNeon           = m_SnapTextNeon;
+        s.text3d             = m_SnapText3d;
+        s.textUnderline      = m_SnapTextUnderline;
+        s.textBoxBg          = m_SnapTextBoxBg;
         s.refW               = 1920;
         s.refH               = 1080;
         for (int i = 0; i < 4; ++i) s.textColor[i] = m_SnapTextColor[i];
@@ -4574,7 +4783,7 @@ void SlintApp::WireLanServerProviders(ProyecThor::Core::NetworkStreamServer& srv
         s.transitionType     = m_SnapTransType;
         s.transitionDuration = m_SnapTransDur;
         s.version            = m_StreamVersion;
-        s.fontVersion        = 1;
+        s.fontVersion        = m_LanFontVersion;
         return s;
     });
 
@@ -4583,7 +4792,10 @@ void SlintApp::WireLanServerProviders(ProyecThor::Core::NetworkStreamServer& srv
         return m_LanLatestJpeg;
     });
 
-    srv.SetFontPathProvider([]() -> std::string { return ""; });
+    srv.SetFontPathProvider([this]() -> std::string {
+        std::lock_guard<std::mutex> lk(m_LiveSnapMutex);
+        return m_LanFontCachePath;
+    });
 }
 
 void SlintApp::UpdateLanFrameCapture() {
@@ -5914,10 +6126,11 @@ void SlintApp::InitMultiScreens() {
     m_Screens.push_back(std::move(lan));
 
     ScreenOutputState stg;
-    stg.id           = 2;
-    stg.name         = "Stage / Escenario";
-    stg.roleBadge    = "MONITOR ESCENARIO";
-    stg.isCustomRoom = false;
+    stg.id                 = 2;
+    stg.name               = "Stage / Escenario";
+    stg.roleBadge          = "MONITOR ESCENARIO";
+    stg.isCustomRoom       = false;
+    stg.textStyle.textSize = 40.0f;
     m_Screens.push_back(std::move(stg));
 
     ScreenOutputState room2;
@@ -5929,9 +6142,12 @@ void SlintApp::InitMultiScreens() {
 
     m_OutputTargetMode   = 0;
     m_InspectedScreenIdx = 0;
+    m_StyleTargetMode    = 0;
     m_Main->set_output_target_mode(0);
     m_Main->set_inspected_screen_idx(0);
     m_Main->set_inspected_screen_name("Público");
+    m_Main->set_style_target_mode(0);
+    m_Main->set_style_target_label("Todas las pantallas");
 }
 
 bool SlintApp::IsScreenTargeted(int screenIdx) const {
@@ -6016,17 +6232,56 @@ void SlintApp::SyncLanFromScreenState() {
         composedText += "★ " + lan.alertText + " ★";
     }
 
+    static const int kFontWeights[] = { 400, 700, 900 };
+    const auto& st = lan.textStyle;
+    std::string resolvedFont = ResolveStyleFontName(st, false);
+    if (resolvedFont.empty()) resolvedFont = "Predeterminada";
+    std::string fontPath = ResolveFontFilePath(resolvedFont);
+
+    float posX = std::clamp(st.lyricsPosX, 0.05f, 0.95f);
+    float posY = std::clamp(st.lyricsPosY, 0.05f, 0.95f);
+    float w    = std::clamp(st.lyricsWidth, 0.15f, 1.0f);
+    float h    = std::clamp(st.lyricsHeight, 0.08f, 1.0f);
+    int   wt   = kFontWeights[std::clamp(st.fontWtIdx, 0, 2)];
+
     {
         std::lock_guard<std::mutex> lk(m_LiveSnapMutex);
         if (m_SnapText != composedText || m_SnapRef != lan.displayRef) {
             ++m_SnapTransTrigger;
         }
-        m_SnapText       = composedText;
-        m_SnapRef        = lan.displayRef;
-        m_SnapBgColor[0] = lan.bgSolidRgb[0];
-        m_SnapBgColor[1] = lan.bgSolidRgb[1];
-        m_SnapBgColor[2] = lan.bgSolidRgb[2];
-        m_SnapProjecting = m_ProjectorVisible || !composedText.empty() || lan.hasBgImage || lan.bgIsVideo;
+        if (m_LanFontCacheName != resolvedFont || m_LanFontCachePath != fontPath) {
+            m_LanFontCacheName = resolvedFont;
+            m_LanFontCachePath = fontPath;
+            ++m_LanFontVersion;
+        }
+        m_SnapText          = composedText;
+        m_SnapRef           = lan.displayRef;
+        m_SnapTextSize      = st.textSize;
+        m_SnapTextAlign     = st.textAlign;
+        m_SnapTextValign    = st.textValign;
+        m_SnapTextColor[0]  = st.colorR / 255.0f;
+        m_SnapTextColor[1]  = st.colorG / 255.0f;
+        m_SnapTextColor[2]  = st.colorB / 255.0f;
+        m_SnapTextColor[3]  = 1.0f;
+        m_SnapMargins[0]    = std::max(0.0f, (posX - w * 0.5f) * 1920.0f);
+        m_SnapMargins[1]    = std::max(0.0f, (posY - h * 0.5f) * 1080.0f);
+        m_SnapMargins[2]    = std::max(0.0f, (1.0f - (posX + w * 0.5f)) * 1920.0f);
+        m_SnapMargins[3]    = std::max(0.0f, (1.0f - (posY + h * 0.5f)) * 1080.0f);
+        m_SnapFontFamily    = resolvedFont;
+        m_SnapFontWeight    = wt;
+        m_SnapTextShadow    = st.shadow;
+        m_SnapTextOutline   = st.outline;
+        m_SnapTextGlow      = st.glow;
+        m_SnapTextNeon      = st.neon;
+        m_SnapText3d        = st.text3d;
+        m_SnapTextUnderline = st.underline;
+        m_SnapTextBoxBg     = st.boxBg;
+        m_SnapTransType     = m_Main->get_transition_type();
+        m_SnapTransDur      = m_Main->get_transition_duration_ms() / 1000.0f;
+        m_SnapBgColor[0]    = lan.bgSolidRgb[0];
+        m_SnapBgColor[1]    = lan.bgSolidRgb[1];
+        m_SnapBgColor[2]    = lan.bgSolidRgb[2];
+        m_SnapProjecting    = m_ProjectorVisible || !composedText.empty() || lan.hasBgImage || lan.bgIsVideo;
         ++m_StreamVersion;
     }
 }
@@ -6035,6 +6290,8 @@ void SlintApp::SyncInspectedScreenToPreview() {
     if (m_Screens.empty()) return;
     int idx = std::clamp(m_InspectedScreenIdx, 0, static_cast<int>(m_Screens.size()) - 1);
     const auto& sc = m_Screens[idx];
+    const auto& st = sc.textStyle;
+    static const int kFontWeights[] = { 400, 700, 900 };
 
     std::string shortName = (idx == 0) ? "Público"
                           : (idx == 1) ? "LAN (8080)"
@@ -6044,6 +6301,40 @@ void SlintApp::SyncInspectedScreenToPreview() {
     m_Main->set_live_is_bible(sc.isBible);
     m_Main->set_live_text(slint::SharedString(sc.displayText));
     m_Main->set_live_ref(slint::SharedString(sc.displayRef));
+
+    std::string styleLabel = st.name.empty() ? "Predeterminado" : st.name;
+    m_Main->set_preview_style_name(slint::SharedString(styleLabel));
+    m_Main->set_preview_text_size(st.textSize);
+    m_Main->set_preview_text_align(st.textAlign);
+    m_Main->set_preview_text_valign(st.textValign);
+    m_Main->set_preview_text_color(slint::Color::from_rgb_uint8(st.colorR, st.colorG, st.colorB));
+    m_Main->set_preview_font_family_name(slint::SharedString(ResolveStyleFontName(st, false)));
+    m_Main->set_preview_font_weight_val(kFontWeights[std::clamp(st.fontWtIdx, 0, 2)]);
+    m_Main->set_preview_text_shadow(st.shadow);
+    m_Main->set_preview_text_outline(st.outline);
+    m_Main->set_preview_text_glow(st.glow);
+    m_Main->set_preview_text_neon(st.neon);
+    m_Main->set_preview_text_3d(st.text3d);
+    m_Main->set_preview_text_underline(st.underline);
+    m_Main->set_preview_text_box_bg(st.boxBg);
+    m_Main->set_preview_lyrics_pos_x(st.lyricsPosX);
+    m_Main->set_preview_lyrics_pos_y(st.lyricsPosY);
+    m_Main->set_preview_lyrics_width(st.lyricsWidth);
+    m_Main->set_preview_lyrics_height(st.lyricsHeight);
+    m_Main->set_preview_index_box_enabled(st.indexEnabled);
+    m_Main->set_preview_index_pos_x(st.indexPosX);
+    m_Main->set_preview_index_pos_y(st.indexPosY);
+    m_Main->set_preview_index_width(st.indexWidth);
+    m_Main->set_preview_index_height(st.indexHeight);
+    m_Main->set_preview_index_size(st.indexSize);
+    m_Main->set_preview_index_align(st.indexAlign);
+    m_Main->set_preview_index_color(slint::Color::from_rgb_uint8(st.indexColorR, st.indexColorG, st.indexColorB));
+    m_Main->set_preview_index_font_family_name(slint::SharedString(ResolveStyleFontName(st, true)));
+    m_Main->set_preview_index_font_weight_val(kFontWeights[std::clamp(st.indexFontWtIdx, 0, 2)]);
+    m_Main->set_preview_index_shadow(st.indexShadow);
+    m_Main->set_preview_index_outline(st.indexOutline);
+    m_Main->set_preview_index_glow(st.indexGlow);
+    m_Main->set_preview_index_box_bg(st.indexBoxBg);
 
     m_Main->set_live_bg_name(slint::SharedString(sc.bgName));
     m_Main->set_live_bg_solid_color(sc.bgSolidColor);
@@ -6078,6 +6369,7 @@ void SlintApp::SyncScreenOutputs() {
     // 1. Screen 0 -> ProjectorWindow (Público Principal)
     if (!m_AudienceFrozen) {
         const auto& pub = m_Screens[0];
+        ApplyStyleToProjector(pub.textStyle);
         m_Projector->set_live_is_bible(pub.isBible);
         m_Projector->set_live_text(slint::SharedString(pub.displayText));
         m_Projector->set_live_ref(slint::SharedString(pub.displayRef));
@@ -6104,10 +6396,17 @@ void SlintApp::SyncScreenOutputs() {
 
     // 3. Screen 2 -> StageWindow (Escenario)
     if (m_Screens.size() > 2) {
+        static const int kFontWeights[] = { 400, 700, 900 };
         const auto& stg = m_Screens[2];
+        const auto& st  = stg.textStyle;
         m_Stage->set_live_text(slint::SharedString(stg.displayText));
         m_Stage->set_live_ref(slint::SharedString(stg.displayRef));
         m_Stage->set_stage_alert(slint::SharedString(stg.alertText));
+        m_Stage->set_text_size(st.textSize);
+        m_Stage->set_text_align(st.textAlign);
+        m_Stage->set_text_color(slint::Color::from_rgb_uint8(st.colorR, st.colorG, st.colorB));
+        m_Stage->set_font_family_name(slint::SharedString(ResolveStyleFontName(st, false)));
+        m_Stage->set_font_weight_val(kFontWeights[std::clamp(st.fontWtIdx, 0, 2)]);
         std::string activeClock = GetActiveClockOverlayString();
         bool showStgTimer = m_TimerRunning || stg.showClock;
         m_Stage->set_timer_text(showStgTimer ? slint::SharedString(activeClock) : "");
@@ -6232,9 +6531,11 @@ void SlintApp::RefreshActiveLayersModel() {
 void SlintApp::RefreshScreenMatrixModel() {
     m_ScreenMatrixModel->clear();
     std::string clk = GetActiveClockOverlayString();
+    static const int kFontWeights[] = { 400, 700, 900 };
 
     for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
         const auto& sc = m_Screens[i];
+        const auto& st = sc.textStyle;
         ScreenMatrixItem item;
         item.id             = i;
         item.name           = slint::SharedString(sc.name);
@@ -6262,6 +6563,26 @@ void SlintApp::RefreshScreenMatrixModel() {
         item.show_pleca     = sc.showPleca;
         item.pleca_title    = slint::SharedString(sc.plecaTitle);
 
+        std::string stName = st.name.empty() ? "Predeterminado" : st.name;
+        item.style_name       = slint::SharedString(stName);
+        item.text_size        = st.textSize;
+        item.text_align       = st.textAlign;
+        item.text_valign      = st.textValign;
+        item.text_color       = slint::Color::from_rgb_uint8(st.colorR, st.colorG, st.colorB);
+        item.font_family_name = slint::SharedString(ResolveStyleFontName(st, false));
+        item.font_weight_val  = kFontWeights[std::clamp(st.fontWtIdx, 0, 2)];
+        item.text_shadow      = st.shadow;
+        item.text_outline     = st.outline;
+        item.text_glow        = st.glow;
+        item.text_neon        = st.neon;
+        item.text_3d          = st.text3d;
+        item.text_underline   = st.underline;
+        item.text_box_bg      = st.boxBg;
+        item.lyrics_pos_x     = st.lyricsPosX;
+        item.lyrics_pos_y     = st.lyricsPosY;
+        item.lyrics_width     = st.lyricsWidth;
+        item.lyrics_height    = st.lyricsHeight;
+
         int activeCount = 0;
         if (sc.showClock)          ++activeCount;
         if (!sc.displayText.empty()) ++activeCount;
@@ -6270,8 +6591,8 @@ void SlintApp::RefreshScreenMatrixModel() {
         if (!sc.alertText.empty()) ++activeCount;
         if (sc.showPleca)          ++activeCount;
         item.queue_summary = slint::SharedString(
-            std::to_string(activeCount) + " capa(s) activa(s) • " +
-            (sc.displayRef.empty() ? sc.bgName : sc.displayRef));
+            std::to_string(activeCount) + " capa(s) • Estilo: " + stName + " (" +
+            std::to_string(static_cast<int>(st.textSize)) + "px)");
         m_ScreenMatrixModel->push_back(item);
     }
 }
@@ -6382,18 +6703,10 @@ void SlintApp::ToggleLayerOnScreen(int screenIdx, const std::string& layerId) {
             int curSlide = m_Main->get_active_slide_index();
             if (curSlide >= 0 && curSlide < static_cast<int>(m_SlidesModel->row_count())) {
                 if (auto s = m_SlidesModel->row_data(curSlide)) {
-                    sc.isBible     = (m_ActiveTab == 1);
-                    sc.rawText     = std::string(s->body);
-                    sc.rawRef      = std::string(s->ref_text);
-                    sc.displayText = m_Main->get_text_uppercase() ? ToUpperUtf8(sc.rawText) : sc.rawText;
-                    sc.displayRef  = (sc.isBible && m_Main->get_index_uppercase()) ? ToUpperUtf8(sc.rawRef) : sc.rawRef;
+                    SetScreenLiveText(sc, std::string(s->body), std::string(s->ref_text), (m_ActiveTab == 1));
                 }
             } else if (!m_Screens[0].displayText.empty()) {
-                sc.isBible     = m_Screens[0].isBible;
-                sc.rawText     = m_Screens[0].rawText;
-                sc.rawRef      = m_Screens[0].rawRef;
-                sc.displayText = m_Screens[0].displayText;
-                sc.displayRef  = m_Screens[0].displayRef;
+                SetScreenLiveText(sc, m_Screens[0].rawText, m_Screens[0].rawRef, m_Screens[0].isBible);
             }
         }
     } else if (layerId == "bg") {
@@ -6456,11 +6769,8 @@ void SlintApp::ClonePublicToScreen(int screenIdx) {
     const auto& pub = m_Screens[0];
     auto& dst       = m_Screens[screenIdx];
 
-    dst.rawText         = pub.rawText;
-    dst.rawRef          = pub.rawRef;
-    dst.displayText     = pub.displayText;
-    dst.displayRef      = pub.displayRef;
-    dst.isBible         = pub.isBible;
+    // Preserve dst's own textStyle / assignedStyleIdx and re-apply its uppercase rules
+    SetScreenLiveText(dst, pub.rawText, pub.rawRef, pub.isBible);
     dst.bgName          = pub.bgName;
     dst.bgPath          = pub.bgPath;
     dst.hasBgImage      = pub.hasBgImage;
@@ -6515,6 +6825,10 @@ void SlintApp::CreateExtraScreen(const std::string& rawName) {
     room.name         = clean;
     room.roleBadge    = "SALA INDEPENDIENTE";
     room.isCustomRoom = true;
+    if (!m_Screens.empty()) {
+        room.textStyle        = m_Screens[0].textStyle;
+        room.assignedStyleIdx = m_Screens[0].assignedStyleIdx;
+    }
     m_Screens.push_back(std::move(room));
 
     m_InspectedScreenIdx = static_cast<int>(m_Screens.size()) - 1;
@@ -6522,6 +6836,7 @@ void SlintApp::CreateExtraScreen(const std::string& rawName) {
     m_Main->set_inspected_screen_idx(m_InspectedScreenIdx);
     m_Main->set_output_target_mode(m_OutputTargetMode);
     SyncScreenOutputs();
+    RefreshSavedStylesModel();
     AppendDebugLog("Nueva sala creada: " + clean);
 }
 
@@ -6539,7 +6854,11 @@ void SlintApp::DeleteExtraScreen(int screenIdx) {
         m_OutputTargetMode = 0;
         m_Main->set_output_target_mode(0);
     }
+    if (m_StyleTargetMode > static_cast<int>(m_Screens.size())) {
+        SelectStyleTarget(0);
+    }
     SyncScreenOutputs();
+    RefreshSavedStylesModel();
 }
 
 } // namespace ProyecThor::SlintUI

@@ -2,71 +2,159 @@ name: Release Windows (.exe) & Linux (.AppImage)
 
 on:
   push:
+    branches:
+      - main
+      - beta
     tags:
       - 'v*'
+  pull_request:
+    branches:
+      - main
+      - beta
   workflow_dispatch:
     inputs:
       version:
-        description: 'Versión manual (ej. 1.1.5). Si se deja vacío, toma CMakeLists.txt.'
+        description: 'Versión manual (ej. 1.1.6 o 1.1.6-beta.1). Vacío = automático desde CMakeLists.txt y rama.'
         required: false
         default: ''
+      channel:
+        description: 'Canal de publicación (auto = main -> Release, beta -> Pre-release)'
+        type: choice
+        required: false
+        default: 'auto'
+        options:
+          - auto
+          - release
+          - prerelease
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type == 'branch' }}
 
 env:
   SLINT_VERSION: "1.19.0"
 
 jobs:
   resolve-meta:
-    name: Resolver Versión y Metadatos
+    name: Resolver Versión y Canal (main=Release / beta=Pre-release)
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.meta.outputs.version }}
       suffix: ${{ steps.meta.outputs.suffix }}
       tag_name: ${{ steps.meta.outputs.tag_name }}
       is_prerelease: ${{ steps.meta.outputs.is_prerelease }}
+      should_publish: ${{ steps.meta.outputs.should_publish }}
+      channel_label: ${{ steps.meta.outputs.channel_label }}
     steps:
-      - name: Checkout
+      - name: Checkout con historial y tags
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Calcular versión desde tag o CMakeLists.txt
+      - name: Calcular versión, tag y canal de publicación
         id: meta
         shell: bash
         run: |
           set -euo pipefail
           CMAKE_VER=$(grep -A 2 'project(ProyecThor' CMakeLists.txt | grep -oP 'VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || echo "1.1.5")
+          COMMIT_MSG=$(git log -1 --pretty=%B || true)
+          EVENT_NAME="${{ github.event_name }}"
+          REF_TYPE="${{ github.ref_type }}"
+          REF_NAME="${{ github.ref_name }}"
+          INPUT_VER="${{ github.event.inputs.version }}"
+          INPUT_CHAN="${{ github.event.inputs.channel }}"
 
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            RAW_REF="${{ github.ref_name }}"
-            CLEAN="${RAW_REF#v}"
-            CLEAN="${CLEAN#V}"
-            BASE_VER=$(echo "$CLEAN" | grep -oP '^[0-9]+\.[0-9]+\.[0-9]+' || echo "$CMAKE_VER")
-            SUFFIX="${CLEAN#"$BASE_VER"}"
-            TAG_NAME="$RAW_REF"
-          elif [ -n "${{ github.event.inputs.version }}" ]; then
-            CLEAN="${{ github.event.inputs.version }}"
-            CLEAN="${CLEAN#v}"
-            CLEAN="${CLEAN#V}"
-            BASE_VER=$(echo "$CLEAN" | grep -oP '^[0-9]+\.[0-9]+\.[0-9]+' || echo "$CMAKE_VER")
-            SUFFIX="${CLEAN#"$BASE_VER"}"
-            TAG_NAME="v${CLEAN}"
-          else
-            BASE_VER="$CMAKE_VER"
-            SUFFIX=""
-            TAG_NAME="v${BASE_VER}"
-          fi
+          next_beta_suffix() {
+            local ver="$1"
+            local max_beta
+            max_beta=$(git tag -l "v${ver}-beta.*" \
+              | sed -nE "s/^v${ver//./\\.}-beta\.([0-9]+)$/\1/p" \
+              | sort -n | tail -n1 || true)
+            echo "-beta.$(( ${max_beta:-0} + 1 ))"
+          }
 
+          SHOULD_PUBLISH="true"
           IS_PRE="false"
-          if [[ "$TAG_NAME" == *"beta"* || "$TAG_NAME" == *"alpha"* || "$TAG_NAME" == *"rc"* ]]; then
+          BASE_VER="$CMAKE_VER"
+          SUFFIX=""
+          TAG_NAME="v${CMAKE_VER}"
+          CHANNEL_LABEL="Release Estable (main)"
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            SHOULD_PUBLISH="false"
             IS_PRE="true"
+            SUFFIX="-pr.${{ github.event.pull_request.number }}"
+            TAG_NAME="v${BASE_VER}${SUFFIX}"
+            CHANNEL_LABEL="Verificación PR"
+          elif [ "$REF_TYPE" = "tag" ]; then
+            CLEAN="${REF_NAME#v}"
+            CLEAN="${CLEAN#V}"
+            BASE_VER=$(echo "$CLEAN" | grep -oP '^[0-9]+\.[0-9]+\.[0-9]+' || echo "$CMAKE_VER")
+            SUFFIX="${CLEAN#"$BASE_VER"}"
+            TAG_NAME="$REF_NAME"
+            if [[ "$TAG_NAME" == *"beta"* || "$TAG_NAME" == *"alpha"* || "$TAG_NAME" == *"rc"* ]]; then
+              IS_PRE="true"
+              CHANNEL_LABEL="Pre-release (tag)"
+            else
+              IS_PRE="false"
+              CHANNEL_LABEL="Release Estable (tag)"
+            fi
+          else
+            # Push a rama (main / beta) o workflow_dispatch
+            if [ "$INPUT_CHAN" = "release" ]; then
+              IS_PRE="false"
+            elif [ "$INPUT_CHAN" = "prerelease" ]; then
+              IS_PRE="true"
+            elif [ "$REF_NAME" = "main" ]; then
+              IS_PRE="false"
+            else
+              IS_PRE="true"
+            fi
+
+            if [ -n "$INPUT_VER" ]; then
+              CLEAN="${INPUT_VER#v}"
+              CLEAN="${CLEAN#V}"
+              BASE_VER=$(echo "$CLEAN" | grep -oP '^[0-9]+\.[0-9]+\.[0-9]+' || echo "$CMAKE_VER")
+              SUFFIX="${CLEAN#"$BASE_VER"}"
+              if [[ "$SUFFIX" == *"beta"* || "$SUFFIX" == *"alpha"* || "$SUFFIX" == *"rc"* ]]; then
+                if [ -z "$INPUT_CHAN" ] || [ "$INPUT_CHAN" = "auto" ]; then
+                  IS_PRE="true"
+                fi
+              elif [ "$IS_PRE" = "true" ] && [ -z "$SUFFIX" ]; then
+                SUFFIX=$(next_beta_suffix "$BASE_VER")
+              fi
+              TAG_NAME="v${BASE_VER}${SUFFIX}"
+            else
+              BASE_VER="$CMAKE_VER"
+              if [ "$IS_PRE" = "true" ]; then
+                SUFFIX=$(next_beta_suffix "$BASE_VER")
+              else
+                SUFFIX=""
+              fi
+              TAG_NAME="v${BASE_VER}${SUFFIX}"
+            fi
+
+            if [ "$IS_PRE" = "true" ]; then
+              CHANNEL_LABEL="Pre-release (${REF_NAME})"
+            else
+              CHANNEL_LABEL="Release Estable (${REF_NAME})"
+            fi
+
+            if [ "$EVENT_NAME" = "push" ] && echo "$COMMIT_MSG" | grep -qiE '\[(skip release|no release)\]'; then
+              SHOULD_PUBLISH="false"
+            fi
           fi
 
           echo "version=${BASE_VER}" >> "$GITHUB_OUTPUT"
           echo "suffix=${SUFFIX}" >> "$GITHUB_OUTPUT"
           echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
           echo "is_prerelease=${IS_PRE}" >> "$GITHUB_OUTPUT"
-          echo "Resolved: version=${BASE_VER} suffix=${SUFFIX} tag=${TAG_NAME} prerelease=${IS_PRE}"
+          echo "should_publish=${SHOULD_PUBLISH}" >> "$GITHUB_OUTPUT"
+          echo "channel_label=${CHANNEL_LABEL}" >> "$GITHUB_OUTPUT"
+          echo "Resolved: version=${BASE_VER} suffix=${SUFFIX} tag=${TAG_NAME} prerelease=${IS_PRE} publish=${SHOULD_PUBLISH} channel=${CHANNEL_LABEL}"
 
   build-windows:
     name: Windows MSVC + Instalador (.exe)
@@ -177,12 +265,24 @@ jobs:
             Remove-Item -Recurse -Force $tmpDir, $zip -ErrorAction SilentlyContinue
           }
 
+      - name: Generar import library MSVC x64 para libmpv-2.dll
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (Test-Path "src\vendor\sdk\mpv\lib\mpv.def") {
+            & lib.exe /nologo /def:src\vendor\sdk\mpv\lib\mpv.def /name:libmpv-2.dll /out:src\vendor\sdk\mpv\lib\mpv.lib /machine:x64
+            if ($LASTEXITCODE -ne 0) { throw "lib.exe fallo generando mpv.lib ($LASTEXITCODE)" }
+            Write-Host "[OK] mpv.lib nativo MSVC x64 generado correctamente."
+          }
+
       - name: Configurar CMake (Release)
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           cmake -B build-win -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
+            -DPROYECTHOR_USE_CCACHE=OFF `
+            -DPROYECTHOR_ENABLE_OPENSSL=OFF `
             -DPROYECTHOR_VERSION_OVERRIDE="${{ needs.resolve-meta.outputs.version }}" `
             -DPROYECTHOR_VERSION_SUFFIX="${{ needs.resolve-meta.outputs.suffix }}" `
             -DPROYECTHOR_BUILD_NUMBER=${{ github.run_number }}
@@ -227,6 +327,7 @@ jobs:
             $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
           }
           New-Item -ItemType Directory -Force -Path "packaging\windows\dist" | Out-Null
+          Remove-Item -Force "packaging\windows\dist\*.exe" -ErrorAction SilentlyContinue
           $ver = "${{ needs.resolve-meta.outputs.version }}"
           $suffix = "${{ needs.resolve-meta.outputs.suffix }}"
           $fullVer = "$ver$suffix"
@@ -236,7 +337,7 @@ jobs:
             "-DOUT_DIR=$PWD\packaging\windows\dist" `
             "packaging\windows\ProyecThor.nsi"
           if ($LASTEXITCODE -ne 0) { throw "makensis fallo con codigo $LASTEXITCODE" }
-          Copy-Item -Force "packaging\windows\dist\ProyecThor_Setup.exe" "packaging\windows\dist\ProyecThor_Setup_v$fullVer.exe"
+          Copy-Item -Force "packaging\windows\dist\ProyecThor_Setup.exe" "packaging\windows\dist\ProyecThor_Setup_$fullVer.exe"
           Get-ChildItem "packaging\windows\dist\*.exe"
 
       - name: Subir artefacto Windows (.exe)
@@ -264,7 +365,7 @@ jobs:
             libmpv-dev libgl1-mesa-dev libx11-dev libxcomposite-dev \
             libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev \
             libwayland-dev libxkbcommon-dev wayland-protocols extra-cmake-modules \
-            libpipewire-0.3-dev libdbus-1-dev libssl-dev libopencv-dev \
+            libpipewire-0.3-dev libdbus-1-dev libopencv-dev \
             libglib2.0-dev libinput-dev libudev-dev libgbm-dev libdrm-dev \
             libfontconfig1-dev libfreetype-dev libfuse2 xvfb
 
@@ -316,6 +417,7 @@ jobs:
           set -euo pipefail
           cmake -B build-linux -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DPROYECTHOR_ENABLE_OPENSSL=OFF \
             -DCMAKE_INSTALL_PREFIX=/usr \
             -DCMAKE_INSTALL_LIBDIR=lib \
             -DPROYECTHOR_VERSION_OVERRIDE="${{ needs.resolve-meta.outputs.version }}" \
@@ -419,9 +521,9 @@ jobs:
           if-no-files-found: error
 
   publish-release:
-    name: Publicar Release en GitHub
+    name: Publicar ${{ needs.resolve-meta.outputs.channel_label }} en GitHub
     needs: [resolve-meta, build-windows, build-linux-appimage]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: needs.resolve-meta.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout del repositorio
@@ -441,19 +543,32 @@ jobs:
           name: ProyecThor-Linux-AppImage
           path: release-assets
 
+      - name: Crear / actualizar tag de lanzamiento para la rama
+        if: github.ref_type == 'branch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.resolve-meta.outputs.tag_name }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f "$TAG" "${{ github.sha }}"
+          git push origin "refs/tags/$TAG" --force
+
       - name: Generar notas de lanzamiento
         shell: bash
         run: |
           set -euo pipefail
           TAG="${{ needs.resolve-meta.outputs.tag_name }}"
+          FULL_VER="${{ needs.resolve-meta.outputs.version }}${{ needs.resolve-meta.outputs.suffix }}"
+          CHANNEL="${{ needs.resolve-meta.outputs.channel_label }}"
           cat <<EOF > release_notes.md
-          ## ProyecThor ${TAG}
+          ## ProyecThor ${TAG} — ${CHANNEL}
 
           ### Descargas
-          - **Windows (Instalador .exe):** \`ProyecThor_Setup_v${{ needs.resolve-meta.outputs.version }}${{ needs.resolve-meta.outputs.suffix }}.exe\`
-          - **Linux (.AppImage portable):** \`ProyecThor-${{ needs.resolve-meta.outputs.version }}${{ needs.resolve-meta.outputs.suffix }}-x86_64.AppImage\`
+          - **Windows (Instalador .exe):** \`ProyecThor_Setup_${FULL_VER}.exe\` (también disponible como \`ProyecThor_Setup.exe\`)
+          - **Linux (.AppImage portable):** \`ProyecThor-${FULL_VER}-x86_64.AppImage\` (también disponible como \`ProyecThor-x86_64.AppImage\`)
 
-          ### Cambios incluidos desde el tag anterior
+          ### Cambios incluidos desde el lanzamiento anterior
           EOF
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           if [ -n "$PREV_TAG" ]; then
@@ -468,10 +583,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve-meta.outputs.tag_name }}
-          name: "ProyecThor ${{ needs.resolve-meta.outputs.tag_name }}"
+          target_commitish: ${{ github.sha }}
+          name: "ProyecThor ${{ needs.resolve-meta.outputs.tag_name }}${{ needs.resolve-meta.outputs.is_prerelease == 'true' && ' (Beta)' || '' }}"
           body_path: release_notes.md
           prerelease: ${{ needs.resolve-meta.outputs.is_prerelease == 'true' }}
-          make_latest: ${{ needs.resolve-meta.outputs.is_prerelease != 'true' }}
+          make_latest: ${{ needs.resolve-meta.outputs.is_prerelease == 'true' && 'false' || 'true' }}
           generate_release_notes: true
           files: |
             release-assets/*.exe

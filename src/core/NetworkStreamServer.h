@@ -23,6 +23,14 @@ struct StreamSnapshot {
     float       margins[4]     = { 50.0f, 50.0f, 50.0f, 50.0f }; // L,T,R,B — igual que PresentationState
     bool        autoScale      = true;
     std::string fontFamily     = "Predeterminada";  // nombre de fuente activo
+    int         fontWeight     = 700;               // 400=Normal, 700=Bold, 900=Extra
+    bool        textShadow     = true;
+    bool        textOutline    = false;
+    bool        textGlow       = false;
+    bool        textNeon       = false;
+    bool        text3d         = false;
+    bool        textUnderline  = false;
+    bool        textBoxBg      = false;
     float       bgColor[3]     = { 0.0f, 0.0f, 0.0f };
     bool        isBgVideo      = false;
     bool        hasFrame       = false;   // true cuando hay frame JPEG disponible

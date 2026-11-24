@@ -156,6 +156,9 @@ private:
         bool        showPleca = false;
         std::string plecaTitle;
         std::string plecaSub;
+
+        SavedTextStyle textStyle;
+        int            assignedStyleIdx = -1; // -1 = personalizado/predeterminado, >=0 = índice en m_SavedStyles
     };
 
     void InitAssetsAndSplash();
@@ -201,6 +204,14 @@ private:
     void DuplicateCustomStyle(int idx);
     void LoadCustomStyle(int idx);
     void DeleteCustomStyle(int idx);
+    void SelectStyleTarget(int targetMode);
+    void ApplyCustomStyleToScreen(int styleIdx, int screenIdx);
+    void ApplyStyleToScreen(int screenIdx, const SavedTextStyle& st, int styleIdx);
+    void ApplyStyleToProjector(const SavedTextStyle& st);
+    void SetScreenLiveText(ScreenOutputState& sc, const std::string& rawText, const std::string& rawRef, bool isBible);
+    std::string ResolveStyleFontName(const SavedTextStyle& st, bool indexBox = false) const;
+    std::string ResolveFontFilePath(const std::string& family) const;
+    std::string GetStyleTargetShortLabel(int targetMode) const;
     void RefreshSavedStylesModel();
     void LoadThemeFilesFromDisk();
     void SaveThemeFileToDisk(const SavedTextStyle& st);
@@ -436,8 +447,10 @@ private:
     std::vector<ScreenOutputState> m_Screens;
     int                            m_OutputTargetMode   = 0; // 0=Todas, 1=Solo Público, 2=Solo LAN, 3=Solo Stage, >=4=Sala
     int                            m_InspectedScreenIdx = 0; // 0=Público, 1=LAN, 2=Stage, >=3=Sala
+    int                            m_StyleTargetMode    = 0; // 0=Todas, 1=Público, 2=LAN, 3=Stage, >=4=Sala
 
     std::vector<std::string>       m_AllSystemFonts;
+    std::unordered_map<std::string, std::string> m_SystemFontFiles;
     std::string                    m_DefaultSansFont;
     std::string                    m_DefaultSerifFont;
     std::string                    m_DefaultMonoFont;
@@ -538,6 +551,18 @@ private:
     float                                                  m_SnapTextColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
     float                                                  m_SnapBgColor[3]   = { 0.0f, 0.0f, 0.0f };
     float                                                  m_SnapMargins[4]   = { 96.0f, 243.0f, 96.0f, 243.0f };
+    std::string                                            m_SnapFontFamily   = "Predeterminada";
+    int                                                    m_SnapFontWeight   = 700;
+    bool                                                   m_SnapTextShadow   = true;
+    bool                                                   m_SnapTextOutline  = false;
+    bool                                                   m_SnapTextGlow     = false;
+    bool                                                   m_SnapTextNeon     = false;
+    bool                                                   m_SnapText3d       = false;
+    bool                                                   m_SnapTextUnderline = false;
+    bool                                                   m_SnapTextBoxBg    = false;
+    std::string                                            m_LanFontCacheName;
+    std::string                                            m_LanFontCachePath;
+    uint64_t                                               m_LanFontVersion   = 1;
     int                                                    m_SnapTransType    = 1;
     float                                                  m_SnapTransDur     = 0.35f;
     std::mutex                                             m_LanFrameMutex;

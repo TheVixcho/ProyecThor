@@ -668,18 +668,30 @@ export component ThemeSwatchButton inherits Rectangle {
     }
 }
 
+export struct StyleScreenTarget {
+    screen-id: int,
+    label: string,
+    active: bool,
+}
+
 export component StyleGalleryCard inherits Rectangle {
     in property <string> style-name;
     in property <string> style-summary;
     in property <color> preview-text-color: #ffffff;
     in property <bool> preview-box-bg: false;
+    in property <string> preview-font-family: "";
+    in property <int> preview-font-weight: 700;
     in property <bool> active: false;
+    in property <string> apply-label: "Aplicar";
+    in property <string> assigned-screens-label: "";
+    in property <[StyleScreenTarget]> screen-targets: [];
     callback apply-style();
+    callback apply-to-screen(int);
     callback edit-style();
     callback duplicate-style();
     callback delete-style();
 
-    height: 118px;
+    min-height: 148px;
     border-radius: Theme.radius-md;
     background: root.active
         ? Theme.bg-surface-hover
@@ -706,7 +718,7 @@ export component StyleGalleryCard inherits Rectangle {
 
             Rectangle {
                 width: 84%;
-                height: 54%;
+                height: 58%;
                 x: (parent.width - self.width) / 2;
                 y: (parent.height - self.height) / 2;
                 border-radius: 5px;
@@ -715,8 +727,9 @@ export component StyleGalleryCard inherits Rectangle {
                 Text {
                     text: "Aa Bb Cc\nEjemplo";
                     color: root.preview-text-color;
+                    font-family: root.preview-font-family;
                     font-size: 13px;
-                    font-weight: 700;
+                    font-weight: root.preview-font-weight;
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }
@@ -726,10 +739,11 @@ export component StyleGalleryCard inherits Rectangle {
         VerticalLayout {
             horizontal-stretch: 1;
             alignment: space-between;
-            spacing: 4px;
+            spacing: 5px;
 
             HorizontalLayout {
                 alignment: space-between;
+                spacing: 6px;
                 Text {
                     text: root.style-name;
                     color: Theme.text-primary;
@@ -737,13 +751,25 @@ export component StyleGalleryCard inherits Rectangle {
                     font-weight: 700;
                     vertical-alignment: center;
                     overflow: elide;
+                    horizontal-stretch: 1;
                 }
-                if root.active : Text {
-                    text: "● ACTIVO";
-                    color: Theme.live-green;
-                    font-size: 10.5px;
-                    font-weight: 700;
-                    vertical-alignment: center;
+                if root.assigned-screens-label != "" : Rectangle {
+                    height: 20px;
+                    border-radius: 4px;
+                    background: Theme.live-green-soft;
+                    border-width: 1px;
+                    border-color: Theme.live-green.transparentize(0.4);
+                    HorizontalLayout {
+                        padding-left: 7px;
+                        padding-right: 7px;
+                        Text {
+                            text: "● " + root.assigned-screens-label;
+                            color: Theme.live-green;
+                            font-size: 10px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                    }
                 }
             }
 
@@ -757,7 +783,7 @@ export component StyleGalleryCard inherits Rectangle {
             HorizontalLayout {
                 spacing: 6px;
                 GlassButton {
-                    label: root.active ? "Aplicado" : "Aplicar";
+                    label: root.active ? "Aplicado" : root.apply-label;
                     primary: !root.active;
                     clicked => { root.apply-style(); }
                 }
@@ -775,6 +801,68 @@ export component StyleGalleryCard inherits Rectangle {
                     icon: @image-url("icons/trash.svg");
                     danger: true;
                     clicked => { root.delete-style(); }
+                }
+            }
+
+            // Per-screen 1-click routing pills directly on each style card
+            HorizontalLayout {
+                spacing: 4px;
+                Text {
+                    text: "Enviar a:";
+                    color: Theme.text-muted;
+                    font-size: 9.5px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+                Rectangle {
+                    height: 22px;
+                    border-radius: 4px;
+                    background: all-ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-0;
+                    border-width: 1px;
+                    border-color: all-ta.has-hover ? Theme.border-accent : Theme.border-subtle;
+                    HorizontalLayout {
+                        padding-left: 7px;
+                        padding-right: 7px;
+                        Text {
+                            text: "🔗 Todas";
+                            color: Theme.text-secondary;
+                            font-size: 9.5px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                    }
+                    all-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.apply-to-screen(-1); }
+                    }
+                }
+                for tgt in root.screen-targets : Rectangle {
+                    height: 22px;
+                    border-radius: 4px;
+                    background: tgt.active
+                        ? (tgt.screen-id == 1 ? #0284c7 : (tgt.screen-id == 2 ? #d97706 : Theme.accent))
+                        : (tgt-ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-0);
+                    border-width: 1px;
+                    border-color: tgt.active
+                        ? (tgt.screen-id == 1 ? #38bdf8 : (tgt.screen-id == 2 ? #fbbf24 : Theme.accent-strong))
+                        : (tgt-ta.has-hover ? Theme.border-accent : Theme.border-subtle);
+                    HorizontalLayout {
+                        padding-left: 7px;
+                        padding-right: 7px;
+                        Text {
+                            text: tgt.active ? ("✓ " + tgt.label) : tgt.label;
+                            color: tgt.active
+                                ? (tgt.screen-id == 0 ? Theme.accent-fg : #ffffff)
+                                : Theme.text-secondary;
+                            font-size: 9.5px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                    }
+                    tgt-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.apply-to-screen(tgt.screen-id); }
+                    }
                 }
             }
         }

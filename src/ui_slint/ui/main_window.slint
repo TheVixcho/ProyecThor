@@ -1,11 +1,12 @@
 import { ScrollView, LineEdit, TextEdit, Slider } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { GlassCard, GlassButton, IconButton, IslandIconButton, SlideTile, SwitchRow, PadTile, ThemeSwatchButton, StyleGalleryCard, ScrubBar } from "components.slint";
+import { GlassCard, GlassButton, IconButton, IslandIconButton, SlideTile, SwitchRow, PadTile, ThemeSwatchButton, StyleGalleryCard, StyleScreenTarget, ScrubBar } from "components.slint";
 import { TopBar } from "topbar.slint";
 import { StyledTextBlock } from "projector_window.slint";
 export { Theme } from "theme.slint";
 export { ProjectorWindow, StageWindow } from "projector_window.slint";
 export { SplashWindow } from "splash_window.slint";
+export { StyleScreenTarget } from "components.slint";
 
 export struct LibraryItem {
     title: string,
@@ -49,6 +50,11 @@ export struct StyleCardItem {
     summary: string,
     text-color: color,
     box-bg: bool,
+    font-family-name: string,
+    font-weight-val: int,
+    active-on-target: bool,
+    assigned-screens-label: string,
+    screen-targets: [StyleScreenTarget],
 }
 
 export struct VideoQueueItem {
@@ -144,6 +150,24 @@ export struct ScreenMatrixItem {
     show-pleca: bool,
     pleca-title: string,
     queue-summary: string,
+    style-name: string,
+    text-size: float,
+    text-align: int,
+    text-valign: int,
+    text-color: color,
+    font-family-name: string,
+    font-weight-val: int,
+    text-shadow: bool,
+    text-outline: bool,
+    text-glow: bool,
+    text-neon: bool,
+    text-3d: bool,
+    text-underline: bool,
+    text-box-bg: bool,
+    lyrics-pos-x: float,
+    lyrics-pos-y: float,
+    lyrics-width: float,
+    lyrics-height: float,
 }
 
 export component MainWindow inherits Window {
@@ -311,6 +335,8 @@ export component MainWindow inherits Window {
     in-out property <float> text-color-g: 255.0;
     in-out property <float> text-color-b: 255.0;
     in-out property <int> active-saved-style-idx: -1;
+    in-out property <int> style-target-mode: 0; // 0=Todas, 1=Público, 2=LAN, 3=Stage, >=4=Sala Extra
+    in property <string> style-target-label: "Todas las pantallas";
     in property <[StyleCardItem]> saved-style-cards: [];
 
     // Media / Background Preview, Hover Video Preview & Video Queue
@@ -379,6 +405,38 @@ export component MainWindow inherits Window {
     in property <bool> preview-show-pleca: false;
     in property <string> preview-pleca-title: "";
     in property <string> preview-pleca-sub: "";
+    in property <string> preview-style-name: "Predeterminado";
+    in property <float> preview-text-size: 60.0;
+    in property <int> preview-text-align: 1;
+    in property <int> preview-text-valign: 1;
+    in property <color> preview-text-color: #ffffff;
+    in property <string> preview-font-family-name: "";
+    in property <int> preview-font-weight-val: 700;
+    in property <bool> preview-text-shadow: true;
+    in property <bool> preview-text-outline: false;
+    in property <bool> preview-text-glow: false;
+    in property <bool> preview-text-neon: false;
+    in property <bool> preview-text-3d: false;
+    in property <bool> preview-text-underline: false;
+    in property <bool> preview-text-box-bg: false;
+    in property <float> preview-lyrics-pos-x: 0.5;
+    in property <float> preview-lyrics-pos-y: 0.5;
+    in property <float> preview-lyrics-width: 0.90;
+    in property <float> preview-lyrics-height: 0.55;
+    in property <bool> preview-index-box-enabled: true;
+    in property <float> preview-index-pos-x: 0.5;
+    in property <float> preview-index-pos-y: 0.86;
+    in property <float> preview-index-width: 0.50;
+    in property <float> preview-index-height: 0.14;
+    in property <float> preview-index-size: 30.0;
+    in property <int> preview-index-align: 1;
+    in property <color> preview-index-color: #fbbf24;
+    in property <string> preview-index-font-family-name: "";
+    in property <int> preview-index-font-weight-val: 700;
+    in property <bool> preview-index-shadow: true;
+    in property <bool> preview-index-outline: false;
+    in property <bool> preview-index-glow: false;
+    in property <bool> preview-index-box-bg: true;
     in-out property <string> new-room-name: "";
 
     // Pads (8 quick scene pads)
@@ -628,6 +686,8 @@ export component MainWindow inherits Window {
     callback duplicate-custom-style(int);
     callback load-custom-style(int);
     callback delete-custom-style(int);
+    callback select-style-target(int);
+    callback apply-style-to-screen(int, int); // (styleIdx, screenIdx: -1=Todas, >=0=screen)
     callback text-color-rgb-changed(float, float, float);
     callback text-color-selected(int);
     callback index-color-rgb-changed(float, float, float);
@@ -2318,7 +2378,7 @@ export component MainWindow inherits Window {
                                     VerticalLayout {
                                         spacing: 2px;
                                         Text { text: "Mis Estilos de Letras (" + root.saved-style-cards.length + ")"; color: Theme.text-primary; font-size: 15px; font-weight: 700; }
-                                        Text { text: "Crea, edita y selecciona tus propios estilos (.theme). Haz clic en un estilo para aplicarlo en vivo."; color: Theme.text-muted; font-size: 11.5px; }
+                                        Text { text: "Define estilos propios (.theme) y elige a qué pantalla enviar cada estilo de letra (ej. letras gigantes solo para LAN)."; color: Theme.text-muted; font-size: 11.5px; }
                                     }
                                     GlassButton {
                                         label: "Crear Nuevo Estilo";
@@ -2326,6 +2386,76 @@ export component MainWindow inherits Window {
                                         has-icon: true;
                                         primary: true;
                                         clicked => { root.open-new-style-editor(); }
+                                    }
+                                }
+
+                                // Selector de Pantalla Destino para Estilos de Letra + Estado actual por pantalla
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
+
+                                    VerticalLayout {
+                                        padding: 10px;
+                                        spacing: 8px;
+
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            Text {
+                                                text: "Enviar estilo a:";
+                                                color: Theme.text-secondary;
+                                                font-size: 11px;
+                                                font-weight: 800;
+                                                vertical-alignment: center;
+                                            }
+                                            GlassButton {
+                                                label: "🔗 Todas";
+                                                compact: true;
+                                                primary: root.style-target-mode == 0;
+                                                clicked => { root.select-style-target(0); }
+                                            }
+                                            for scr in root.screen-matrix-items : GlassButton {
+                                                label: (scr.id == 0 ? "📺 " : (scr.id == 1 ? "🌐 " : (scr.id == 2 ? "🎤 " : "🖥 "))) + scr.name;
+                                                compact: true;
+                                                primary: root.style-target-mode == (scr.id + 1);
+                                                clicked => { root.select-style-target(scr.id + 1); }
+                                            }
+                                        }
+
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            Text {
+                                                text: "Activo:";
+                                                color: Theme.text-muted;
+                                                font-size: 10px;
+                                                font-weight: 700;
+                                                vertical-alignment: center;
+                                            }
+                                            for scr in root.screen-matrix-items : Rectangle {
+                                                height: 22px;
+                                                border-radius: 4px;
+                                                background: root.style-target-mode == (scr.id + 1) ? Theme.accent-soft : Theme.bg-surface-0;
+                                                border-width: 1px;
+                                                border-color: root.style-target-mode == (scr.id + 1) ? Theme.border-accent : Theme.border-subtle;
+                                                HorizontalLayout {
+                                                    padding-left: 7px;
+                                                    padding-right: 7px;
+                                                    Text {
+                                                        text: (scr.id == 0 ? "Público" : (scr.id == 1 ? "LAN" : (scr.id == 2 ? "Stage" : scr.name)))
+                                                            + ": " + scr.style-name + " (" + Math.round(scr.text-size) + "px)";
+                                                        color: Theme.text-secondary;
+                                                        font-size: 10px;
+                                                        font-weight: 600;
+                                                        vertical-alignment: center;
+                                                    }
+                                                }
+                                                TouchArea {
+                                                    mouse-cursor: pointer;
+                                                    clicked => { root.select-style-target(scr.id + 1); }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
 
@@ -2364,10 +2494,19 @@ export component MainWindow inherits Window {
                                     style-summary: sc.summary;
                                     preview-text-color: sc.text-color;
                                     preview-box-bg: sc.box-bg;
-                                    active: sidx == root.active-saved-style-idx;
+                                    preview-font-family: sc.font-family-name;
+                                    preview-font-weight: sc.font-weight-val;
+                                    active: sc.active-on-target;
+                                    apply-label: root.style-target-mode == 0 ? "Aplicar a Todas" : ("Aplicar a " + root.style-target-label);
+                                    assigned-screens-label: sc.assigned-screens-label;
+                                    screen-targets: sc.screen-targets;
                                     apply-style => {
                                         root.active-saved-style-idx = sidx;
                                         root.load-custom-style(sidx);
+                                    }
+                                    apply-to-screen(scrId) => {
+                                        root.active-saved-style-idx = sidx;
+                                        root.apply-style-to-screen(sidx, scrId);
                                     }
                                     edit-style => { root.open-edit-style-editor(sidx); }
                                     duplicate-style => { root.duplicate-custom-style(sidx); }
@@ -2387,8 +2526,26 @@ export component MainWindow inherits Window {
                                 Text { text: "Editor de Estilo:"; color: Theme.text-secondary; font-size: 13px; font-weight: 700; vertical-alignment: center; }
                                 LineEdit {
                                     horizontal-stretch: 1;
-                                    placeholder-text: "Nombre del estilo (ej. Alabanza Principal, Predicación, Biblia)...";
+                                    placeholder-text: "Nombre del estilo (ej. Alabanza Principal, LAN Gigante, Biblia)...";
                                     text <=> root.editing-style-name;
+                                }
+                                Rectangle {
+                                    height: 30px;
+                                    border-radius: 6px;
+                                    background: Theme.accent-soft;
+                                    border-width: 1px;
+                                    border-color: Theme.border-accent;
+                                    HorizontalLayout {
+                                        padding-left: 9px;
+                                        padding-right: 9px;
+                                        Text {
+                                            text: "Destino: " + root.style-target-label;
+                                            color: Theme.accent-strong;
+                                            font-size: 11px;
+                                            font-weight: 700;
+                                            vertical-alignment: center;
+                                        }
+                                    }
                                 }
                                 GlassButton {
                                     label: "Cancelar";
@@ -2715,7 +2872,7 @@ export component MainWindow inherits Window {
                                                 }
 
                                                 HorizontalLayout { alignment: space-between; Text { text: "Tamaño de Fuente"; color: Theme.text-primary; font-size: 12px; } Text { text: Math.round(root.text-size) + " px"; color: Theme.accent-strong; font-size: 12px; font-weight: 700; } }
-                                                Slider { minimum: 20; maximum: 140; value <=> root.text-size; changed(v) => { root.style-changed(); } }
+                                                Slider { minimum: 20; maximum: 220; value <=> root.text-size; changed(v) => { root.style-changed(); } }
 
                                                 HorizontalLayout {
                                                     spacing: 5px;
@@ -4878,21 +5035,24 @@ export component MainWindow inherits Window {
                                                 }
 
                                                 if scr.live-text != "" : StyledTextBlock {
-                                                    width: Math.clamp(root.lyrics-width, 0.15, 1.0) * parent.width;
-                                                    height: Math.clamp(root.lyrics-height, 0.08, 1.0) * parent.height;
-                                                    x: Math.clamp(root.lyrics-pos-x * parent.width - self.width / 2, 0px, Math.max(0px, parent.width - self.width));
-                                                    y: Math.clamp(root.lyrics-pos-y * parent.height - self.height / 2, 0px, Math.max(0px, parent.height - self.height));
+                                                    width: Math.clamp(scr.lyrics-width, 0.15, 1.0) * parent.width;
+                                                    height: Math.clamp(scr.lyrics-height, 0.08, 1.0) * parent.height;
+                                                    x: Math.clamp(scr.lyrics-pos-x * parent.width - self.width / 2, 0px, Math.max(0px, parent.width - self.width));
+                                                    y: Math.clamp(scr.lyrics-pos-y * parent.height - self.height / 2, 0px, Math.max(0px, parent.height - self.height));
                                                     text-body: scr.live-text;
-                                                    text-size: Math.max(6.5, root.text-size * 0.20);
-                                                    text-align: root.text-align;
-                                                    text-valign: root.text-valign;
-                                                    text-color: root.text-color;
-                                                    font-family-name: root.font-family-name;
-                                                    font-weight-val: root.font-weight-idx == 0 ? 400 : (root.font-weight-idx == 2 ? 900 : 700);
-                                                    text-shadow: root.text-shadow;
-                                                    text-outline: root.text-outline;
-                                                    text-glow: root.text-glow;
-                                                    text-box-bg: root.text-box-bg;
+                                                    text-size: Math.max(6.5, scr.text-size * 0.20);
+                                                    text-align: scr.text-align;
+                                                    text-valign: scr.text-valign;
+                                                    text-color: scr.text-color;
+                                                    font-family-name: scr.font-family-name;
+                                                    font-weight-val: scr.font-weight-val;
+                                                    text-shadow: scr.text-shadow;
+                                                    text-outline: scr.text-outline;
+                                                    text-glow: scr.text-glow;
+                                                    text-neon: scr.text-neon;
+                                                    text-3d: scr.text-3d;
+                                                    text-underline: scr.text-underline;
+                                                    text-box-bg: scr.text-box-bg;
                                                     box-padding: 3px;
                                                 }
 
@@ -5258,26 +5418,26 @@ export component MainWindow inherits Window {
                                 image-fit: contain;
                             }
 
-                            // 1:1 Bounded Lyrics Box matching ProjectorWindow
+                            // 1:1 Bounded Lyrics Box matching inspected screen's own text style
                             if root.live-text != "" : StyledTextBlock {
-                                width: Math.clamp(root.lyrics-width, 0.15, 1.0) * parent.width;
-                                height: Math.clamp(root.lyrics-height, 0.08, 1.0) * parent.height;
-                                x: Math.clamp(root.lyrics-pos-x * parent.width - self.width / 2, 0px, Math.max(0px, parent.width - self.width));
-                                y: Math.clamp(root.lyrics-pos-y * parent.height - self.height / 2, 0px, Math.max(0px, parent.height - self.height));
+                                width: Math.clamp(root.preview-lyrics-width, 0.15, 1.0) * parent.width;
+                                height: Math.clamp(root.preview-lyrics-height, 0.08, 1.0) * parent.height;
+                                x: Math.clamp(root.preview-lyrics-pos-x * parent.width - self.width / 2, 0px, Math.max(0px, parent.width - self.width));
+                                y: Math.clamp(root.preview-lyrics-pos-y * parent.height - self.height / 2, 0px, Math.max(0px, parent.height - self.height));
                                 text-body: root.live-text;
-                                text-size: Math.max(7.0, root.text-size * 0.25);
-                                text-align: root.text-align;
-                                text-valign: root.text-valign;
-                                text-color: root.text-color;
-                                font-family-name: root.font-family-name;
-                                font-weight-val: root.font-weight-idx == 0 ? 400 : (root.font-weight-idx == 2 ? 900 : 700);
-                                text-shadow: root.text-shadow;
-                                text-outline: root.text-outline;
-                                text-glow: root.text-glow;
-                                text-neon: root.text-neon;
-                                text-3d: root.text-3d;
-                                text-underline: root.text-underline;
-                                text-box-bg: root.text-box-bg;
+                                text-size: Math.max(7.0, root.preview-text-size * 0.25);
+                                text-align: root.preview-text-align;
+                                text-valign: root.preview-text-valign;
+                                text-color: root.preview-text-color;
+                                font-family-name: root.preview-font-family-name;
+                                font-weight-val: root.preview-font-weight-val;
+                                text-shadow: root.preview-text-shadow;
+                                text-outline: root.preview-text-outline;
+                                text-glow: root.preview-text-glow;
+                                text-neon: root.preview-text-neon;
+                                text-3d: root.preview-text-3d;
+                                text-underline: root.preview-text-underline;
+                                text-box-bg: root.preview-text-box-bg;
                                 box-padding: 4px;
                             }
 
@@ -5289,22 +5449,22 @@ export component MainWindow inherits Window {
                                 vertical-alignment: center;
                             }
 
-                            if root.index-box-enabled && root.live-is-bible && root.live-ref != "" : StyledTextBlock {
-                                width: Math.clamp(root.index-width, 0.12, 1.0) * parent.width;
-                                height: Math.clamp(root.index-height, 0.06, 0.60) * parent.height;
-                                x: Math.clamp(root.index-pos-x * parent.width - self.width / 2, 0px, Math.max(0px, parent.width - self.width));
-                                y: Math.clamp(root.index-pos-y * parent.height - self.height / 2, 0px, Math.max(0px, parent.height - self.height));
+                            if root.preview-index-box-enabled && root.live-is-bible && root.live-ref != "" : StyledTextBlock {
+                                width: Math.clamp(root.preview-index-width, 0.12, 1.0) * parent.width;
+                                height: Math.clamp(root.preview-index-height, 0.06, 0.60) * parent.height;
+                                x: Math.clamp(root.preview-index-pos-x * parent.width - self.width / 2, 0px, Math.max(0px, parent.width - self.width));
+                                y: Math.clamp(root.preview-index-pos-y * parent.height - self.height / 2, 0px, Math.max(0px, parent.height - self.height));
                                 text-body: root.live-ref;
-                                text-size: Math.max(6.5, root.index-size * 0.25);
-                                text-align: root.index-align;
-                                text-color: root.index-color;
-                                font-family-name: root.index-font-family-name;
-                                font-weight-val: root.index-font-weight-idx == 0 ? 400 : (root.index-font-weight-idx == 2 ? 900 : 700);
-                                text-shadow: root.index-shadow;
-                                text-outline: root.index-outline;
-                                text-glow: root.index-glow;
-                                glow-color: root.index-color;
-                                text-box-bg: root.index-box-bg;
+                                text-size: Math.max(6.5, root.preview-index-size * 0.25);
+                                text-align: root.preview-index-align;
+                                text-color: root.preview-index-color;
+                                font-family-name: root.preview-index-font-family-name;
+                                font-weight-val: root.preview-index-font-weight-val;
+                                text-shadow: root.preview-index-shadow;
+                                text-outline: root.preview-index-outline;
+                                text-glow: root.preview-index-glow;
+                                glow-color: root.preview-index-color;
+                                text-box-bg: root.preview-index-box-bg;
                                 box-padding: 3px;
                             }
 
@@ -5319,7 +5479,7 @@ export component MainWindow inherits Window {
                                 border-width: 1px;
                                 border-color: #ffffff22;
                                 mon-lbl := Text {
-                                    text: root.inspected-screen-name;
+                                    text: root.inspected-screen-name + " • " + root.preview-style-name;
                                     color: #e4e4e7;
                                     font-size: 9px;
                                     font-weight: 700;

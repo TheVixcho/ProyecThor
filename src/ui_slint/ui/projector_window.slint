@@ -592,6 +592,11 @@ export component StageWindow inherits Window {
     in property <string> clock-text: "00:00:00";
     in property <string> timer-text: "";
     in property <string> stage-alert: "";
+    in property <float> text-size: 40.0;
+    in property <int> text-align: 1;
+    in property <color> text-color: #ffffff;
+    in property <string> font-family-name: "";
+    in property <int> font-weight-val: 700;
 
     VerticalLayout {
         padding: 26px;
@@ -655,16 +660,18 @@ export component StageWindow inherits Window {
             background: Theme.bg-surface-0;
             border-width: 2px;
             border-color: Theme.live-green.transparentize(0.35);
+            clip: true;
 
             VerticalLayout {
                 padding: 26px;
                 alignment: center;
                 Text {
                     text: root.live-text == "" ? "(En espera)" : root.live-text;
-                    color: root.live-text == "" ? Theme.text-muted : #ffffff;
-                    font-size: 40px;
-                    font-weight: 700;
-                    horizontal-alignment: center;
+                    color: root.live-text == "" ? Theme.text-muted : root.text-color;
+                    font-family: root.font-family-name;
+                    font-size: root.text-size * 1px;
+                    font-weight: root.font-weight-val;
+                    horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
                     wrap: word-wrap;
                 }
             }
