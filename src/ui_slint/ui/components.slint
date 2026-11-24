@@ -49,8 +49,22 @@ export component CircleIslandButton inherits Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         colorize: (root.active || ta.has-hover) ? root.accent-color : Theme.text-secondary;
-        animate width  { duration: 110ms; easing: ease-out; }
-        animate height { duration: 110ms; easing: ease-out; }
+        animate width    { duration: 130ms; easing: ease-out; }
+        animate height   { duration: 130ms; easing: ease-out; }
+        animate colorize { duration: 150ms; easing: ease-out; }
+    }
+
+    // Subtle macOS/ProPresenter active indicator dot at bottom of island icon
+    Rectangle {
+        width: root.active ? 10px : 0px;
+        height: 2.5px;
+        x: (parent.width - self.width) / 2;
+        y: parent.height - 4px;
+        border-radius: 1.25px;
+        background: root.accent-color;
+        opacity: root.active ? 1.0 : 0.0;
+        animate width   { duration: 170ms; easing: ease-out; }
+        animate opacity { duration: 170ms; easing: ease-out; }
     }
 
     ta := TouchArea {
@@ -423,8 +437,8 @@ export component SlideTile inherits Rectangle {
         : (ta.has-hover ? Theme.border-medium : Theme.border-subtle);
     clip: true;
 
-    animate background { duration: 100ms; }
-    animate border-color { duration: 100ms; }
+    animate background   { duration: 140ms; easing: ease-out; }
+    animate border-color { duration: 140ms; easing: ease-out; }
 
     VerticalLayout {
         padding: 0px;
@@ -433,7 +447,8 @@ export component SlideTile inherits Rectangle {
         // Compact broadcast header bar
         Rectangle {
             height: 22px;
-            background: root.active ? Theme.accent : Theme.bg-surface-2;
+            background: root.active ? Theme.accent : (ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-2);
+            animate background { duration: 140ms; easing: ease-out; }
             HorizontalLayout {
                 padding-left: 8px;
                 padding-right: 8px;
@@ -445,13 +460,24 @@ export component SlideTile inherits Rectangle {
                     font-weight: 700;
                     vertical-alignment: center;
                     overflow: elide;
+                    animate color { duration: 140ms; easing: ease-out; }
                 }
-                if root.active : Text {
-                    text: "● LIVE";
-                    color: Theme.accent-fg;
-                    font-size: 9.5px;
-                    font-weight: 800;
-                    vertical-alignment: center;
+                if root.active : HorizontalLayout {
+                    spacing: 4px;
+                    Rectangle {
+                        width: 5px;
+                        height: 5px;
+                        y: (parent.height - self.height) / 2;
+                        border-radius: 2.5px;
+                        background: Theme.accent-fg;
+                    }
+                    Text {
+                        text: "EN VIVO";
+                        color: Theme.accent-fg;
+                        font-size: 9px;
+                        font-weight: 800;
+                        vertical-alignment: center;
+                    }
                 }
             }
         }
@@ -492,6 +518,7 @@ export component SwitchRow inherits Rectangle {
     height: root.subtitle == "" ? 42px : 52px;
     border-radius: Theme.radius-md;
     background: ta.has-hover ? Theme.bg-surface-2 : transparent;
+    animate background { duration: 140ms; easing: ease-out; }
 
     HorizontalLayout {
         padding-left: 10px;
@@ -559,7 +586,9 @@ export component PadTile inherits Rectangle {
         ? (ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-2)
         : (ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1);
     border-width: 1px;
-    border-color: root.assigned ? Theme.border-accent : Theme.border-subtle;
+    border-color: root.assigned ? Theme.border-accent : (ta.has-hover ? Theme.border-medium : Theme.border-subtle);
+    animate background   { duration: 150ms; easing: ease-out; }
+    animate border-color { duration: 150ms; easing: ease-out; }
 
     ta := TouchArea {
         mouse-cursor: pointer;
@@ -698,6 +727,8 @@ export component StyleGalleryCard inherits Rectangle {
         : (card-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1);
     border-width: root.active ? 2px : 1px;
     border-color: root.active ? Theme.live-green : (card-ta.has-hover ? Theme.border-accent : Theme.border-subtle);
+    animate background   { duration: 160ms; easing: ease-out; }
+    animate border-color { duration: 160ms; easing: ease-out; }
 
     card-ta := TouchArea {
         mouse-cursor: pointer;
@@ -820,11 +851,13 @@ export component StyleGalleryCard inherits Rectangle {
                     background: all-ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-0;
                     border-width: 1px;
                     border-color: all-ta.has-hover ? Theme.border-accent : Theme.border-subtle;
+                    animate background   { duration: 120ms; easing: ease-out; }
+                    animate border-color { duration: 120ms; easing: ease-out; }
                     HorizontalLayout {
                         padding-left: 7px;
                         padding-right: 7px;
                         Text {
-                            text: "🔗 Todas";
+                            text: "Todas";
                             color: Theme.text-secondary;
                             font-size: 9.5px;
                             font-weight: 700;
@@ -846,6 +879,8 @@ export component StyleGalleryCard inherits Rectangle {
                     border-color: tgt.active
                         ? (tgt.screen-id == 1 ? #38bdf8 : (tgt.screen-id == 2 ? #fbbf24 : Theme.accent-strong))
                         : (tgt-ta.has-hover ? Theme.border-accent : Theme.border-subtle);
+                    animate background   { duration: 130ms; easing: ease-out; }
+                    animate border-color { duration: 130ms; easing: ease-out; }
                     HorizontalLayout {
                         padding-left: 7px;
                         padding-right: 7px;
@@ -866,5 +901,93 @@ export component StyleGalleryCard inherits Rectangle {
                 }
             }
         }
+    }
+}
+
+export component ItemRowActionBtn inherits Rectangle {
+    in property <image> icon;
+    in property <bool> danger: false;
+    in property <bool> accent: false;
+    in property <bool> dark-pill: false;
+    callback clicked();
+
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: root.danger
+        ? (ta.pressed ? #ef444455 : (ta.has-hover ? #ef444430 : (root.dark-pill ? #09090b99 : transparent)))
+        : (root.accent
+            ? (ta.pressed ? Theme.accent.transparentize(0.45) : (ta.has-hover ? Theme.accent.transparentize(0.72) : (root.dark-pill ? #09090b99 : transparent)))
+            : (ta.pressed ? Theme.bg-surface-hover : (ta.has-hover ? Theme.bg-surface-2 : (root.dark-pill ? #09090b99 : transparent))));
+    border-width: 1px;
+    border-color: root.danger
+        ? (ta.has-hover ? #ef4444aa : (root.dark-pill ? #ffffff18 : transparent))
+        : (ta.has-hover ? Theme.border-medium : (root.dark-pill ? #ffffff18 : transparent));
+
+    animate background   { duration: 120ms; easing: ease-out; }
+    animate border-color { duration: 120ms; easing: ease-out; }
+
+    Image {
+        source: root.icon;
+        width: 12.5px;
+        height: 12.5px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        colorize: root.danger
+            ? (ta.has-hover ? #f87171 : Theme.text-muted)
+            : (root.accent
+                ? (ta.has-hover ? Theme.accent-strong : Theme.text-secondary)
+                : (ta.has-hover ? Theme.text-primary : Theme.text-muted));
+        animate colorize { duration: 120ms; easing: ease-out; }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component ItemMoreBtn inherits Rectangle {
+    in property <bool> dark-pill: false;
+    callback clicked();
+
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: ta.pressed
+        ? Theme.bg-surface-hover
+        : (ta.has-hover ? Theme.bg-surface-2 : (root.dark-pill ? #09090b99 : transparent));
+    border-width: 1px;
+    border-color: ta.has-hover ? Theme.border-medium : (root.dark-pill ? #ffffff18 : transparent);
+
+    animate background   { duration: 120ms; easing: ease-out; }
+    animate border-color { duration: 120ms; easing: ease-out; }
+
+    HorizontalLayout {
+        alignment: center;
+        spacing: 2.5px;
+        Rectangle {
+            width: 3px; height: 3px; border-radius: 1.5px;
+            y: (parent.height - self.height) / 2;
+            background: ta.has-hover ? Theme.text-primary : Theme.text-muted;
+            animate background { duration: 120ms; }
+        }
+        Rectangle {
+            width: 3px; height: 3px; border-radius: 1.5px;
+            y: (parent.height - self.height) / 2;
+            background: ta.has-hover ? Theme.text-primary : Theme.text-muted;
+            animate background { duration: 120ms; }
+        }
+        Rectangle {
+            width: 3px; height: 3px; border-radius: 1.5px;
+            y: (parent.height - self.height) / 2;
+            background: ta.has-hover ? Theme.text-primary : Theme.text-muted;
+            animate background { duration: 120ms; }
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
     }
 }

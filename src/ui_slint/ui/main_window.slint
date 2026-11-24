@@ -1,6 +1,6 @@
 import { ScrollView, LineEdit, TextEdit, Slider } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { GlassCard, GlassButton, IconButton, IslandIconButton, SlideTile, SwitchRow, PadTile, ThemeSwatchButton, StyleGalleryCard, StyleScreenTarget, ScrubBar } from "components.slint";
+import { GlassCard, GlassButton, IconButton, IslandIconButton, ItemRowActionBtn, ItemMoreBtn, SlideTile, SwitchRow, PadTile, ThemeSwatchButton, StyleGalleryCard, StyleScreenTarget, ScrubBar } from "components.slint";
 import { TopBar } from "topbar.slint";
 import { StyledTextBlock } from "projector_window.slint";
 export { Theme } from "theme.slint";
@@ -94,6 +94,7 @@ export struct MusicGridCell {
     index: int,
     title: string,
     subtitle: string,
+    path: string,
     playing: bool,
     cover: image,
     has-cover: bool,
@@ -150,6 +151,8 @@ export struct ScreenMatrixItem {
     show-pleca: bool,
     pleca-title: string,
     queue-summary: string,
+    use-own-style: bool,
+    assigned-style-idx: int,
     style-name: string,
     text-size: float,
     text-align: int,
@@ -195,7 +198,29 @@ export component MainWindow inherits Window {
     // Library, Slides & Service Queue
     in property <[LibraryItem]> library-items: [];
     in-out property <int> selected-library-index: -1;
+    in property <string> selected-library-path: "";
     in property <string> selected-item-title: "Selecciona una canción o pasaje";
+
+    // Unified Item Action / Rename / Delete Modal state
+    // kind: 0=Canción, 1=Multimedia, 2=Documento, 3=Música, 4=Fondo, 5=Overlay
+    // mode: 0=Acciones, 1=Cambiar Nombre, 2=Confirmar Eliminar
+    in-out property <bool>   item-modal-open: false;
+    in-out property <int>    item-modal-mode: 0;
+    in-out property <int>    item-modal-kind: 0;
+    in-out property <string> item-modal-title: "";
+    in-out property <string> item-modal-subtitle: "";
+    in-out property <string> item-modal-path: "";
+    in-out property <string> item-modal-rename-input: "";
+
+    function open-item-modal(mode: int, kind: int, title: string, subtitle: string, path: string) {
+        root.item-modal-mode = mode;
+        root.item-modal-kind = kind;
+        root.item-modal-title = title;
+        root.item-modal-subtitle = subtitle;
+        root.item-modal-path = path;
+        root.item-modal-rename-input = title;
+        root.item-modal-open = true;
+    }
 
     in property <[SlideItem]> slides: [];
     in property <[SlideGridRow]> slide-rows: [];
@@ -406,6 +431,7 @@ export component MainWindow inherits Window {
     in property <string> preview-pleca-title: "";
     in property <string> preview-pleca-sub: "";
     in property <string> preview-style-name: "Predeterminado";
+    in property <bool> preview-own-style: false;
     in property <float> preview-text-size: 60.0;
     in property <int> preview-text-align: 1;
     in property <int> preview-text-valign: 1;
@@ -457,6 +483,9 @@ export component MainWindow inherits Window {
     in-out property <bool> lan-send-bg: true;
     in-out property <bool> lan-send-text: true;
     in-out property <bool> lan-send-overlay: true;
+    in-out property <bool> lan-own-style: false;
+    in property <int> lan-assigned-style-idx: -1;
+    in property <string> lan-style-summary: "Siguiendo estilo de Público";
     in-out property <bool> lan-high-quality: true;
     in-out property <int> lan-res-preset: 1;     // 0=640x360, 1=1280x720, 2=1920x1080
     in-out property <int> lan-video-mode: 1;     // 0=Ahorro(LowLatency), 1=Normal(HighQuality), 2=Máxima(UltraStable)
@@ -688,6 +717,7 @@ export component MainWindow inherits Window {
     callback delete-custom-style(int);
     callback select-style-target(int);
     callback apply-style-to-screen(int, int); // (styleIdx, screenIdx: -1=Todas, >=0=screen)
+    callback set-screen-own-style(int, bool); // (screenIdx, useOwnStyle)
     callback text-color-rgb-changed(float, float, float);
     callback text-color-selected(int);
     callback index-color-rgb-changed(float, float, float);
@@ -762,6 +792,12 @@ export component MainWindow inherits Window {
     callback fullscreen-changed(bool);
     callback check-github-updates();
 
+    // Unified Library File Management (Play/Screen, Queue, Rename, Delete)
+    callback item-action-play(int, string);
+    callback item-action-queue(int, string);
+    callback item-action-rename(int, string, string);
+    callback item-action-delete(int, string);
+
     changed active-tab => {
         root.tab-changed(root.active-tab);
     }
@@ -772,6 +808,10 @@ export component MainWindow inherits Window {
 
         key-pressed(event) => {
             if (event.text == Key.Escape) {
+                if (root.item-modal-open) {
+                    root.item-modal-open = false;
+                    return accept;
+                }
                 if (root.font-picker-open) {
                     root.font-picker-open = false;
                     return accept;
@@ -1124,14 +1164,37 @@ export component MainWindow inherits Window {
                                     animate background { duration: 110ms; }
                                     animate border-color { duration: 110ms; }
 
+                                    item-ta := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            main-keys.focus();
+                                            root.selected-library-index = idx;
+                                            root.library-item-selected(idx);
+                                        }
+                                        pointer-event(ev) => {
+                                            if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
+                                                root.open-item-modal(0, root.active-tab == 0 ? 0 : (root.active-tab == 2 ? 1 : 2), item.title, item.subtitle, item.path);
+                                            }
+                                        }
+                                        changed has-hover => {
+                                            if (self.has-hover) {
+                                                root.hovered-library-index = idx;
+                                                root.library-item-hovered(idx);
+                                            } else if (root.hovered-library-index == idx) {
+                                                root.hovered-library-index = -1;
+                                                root.library-item-hovered(-1);
+                                            }
+                                        }
+                                    }
+
                                     HorizontalLayout {
                                         padding-left: item.has-thumbnail ? 6px : 10px;
-                                        padding-right: 10px;
-                                        spacing: 8px;
+                                        padding-right: 6px;
+                                        spacing: 6px;
 
                                         if item.has-thumbnail : Rectangle {
-                                            width: 72px;
-                                            height: 42px;
+                                            width: 68px;
+                                            height: 40px;
                                             y: (parent.height - self.height) / 2;
                                             border-radius: 6px;
                                             background: #050507;
@@ -1171,33 +1234,33 @@ export component MainWindow inherits Window {
                                             Text {
                                                 text: item.title;
                                                 color: idx == root.selected-library-index ? Theme.text-primary : Theme.text-secondary;
-                                                font-size: 12.5px;
+                                                font-size: 12px;
                                                 font-weight: idx == root.selected-library-index ? 600 : 400;
                                                 overflow: elide;
                                             }
                                             if item.subtitle != "" : Text {
                                                 text: item.subtitle;
                                                 color: Theme.text-muted;
-                                                font-size: 10.5px;
+                                                font-size: 10px;
                                                 overflow: elide;
                                             }
                                         }
-                                    }
 
-                                    item-ta := TouchArea {
-                                        mouse-cursor: pointer;
-                                        clicked => {
-                                            main-keys.focus();
-                                            root.selected-library-index = idx;
-                                            root.library-item-selected(idx);
-                                        }
-                                        changed has-hover => {
-                                            if (self.has-hover) {
-                                                root.hovered-library-index = idx;
-                                                root.library-item-hovered(idx);
-                                            } else if (root.hovered-library-index == idx) {
-                                                root.hovered-library-index = -1;
-                                                root.library-item-hovered(-1);
+                                        HorizontalLayout {
+                                            spacing: 2px;
+                                            ItemMoreBtn {
+                                                y: (parent.height - self.height) / 2;
+                                                clicked => {
+                                                    root.open-item-modal(0, root.active-tab == 0 ? 0 : (root.active-tab == 2 ? 1 : 2), item.title, item.subtitle, item.path);
+                                                }
+                                            }
+                                            ItemRowActionBtn {
+                                                icon: @image-url("icons/trash.svg");
+                                                danger: true;
+                                                y: (parent.height - self.height) / 2;
+                                                clicked => {
+                                                    root.open-item-modal(2, root.active-tab == 0 ? 0 : (root.active-tab == 2 ? 1 : 2), item.title, item.subtitle, item.path);
+                                                }
                                             }
                                         }
                                     }
@@ -1447,14 +1510,35 @@ export component MainWindow inherits Window {
                                         animate background { duration: 110ms; }
                                         animate border-color { duration: 110ms; }
 
+                                        bg-ta := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => { root.dock-bg-selected(bidx); }
+                                            pointer-event(ev) => {
+                                                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
+                                                    root.open-item-modal(0, 4, bg.title, bg.subtitle, bg.path);
+                                                }
+                                            }
+                                            changed has-hover => {
+                                                if (self.has-hover) {
+                                                    root.hovered-dock-index = bidx;
+                                                    root.dock-bg-hovered(bidx);
+                                                } else if (root.hovered-dock-index == bidx) {
+                                                    root.hovered-dock-index = -1;
+                                                    root.dock-bg-hovered(-1);
+                                                }
+                                            }
+                                        }
+
                                         HorizontalLayout {
                                             padding: 4px;
-                                            spacing: 8px;
+                                            padding-right: 6px;
+                                            spacing: 7px;
 
                                             Rectangle {
-                                                width: 88px;
-                                                height: 50px;
-                                                border-radius: 3px;
+                                                width: 78px;
+                                                height: 48px;
+                                                y: (parent.height - self.height) / 2;
+                                                border-radius: 4px;
                                                 background: #050507;
                                                 clip: true;
 
@@ -1483,33 +1567,33 @@ export component MainWindow inherits Window {
                                             VerticalLayout {
                                                 horizontal-stretch: 1;
                                                 alignment: center;
-                                                spacing: 3px;
+                                                spacing: 2px;
                                                 Text {
                                                     text: bg.title;
                                                     color: Theme.text-primary;
-                                                    font-size: 12px;
+                                                    font-size: 11.5px;
                                                     font-weight: 600;
                                                     overflow: elide;
                                                 }
                                                 Text {
-                                                    text: (bidx == root.hovered-dock-index && root.has-hover-video-frame) ? "▶ Vista previa en vivo" : bg.subtitle;
+                                                    text: (bidx == root.hovered-dock-index && root.has-hover-video-frame) ? "▶ Vista previa" : bg.subtitle;
                                                     color: (bidx == root.hovered-dock-index && root.has-hover-video-frame) ? Theme.live-green : Theme.text-muted;
-                                                    font-size: 10px;
+                                                    font-size: 9.5px;
                                                     font-weight: 600;
                                                 }
                                             }
-                                        }
 
-                                        bg-ta := TouchArea {
-                                            mouse-cursor: pointer;
-                                            clicked => { root.dock-bg-selected(bidx); }
-                                            changed has-hover => {
-                                                if (self.has-hover) {
-                                                    root.hovered-dock-index = bidx;
-                                                    root.dock-bg-hovered(bidx);
-                                                } else if (root.hovered-dock-index == bidx) {
-                                                    root.hovered-dock-index = -1;
-                                                    root.dock-bg-hovered(-1);
+                                            HorizontalLayout {
+                                                spacing: 2px;
+                                                ItemMoreBtn {
+                                                    y: (parent.height - self.height) / 2;
+                                                    clicked => { root.open-item-modal(0, 4, bg.title, bg.subtitle, bg.path); }
+                                                }
+                                                ItemRowActionBtn {
+                                                    icon: @image-url("icons/trash.svg");
+                                                    danger: true;
+                                                    y: (parent.height - self.height) / 2;
+                                                    clicked => { root.open-item-modal(2, 4, bg.title, bg.subtitle, bg.path); }
                                                 }
                                             }
                                         }
@@ -1542,13 +1626,25 @@ export component MainWindow inherits Window {
                                     border-color: ov.subtitle == "● ACTIVO" ? Theme.live-green : (ov-ta.has-hover ? Theme.border-medium : Theme.border-subtle);
                                     animate background { duration: 110ms; }
 
+                                    ov-ta := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => { root.overlay-layer-selected(oidx); }
+                                        pointer-event(ev) => {
+                                            if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
+                                                root.open-item-modal(0, 5, ov.title, ov.subtitle, ov.path);
+                                            }
+                                        }
+                                    }
+
                                     HorizontalLayout {
                                         padding: 5px;
-                                        spacing: 8px;
+                                        padding-right: 6px;
+                                        spacing: 6px;
 
                                         Rectangle {
-                                            width: 68px;
-                                            height: 44px;
+                                            width: 60px;
+                                            height: 42px;
+                                            y: (parent.height - self.height) / 2;
                                             border-radius: 5px;
                                             background: #141418;
                                             border-width: 1px;
@@ -1568,48 +1664,37 @@ export component MainWindow inherits Window {
                                             Text {
                                                 text: ov.title;
                                                 color: Theme.text-primary;
-                                                font-size: 12px;
+                                                font-size: 11.5px;
                                                 font-weight: 600;
                                                 overflow: elide;
                                             }
                                             Text {
                                                 text: ov.subtitle;
                                                 color: ov.subtitle == "● ACTIVO" ? Theme.live-green : Theme.text-muted;
-                                                font-size: 10px;
+                                                font-size: 9.5px;
                                                 font-weight: 700;
                                             }
                                         }
 
-                                        Rectangle {
-                                            width: 28px;
-                                            height: 28px;
-                                            y: (parent.height - self.height) / 2;
-                                            border-radius: 6px;
-                                            background: ovq-ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-2;
-                                            border-width: 1px;
-                                            border-color: Theme.border-subtle;
-                                            z: 5;
-                                            Image {
-                                                source: @image-url("icons/plus.svg");
-                                                width: 13px;
-                                                height: 13px;
-                                                x: (parent.width - self.width) / 2;
+                                        HorizontalLayout {
+                                            spacing: 2px;
+                                            ItemRowActionBtn {
+                                                icon: @image-url("icons/plus.svg");
+                                                accent: true;
                                                 y: (parent.height - self.height) / 2;
-                                                colorize: Theme.text-primary;
-                                            }
-                                            ovq-ta := TouchArea {
-                                                mouse-cursor: pointer;
                                                 clicked => { root.overlay-layer-add-to-queue(oidx); }
                                             }
+                                            ItemMoreBtn {
+                                                y: (parent.height - self.height) / 2;
+                                                clicked => { root.open-item-modal(0, 5, ov.title, ov.subtitle, ov.path); }
+                                            }
+                                            ItemRowActionBtn {
+                                                icon: @image-url("icons/trash.svg");
+                                                danger: true;
+                                                y: (parent.height - self.height) / 2;
+                                                clicked => { root.open-item-modal(2, 5, ov.title, ov.subtitle, ov.path); }
+                                            }
                                         }
-                                    }
-
-                                    ov-ta := TouchArea {
-                                        x: 0;
-                                        width: parent.width - 40px;
-                                        height: parent.height;
-                                        mouse-cursor: pointer;
-                                        clicked => { root.overlay-layer-selected(oidx); }
                                     }
                                 }
                             }
@@ -2081,6 +2166,11 @@ export component MainWindow inherits Window {
                                     compact: true;
                                     clicked => { root.edit-song-clicked(); }
                                 }
+                                if root.active-tab == 0 && root.selected-library-index >= 0 && root.selected-library-path != "" : GlassButton {
+                                    label: "Renombrar";
+                                    compact: true;
+                                    clicked => { root.open-item-modal(1, 0, root.selected-item-title, root.selected-song-author, root.selected-library-path); }
+                                }
                                 if root.active-tab == 2 && root.selected-library-index >= 0 : GlassButton {
                                     label: "Enviar a Pantalla";
                                     icon: @image-url("icons/tv.svg");
@@ -2089,10 +2179,23 @@ export component MainWindow inherits Window {
                                     clicked => { root.project-selected-media(); }
                                 }
                                 if root.active-tab == 2 && root.selected-library-index >= 0 : GlassButton {
-                                    label: "A Cola Videos";
+                                    label: "A Cola";
                                     icon: @image-url("icons/list.svg");
                                     has-icon: true;
+                                    compact: true;
                                     clicked => { root.add-selected-to-video-queue(); }
+                                }
+                                if root.active-tab == 2 && root.selected-library-index >= 0 && root.selected-library-path != "" : GlassButton {
+                                    label: "Renombrar";
+                                    icon: @image-url("icons/edit.svg");
+                                    has-icon: true;
+                                    compact: true;
+                                    clicked => { root.open-item-modal(1, 1, root.selected-item-title, root.selected-media-info, root.selected-library-path); }
+                                }
+                                if root.active-tab == 2 && root.selected-library-index >= 0 && root.selected-library-path != "" : IconButton {
+                                    icon: @image-url("icons/trash.svg");
+                                    danger: true;
+                                    clicked => { root.open-item-modal(2, 1, root.selected-item-title, root.selected-media-info, root.selected-library-path); }
                                 }
                                 if root.active-tab == 0 && root.active-song-playlist-idx >= 0 && root.selected-library-index >= 0 : GlassButton {
                                     label: "A Playlist";
@@ -2105,6 +2208,11 @@ export component MainWindow inherits Window {
                                     has-icon: true;
                                     compact: true;
                                     clicked => { root.add-current-to-queue(); }
+                                }
+                                if root.active-tab == 0 && root.selected-library-index >= 0 && root.selected-library-path != "" : IconButton {
+                                    icon: @image-url("icons/trash.svg");
+                                    danger: true;
+                                    clicked => { root.open-item-modal(2, 0, root.selected-item-title, root.selected-song-author, root.selected-library-path); }
                                 }
                                 if root.active-tab == 0 : IconButton {
                                     icon: @image-url("icons/prev.svg");
@@ -2207,45 +2315,64 @@ export component MainWindow inherits Window {
                                     border-radius: Theme.radius-md;
                                     background: Theme.bg-surface-1;
                                     border-width: 1px;
-                                    border-color: root.video-queue-playing ? Theme.live-green.transparentize(0.4) : Theme.border-subtle;
+                                    border-color: root.video-queue-playing ? Theme.live-green.transparentize(0.45) : Theme.border-subtle;
+                                    animate border-color { duration: 180ms; easing: ease-out; }
 
                                     VerticalLayout {
                                         padding: 12px;
-                                        spacing: 9px;
+                                        spacing: 10px;
 
                                         HorizontalLayout {
                                             alignment: space-between;
-                                            Text {
-                                                text: "Cola de Reproducción de Videos (" + root.video-queue-items.length + ")";
-                                                color: Theme.text-primary;
-                                                font-size: 13px;
-                                                font-weight: 700;
-                                                vertical-alignment: center;
+                                            spacing: 8px;
+                                            HorizontalLayout {
+                                                spacing: 7px;
+                                                Image {
+                                                    source: @image-url("icons/list.svg");
+                                                    width: 14px;
+                                                    height: 14px;
+                                                    y: (parent.height - self.height) / 2;
+                                                    colorize: Theme.accent-strong;
+                                                }
+                                                Text {
+                                                    text: "Cola de Reproducción (" + root.video-queue-items.length + ")";
+                                                    color: Theme.text-primary;
+                                                    font-size: 13px;
+                                                    font-weight: 700;
+                                                    vertical-alignment: center;
+                                                }
                                             }
                                             HorizontalLayout {
                                                 spacing: 5px;
-                                                IconButton {
+                                                IslandIconButton {
+                                                    y: (parent.height - self.height) / 2;
                                                     icon: @image-url("icons/prev.svg");
                                                     clicked => { root.prev-video-queue(); }
                                                 }
                                                 GlassButton {
+                                                    height: 30px;
+                                                    y: (parent.height - self.height) / 2;
                                                     label: root.video-queue-playing ? "Detener" : "Reproducir";
                                                     icon: root.video-queue-playing ? @image-url("icons/stop.svg") : @image-url("icons/play.svg");
                                                     has-icon: true;
+                                                    compact: true;
                                                     primary: !root.video-queue-playing;
                                                     danger: root.video-queue-playing;
                                                     clicked => { root.toggle-video-queue-play(); }
                                                 }
-                                                IconButton {
+                                                IslandIconButton {
+                                                    y: (parent.height - self.height) / 2;
                                                     icon: @image-url("icons/next.svg");
                                                     clicked => { root.next-video-queue(); }
                                                 }
-                                                IconButton {
+                                                IslandIconButton {
+                                                    y: (parent.height - self.height) / 2;
                                                     icon: @image-url("icons/repeat.svg");
                                                     active: root.video-queue-loop;
                                                     clicked => { root.video-queue-loop = !root.video-queue-loop; }
                                                 }
-                                                IconButton {
+                                                IslandIconButton {
+                                                    y: (parent.height - self.height) / 2;
                                                     icon: @image-url("icons/trash.svg");
                                                     danger: true;
                                                     clicked => { root.clear-video-queue(); }
@@ -2261,26 +2388,34 @@ export component MainWindow inherits Window {
                                         }
 
                                         for vq[vidx] in root.video-queue-items : Rectangle {
-                                            height: 40px;
+                                            height: 44px;
                                             border-radius: 7px;
-                                            background: vq.playing ? Theme.live-green-soft : Theme.bg-surface-0;
+                                            background: vq.playing ? Theme.live-green-soft : (vq-row-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-0);
                                             border-width: 1px;
-                                            border-color: vq.playing ? Theme.live-green : Theme.border-subtle;
+                                            border-color: vq.playing ? Theme.live-green.transparentize(0.2) : (vq-row-ta.has-hover ? Theme.border-medium : Theme.border-subtle);
+                                            animate background   { duration: 140ms; easing: ease-out; }
+                                            animate border-color { duration: 140ms; easing: ease-out; }
+
+                                            vq-row-ta := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => { root.play-video-queue-item(vidx); }
+                                            }
 
                                             HorizontalLayout {
-                                                padding-left: 10px;
-                                                padding-right: 6px;
-                                                spacing: 5px;
+                                                padding-left: 12px;
+                                                padding-right: 8px;
+                                                spacing: 6px;
 
                                                 Text {
+                                                    width: 18px;
                                                     text: (vidx + 1) + ".";
-                                                    color: Theme.text-muted;
+                                                    color: vq.playing ? Theme.live-green : Theme.text-muted;
                                                     font-size: 11.5px;
                                                     font-weight: 700;
                                                     vertical-alignment: center;
                                                 }
                                                 Text {
-                                                    text: vq.playing ? "● " + vq.title : vq.title;
+                                                    text: vq.title;
                                                     color: vq.playing ? Theme.live-green : Theme.text-primary;
                                                     font-size: 12px;
                                                     font-weight: vq.playing ? 700 : 500;
@@ -2288,16 +2423,45 @@ export component MainWindow inherits Window {
                                                     overflow: elide;
                                                     horizontal-stretch: 1;
                                                 }
-                                                Text {
-                                                    text: vq.kind;
-                                                    color: Theme.text-muted;
-                                                    font-size: 10px;
-                                                    vertical-alignment: center;
+                                                Rectangle {
+                                                    height: 20px;
+                                                    y: (parent.height - self.height) / 2;
+                                                    border-radius: 4px;
+                                                    background: Theme.bg-surface-2;
+                                                    HorizontalLayout {
+                                                        padding-left: 6px;
+                                                        padding-right: 6px;
+                                                        Text {
+                                                            text: vq.kind;
+                                                            color: Theme.text-muted;
+                                                            font-size: 9.5px;
+                                                            font-weight: 600;
+                                                            vertical-alignment: center;
+                                                        }
+                                                    }
                                                 }
-                                                IconButton { icon: @image-url("icons/play.svg"); clicked => { root.play-video-queue-item(vidx); } }
-                                                GlassButton { label: "▲"; compact: true; width: 30px; clicked => { root.move-video-queue-item(vidx, vidx - 1); } }
-                                                GlassButton { label: "▼"; compact: true; width: 30px; clicked => { root.move-video-queue-item(vidx, vidx + 1); } }
-                                                IconButton { icon: @image-url("icons/trash.svg"); danger: true; clicked => { root.remove-video-queue-item(vidx); } }
+                                                IslandIconButton {
+                                                    y: (parent.height - self.height) / 2;
+                                                    icon: @image-url("icons/play.svg");
+                                                    active: vq.playing;
+                                                    clicked => { root.play-video-queue-item(vidx); }
+                                                }
+                                                IslandIconButton {
+                                                    y: (parent.height - self.height) / 2;
+                                                    label: "▲";
+                                                    clicked => { root.move-video-queue-item(vidx, vidx - 1); }
+                                                }
+                                                IslandIconButton {
+                                                    y: (parent.height - self.height) / 2;
+                                                    label: "▼";
+                                                    clicked => { root.move-video-queue-item(vidx, vidx + 1); }
+                                                }
+                                                IslandIconButton {
+                                                    y: (parent.height - self.height) / 2;
+                                                    icon: @image-url("icons/trash.svg");
+                                                    danger: true;
+                                                    clicked => { root.remove-video-queue-item(vidx); }
+                                                }
                                             }
                                         }
                                     }
@@ -2406,17 +2570,17 @@ export component MainWindow inherits Window {
                                                 text: "Enviar estilo a:";
                                                 color: Theme.text-secondary;
                                                 font-size: 11px;
-                                                font-weight: 800;
+                                                font-weight: 700;
                                                 vertical-alignment: center;
                                             }
                                             GlassButton {
-                                                label: "🔗 Todas";
+                                                label: "Todas";
                                                 compact: true;
                                                 primary: root.style-target-mode == 0;
                                                 clicked => { root.select-style-target(0); }
                                             }
                                             for scr in root.screen-matrix-items : GlassButton {
-                                                label: (scr.id == 0 ? "📺 " : (scr.id == 1 ? "🌐 " : (scr.id == 2 ? "🎤 " : "🖥 "))) + scr.name;
+                                                label: scr.id == 0 ? "Público" : (scr.id == 1 ? "LAN" : (scr.id == 2 ? "Stage" : scr.name));
                                                 compact: true;
                                                 primary: root.style-target-mode == (scr.id + 1);
                                                 clicked => { root.select-style-target(scr.id + 1); }
@@ -2438,13 +2602,16 @@ export component MainWindow inherits Window {
                                                 background: root.style-target-mode == (scr.id + 1) ? Theme.accent-soft : Theme.bg-surface-0;
                                                 border-width: 1px;
                                                 border-color: root.style-target-mode == (scr.id + 1) ? Theme.border-accent : Theme.border-subtle;
+                                                animate background   { duration: 130ms; easing: ease-out; }
+                                                animate border-color { duration: 130ms; easing: ease-out; }
                                                 HorizontalLayout {
                                                     padding-left: 7px;
                                                     padding-right: 7px;
                                                     Text {
                                                         text: (scr.id == 0 ? "Público" : (scr.id == 1 ? "LAN" : (scr.id == 2 ? "Stage" : scr.name)))
-                                                            + ": " + scr.style-name + " (" + Math.round(scr.text-size) + "px)";
-                                                        color: Theme.text-secondary;
+                                                            + ": " + scr.style-name + " (" + Math.round(scr.text-size) + "px)"
+                                                            + (scr.use-own-style ? " · Propio" : "");
+                                                        color: scr.use-own-style ? #38bdf8 : Theme.text-secondary;
                                                         font-size: 10px;
                                                         font-weight: 600;
                                                         vertical-alignment: center;
@@ -3409,6 +3576,201 @@ export component MainWindow inherits Window {
                                     }
                                 }
 
+                                // Estilo de Letra Independiente para LAN (no afecta a Público ni Público afecta a LAN)
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: root.lan-own-style ? #38bdf866 : Theme.border-subtle;
+                                    animate border-color { duration: 160ms; easing: ease-out; }
+
+                                    VerticalLayout {
+                                        padding: 14px;
+                                        spacing: 9px;
+
+                                        HorizontalLayout {
+                                            alignment: space-between;
+                                            spacing: 8px;
+                                            HorizontalLayout {
+                                                spacing: 7px;
+                                                Image {
+                                                    source: @image-url("icons/palette.svg");
+                                                    width: 14px;
+                                                    height: 14px;
+                                                    y: (parent.height - self.height) / 2;
+                                                    colorize: root.lan-own-style ? #38bdf8 : Theme.text-secondary;
+                                                    animate colorize { duration: 150ms; }
+                                                }
+                                                Text {
+                                                    text: "ESTILO DE LETRAS PARA LAN";
+                                                    color: root.lan-own-style ? #38bdf8 : Theme.text-secondary;
+                                                    font-size: 11.5px;
+                                                    font-weight: 800;
+                                                    vertical-alignment: center;
+                                                }
+                                            }
+                                            GlassButton {
+                                                label: "Crear / Editar Estilos";
+                                                icon: @image-url("icons/edit.svg");
+                                                has-icon: true;
+                                                compact: true;
+                                                clicked => {
+                                                    root.select-style-target(2);
+                                                    root.active-tab = 4;
+                                                    root.design-subtab = 0;
+                                                }
+                                            }
+                                        }
+
+                                        SwitchRow {
+                                            title: "Usar estilo de letra independiente en LAN";
+                                            subtitle: "LAN mantiene su propio tamaño/fuente (ej. letras gigantes) sin afectar ni ser afectado por Público";
+                                            checked <=> root.lan-own-style;
+                                            toggled(v) => { root.set-screen-own-style(1, v); }
+                                        }
+
+                                        if !root.lan-own-style : Rectangle {
+                                            height: 32px;
+                                            border-radius: Theme.radius-sm;
+                                            background: Theme.bg-surface-0;
+                                            border-width: 1px;
+                                            border-color: Theme.border-subtle;
+                                            HorizontalLayout {
+                                                padding-left: 10px;
+                                                padding-right: 10px;
+                                                Text {
+                                                    text: "Actualmente siguiendo el estilo de Público (" + root.lan-style-summary + ")";
+                                                    color: Theme.text-muted;
+                                                    font-size: 11px;
+                                                    vertical-alignment: center;
+                                                    overflow: elide;
+                                                }
+                                            }
+                                        }
+
+                                        if root.lan-own-style : VerticalLayout {
+                                            spacing: 6px;
+
+                                            HorizontalLayout {
+                                                alignment: space-between;
+                                                Text {
+                                                    text: "Elige el estilo de letra exclusivo para LAN:";
+                                                    color: Theme.text-secondary;
+                                                    font-size: 11.5px;
+                                                    font-weight: 600;
+                                                    vertical-alignment: center;
+                                                }
+                                                Text {
+                                                    text: "Activo: " + root.lan-style-summary;
+                                                    color: #38bdf8;
+                                                    font-size: 11px;
+                                                    font-weight: 700;
+                                                    vertical-alignment: center;
+                                                }
+                                            }
+
+                                            if root.saved-style-cards.length == 0 : Rectangle {
+                                                height: 44px;
+                                                border-radius: Theme.radius-sm;
+                                                background: Theme.bg-surface-0;
+                                                border-width: 1px;
+                                                border-color: Theme.border-subtle;
+                                                HorizontalLayout {
+                                                    padding-left: 12px;
+                                                    padding-right: 10px;
+                                                    alignment: space-between;
+                                                    Text {
+                                                        text: "Aún no tienes estilos guardados. Crea uno (ej. 'LAN Gigante 140px').";
+                                                        color: Theme.text-muted;
+                                                        font-size: 11px;
+                                                        vertical-alignment: center;
+                                                    }
+                                                    GlassButton {
+                                                        label: "Crear Estilo LAN";
+                                                        compact: true;
+                                                        primary: true;
+                                                        clicked => {
+                                                            root.select-style-target(2);
+                                                            root.active-tab = 4;
+                                                            root.design-subtab = 0;
+                                                            root.open-new-style-editor();
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            for st[stIdx] in root.saved-style-cards : Rectangle {
+                                                height: 40px;
+                                                border-radius: Theme.radius-sm;
+                                                background: stIdx == root.lan-assigned-style-idx
+                                                    ? #0284c72a
+                                                    : (lan-st-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-0);
+                                                border-width: 1px;
+                                                border-color: stIdx == root.lan-assigned-style-idx
+                                                    ? #38bdf8
+                                                    : (lan-st-ta.has-hover ? Theme.border-medium : Theme.border-subtle);
+                                                animate background   { duration: 130ms; easing: ease-out; }
+                                                animate border-color { duration: 130ms; easing: ease-out; }
+
+                                                lan-st-ta := TouchArea {
+                                                    mouse-cursor: pointer;
+                                                    clicked => { root.apply-style-to-screen(stIdx, 1); }
+                                                }
+
+                                                HorizontalLayout {
+                                                    padding-left: 10px;
+                                                    padding-right: 10px;
+                                                    spacing: 10px;
+
+                                                    Rectangle {
+                                                        width: 14px;
+                                                        height: 14px;
+                                                        y: (parent.height - self.height) / 2;
+                                                        border-radius: 7px;
+                                                        background: st.text-color;
+                                                        border-width: 1px;
+                                                        border-color: Theme.border-medium;
+                                                    }
+                                                    VerticalLayout {
+                                                        horizontal-stretch: 1;
+                                                        alignment: center;
+                                                        Text {
+                                                            text: st.name;
+                                                            color: stIdx == root.lan-assigned-style-idx ? #ffffff : Theme.text-primary;
+                                                            font-size: 12px;
+                                                            font-weight: 700;
+                                                            overflow: elide;
+                                                        }
+                                                        Text {
+                                                            text: st.summary;
+                                                            color: Theme.text-muted;
+                                                            font-size: 10px;
+                                                            overflow: elide;
+                                                        }
+                                                    }
+                                                    if stIdx == root.lan-assigned-style-idx : Rectangle {
+                                                        height: 20px;
+                                                        y: (parent.height - self.height) / 2;
+                                                        border-radius: 4px;
+                                                        background: #0284c7;
+                                                        HorizontalLayout {
+                                                            padding-left: 7px;
+                                                            padding-right: 7px;
+                                                            Text {
+                                                                text: "ACTIVO EN LAN";
+                                                                color: #ffffff;
+                                                                font-size: 9px;
+                                                                font-weight: 800;
+                                                                vertical-alignment: center;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
                                 // ImGui StreamingPanel Parity: Calidad (Tamaño, Fluidez y Nitidez JPEG)
                                 Rectangle {
                                     border-radius: Theme.radius-md;
@@ -4328,6 +4690,17 @@ export component MainWindow inherits Window {
                                             border-color: cell.playing ? Theme.live-green : (mg-ta.has-hover ? Theme.border-accent : Theme.border-subtle);
                                             clip: true;
                                             animate background { duration: 110ms; }
+                                            animate border-color { duration: 110ms; }
+
+                                            mg-ta := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => { root.music-track-clicked(cell.index); }
+                                                pointer-event(ev) => {
+                                                    if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
+                                                        root.open-item-modal(0, 3, cell.title, cell.subtitle, cell.path);
+                                                    }
+                                                }
+                                            }
 
                                             VerticalLayout {
                                                 padding: 7px;
@@ -4366,6 +4739,38 @@ export component MainWindow inherits Window {
                                                         background: #09090be0;
                                                         Text { text: "▶"; color: Theme.live-green; font-size: 10px; horizontal-alignment: center; vertical-alignment: center; }
                                                     }
+
+                                                    // Floating studio action strip (Queue / Options / Delete)
+                                                    Rectangle {
+                                                        x: parent.width - self.width - 4px;
+                                                        y: 4px;
+                                                        width: 76px;
+                                                        height: 26px;
+                                                        border-radius: 7px;
+                                                        background: #09090bcc;
+                                                        border-width: 1px;
+                                                        border-color: #ffffff1a;
+                                                        HorizontalLayout {
+                                                            padding: 1px;
+                                                            spacing: 1px;
+                                                            alignment: center;
+                                                            ItemRowActionBtn {
+                                                                icon: @image-url("icons/list.svg");
+                                                                y: (parent.height - self.height) / 2;
+                                                                clicked => { root.item-action-queue(3, cell.path); }
+                                                            }
+                                                            ItemMoreBtn {
+                                                                y: (parent.height - self.height) / 2;
+                                                                clicked => { root.open-item-modal(0, 3, cell.title, cell.subtitle, cell.path); }
+                                                            }
+                                                            ItemRowActionBtn {
+                                                                icon: @image-url("icons/trash.svg");
+                                                                danger: true;
+                                                                y: (parent.height - self.height) / 2;
+                                                                clicked => { root.open-item-modal(2, 3, cell.title, cell.subtitle, cell.path); }
+                                                            }
+                                                        }
+                                                    }
                                                 }
 
                                                 Text {
@@ -4382,11 +4787,6 @@ export component MainWindow inherits Window {
                                                     overflow: elide;
                                                 }
                                             }
-
-                                            mg-ta := TouchArea {
-                                                mouse-cursor: pointer;
-                                                clicked => { root.music-track-clicked(cell.index); }
-                                            }
                                         }
                                     }
                                 }
@@ -4394,18 +4794,54 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // ── Mode 13: BIBLIOTECA PRINCIPAL (Hub Unificado — sin títulos redundantes) ──
+                    // ── Mode 13: BIBLIOTECA PRINCIPAL (Hub Dinámico y Limpio) ──
                     if root.active-tab == 13 : ScrollView {
                         vertical-stretch: 1;
                         VerticalLayout {
                             alignment: start;
-                            spacing: 10px;
+                            spacing: 12px;
                             padding-right: 8px;
 
-                            // 5 Quick Category Cards
+                            // Quick Studio Action Strip
+                            HorizontalLayout {
+                                alignment: space-between;
+                                spacing: 8px;
+                                VerticalLayout {
+                                    spacing: 1px;
+                                    Text { text: "Biblioteca"; color: Theme.text-primary; font-size: 15px; font-weight: 700; }
+                                    Text { text: "Acceso directo a todo tu contenido en vivo"; color: Theme.text-muted; font-size: 11px; }
+                                }
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    GlassButton {
+                                        label: "Nueva Canción";
+                                        icon: @image-url("icons/plus.svg");
+                                        has-icon: true;
+                                        compact: true;
+                                        primary: true;
+                                        clicked => { root.active-tab = 0; root.new-song-clicked(); }
+                                    }
+                                    GlassButton {
+                                        label: "Importar";
+                                        icon: @image-url("icons/upload.svg");
+                                        has-icon: true;
+                                        compact: true;
+                                        clicked => { root.import-file-clicked(); }
+                                    }
+                                    GlassButton {
+                                        label: "Escanear";
+                                        icon: @image-url("icons/refresh.svg");
+                                        has-icon: true;
+                                        compact: true;
+                                        clicked => { root.scan-libraries(); }
+                                    }
+                                }
+                            }
+
+                            // 5 Quick Category Cards with SVG icons & smooth transitions
                             HorizontalLayout {
                                 spacing: 8px;
-                                height: 76px;
+                                height: 86px;
 
                                 Rectangle {
                                     horizontal-stretch: 1;
@@ -4413,12 +4849,20 @@ export component MainWindow inherits Window {
                                     background: hc0.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1;
                                     border-width: 1px;
                                     border-color: hc0.has-hover ? #38bdf8 : Theme.border-subtle;
+                                    clip: true;
+                                    animate background   { duration: 150ms; easing: ease-out; }
+                                    animate border-color { duration: 150ms; easing: ease-out; }
+                                    Rectangle { y: 0; width: 100%; height: hc0.has-hover ? 3px : 2px; background: #38bdf8; animate height { duration: 140ms; } }
                                     VerticalLayout {
-                                        padding: 10px;
+                                        padding: 11px;
                                         alignment: center;
-                                        spacing: 4px;
-                                        Text { text: "Canciones / Letras"; color: #38bdf8; font-size: 12px; font-weight: 700; }
-                                        Text { text: root.hub-songs-count + " elementos"; color: Theme.text-secondary; font-size: 11px; }
+                                        spacing: 5px;
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            Image { source: @image-url("icons/music.svg"); width: 15px; height: 15px; y: (parent.height - self.height) / 2; colorize: #38bdf8; }
+                                            Text { text: "Canciones"; color: Theme.text-primary; font-size: 12.5px; font-weight: 700; vertical-alignment: center; }
+                                        }
+                                        Text { text: root.hub-songs-count + " elementos"; color: Theme.text-muted; font-size: 11px; }
                                     }
                                     hc0 := TouchArea { mouse-cursor: pointer; clicked => { root.active-tab = 0; } }
                                 }
@@ -4428,12 +4872,20 @@ export component MainWindow inherits Window {
                                     background: hc1.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1;
                                     border-width: 1px;
                                     border-color: hc1.has-hover ? #fbbf24 : Theme.border-subtle;
+                                    clip: true;
+                                    animate background   { duration: 150ms; easing: ease-out; }
+                                    animate border-color { duration: 150ms; easing: ease-out; }
+                                    Rectangle { y: 0; width: 100%; height: hc1.has-hover ? 3px : 2px; background: #fbbf24; animate height { duration: 140ms; } }
                                     VerticalLayout {
-                                        padding: 10px;
+                                        padding: 11px;
                                         alignment: center;
-                                        spacing: 4px;
-                                        Text { text: "Biblia"; color: #fbbf24; font-size: 12px; font-weight: 700; }
-                                        Text { text: root.hub-bibles-count + " versiones"; color: Theme.text-secondary; font-size: 11px; }
+                                        spacing: 5px;
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            Image { source: @image-url("icons/book.svg"); width: 15px; height: 15px; y: (parent.height - self.height) / 2; colorize: #fbbf24; }
+                                            Text { text: "Biblia"; color: Theme.text-primary; font-size: 12.5px; font-weight: 700; vertical-alignment: center; }
+                                        }
+                                        Text { text: root.hub-bibles-count + " versiones"; color: Theme.text-muted; font-size: 11px; }
                                     }
                                     hc1 := TouchArea { mouse-cursor: pointer; clicked => { root.active-tab = 1; } }
                                 }
@@ -4443,12 +4895,20 @@ export component MainWindow inherits Window {
                                     background: hc2.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1;
                                     border-width: 1px;
                                     border-color: hc2.has-hover ? #ec4899 : Theme.border-subtle;
+                                    clip: true;
+                                    animate background   { duration: 150ms; easing: ease-out; }
+                                    animate border-color { duration: 150ms; easing: ease-out; }
+                                    Rectangle { y: 0; width: 100%; height: hc2.has-hover ? 3px : 2px; background: #ec4899; animate height { duration: 140ms; } }
                                     VerticalLayout {
-                                        padding: 10px;
+                                        padding: 11px;
                                         alignment: center;
-                                        spacing: 4px;
-                                        Text { text: "Multimedia"; color: #ec4899; font-size: 12px; font-weight: 700; }
-                                        Text { text: root.hub-media-count + " videos/img"; color: Theme.text-secondary; font-size: 11px; }
+                                        spacing: 5px;
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            Image { source: @image-url("icons/film.svg"); width: 15px; height: 15px; y: (parent.height - self.height) / 2; colorize: #ec4899; }
+                                            Text { text: "Multimedia"; color: Theme.text-primary; font-size: 12.5px; font-weight: 700; vertical-alignment: center; }
+                                        }
+                                        Text { text: root.hub-media-count + " videos/img"; color: Theme.text-muted; font-size: 11px; }
                                     }
                                     hc2 := TouchArea { mouse-cursor: pointer; clicked => { root.active-tab = 2; } }
                                 }
@@ -4458,12 +4918,20 @@ export component MainWindow inherits Window {
                                     background: hc3.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1;
                                     border-width: 1px;
                                     border-color: hc3.has-hover ? #22c55e : Theme.border-subtle;
+                                    clip: true;
+                                    animate background   { duration: 150ms; easing: ease-out; }
+                                    animate border-color { duration: 150ms; easing: ease-out; }
+                                    Rectangle { y: 0; width: 100%; height: hc3.has-hover ? 3px : 2px; background: #22c55e; animate height { duration: 140ms; } }
                                     VerticalLayout {
-                                        padding: 10px;
+                                        padding: 11px;
                                         alignment: center;
-                                        spacing: 4px;
-                                        Text { text: "Música"; color: #22c55e; font-size: 12px; font-weight: 700; }
-                                        Text { text: root.hub-music-count + " pistas"; color: Theme.text-secondary; font-size: 11px; }
+                                        spacing: 5px;
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            Image { source: @image-url("icons/headphones.svg"); width: 15px; height: 15px; y: (parent.height - self.height) / 2; colorize: #22c55e; }
+                                            Text { text: "Música"; color: Theme.text-primary; font-size: 12.5px; font-weight: 700; vertical-alignment: center; }
+                                        }
+                                        Text { text: root.hub-music-count + " pistas"; color: Theme.text-muted; font-size: 11px; }
                                     }
                                     hc3 := TouchArea { mouse-cursor: pointer; clicked => { root.active-tab = 9; } }
                                 }
@@ -4473,12 +4941,20 @@ export component MainWindow inherits Window {
                                     background: hc4.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1;
                                     border-width: 1px;
                                     border-color: hc4.has-hover ? #a78bfa : Theme.border-subtle;
+                                    clip: true;
+                                    animate background   { duration: 150ms; easing: ease-out; }
+                                    animate border-color { duration: 150ms; easing: ease-out; }
+                                    Rectangle { y: 0; width: 100%; height: hc4.has-hover ? 3px : 2px; background: #a78bfa; animate height { duration: 140ms; } }
                                     VerticalLayout {
-                                        padding: 10px;
+                                        padding: 11px;
                                         alignment: center;
-                                        spacing: 4px;
-                                        Text { text: "Documentos"; color: #a78bfa; font-size: 12px; font-weight: 700; }
-                                        Text { text: root.hub-docs-count + " archivos"; color: Theme.text-secondary; font-size: 11px; }
+                                        spacing: 5px;
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            Image { source: @image-url("icons/file_text.svg"); width: 15px; height: 15px; y: (parent.height - self.height) / 2; colorize: #a78bfa; }
+                                            Text { text: "Documentos"; color: Theme.text-primary; font-size: 12.5px; font-weight: 700; vertical-alignment: center; }
+                                        }
+                                        Text { text: root.hub-docs-count + " archivos"; color: Theme.text-muted; font-size: 11px; }
                                     }
                                     hc4 := TouchArea { mouse-cursor: pointer; clicked => { root.active-tab = 10; } }
                                 }
@@ -4500,19 +4976,39 @@ export component MainWindow inherits Window {
                                     }
                                     if root.hub-recent-songs.length == 0 : Text { text: "Sin canciones todavía."; color: Theme.text-muted; font-size: 11.5px; }
                                     for s in root.hub-recent-songs : Rectangle {
-                                        height: 34px;
+                                        height: 36px;
                                         border-radius: Theme.radius-sm;
                                         background: hs-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-0;
                                         border-width: 1px;
-                                        border-color: Theme.border-subtle;
+                                        border-color: hs-ta.has-hover ? Theme.border-medium : Theme.border-subtle;
+                                        animate background   { duration: 130ms; easing: ease-out; }
+                                        animate border-color { duration: 130ms; easing: ease-out; }
+                                        hs-ta := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => { root.hub-open-song(s.path); }
+                                            pointer-event(ev) => {
+                                                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
+                                                    root.open-item-modal(0, 0, s.title, s.subtitle, s.path);
+                                                }
+                                            }
+                                        }
                                         HorizontalLayout {
                                             padding-left: 10px;
-                                            padding-right: 10px;
-                                            alignment: space-between;
-                                            Text { text: s.title; color: Theme.text-primary; font-size: 12px; font-weight: 600; vertical-alignment: center; overflow: elide; }
+                                            padding-right: 6px;
+                                            spacing: 6px;
+                                            Text { text: s.title; color: Theme.text-primary; font-size: 12px; font-weight: 600; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
                                             Text { text: s.subtitle; color: Theme.text-muted; font-size: 10.5px; vertical-alignment: center; }
+                                            ItemMoreBtn {
+                                                y: (parent.height - self.height) / 2;
+                                                clicked => { root.open-item-modal(0, 0, s.title, s.subtitle, s.path); }
+                                            }
+                                            ItemRowActionBtn {
+                                                icon: @image-url("icons/trash.svg");
+                                                danger: true;
+                                                y: (parent.height - self.height) / 2;
+                                                clicked => { root.open-item-modal(2, 0, s.title, s.subtitle, s.path); }
+                                            }
                                         }
-                                        hs-ta := TouchArea { mouse-cursor: pointer; clicked => { root.hub-open-song(s.path); } }
                                     }
                                 }
                             }
@@ -4537,11 +5033,22 @@ export component MainWindow inherits Window {
                                         border-radius: Theme.radius-sm;
                                         background: hm-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-0;
                                         border-width: 1px;
-                                        border-color: Theme.border-subtle;
+                                        border-color: hm-ta.has-hover ? Theme.border-medium : Theme.border-subtle;
+                                        animate background   { duration: 130ms; easing: ease-out; }
+                                        animate border-color { duration: 130ms; easing: ease-out; }
+                                        hm-ta := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => { root.hub-play-music(midx); }
+                                            pointer-event(ev) => {
+                                                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
+                                                    root.open-item-modal(0, 3, mt.title, mt.subtitle, mt.path);
+                                                }
+                                            }
+                                        }
                                         HorizontalLayout {
                                             padding-left: 6px;
-                                            padding-right: 10px;
-                                            spacing: 8px;
+                                            padding-right: 6px;
+                                            spacing: 7px;
                                             Rectangle {
                                                 width: 30px; height: 30px; y: (parent.height - self.height) / 2;
                                                 border-radius: 3px; background: Theme.bg-surface-1; clip: true;
@@ -4550,8 +5057,17 @@ export component MainWindow inherits Window {
                                             }
                                             Text { text: mt.title; color: Theme.text-primary; font-size: 12px; font-weight: 600; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
                                             Text { text: mt.subtitle; color: Theme.text-muted; font-size: 10px; vertical-alignment: center; }
+                                            ItemMoreBtn {
+                                                y: (parent.height - self.height) / 2;
+                                                clicked => { root.open-item-modal(0, 3, mt.title, mt.subtitle, mt.path); }
+                                            }
+                                            ItemRowActionBtn {
+                                                icon: @image-url("icons/trash.svg");
+                                                danger: true;
+                                                y: (parent.height - self.height) / 2;
+                                                clicked => { root.open-item-modal(2, 3, mt.title, mt.subtitle, mt.path); }
+                                            }
                                         }
-                                        hm-ta := TouchArea { mouse-cursor: pointer; clicked => { root.hub-play-music(midx); } }
                                     }
                                 }
                             }
@@ -4576,17 +5092,37 @@ export component MainWindow inherits Window {
                                         }
                                         if root.hub-recent-media.length == 0 : Text { text: "Sin videos ni imágenes."; color: Theme.text-muted; font-size: 11px; }
                                         for md in root.hub-recent-media : Rectangle {
-                                            height: 34px;
+                                            height: 36px;
                                             border-radius: Theme.radius-sm;
                                             background: hmd-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-0;
                                             border-width: 1px;
-                                            border-color: Theme.border-subtle;
-                                            HorizontalLayout {
-                                                padding-left: 10px; padding-right: 10px; alignment: space-between;
-                                                Text { text: md.title; color: Theme.text-primary; font-size: 11.5px; font-weight: 600; vertical-alignment: center; overflow: elide; }
-                                                Text { text: md.subtitle; color: Theme.text-muted; font-size: 10px; vertical-alignment: center; }
+                                            border-color: hmd-ta.has-hover ? Theme.border-medium : Theme.border-subtle;
+                                            animate background   { duration: 130ms; easing: ease-out; }
+                                            animate border-color { duration: 130ms; easing: ease-out; }
+                                            hmd-ta := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => { root.hub-open-media(md.path); }
+                                                pointer-event(ev) => {
+                                                    if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
+                                                        root.open-item-modal(0, 1, md.title, md.subtitle, md.path);
+                                                    }
+                                                }
                                             }
-                                            hmd-ta := TouchArea { mouse-cursor: pointer; clicked => { root.hub-open-media(md.path); } }
+                                            HorizontalLayout {
+                                                padding-left: 10px; padding-right: 6px; spacing: 5px;
+                                                Text { text: md.title; color: Theme.text-primary; font-size: 11.5px; font-weight: 600; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+                                                Text { text: md.subtitle; color: Theme.text-muted; font-size: 10px; vertical-alignment: center; }
+                                                ItemMoreBtn {
+                                                    y: (parent.height - self.height) / 2;
+                                                    clicked => { root.open-item-modal(0, 1, md.title, md.subtitle, md.path); }
+                                                }
+                                                ItemRowActionBtn {
+                                                    icon: @image-url("icons/trash.svg");
+                                                    danger: true;
+                                                    y: (parent.height - self.height) / 2;
+                                                    clicked => { root.open-item-modal(2, 1, md.title, md.subtitle, md.path); }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -4607,17 +5143,37 @@ export component MainWindow inherits Window {
                                         }
                                         if root.hub-recent-docs.length == 0 : Text { text: "Sin documentos PDF."; color: Theme.text-muted; font-size: 11px; }
                                         for dc in root.hub-recent-docs : Rectangle {
-                                            height: 34px;
+                                            height: 36px;
                                             border-radius: Theme.radius-sm;
                                             background: hdc-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-0;
                                             border-width: 1px;
-                                            border-color: Theme.border-subtle;
-                                            HorizontalLayout {
-                                                padding-left: 10px; padding-right: 10px; alignment: space-between;
-                                                Text { text: dc.title; color: Theme.text-primary; font-size: 11.5px; font-weight: 600; vertical-alignment: center; overflow: elide; }
-                                                Text { text: dc.subtitle; color: Theme.text-muted; font-size: 10px; vertical-alignment: center; }
+                                            border-color: hdc-ta.has-hover ? Theme.border-medium : Theme.border-subtle;
+                                            animate background   { duration: 130ms; easing: ease-out; }
+                                            animate border-color { duration: 130ms; easing: ease-out; }
+                                            hdc-ta := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => { root.hub-open-doc(dc.path); }
+                                                pointer-event(ev) => {
+                                                    if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
+                                                        root.open-item-modal(0, 2, dc.title, dc.subtitle, dc.path);
+                                                    }
+                                                }
                                             }
-                                            hdc-ta := TouchArea { mouse-cursor: pointer; clicked => { root.hub-open-doc(dc.path); } }
+                                            HorizontalLayout {
+                                                padding-left: 10px; padding-right: 6px; spacing: 5px;
+                                                Text { text: dc.title; color: Theme.text-primary; font-size: 11.5px; font-weight: 600; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+                                                Text { text: dc.subtitle; color: Theme.text-muted; font-size: 10px; vertical-alignment: center; }
+                                                ItemMoreBtn {
+                                                    y: (parent.height - self.height) / 2;
+                                                    clicked => { root.open-item-modal(0, 2, dc.title, dc.subtitle, dc.path); }
+                                                }
+                                                ItemRowActionBtn {
+                                                    icon: @image-url("icons/trash.svg");
+                                                    danger: true;
+                                                    y: (parent.height - self.height) / 2;
+                                                    clicked => { root.open-item-modal(2, 2, dc.title, dc.subtitle, dc.path); }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -4632,9 +5188,29 @@ export component MainWindow inherits Window {
 
                         HorizontalLayout {
                             alignment: space-between;
+                            spacing: 6px;
                             Text { text: root.doc-title; color: Theme.text-primary; font-size: 13.5px; font-weight: 700; overflow: elide; horizontal-stretch: 1; vertical-alignment: center; }
                             HorizontalLayout {
-                                spacing: 6px;
+                                spacing: 5px;
+                                if root.selected-library-index >= 0 && root.selected-library-path != "" : GlassButton {
+                                    label: "A Cola";
+                                    icon: @image-url("icons/list.svg");
+                                    has-icon: true;
+                                    compact: true;
+                                    clicked => { root.item-action-queue(2, root.selected-library-path); }
+                                }
+                                if root.selected-library-index >= 0 && root.selected-library-path != "" : GlassButton {
+                                    label: "Renombrar";
+                                    icon: @image-url("icons/edit.svg");
+                                    has-icon: true;
+                                    compact: true;
+                                    clicked => { root.open-item-modal(1, 2, root.doc-title, "Documento", root.selected-library-path); }
+                                }
+                                if root.selected-library-index >= 0 && root.selected-library-path != "" : IconButton {
+                                    icon: @image-url("icons/trash.svg");
+                                    danger: true;
+                                    clicked => { root.open-item-modal(2, 2, root.doc-title, "Documento", root.selected-library-path); }
+                                }
                                 IconButton { icon: @image-url("icons/prev.svg"); clicked => { root.doc-prev-page(); } }
                                 IconButton { icon: @image-url("icons/next.svg"); clicked => { root.doc-next-page(); } }
                                 GlassButton {
@@ -4833,14 +5409,14 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // ── Mode 14: MATRIZ MULTI-PANTALLA Y SALAS (Control Independiente tipo Estudio) ──
+                    // ── Mode 14: MATRIZ MULTI-PANTALLA Y SALAS (Control Independiente tipo ProPresenter) ──
                     if root.active-tab == 14 : VerticalLayout {
                         spacing: 10px;
                         vertical-stretch: 1;
 
-                        // Top Routing & New Room Bar
+                        // Top Routing & New Room Bar (clean studio style, no emojis)
                         Rectangle {
-                            height: 46px;
+                            height: 48px;
                             border-radius: Theme.radius-md;
                             background: Theme.bg-surface-1;
                             border-width: 1px;
@@ -4852,33 +5428,39 @@ export component MainWindow inherits Window {
                                 spacing: 8px;
 
                                 Text {
-                                    text: "ENVIAR A:";
+                                    text: "DESTINO:";
                                     color: Theme.text-muted;
-                                    font-size: 10.5px;
+                                    font-size: 10px;
                                     font-weight: 800;
                                     vertical-alignment: center;
                                 }
 
                                 GlassButton {
-                                    label: "🔗 Todas";
+                                    label: "Todas";
                                     compact: true;
                                     primary: root.output-target-mode == 0;
                                     clicked => { root.select-output-target(0); }
                                 }
                                 GlassButton {
-                                    label: "📺 Solo Público";
+                                    label: "Público";
+                                    icon: @image-url("icons/tv.svg");
+                                    has-icon: true;
                                     compact: true;
                                     primary: root.output-target-mode == 1;
                                     clicked => { root.select-output-target(1); }
                                 }
                                 GlassButton {
-                                    label: "🌐 Solo LAN";
+                                    label: "LAN";
+                                    icon: @image-url("icons/wifi.svg");
+                                    has-icon: true;
                                     compact: true;
                                     primary: root.output-target-mode == 2;
                                     clicked => { root.select-output-target(2); }
                                 }
                                 GlassButton {
-                                    label: "🎤 Solo Stage";
+                                    label: "Stage";
+                                    icon: @image-url("icons/monitor.svg");
+                                    has-icon: true;
                                     compact: true;
                                     primary: root.output-target-mode == 3;
                                     clicked => { root.select-output-target(3); }
@@ -4898,7 +5480,9 @@ export component MainWindow inherits Window {
                                     }
                                 }
                                 GlassButton {
-                                    label: "+ Nueva Sala";
+                                    label: "Nueva Sala";
+                                    icon: @image-url("icons/plus.svg");
+                                    has-icon: true;
                                     compact: true;
                                     primary: true;
                                     clicked => {
@@ -4923,11 +5507,12 @@ export component MainWindow inherits Window {
                                 for scr[sidx] in root.screen-matrix-items : Rectangle {
                                     border-radius: Theme.radius-md;
                                     background: Theme.bg-surface-1;
-                                    border-width: scr.is-targeted ? 2px : 1px;
-                                    border-color: scr.is-targeted ? #38bdf8 : (scr.is-inspected ? Theme.live-green : Theme.border-subtle);
+                                    border-width: scr.is-targeted ? 1.5px : 1px;
+                                    border-color: scr.is-targeted ? #38bdf8 : (scr.is-inspected ? Theme.border-accent : Theme.border-subtle);
+                                    animate border-color { duration: 150ms; easing: ease-out; }
 
                                     VerticalLayout {
-                                        padding: 12px;
+                                        padding: 13px;
                                         spacing: 10px;
 
                                         // Screen Card Header
@@ -4939,17 +5524,26 @@ export component MainWindow inherits Window {
                                                 spacing: 8px;
                                                 Rectangle {
                                                     height: 22px;
+                                                    y: (parent.height - self.height) / 2;
                                                     border-radius: 4px;
                                                     background: scr.is-live ? Theme.live-green-soft : Theme.bg-surface-2;
                                                     border-width: 1px;
-                                                    border-color: scr.is-live ? Theme.live-green : Theme.border-subtle;
+                                                    border-color: scr.is-live ? Theme.live-green.transparentize(0.35) : Theme.border-subtle;
                                                     HorizontalLayout {
                                                         padding-left: 7px;
                                                         padding-right: 7px;
+                                                        spacing: 5px;
+                                                        Rectangle {
+                                                            width: 6px;
+                                                            height: 6px;
+                                                            y: (parent.height - self.height) / 2;
+                                                            border-radius: 3px;
+                                                            background: scr.is-live ? Theme.live-green : Theme.text-muted;
+                                                        }
                                                         Text {
-                                                            text: scr.is-live ? "● ACTIVA" : "LISTA";
+                                                            text: scr.is-live ? "ACTIVA" : "LISTA";
                                                             color: scr.is-live ? Theme.live-green : Theme.text-muted;
-                                                            font-size: 9.5px;
+                                                            font-size: 9px;
                                                             font-weight: 800;
                                                             vertical-alignment: center;
                                                         }
@@ -4959,11 +5553,12 @@ export component MainWindow inherits Window {
                                                     text: scr.name;
                                                     color: Theme.text-primary;
                                                     font-size: 13.5px;
-                                                    font-weight: 800;
+                                                    font-weight: 700;
                                                     vertical-alignment: center;
                                                 }
                                                 Rectangle {
                                                     height: 20px;
+                                                    y: (parent.height - self.height) / 2;
                                                     border-radius: 4px;
                                                     background: Theme.bg-surface-2;
                                                     HorizontalLayout {
@@ -4971,8 +5566,8 @@ export component MainWindow inherits Window {
                                                         padding-right: 7px;
                                                         Text {
                                                             text: scr.role-badge;
-                                                            color: Theme.text-secondary;
-                                                            font-size: 9.5px;
+                                                            color: Theme.text-muted;
+                                                            font-size: 9px;
                                                             font-weight: 700;
                                                             vertical-alignment: center;
                                                         }
@@ -4983,18 +5578,19 @@ export component MainWindow inherits Window {
                                             HorizontalLayout {
                                                 spacing: 6px;
                                                 GlassButton {
-                                                    label: scr.is-targeted ? "🎯 Destino Activo" : "🎯 Enviar Solo Aquí";
+                                                    label: scr.is-targeted ? "Destino Activo" : "Enviar Solo Aquí";
                                                     compact: true;
                                                     primary: scr.is-targeted;
                                                     clicked => { root.select-output-target(scr.id + 1); }
                                                 }
                                                 GlassButton {
-                                                    label: scr.is-inspected ? "👁 En Monitor" : "👁 Ver en Monitor";
+                                                    label: scr.is-inspected ? "En Monitor" : "Ver en Monitor";
                                                     compact: true;
                                                     primary: scr.is-inspected;
                                                     clicked => { root.inspect-screen(scr.id); }
                                                 }
-                                                if scr.is-custom-room : IconButton {
+                                                if scr.is-custom-room : IslandIconButton {
+                                                    y: (parent.height - self.height) / 2;
                                                     icon: @image-url("icons/trash.svg");
                                                     danger: true;
                                                     clicked => { root.delete-extra-screen(scr.id); }
@@ -5010,11 +5606,12 @@ export component MainWindow inherits Window {
                                             Rectangle {
                                                 width: 256px;
                                                 height: 144px;
-                                                border-radius: 4px;
+                                                border-radius: 5px;
                                                 background: scr.bg-color;
-                                                border-width: 1.5px;
-                                                border-color: scr.is-targeted ? #38bdf8 : (scr.is-live ? Theme.live-green : Theme.border-medium);
+                                                border-width: 1px;
+                                                border-color: scr.is-targeted ? #38bdf8 : (scr.is-live ? Theme.live-green.transparentize(0.35) : Theme.border-medium);
                                                 clip: true;
+                                                animate border-color { duration: 150ms; }
 
                                                 if scr.has-bg-image : Image {
                                                     x: 0px;
@@ -5057,7 +5654,7 @@ export component MainWindow inherits Window {
                                                 }
 
                                                 if scr.live-text == "" && !scr.show-clock : Text {
-                                                    text: "(Sin texto en " + scr.name + ")";
+                                                    text: "Sin texto en " + scr.name;
                                                     color: Theme.text-muted;
                                                     font-size: 10px;
                                                     horizontal-alignment: center;
@@ -5067,14 +5664,14 @@ export component MainWindow inherits Window {
                                                 if scr.show-clock && scr.clock-text != "" : Rectangle {
                                                     x: parent.width - self.width - 8px;
                                                     y: 7px;
-                                                    width: Math.max(62px, scr-clk.preferred-width + 14px);
+                                                    width: Math.max(58px, scr-clk.preferred-width + 14px);
                                                     height: 22px;
                                                     border-radius: 4px;
                                                     background: #09090be6;
                                                     border-width: 1px;
-                                                    border-color: #38bdf888;
+                                                    border-color: #38bdf866;
                                                     scr-clk := Text {
-                                                        text: "⏱ " + scr.clock-text;
+                                                        text: scr.clock-text;
                                                         color: #ffffff;
                                                         font-size: 10.5px;
                                                         font-weight: 800;
@@ -5112,7 +5709,7 @@ export component MainWindow inherits Window {
                                                     height: 20px;
                                                     background: #7f1d1df0;
                                                     Text {
-                                                        text: " ★ " + scr.alert-text;
+                                                        text: scr.alert-text;
                                                         color: #ffffff;
                                                         font-size: 9.5px;
                                                         font-weight: 700;
@@ -5138,7 +5735,7 @@ export component MainWindow inherits Window {
                                                 VerticalLayout {
                                                     spacing: 5px;
                                                     Text {
-                                                        text: "CAPAS ACTIVAS EN ESTA PANTALLA (Clic para activar o quitar ✕):";
+                                                        text: "CAPAS ACTIVAS";
                                                         color: Theme.text-muted;
                                                         font-size: 9.5px;
                                                         font-weight: 800;
@@ -5147,14 +5744,18 @@ export component MainWindow inherits Window {
                                                     HorizontalLayout {
                                                         spacing: 5px;
                                                         GlassButton {
-                                                            label: scr.show-clock ? ("⏱ " + scr.clock-text + "  ✕") : "+ ⏱ Tiempo / Reloj";
+                                                            label: scr.show-clock ? (scr.clock-text + "  ✕") : "Tiempo / Reloj";
+                                                            icon: @image-url("icons/clock.svg");
+                                                            has-icon: true;
                                                             compact: true;
                                                             primary: scr.show-clock;
                                                             horizontal-stretch: 1;
                                                             clicked => { root.screen-toggle-layer(scr.id, "clock"); }
                                                         }
                                                         GlassButton {
-                                                            label: scr.live-text != "" ? "T Letras  ✕" : "+ T Letras Actuales";
+                                                            label: scr.live-text != "" ? "Letras  ✕" : "Letras";
+                                                            icon: @image-url("icons/file_text.svg");
+                                                            has-icon: true;
                                                             compact: true;
                                                             primary: scr.live-text != "";
                                                             horizontal-stretch: 1;
@@ -5165,14 +5766,18 @@ export component MainWindow inherits Window {
                                                     HorizontalLayout {
                                                         spacing: 5px;
                                                         GlassButton {
-                                                            label: scr.bg-name != "Sin fondo" ? ("🖼 " + scr.bg-name + "  ✕") : "+ 🖼 Fondo Actual";
+                                                            label: scr.bg-name != "Sin fondo" ? (scr.bg-name + "  ✕") : "Fondo";
+                                                            icon: @image-url("icons/film.svg");
+                                                            has-icon: true;
                                                             compact: true;
                                                             primary: scr.bg-name != "Sin fondo";
                                                             horizontal-stretch: 1;
                                                             clicked => { root.screen-toggle-layer(scr.id, "bg"); }
                                                         }
                                                         GlassButton {
-                                                            label: scr.alert-text != "" ? "★ Aviso  ✕" : "+ ★ Aviso Actual";
+                                                            label: scr.alert-text != "" ? "Aviso  ✕" : "Aviso";
+                                                            icon: @image-url("icons/bell.svg");
+                                                            has-icon: true;
                                                             compact: true;
                                                             primary: scr.alert-text != "";
                                                             horizontal-stretch: 1;
@@ -5192,14 +5797,16 @@ export component MainWindow inherits Window {
                                                 HorizontalLayout {
                                                     spacing: 6px;
                                                     GlassButton {
-                                                        label: "▶ Enviar Selección Aquí";
+                                                        label: "Enviar Selección";
+                                                        icon: @image-url("icons/play.svg");
+                                                        has-icon: true;
                                                         compact: true;
                                                         primary: true;
                                                         horizontal-stretch: 1;
                                                         clicked => { root.screen-send-current(scr.id); }
                                                     }
                                                     if scr.id != 0 : GlassButton {
-                                                        label: "🔗 Clonar Público";
+                                                        label: "Clonar Público";
                                                         compact: true;
                                                         clicked => { root.screen-clone-public(scr.id); }
                                                     }
@@ -5208,6 +5815,143 @@ export component MainWindow inherits Window {
                                                         compact: true;
                                                         danger: true;
                                                         clicked => { root.screen-clear-all(scr.id); }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Per-Screen Independent Font Style (ProPresenter "Look" Override directly in each room card!)
+                                        Rectangle {
+                                            border-radius: Theme.radius-sm;
+                                            background: Theme.bg-surface-0;
+                                            border-width: 1px;
+                                            border-color: scr.use-own-style ? #38bdf855 : Theme.border-subtle;
+                                            animate border-color { duration: 150ms; easing: ease-out; }
+
+                                            VerticalLayout {
+                                                padding: 9px;
+                                                spacing: 7px;
+
+                                                HorizontalLayout {
+                                                    alignment: space-between;
+                                                    spacing: 8px;
+
+                                                    HorizontalLayout {
+                                                        spacing: 6px;
+                                                        Image {
+                                                            source: @image-url("icons/palette.svg");
+                                                            width: 13px;
+                                                            height: 13px;
+                                                            y: (parent.height - self.height) / 2;
+                                                            colorize: (scr.id == 0 || scr.use-own-style) ? #38bdf8 : Theme.text-muted;
+                                                        }
+                                                        Text {
+                                                            text: scr.id == 0
+                                                                ? ("Estilo Principal: " + scr.style-name + " (" + Math.round(scr.text-size) + "px)")
+                                                                : (scr.use-own-style
+                                                                    ? ("Estilo propio: " + scr.style-name + " (" + Math.round(scr.text-size) + "px)")
+                                                                    : ("Siguiendo estilo de Público (" + scr.style-name + " · " + Math.round(scr.text-size) + "px)"));
+                                                            color: (scr.id == 0 || scr.use-own-style) ? Theme.text-primary : Theme.text-muted;
+                                                            font-size: 11px;
+                                                            font-weight: 600;
+                                                            vertical-alignment: center;
+                                                            overflow: elide;
+                                                        }
+                                                    }
+
+                                                    if scr.id != 0 : Rectangle {
+                                                        height: 24px;
+                                                        border-radius: 5px;
+                                                        background: scr.use-own-style ? #0284c730 : (own-ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-2);
+                                                        border-width: 1px;
+                                                        border-color: scr.use-own-style ? #38bdf8 : Theme.border-subtle;
+                                                        animate background   { duration: 130ms; easing: ease-out; }
+                                                        animate border-color { duration: 130ms; easing: ease-out; }
+                                                        HorizontalLayout {
+                                                            padding-left: 9px;
+                                                            padding-right: 9px;
+                                                            spacing: 6px;
+                                                            Rectangle {
+                                                                width: 7px;
+                                                                height: 7px;
+                                                                y: (parent.height - self.height) / 2;
+                                                                border-radius: 3.5px;
+                                                                background: scr.use-own-style ? #38bdf8 : Theme.text-muted;
+                                                            }
+                                                            Text {
+                                                                text: scr.use-own-style ? "Estilo propio activo" : "Activar estilo propio";
+                                                                color: scr.use-own-style ? #38bdf8 : Theme.text-secondary;
+                                                                font-size: 10px;
+                                                                font-weight: 700;
+                                                                vertical-alignment: center;
+                                                            }
+                                                        }
+                                                        own-ta := TouchArea {
+                                                            mouse-cursor: pointer;
+                                                            clicked => { root.set-screen-own-style(scr.id, !scr.use-own-style); }
+                                                        }
+                                                    }
+                                                }
+
+                                                if (scr.id == 0 || scr.use-own-style) && root.saved-style-cards.length > 0 : HorizontalLayout {
+                                                    spacing: 5px;
+                                                    for st[stIdx] in root.saved-style-cards : Rectangle {
+                                                        height: 24px;
+                                                        border-radius: 5px;
+                                                        background: scr.assigned-style-idx == stIdx
+                                                            ? (scr.id == 1 ? #0284c7 : (scr.id == 2 ? #d97706 : Theme.accent))
+                                                            : (rm-st-ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-2);
+                                                        border-width: 1px;
+                                                        border-color: scr.assigned-style-idx == stIdx
+                                                            ? (scr.id == 1 ? #38bdf8 : (scr.id == 2 ? #fbbf24 : Theme.accent-strong))
+                                                            : Theme.border-subtle;
+                                                        animate background   { duration: 120ms; easing: ease-out; }
+                                                        animate border-color { duration: 120ms; easing: ease-out; }
+                                                        HorizontalLayout {
+                                                            padding-left: 8px;
+                                                            padding-right: 8px;
+                                                            spacing: 5px;
+                                                            Rectangle {
+                                                                width: 7px;
+                                                                height: 7px;
+                                                                y: (parent.height - self.height) / 2;
+                                                                border-radius: 3.5px;
+                                                                background: st.text-color;
+                                                            }
+                                                            Text {
+                                                                text: st.name;
+                                                                color: scr.assigned-style-idx == stIdx
+                                                                    ? (scr.id == 0 ? Theme.accent-fg : #ffffff)
+                                                                    : Theme.text-secondary;
+                                                                font-size: 10px;
+                                                                font-weight: 700;
+                                                                vertical-alignment: center;
+                                                            }
+                                                        }
+                                                        rm-st-ta := TouchArea {
+                                                            mouse-cursor: pointer;
+                                                            clicked => { root.apply-style-to-screen(stIdx, scr.id); }
+                                                        }
+                                                    }
+                                                }
+
+                                                if (scr.id == 0 || scr.use-own-style) && root.saved-style-cards.length == 0 : HorizontalLayout {
+                                                    alignment: space-between;
+                                                    Text {
+                                                        text: "Sin estilos guardados — crea uno en Diseño > Estilos.";
+                                                        color: Theme.text-muted;
+                                                        font-size: 10px;
+                                                        vertical-alignment: center;
+                                                    }
+                                                    GlassButton {
+                                                        label: "Crear Estilo";
+                                                        compact: true;
+                                                        clicked => {
+                                                            root.select-style-target(scr.id + 1);
+                                                            root.active-tab = 4;
+                                                            root.design-subtab = 0;
+                                                            root.open-new-style-editor();
+                                                        }
                                                     }
                                                 }
                                             }
@@ -5228,161 +5972,137 @@ export component MainWindow inherits Window {
                 width: 364px;
                 spacing: 10px;
 
-                // ── Top Card: Vista en Vivo + Enrutamiento Multi-Pantalla + Capas en Vivo (Photoshop) ──
+                // ── Top Card: ProPresenter-Style Broadcast Monitor + Capas Activas ──
                 GlassCard {
                     VerticalLayout {
-                        padding: 10px;
-                        spacing: 7px;
+                        padding: 11px;
+                        spacing: 9px;
 
-                        // Header + Screen Monitor Switcher (Viendo: Público | LAN | Stage | Salas)
+                        // Single Clean Broadcast Header (Status + Segmented Monitor Switcher + Salas)
                         HorizontalLayout {
                             alignment: space-between;
-                            spacing: 4px;
+                            spacing: 6px;
+
                             HorizontalLayout {
-                                spacing: 5px;
+                                spacing: 7px;
+                                Rectangle {
+                                    width: 7px;
+                                    height: 7px;
+                                    y: (parent.height - self.height) / 2;
+                                    border-radius: 3.5px;
+                                    background: root.audience-frozen ? #38bdf8 : (root.audience-live ? Theme.live-green : Theme.text-muted);
+                                    animate background { duration: 180ms; easing: ease-out; }
+                                }
                                 Text {
-                                    text: "Vista en Vivo";
-                                    color: Theme.text-primary;
-                                    font-size: 12.5px;
-                                    font-weight: 800;
+                                    text: root.audience-frozen ? "Freeze" : (root.audience-live ? "En Vivo" : "Monitor");
+                                    color: root.audience-frozen ? #38bdf8 : (root.audience-live ? Theme.text-primary : Theme.text-secondary);
+                                    font-size: 12px;
+                                    font-weight: 700;
                                     vertical-alignment: center;
                                 }
+                            }
+
+                            // Unified ProPresenter-style Segmented Screen Switcher (no emojis, crisp track)
+                            HorizontalLayout {
+                                spacing: 5px;
                                 Rectangle {
-                                    height: 19px;
-                                    border-radius: 3px;
-                                    background: root.audience-frozen ? #0284c738 : (root.audience-live ? Theme.live-green-soft : Theme.bg-surface-2);
+                                    height: 24px;
+                                    border-radius: 6px;
+                                    background: Theme.bg-surface-1;
                                     border-width: 1px;
-                                    border-color: root.audience-frozen ? #38bdf8 : (root.audience-live ? Theme.live-green : Theme.border-subtle);
+                                    border-color: Theme.border-subtle;
                                     HorizontalLayout {
-                                        padding-left: 5px;
-                                        padding-right: 5px;
-                                        Text {
-                                            text: root.audience-frozen ? "❄ FREEZE" : (root.audience-live ? "● AL AIRE" : "MONITOR");
-                                            color: root.audience-frozen ? #38bdf8 : (root.audience-live ? Theme.live-green : Theme.text-muted);
-                                            font-size: 8.5px;
-                                            font-weight: 800;
-                                            vertical-alignment: center;
+                                        padding: 2px;
+                                        spacing: 2px;
+
+                                        Rectangle {
+                                            border-radius: 4px;
+                                            background: root.inspected-screen-idx == 0 ? Theme.bg-surface-hover : (pv-s0.has-hover ? Theme.bg-surface-2 : transparent);
+                                            animate background { duration: 130ms; easing: ease-out; }
+                                            HorizontalLayout {
+                                                padding-left: 8px; padding-right: 8px;
+                                                Text {
+                                                    text: "Público";
+                                                    color: root.inspected-screen-idx == 0 ? Theme.text-primary : Theme.text-muted;
+                                                    font-size: 10px;
+                                                    font-weight: root.inspected-screen-idx == 0 ? 700 : 500;
+                                                    vertical-alignment: center;
+                                                    animate color { duration: 130ms; }
+                                                }
+                                            }
+                                            pv-s0 := TouchArea { mouse-cursor: pointer; clicked => { root.inspect-screen(0); } }
+                                        }
+                                        Rectangle {
+                                            border-radius: 4px;
+                                            background: root.inspected-screen-idx == 1 ? #0284c740 : (pv-s1.has-hover ? Theme.bg-surface-2 : transparent);
+                                            animate background { duration: 130ms; easing: ease-out; }
+                                            HorizontalLayout {
+                                                padding-left: 8px; padding-right: 8px;
+                                                Text {
+                                                    text: "LAN";
+                                                    color: root.inspected-screen-idx == 1 ? #38bdf8 : Theme.text-muted;
+                                                    font-size: 10px;
+                                                    font-weight: root.inspected-screen-idx == 1 ? 700 : 500;
+                                                    vertical-alignment: center;
+                                                    animate color { duration: 130ms; }
+                                                }
+                                            }
+                                            pv-s1 := TouchArea { mouse-cursor: pointer; clicked => { root.inspect-screen(1); } }
+                                        }
+                                        Rectangle {
+                                            border-radius: 4px;
+                                            background: root.inspected-screen-idx == 2 ? #d9770640 : (pv-s2.has-hover ? Theme.bg-surface-2 : transparent);
+                                            animate background { duration: 130ms; easing: ease-out; }
+                                            HorizontalLayout {
+                                                padding-left: 8px; padding-right: 8px;
+                                                Text {
+                                                    text: "Stage";
+                                                    color: root.inspected-screen-idx == 2 ? #fbbf24 : Theme.text-muted;
+                                                    font-size: 10px;
+                                                    font-weight: root.inspected-screen-idx == 2 ? 700 : 500;
+                                                    vertical-alignment: center;
+                                                    animate color { duration: 130ms; }
+                                                }
+                                            }
+                                            pv-s2 := TouchArea { mouse-cursor: pointer; clicked => { root.inspect-screen(2); } }
                                         }
                                     }
                                 }
-                            }
 
-                            // Screen Preview Selector Pills (Público | LAN | Stage | Salas)
-                            HorizontalLayout {
-                                spacing: 3px;
+                                // Salas / Multi-Screen quick icon button
                                 Rectangle {
-                                    height: 20px;
-                                    border-radius: 4px;
-                                    background: root.inspected-screen-idx == 0 ? Theme.accent : Theme.bg-surface-1;
+                                    width: 24px;
+                                    height: 24px;
+                                    border-radius: 6px;
+                                    background: root.active-tab == 14 ? #38bdf828 : (pv-salas.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-1);
                                     border-width: 1px;
-                                    border-color: root.inspected-screen-idx == 0 ? Theme.accent-strong : Theme.border-subtle;
-                                    HorizontalLayout {
-                                        padding-left: 6px; padding-right: 6px;
-                                        Text { text: "Público"; color: root.inspected-screen-idx == 0 ? Theme.accent-fg : Theme.text-secondary; font-size: 9.5px; font-weight: 700; vertical-alignment: center; }
+                                    border-color: root.active-tab == 14 ? #38bdf888 : Theme.border-subtle;
+                                    animate background   { duration: 130ms; easing: ease-out; }
+                                    animate border-color { duration: 130ms; easing: ease-out; }
+                                    Image {
+                                        source: @image-url("icons/layers.svg");
+                                        width: 12px;
+                                        height: 12px;
+                                        x: (parent.width - self.width) / 2;
+                                        y: (parent.height - self.height) / 2;
+                                        colorize: root.active-tab == 14 ? #38bdf8 : Theme.text-secondary;
                                     }
-                                    TouchArea { mouse-cursor: pointer; clicked => { root.inspect-screen(0); } }
-                                }
-                                Rectangle {
-                                    height: 20px;
-                                    border-radius: 4px;
-                                    background: root.inspected-screen-idx == 1 ? #0284c7 : Theme.bg-surface-1;
-                                    border-width: 1px;
-                                    border-color: root.inspected-screen-idx == 1 ? #38bdf8 : Theme.border-subtle;
-                                    HorizontalLayout {
-                                        padding-left: 6px; padding-right: 6px;
-                                        Text { text: "LAN"; color: root.inspected-screen-idx == 1 ? #ffffff : Theme.text-secondary; font-size: 9.5px; font-weight: 700; vertical-alignment: center; }
-                                    }
-                                    TouchArea { mouse-cursor: pointer; clicked => { root.inspect-screen(1); } }
-                                }
-                                Rectangle {
-                                    height: 20px;
-                                    border-radius: 4px;
-                                    background: root.inspected-screen-idx == 2 ? #d97706 : Theme.bg-surface-1;
-                                    border-width: 1px;
-                                    border-color: root.inspected-screen-idx == 2 ? #fbbf24 : Theme.border-subtle;
-                                    HorizontalLayout {
-                                        padding-left: 6px; padding-right: 6px;
-                                        Text { text: "Stage"; color: root.inspected-screen-idx == 2 ? #ffffff : Theme.text-secondary; font-size: 9.5px; font-weight: 700; vertical-alignment: center; }
-                                    }
-                                    TouchArea { mouse-cursor: pointer; clicked => { root.inspect-screen(2); } }
-                                }
-                                Rectangle {
-                                    height: 20px;
-                                    border-radius: 4px;
-                                    background: root.active-tab == 14 ? #38bdf833 : Theme.bg-surface-1;
-                                    border-width: 1px;
-                                    border-color: root.active-tab == 14 ? #38bdf8 : Theme.border-subtle;
-                                    HorizontalLayout {
-                                        padding-left: 6px; padding-right: 6px;
-                                        Text { text: "⊞ Salas"; color: root.active-tab == 14 ? #38bdf8 : Theme.text-secondary; font-size: 9.5px; font-weight: 700; vertical-alignment: center; }
-                                    }
-                                    TouchArea { mouse-cursor: pointer; clicked => { root.active-tab = 14; } }
+                                    pv-salas := TouchArea { mouse-cursor: pointer; clicked => { root.active-tab = 14; } }
                                 }
                             }
                         }
 
-                        // Quick Output Target Routing Bar ("Enviar a: Todas | Solo Público | Solo LAN | Solo Stage")
-                        HorizontalLayout {
-                            spacing: 4px;
-                            Text {
-                                text: "Enviar a:";
-                                color: Theme.text-muted;
-                                font-size: 9.5px;
-                                font-weight: 700;
-                                vertical-alignment: center;
-                            }
-                            Rectangle {
-                                horizontal-stretch: 1;
-                                height: 21px;
-                                border-radius: 4px;
-                                background: root.output-target-mode == 0 ? Theme.live-green.transparentize(0.78) : Theme.bg-surface-1;
-                                border-width: 1px;
-                                border-color: root.output-target-mode == 0 ? Theme.live-green : Theme.border-subtle;
-                                Text { text: "🔗 Todas"; color: root.output-target-mode == 0 ? Theme.live-green : Theme.text-secondary; font-size: 9.5px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
-                                TouchArea { mouse-cursor: pointer; clicked => { root.select-output-target(0); } }
-                            }
-                            Rectangle {
-                                horizontal-stretch: 1;
-                                height: 21px;
-                                border-radius: 4px;
-                                background: root.output-target-mode == 1 ? Theme.accent : Theme.bg-surface-1;
-                                border-width: 1px;
-                                border-color: root.output-target-mode == 1 ? Theme.accent-strong : Theme.border-subtle;
-                                Text { text: "📺 Público"; color: root.output-target-mode == 1 ? Theme.accent-fg : Theme.text-secondary; font-size: 9.5px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
-                                TouchArea { mouse-cursor: pointer; clicked => { root.select-output-target(1); } }
-                            }
-                            Rectangle {
-                                horizontal-stretch: 1;
-                                height: 21px;
-                                border-radius: 4px;
-                                background: root.output-target-mode == 2 ? #0284c7 : Theme.bg-surface-1;
-                                border-width: 1px;
-                                border-color: root.output-target-mode == 2 ? #38bdf8 : Theme.border-subtle;
-                                Text { text: "🌐 Solo LAN"; color: root.output-target-mode == 2 ? #ffffff : Theme.text-secondary; font-size: 9.5px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
-                                TouchArea { mouse-cursor: pointer; clicked => { root.select-output-target(2); } }
-                            }
-                            Rectangle {
-                                horizontal-stretch: 1;
-                                height: 21px;
-                                border-radius: 4px;
-                                background: root.output-target-mode == 3 ? #d97706 : Theme.bg-surface-1;
-                                border-width: 1px;
-                                border-color: root.output-target-mode == 3 ? #fbbf24 : Theme.border-subtle;
-                                Text { text: "🎤 Stage"; color: root.output-target-mode == 3 ? #ffffff : Theme.text-secondary; font-size: 9.5px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
-                                TouchArea { mouse-cursor: pointer; clicked => { root.select-output-target(3); } }
-                            }
-                        }
-
-                        // ── 16:9 Live Preview Studio Monitor (crisp rectangular broadcast frame) ──
+                        // ── Pure 16:9 Broadcast Program Monitor (unobstructed cinematic frame, ProPresenter style) ──
                         Rectangle {
-                            height: 178px;
-                            border-radius: 3px;
+                            height: 188px;
+                            border-radius: 6px;
                             background: root.live-bg-solid-color;
-                            border-width: 1.5px;
-                            border-color: root.inspected-screen-idx == 1 ? #38bdf8
-                                        : root.inspected-screen-idx == 2 ? #fbbf24
-                                        : (root.audience-frozen ? #38bdf8 : (root.audience-live ? Theme.live-green : Theme.border-medium));
+                            border-width: 1px;
+                            border-color: root.inspected-screen-idx == 1 ? #38bdf880
+                                        : root.inspected-screen-idx == 2 ? #fbbf2480
+                                        : (root.audience-frozen ? #38bdf880 : (root.audience-live ? Theme.live-green.transparentize(0.45) : Theme.border-medium));
                             clip: true;
+                            animate border-color { duration: 180ms; easing: ease-out; }
 
                             if root.has-live-preview-image : Image {
                                 x: 0px;
@@ -5441,10 +6161,11 @@ export component MainWindow inherits Window {
                                 box-padding: 4px;
                             }
 
-                            if root.live-text == "" && !root.preview-show-clock : Text {
-                                text: "(Sin texto en " + root.inspected-screen-name + ")";
-                                color: Theme.text-muted;
+                            if root.live-text == "" && !root.preview-show-clock && !root.has-live-preview-image : Text {
+                                text: "Sin señal en " + root.inspected-screen-name;
+                                color: Theme.text-muted.transparentize(0.25);
                                 font-size: 11px;
+                                font-weight: 500;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
                             }
@@ -5468,38 +6189,18 @@ export component MainWindow inherits Window {
                                 box-padding: 3px;
                             }
 
-                            // Screen badge top-left
-                            Rectangle {
-                                x: 7px;
-                                y: 7px;
-                                height: 18px;
-                                width: mon-lbl.preferred-width + 12px;
-                                border-radius: 3px;
-                                background: #09090bcc;
-                                border-width: 1px;
-                                border-color: #ffffff22;
-                                mon-lbl := Text {
-                                    text: root.inspected-screen-name + " • " + root.preview-style-name;
-                                    color: #e4e4e7;
-                                    font-size: 9px;
-                                    font-weight: 700;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                }
-                            }
-
-                            // FIXED: Clock / Countdown Timer Overlay rendered live inside Vista en Vivo!
+                            // Clock / Countdown Timer Overlay rendered live inside Vista en Vivo
                             if root.preview-show-clock && root.preview-clock-text != "" : Rectangle {
                                 x: parent.width - self.width - 8px;
-                                y: 7px;
-                                width: Math.max(66px, pv-clk-txt.preferred-width + 16px);
-                                height: 24px;
+                                y: 8px;
+                                width: Math.max(60px, pv-clk-txt.preferred-width + 16px);
+                                height: 22px;
                                 border-radius: 4px;
-                                background: #09090be8;
+                                background: #09090be0;
                                 border-width: 1px;
-                                border-color: #38bdf888;
+                                border-color: #38bdf866;
                                 pv-clk-txt := Text {
-                                    text: "⏱ " + root.preview-clock-text;
+                                    text: root.preview-clock-text;
                                     color: #ffffff;
                                     font-size: 11px;
                                     font-weight: 800;
@@ -5508,7 +6209,7 @@ export component MainWindow inherits Window {
                                 }
                             }
 
-                            // Lower-Third / Pleca Overlay rendered live inside Vista en Vivo!
+                            // Lower-Third / Pleca Overlay rendered live inside Vista en Vivo
                             if root.preview-show-pleca && root.preview-pleca-title != "" : Rectangle {
                                 x: 10px;
                                 y: parent.height - 38px;
@@ -5542,7 +6243,7 @@ export component MainWindow inherits Window {
                                     x: parent.width - root.alert-ticker-pos * (parent.width + self.preferred-width);
                                     y: 0px;
                                     height: parent.height;
-                                    text: " ★ " + root.active-public-alert + " ★ ";
+                                    text: "  " + root.active-public-alert + "  ";
                                     color: #ffffff;
                                     font-size: 10px;
                                     font-weight: 700;
@@ -5560,6 +6261,110 @@ export component MainWindow inherits Window {
                                     horizontal-alignment: center;
                                     vertical-alignment: center;
                                     overflow: elide;
+                                }
+                            }
+                        }
+
+                        // ── Studio Monitor Footer: Active Look (Left) + Clean Segmented Routing (Right) ──
+                        HorizontalLayout {
+                            alignment: space-between;
+                            spacing: 6px;
+
+                            // Active Look / Font Style pill for inspected screen
+                            Rectangle {
+                                height: 22px;
+                                horizontal-stretch: 1;
+                                border-radius: 5px;
+                                background: look-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1;
+                                border-width: 1px;
+                                border-color: root.preview-own-style ? #38bdf855 : Theme.border-subtle;
+                                animate background   { duration: 130ms; }
+                                animate border-color { duration: 130ms; }
+                                HorizontalLayout {
+                                    padding-left: 7px;
+                                    padding-right: 7px;
+                                    spacing: 5px;
+                                    Image {
+                                        source: @image-url("icons/palette.svg");
+                                        width: 11px;
+                                        height: 11px;
+                                        y: (parent.height - self.height) / 2;
+                                        colorize: root.preview-own-style ? #38bdf8 : Theme.text-muted;
+                                    }
+                                    Text {
+                                        text: root.preview-style-name + " · " + Math.round(root.preview-text-size) + "px";
+                                        color: root.preview-own-style ? #38bdf8 : Theme.text-secondary;
+                                        font-size: 9.5px;
+                                        font-weight: 600;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                    }
+                                }
+                                look-ta := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        if (root.inspected-screen-idx == 1) {
+                                            root.active-tab = 5;
+                                            root.net-subtab = 0;
+                                        } else {
+                                            root.select-style-target(root.inspected-screen-idx + 1);
+                                            root.active-tab = 4;
+                                            root.design-subtab = 0;
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Clean ProPresenter-style Segmented Output Routing (no emojis!)
+                            Rectangle {
+                                height: 22px;
+                                border-radius: 5px;
+                                background: Theme.bg-surface-1;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+                                HorizontalLayout {
+                                    padding: 2px;
+                                    spacing: 2px;
+                                    Rectangle {
+                                        border-radius: 3px;
+                                        background: root.output-target-mode == 0 ? Theme.live-green.transparentize(0.78) : (rt0.has-hover ? Theme.bg-surface-2 : transparent);
+                                        animate background { duration: 120ms; }
+                                        HorizontalLayout {
+                                            padding-left: 6px; padding-right: 6px;
+                                            Text { text: "Todas"; color: root.output-target-mode == 0 ? Theme.live-green : Theme.text-muted; font-size: 9px; font-weight: 700; vertical-alignment: center; }
+                                        }
+                                        rt0 := TouchArea { mouse-cursor: pointer; clicked => { root.select-output-target(0); } }
+                                    }
+                                    Rectangle {
+                                        border-radius: 3px;
+                                        background: root.output-target-mode == 1 ? Theme.bg-surface-hover : (rt1.has-hover ? Theme.bg-surface-2 : transparent);
+                                        animate background { duration: 120ms; }
+                                        HorizontalLayout {
+                                            padding-left: 6px; padding-right: 6px;
+                                            Text { text: "Púb"; color: root.output-target-mode == 1 ? Theme.text-primary : Theme.text-muted; font-size: 9px; font-weight: 700; vertical-alignment: center; }
+                                        }
+                                        rt1 := TouchArea { mouse-cursor: pointer; clicked => { root.select-output-target(1); } }
+                                    }
+                                    Rectangle {
+                                        border-radius: 3px;
+                                        background: root.output-target-mode == 2 ? #0284c744 : (rt2.has-hover ? Theme.bg-surface-2 : transparent);
+                                        animate background { duration: 120ms; }
+                                        HorizontalLayout {
+                                            padding-left: 6px; padding-right: 6px;
+                                            Text { text: "LAN"; color: root.output-target-mode == 2 ? #38bdf8 : Theme.text-muted; font-size: 9px; font-weight: 700; vertical-alignment: center; }
+                                        }
+                                        rt2 := TouchArea { mouse-cursor: pointer; clicked => { root.select-output-target(2); } }
+                                    }
+                                    Rectangle {
+                                        border-radius: 3px;
+                                        background: root.output-target-mode == 3 ? #d9770644 : (rt3.has-hover ? Theme.bg-surface-2 : transparent);
+                                        animate background { duration: 120ms; }
+                                        HorizontalLayout {
+                                            padding-left: 6px; padding-right: 6px;
+                                            Text { text: "Stg"; color: root.output-target-mode == 3 ? #fbbf24 : Theme.text-muted; font-size: 9px; font-weight: 700; vertical-alignment: center; }
+                                        }
+                                        rt3 := TouchArea { mouse-cursor: pointer; clicked => { root.select-output-target(3); } }
+                                    }
                                 }
                             }
                         }
@@ -5661,19 +6466,29 @@ export component MainWindow inherits Window {
 
                                     HorizontalLayout {
                                         spacing: 4px;
-                                        // 1-click Time Overlay toggle right on the Active Layers panel!
+                                        // 1-click Time Overlay toggle right on the Active Layers panel (SVG icon, no emoji)
                                         Rectangle {
-                                            height: 20px;
-                                            border-radius: 4px;
-                                            background: root.preview-show-clock ? #0284c7 : (clk-chip-ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-1);
+                                            height: 22px;
+                                            border-radius: 5px;
+                                            background: root.preview-show-clock ? #0284c738 : (clk-chip-ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-1);
                                             border-width: 1px;
                                             border-color: root.preview-show-clock ? #38bdf8 : Theme.border-subtle;
+                                            animate background   { duration: 130ms; easing: ease-out; }
+                                            animate border-color { duration: 130ms; easing: ease-out; }
                                             HorizontalLayout {
-                                                padding-left: 6px;
-                                                padding-right: 6px;
+                                                padding-left: 7px;
+                                                padding-right: 7px;
+                                                spacing: 4px;
+                                                Image {
+                                                    source: @image-url("icons/clock.svg");
+                                                    width: 11px;
+                                                    height: 11px;
+                                                    y: (parent.height - self.height) / 2;
+                                                    colorize: root.preview-show-clock ? #38bdf8 : Theme.text-secondary;
+                                                }
                                                 Text {
-                                                    text: root.preview-show-clock ? "⏱ Tiempo ON" : "+ ⏱ Tiempo";
-                                                    color: root.preview-show-clock ? #ffffff : Theme.text-secondary;
+                                                    text: root.preview-show-clock ? "Tiempo" : "+ Tiempo";
+                                                    color: root.preview-show-clock ? #38bdf8 : Theme.text-secondary;
                                                     font-size: 9.5px;
                                                     font-weight: 700;
                                                     vertical-alignment: center;
@@ -5872,22 +6687,26 @@ export component MainWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 4px;
-                                if root.queue-category == 1 && root.video-queue-items.length > 0 : IconButton {
+                                if root.queue-category == 1 && root.video-queue-items.length > 0 : IslandIconButton {
+                                    y: (parent.height - self.height) / 2;
                                     icon: @image-url("icons/prev.svg");
                                     clicked => { root.prev-video-queue(); }
                                 }
-                                if root.queue-category == 1 && root.video-queue-items.length > 0 : IconButton {
+                                if root.queue-category == 1 && root.video-queue-items.length > 0 : IslandIconButton {
+                                    y: (parent.height - self.height) / 2;
                                     icon: root.video-queue-playing ? @image-url("icons/stop.svg") : @image-url("icons/play.svg");
                                     active: root.video-queue-playing;
                                     clicked => { root.toggle-video-queue-play(); }
                                 }
-                                if root.queue-category == 1 && root.video-queue-items.length > 0 : IconButton {
+                                if root.queue-category == 1 && root.video-queue-items.length > 0 : IslandIconButton {
+                                    y: (parent.height - self.height) / 2;
                                     icon: @image-url("icons/next.svg");
                                     clicked => { root.next-video-queue(); }
                                 }
                                 if (root.queue-category == 0 && root.queue-items.length > 0)
                                     || (root.queue-category == 1 && root.video-queue-items.length > 0)
-                                    || (root.queue-category == 2 && root.overlay-queue-items.length > 0) : IconButton {
+                                    || (root.queue-category == 2 && root.overlay-queue-items.length > 0) : IslandIconButton {
+                                    y: (parent.height - self.height) / 2;
                                     icon: @image-url("icons/trash.svg");
                                     danger: true;
                                     clicked => {
@@ -7410,6 +8229,212 @@ export component MainWindow inherits Window {
                                     root.system-font-selected(root.font-picker-target, fname);
                                     root.font-picker-open = false;
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── FLOATING MODAL: Gestión Unificada de Archivo (Acciones / Cambiar Nombre / Eliminar) ──
+    if root.item-modal-open : Rectangle {
+        background: #00000066;
+
+        TouchArea {
+            clicked => { root.item-modal-open = false; }
+        }
+
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: Math.max(72px, (parent.height - self.height) / 2);
+            width: 396px;
+            height: root.item-modal-mode == 0 ? 276px : (root.item-modal-mode == 1 ? 210px : 216px);
+            border-radius: Theme.radius-lg;
+            background: Theme.bg-surface-0;
+            border-width: 1.5px;
+            border-color: root.item-modal-mode == 2 ? #ef444488 : Theme.border-medium;
+            clip: true;
+            animate height       { duration: 150ms; easing: ease-out; }
+            animate border-color { duration: 150ms; easing: ease-out; }
+
+            TouchArea {} // absorb inner clicks
+
+            VerticalLayout {
+                padding: 16px;
+                spacing: 11px;
+
+                // Header with category pill + item title + close button
+                HorizontalLayout {
+                    alignment: space-between;
+                    spacing: 8px;
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        spacing: 3px;
+                        HorizontalLayout {
+                            spacing: 6px;
+                            Rectangle {
+                                height: 18px;
+                                width: im-kind-txt.preferred-width + 12px;
+                                border-radius: 4px;
+                                background: root.item-modal-mode == 2 ? #ef444428 : Theme.bg-surface-2;
+                                border-width: 1px;
+                                border-color: root.item-modal-mode == 2 ? #ef444466 : Theme.border-subtle;
+                                im-kind-txt := Text {
+                                    text: root.item-modal-kind == 0 ? "CANCIÓN"
+                                        : root.item-modal-kind == 1 ? "MULTIMEDIA"
+                                        : root.item-modal-kind == 2 ? "DOCUMENTO"
+                                        : root.item-modal-kind == 3 ? "MÚSICA"
+                                        : root.item-modal-kind == 4 ? "FONDO"
+                                        : "OVERLAY";
+                                    color: root.item-modal-mode == 2 ? #f87171 : Theme.accent-strong;
+                                    font-size: 9.5px;
+                                    font-weight: 800;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            Text {
+                                text: root.item-modal-mode == 0 ? "Opciones del archivo"
+                                    : root.item-modal-mode == 1 ? "Cambiar nombre"
+                                    : "Eliminar archivo";
+                                color: root.item-modal-mode == 2 ? #f87171 : Theme.text-muted;
+                                font-size: 11px;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                            }
+                        }
+                        Text {
+                            text: root.item-modal-title;
+                            color: Theme.text-primary;
+                            font-size: 14px;
+                            font-weight: 700;
+                            overflow: elide;
+                        }
+                    }
+                    GlassButton {
+                        label: "✕";
+                        compact: true;
+                        clicked => { root.item-modal-open = false; }
+                    }
+                }
+
+                Rectangle { height: 1px; background: Theme.border-subtle; }
+
+                // MODE 0: Full Action Sheet (Play / Queue / Rename / Delete)
+                if root.item-modal-mode == 0 : VerticalLayout {
+                    spacing: 7px;
+
+                    GlassButton {
+                        label: root.item-modal-kind == 3 ? "Reproducir pista ahora" : "Enviar a Pantalla / Reproducir";
+                        icon: @image-url("icons/play.svg");
+                        has-icon: true;
+                        primary: true;
+                        clicked => {
+                            root.item-action-play(root.item-modal-kind, root.item-modal-path);
+                            root.item-modal-open = false;
+                        }
+                    }
+                    GlassButton {
+                        label: root.item-modal-kind == 1 || root.item-modal-kind == 4 ? "Agregar a Cola de Videos"
+                             : root.item-modal-kind == 5 ? "Agregar a Cola de Overlays"
+                             : "Agregar a Cola de Servicio";
+                        icon: @image-url("icons/list.svg");
+                        has-icon: true;
+                        clicked => {
+                            root.item-action-queue(root.item-modal-kind, root.item-modal-path);
+                            root.item-modal-open = false;
+                        }
+                    }
+                    GlassButton {
+                        label: "Cambiar Nombre";
+                        icon: @image-url("icons/edit.svg");
+                        has-icon: true;
+                        clicked => {
+                            root.item-modal-rename-input = root.item-modal-title;
+                            root.item-modal-mode = 1;
+                        }
+                    }
+                    GlassButton {
+                        label: "Eliminar de la Biblioteca";
+                        icon: @image-url("icons/trash.svg");
+                        has-icon: true;
+                        danger: true;
+                        clicked => {
+                            root.item-modal-mode = 2;
+                        }
+                    }
+                }
+
+                // MODE 1: Rename Input
+                if root.item-modal-mode == 1 : VerticalLayout {
+                    spacing: 9px;
+                    LineEdit {
+                        placeholder-text: "Nuevo nombre del archivo...";
+                        text <=> root.item-modal-rename-input;
+                        accepted(txt) => {
+                            if (txt != "") {
+                                root.item-action-rename(root.item-modal-kind, root.item-modal-path, txt);
+                                root.item-modal-open = false;
+                            }
+                        }
+                    }
+                    Text {
+                        text: "Se conservará la extensión original y se actualizarán colas y listas automáticamente.";
+                        color: Theme.text-muted;
+                        font-size: 11px;
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        alignment: end;
+                        GlassButton {
+                            label: "Cancelar";
+                            compact: true;
+                            clicked => { root.item-modal-open = false; }
+                        }
+                        GlassButton {
+                            label: "Guardar Nombre";
+                            icon: @image-url("icons/save.svg");
+                            has-icon: true;
+                            compact: true;
+                            primary: true;
+                            clicked => {
+                                if (root.item-modal-rename-input != "") {
+                                    root.item-action-rename(root.item-modal-kind, root.item-modal-path, root.item-modal-rename-input);
+                                    root.item-modal-open = false;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // MODE 2: Confirm Permanent Delete
+                if root.item-modal-mode == 2 : VerticalLayout {
+                    spacing: 10px;
+                    Text {
+                        text: "¿Seguro que quieres eliminar este archivo de forma permanente? Si está en reproducción o en cola, se detendrá y quitará automáticamente.";
+                        color: Theme.text-secondary;
+                        font-size: 11.5px;
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        alignment: end;
+                        GlassButton {
+                            label: "Cancelar";
+                            compact: true;
+                            clicked => { root.item-modal-open = false; }
+                        }
+                        GlassButton {
+                            label: "Eliminar Definitivamente";
+                            icon: @image-url("icons/trash.svg");
+                            has-icon: true;
+                            compact: true;
+                            danger: true;
+                            clicked => {
+                                root.item-action-delete(root.item-modal-kind, root.item-modal-path);
+                                root.item-modal-open = false;
                             }
                         }
                     }

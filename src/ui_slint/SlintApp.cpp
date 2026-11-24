@@ -873,6 +873,7 @@ void SlintApp::BindCallbacks() {
     m_Main->on_delete_custom_style([this](int idx) { DeleteCustomStyle(idx); });
     m_Main->on_select_style_target([this](int mode) { SelectStyleTarget(mode); });
     m_Main->on_apply_style_to_screen([this](int styleIdx, int screenIdx) { ApplyCustomStyleToScreen(styleIdx, screenIdx); });
+    m_Main->on_set_screen_own_style([this](int screenIdx, bool enabled) { SetScreenOwnStyle(screenIdx, enabled); });
     m_Main->on_text_color_rgb_changed([this](float r, float g, float b) {
         SetTextColorRGB(static_cast<uint8_t>(std::clamp(r, 0.0f, 255.0f)),
                         static_cast<uint8_t>(std::clamp(g, 0.0f, 255.0f)),
@@ -1110,6 +1111,18 @@ void SlintApp::BindCallbacks() {
         SavePersistedState();
     });
     m_Main->on_check_github_updates([this]() { CheckGitHubUpdatesAsync(); });
+    m_Main->on_item_action_play([this](int kind, slint::SharedString path) {
+        HandleItemPlay(kind, std::string(path));
+    });
+    m_Main->on_item_action_queue([this](int kind, slint::SharedString path) {
+        HandleItemQueue(kind, std::string(path));
+    });
+    m_Main->on_item_action_rename([this](int kind, slint::SharedString path, slint::SharedString newName) {
+        HandleItemRename(kind, std::string(path), std::string(newName));
+    });
+    m_Main->on_item_action_delete([this](int kind, slint::SharedString path) {
+        HandleItemDelete(kind, std::string(path));
+    });
 }
 
 void SlintApp::LoadTabData(int tab) {
@@ -1117,6 +1130,7 @@ void SlintApp::LoadTabData(int tab) {
     m_SlidesModel->clear();
     m_SlideRowsModel->clear();
     m_Main->set_selected_library_index(-1);
+    m_Main->set_selected_library_path("");
     m_Main->set_active_slide_index(-1);
     m_Main->set_selected_song_author("");
     m_Main->set_chapter_count(1);
@@ -1201,6 +1215,7 @@ void SlintApp::SelectLibraryItem(int filteredIdx) {
     if (filteredIdx < 0 || filteredIdx >= static_cast<int>(m_FilteredIndices.size())) return;
     int realIdx = m_FilteredIndices[filteredIdx];
     const auto& entry = m_AllEntries[realIdx];
+    m_Main->set_selected_library_path(slint::SharedString(entry.path));
 
     if (m_ActiveTab == 0) {
         m_Main->set_song_editor_open(false);
@@ -1688,13 +1703,27 @@ void SlintApp::SelectStyleTarget(int targetMode) {
         }
     } else if (!m_Screens.empty()) {
         int firstIdx = m_Screens[0].assignedStyleIdx;
-        bool allSame = true;
-        for (const auto& sc : m_Screens) {
-            if (sc.assignedStyleIdx != firstIdx) { allSame = false; break; }
+        bool allLinkedSame = true;
+        for (int i = 1; i < static_cast<int>(m_Screens.size()); ++i) {
+            if (!m_Screens[i].useOwnStyle && m_Screens[i].assignedStyleIdx != firstIdx) {
+                allLinkedSame = false;
+                break;
+            }
         }
-        m_Main->set_active_saved_style_idx(allSame ? firstIdx : -1);
+        m_Main->set_active_saved_style_idx(allLinkedSame ? firstIdx : -1);
     }
     RefreshSavedStylesModel();
+}
+
+void SlintApp::SetScreenOwnStyle(int screenIdx, bool enabled) {
+    if (screenIdx <= 0 || screenIdx >= static_cast<int>(m_Screens.size())) return;
+    m_Screens[screenIdx].useOwnStyle = enabled;
+    if (!enabled && !m_Screens.empty()) {
+        ApplyStyleToScreen(screenIdx, m_Screens[0].textStyle, m_Screens[0].assignedStyleIdx);
+    }
+    SyncScreenOutputs();
+    RefreshSavedStylesModel();
+    SavePersistedState();
 }
 
 void SlintApp::ApplyStyleToScreen(int screenIdx, const SavedTextStyle& st, int styleIdx) {
@@ -1713,18 +1742,29 @@ void SlintApp::ApplyStyleToScreen(int screenIdx, const SavedTextStyle& st, int s
 void SlintApp::ApplyCustomStyleToScreen(int styleIdx, int screenIdx) {
     if (styleIdx < 0 || styleIdx >= static_cast<int>(m_SavedStyles.size())) return;
     const auto& st = m_SavedStyles[styleIdx];
-    if (screenIdx < 0) {
-        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
-            ApplyStyleToScreen(i, st, styleIdx);
+    if (screenIdx <= 0) {
+        // Público (0) o Todas (<0): actualiza Público y todas las pantallas enlazadas (!useOwnStyle),
+        // protegiendo las pantallas con estilo propio independiente (ej. LAN con letras gigantes).
+        if (!m_Screens.empty()) {
+            ApplyStyleToScreen(0, st, styleIdx);
+        }
+        for (int i = 1; i < static_cast<int>(m_Screens.size()); ++i) {
+            if (!m_Screens[i].useOwnStyle) {
+                ApplyStyleToScreen(i, st, styleIdx);
+            }
         }
     } else if (screenIdx < static_cast<int>(m_Screens.size())) {
+        // Pantalla secundaria específica (LAN, Stage, Sala Extra): activa estilo independiente
+        // automáticamente y NO afecta a Público ni a otras pantallas.
+        m_Screens[screenIdx].useOwnStyle = true;
         ApplyStyleToScreen(screenIdx, st, styleIdx);
     } else {
         return;
     }
 
-    if (screenIdx < 0 || screenIdx == 0) {
+    if (screenIdx <= 0) {
         ApplyStyleStructToUI(st);
+        m_Main->set_active_saved_style_idx(styleIdx);
     } else if (m_StyleTargetMode >= 1 && (m_StyleTargetMode - 1) == screenIdx) {
         m_Main->set_active_saved_style_idx(styleIdx);
     }
@@ -1797,12 +1837,20 @@ void SlintApp::SaveStyleEditor(const std::string& rawName) {
     m_Main->set_active_saved_style_idx(savedIdx);
 
     // Apply saved style to targeted screen(s) AND refresh any screen already using this edited style
-    if (m_StyleTargetMode <= 0) {
-        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
-            ApplyStyleToScreen(i, st, savedIdx);
+    if (m_StyleTargetMode <= 1) {
+        if (!m_Screens.empty()) {
+            ApplyStyleToScreen(0, st, savedIdx);
+        }
+        for (int i = 1; i < static_cast<int>(m_Screens.size()); ++i) {
+            if (!m_Screens[i].useOwnStyle || (m_EditingStyleIdx >= 0 && m_Screens[i].assignedStyleIdx == savedIdx)) {
+                ApplyStyleToScreen(i, st, savedIdx);
+            }
         }
     } else {
         int targetScr = m_StyleTargetMode - 1;
+        if (targetScr >= 1 && targetScr < static_cast<int>(m_Screens.size())) {
+            m_Screens[targetScr].useOwnStyle = true;
+        }
         for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
             if (i == targetScr || (m_EditingStyleIdx >= 0 && m_Screens[i].assignedStyleIdx == savedIdx)) {
                 ApplyStyleToScreen(i, st, savedIdx);
@@ -1849,6 +1897,7 @@ void SlintApp::DeleteCustomStyle(int idx) {
         if (sc.assignedStyleIdx == idx) sc.assignedStyleIdx = -1;
         else if (sc.assignedStyleIdx > idx) sc.assignedStyleIdx -= 1;
     }
+    SyncLanStyleProperties();
     RefreshSavedStylesModel();
     RefreshScreenMatrixModel();
     SavePersistedState();
@@ -1891,10 +1940,10 @@ void SlintApp::RefreshSavedStylesModel() {
         auto targetsModel = std::make_shared<slint::VectorModel<StyleScreenTarget>>();
         std::string assignedLbl;
         bool activeOnTarget = false;
-        bool allUsing = !m_Screens.empty();
+        bool allLinkedUsing = !m_Screens.empty();
         for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
             bool isAssigned = (m_Screens[i].assignedStyleIdx == sidx);
-            if (!isAssigned) allUsing = false;
+            if ((i == 0 || !m_Screens[i].useOwnStyle) && !isAssigned) allLinkedUsing = false;
             if (isAssigned) {
                 if (!assignedLbl.empty()) assignedLbl += ", ";
                 assignedLbl += shortScreenName(i, m_Screens[i]);
@@ -1908,7 +1957,7 @@ void SlintApp::RefreshSavedStylesModel() {
             tgt.active    = isAssigned;
             targetsModel->push_back(tgt);
         }
-        if (m_StyleTargetMode <= 0 && allUsing) activeOnTarget = true;
+        if (m_StyleTargetMode <= 0 && allLinkedUsing) activeOnTarget = true;
         card.active_on_target       = activeOnTarget;
         card.assigned_screens_label = slint::SharedString(assignedLbl);
         card.screen_targets         = targetsModel;
@@ -2656,6 +2705,17 @@ void SlintApp::ActivateQueueItem(int index) {
     if (index < 0 || index >= static_cast<int>(m_Queue.size())) return;
     const auto q = m_Queue[index];
 
+    if (q.tab == 9) {
+        if (!m_MusicScanned) ScanMusicTracks();
+        for (int i = 0; i < static_cast<int>(m_MusicEntries.size()); ++i) {
+            if (m_MusicEntries[i].path == q.path) {
+                PlayMusicTrack(i);
+                return;
+            }
+        }
+        return;
+    }
+
     m_ActiveTab = q.tab;
     m_Main->set_active_tab(q.tab);
     LoadTabData(q.tab);
@@ -3111,11 +3171,22 @@ void SlintApp::LoadPersistedState() {
             m_Screens[i].textStyle = globalFallback;
             if (i == 2) m_Screens[i].textStyle.textSize = 40.0f; // Stage classic default
             m_Screens[i].assignedStyleIdx = -1;
+            m_Screens[i].useOwnStyle      = false;
         }
         if (j.contains("screenStyles") && j["screenStyles"].is_array()) {
             const auto& arr = j["screenStyles"];
-            for (int i = 0; i < static_cast<int>(std::min<size_t>(arr.size(), m_Screens.size())); ++i) {
+            for (int i = 0; i < static_cast<int>(arr.size()); ++i) {
                 const auto& item = arr[i];
+                if (i >= static_cast<int>(m_Screens.size())) {
+                    ScreenOutputState extra;
+                    extra.id           = i;
+                    extra.name         = item.value("name", "Sala " + std::to_string(i));
+                    extra.roleBadge    = "SALA INDEPENDIENTE";
+                    extra.isCustomRoom = true;
+                    extra.textStyle    = globalFallback;
+                    extra.useOwnStyle  = false;
+                    m_Screens.push_back(std::move(extra));
+                }
                 if (item.contains("style") && item["style"].is_object()) {
                     m_Screens[i].textStyle = parseStyleJson(item["style"], m_Screens[i].textStyle);
                 }
@@ -3124,6 +3195,13 @@ void SlintApp::LoadPersistedState() {
                     m_Screens[i].assignedStyleIdx = aIdx;
                 } else {
                     m_Screens[i].assignedStyleIdx = -1;
+                }
+                if (i > 0) {
+                    if (item.contains("useOwnStyle")) {
+                        m_Screens[i].useOwnStyle = item.value("useOwnStyle", false);
+                    } else {
+                        m_Screens[i].useOwnStyle = (m_Screens[i].assignedStyleIdx != m_Screens[0].assignedStyleIdx);
+                    }
                 }
             }
         }
@@ -3226,6 +3304,7 @@ void SlintApp::SavePersistedState() {
             {"id", sc.id},
             {"name", sc.name},
             {"assignedStyleIdx", sc.assignedStyleIdx},
+            {"useOwnStyle", sc.useOwnStyle},
             {"style", SavedStyleToJson(sc.textStyle)}
         });
     }
@@ -5722,6 +5801,7 @@ void SlintApp::RebuildMusicGridRows() {
                     cell.index     = idx;
                     cell.title     = trk->title;
                     cell.subtitle  = trk->subtitle;
+                    cell.path      = trk->path;
                     cell.playing   = trk->playing;
                     cell.cover     = trk->cover;
                     cell.has_cover = trk->has_cover;
@@ -5903,7 +5983,7 @@ void SlintApp::ScanDocuments() {
               [](const MediaEntry& a, const MediaEntry& b) { return a.title < b.title; });
 }
 
-void SlintApp::OpenDocumentAsync(const std::string& path) {
+void SlintApp::OpenDocumentAsync(const std::string& path, bool autoProjectFirst) {
     m_DocPagePaths.clear();
     m_DocPagesModel->clear();
     m_ActiveDocPageIdx = -1;
@@ -5918,11 +5998,15 @@ void SlintApp::OpenDocumentAsync(const std::string& path) {
         pg.has_preview = true;
         m_DocPagesModel->push_back(pg);
         m_Main->set_doc_status("1 página lista. Haz clic para proyectar.");
+        if (autoProjectFirst) {
+            m_Main->set_active_doc_page_idx(0);
+            ProjectDocPage(0);
+        }
         return;
     }
 
     m_Main->set_doc_status("Renderizando páginas PDF con pdftoppm...");
-    std::thread([this, path]() {
+    std::thread([this, path, autoProjectFirst]() {
         fs::path outDir = fs::path(ProyecThor::GetAssetsPath()) / "thumbnails" / "docs" /
                           std::to_string(std::hash<std::string>{}(path));
         std::error_code ec;
@@ -5950,7 +6034,7 @@ void SlintApp::OpenDocumentAsync(const std::string& path) {
         }
         std::sort(pages.begin(), pages.end());
 
-        slint::invoke_from_event_loop([this, pages = std::move(pages)]() mutable {
+        slint::invoke_from_event_loop([this, pages = std::move(pages), autoProjectFirst]() mutable {
             m_DocPagePaths = std::move(pages);
             m_DocPagesModel->clear();
             for (size_t i = 0; i < m_DocPagePaths.size(); ++i) {
@@ -5965,6 +6049,10 @@ void SlintApp::OpenDocumentAsync(const std::string& path) {
             } else {
                 m_Main->set_doc_status(slint::SharedString(
                     std::to_string(m_DocPagePaths.size()) + " página(s) lista(s). Haz clic para proyectar."));
+                if (autoProjectFirst) {
+                    m_Main->set_active_doc_page_idx(0);
+                    ProjectDocPage(0);
+                }
             }
         });
     }).detach();
@@ -5996,6 +6084,417 @@ void SlintApp::ProjectDocPage(int pageIdx) {
     if (!anyVid) { m_Player.Stop(); m_HasVideoBg = false; }
     m_HasStaticImage = m_Screens[0].bgIsStatic;
     if (IsScreenTargeted(1) && IsLanRunning()) UpdateLanStaticFrame(img);
+    SyncScreenOutputs();
+}
+
+// ── Unified Library File Management (Play/Screen, Queue, Rename, Delete) ────
+void SlintApp::HandleItemPlay(int kind, const std::string& path) {
+    if (path.empty()) return;
+    const std::vector<std::string> videoExts = { ".mp4", ".mkv", ".mov", ".webm", ".avi", ".wmv" };
+    const std::vector<std::string> imageExts = { ".png", ".jpg", ".jpeg", ".webp", ".bmp" };
+
+    if (kind == 0) {
+        // Canción: abrir y proyectar la primera estrofa inmediatamente
+        m_ActiveTab = 0;
+        m_Main->set_active_tab(0);
+        LoadTabData(0);
+        for (int i = 0; i < static_cast<int>(m_FilteredIndices.size()); ++i) {
+            if (m_AllEntries[m_FilteredIndices[i]].path == path) {
+                m_Main->set_selected_library_index(i);
+                SelectLibraryItem(i);
+                if (m_SlidesModel->row_count() > 0) {
+                    m_Main->set_active_slide_index(0);
+                    ProjectSlide(0);
+                }
+                break;
+            }
+        }
+    } else if (kind == 1) {
+        // Multimedia (Video o Imagen): proyectar directamente en la(s) pantalla(s) destino
+        fs::path fp(path);
+        MediaEntry entry;
+        entry.title    = fp.stem().string();
+        entry.path     = path;
+        entry.isVideo  = HasExtension(fp, videoExts);
+        entry.isImage  = HasExtension(fp, imageExts);
+        entry.subtitle = entry.isVideo ? "Video" : "Imagen";
+        m_SelectedPreviewEntry    = entry;
+        m_HasSelectedPreviewEntry = true;
+        ProjectSelectedMedia();
+    } else if (kind == 2) {
+        // Documento (PDF o Imagen): abrir y proyectar página 1 automáticamente
+        m_ActiveTab = 10;
+        m_Main->set_active_tab(10);
+        LoadTabData(10);
+        for (int i = 0; i < static_cast<int>(m_FilteredIndices.size()); ++i) {
+            if (m_AllEntries[m_FilteredIndices[i]].path == path) {
+                m_Main->set_selected_library_index(i);
+                m_Main->set_selected_library_path(slint::SharedString(path));
+                break;
+            }
+        }
+        OpenDocumentAsync(path, true);
+    } else if (kind == 3) {
+        // Música (Audio independiente)
+        if (!m_MusicScanned) ScanMusicTracks();
+        for (int i = 0; i < static_cast<int>(m_MusicEntries.size()); ++i) {
+            if (m_MusicEntries[i].path == path) {
+                PlayMusicTrack(i);
+                break;
+            }
+        }
+    } else if (kind == 4) {
+        // Fondo en Bucle
+        for (int i = 0; i < static_cast<int>(m_BgDockEntries.size()); ++i) {
+            if (m_BgDockEntries[i].path == path) {
+                SelectDockBackground(i);
+                return;
+            }
+        }
+        fs::path fp(path);
+        MediaEntry entry;
+        entry.title   = fp.stem().string();
+        entry.path    = path;
+        entry.isVideo = HasExtension(fp, videoExts);
+        entry.isImage = HasExtension(fp, imageExts);
+        m_SelectedPreviewEntry    = entry;
+        m_HasSelectedPreviewEntry = true;
+        ProjectSelectedMedia();
+    } else if (kind == 5) {
+        // Overlay PNG
+        for (int i = 0; i < static_cast<int>(m_OverlayLayerEntries.size()); ++i) {
+            if (m_OverlayLayerEntries[i].path == path) {
+                SelectOverlayLayer(i);
+                return;
+            }
+        }
+    }
+}
+
+void SlintApp::HandleItemQueue(int kind, const std::string& path) {
+    if (path.empty()) return;
+    fs::path fp(path);
+    const std::vector<std::string> imageExts = { ".png", ".jpg", ".jpeg", ".webp", ".bmp" };
+
+    if (kind == 0) {
+        std::string title, author;
+        ReadSongMeta(path, title, author);
+        ServiceQueueEntry q;
+        q.tab   = 0;
+        q.path  = path;
+        q.kind  = "CANCIÓN";
+        q.title = title;
+        m_Queue.push_back(std::move(q));
+        m_Main->set_queue_category(0);
+        RefreshQueueModel();
+    } else if (kind == 1 || kind == 4) {
+        bool isImg = HasExtension(fp, imageExts);
+        VideoQueueEntry e;
+        e.title   = fp.stem().string();
+        e.path    = path;
+        e.kind    = isImg ? "Imagen" : (kind == 4 ? "Fondo" : "Video");
+        e.isImage = isImg;
+        m_VideoQueue.push_back(std::move(e));
+        m_Main->set_queue_category(1);
+        RefreshVideoQueueModel();
+    } else if (kind == 2) {
+        ServiceQueueEntry q;
+        q.tab   = 10;
+        q.path  = path;
+        q.kind  = "DOC";
+        q.title = fp.stem().string();
+        m_Queue.push_back(std::move(q));
+        m_Main->set_queue_category(0);
+        RefreshQueueModel();
+    } else if (kind == 3) {
+        ServiceQueueEntry q;
+        q.tab   = 9;
+        q.path  = path;
+        q.kind  = "MÚSICA";
+        q.title = fp.stem().string();
+        m_Queue.push_back(std::move(q));
+        m_Main->set_queue_category(0);
+        RefreshQueueModel();
+    } else if (kind == 5) {
+        OverlayQueueEntry oq;
+        oq.title = fp.stem().string();
+        oq.path  = path;
+        m_OverlayQueue.push_back(std::move(oq));
+        m_Main->set_queue_category(2);
+        RefreshOverlayQueueModel();
+    }
+}
+
+void SlintApp::HandleItemRename(int kind, const std::string& path, const std::string& rawNewName) {
+    if (path.empty()) return;
+    std::string displayTitle = rawNewName;
+    while (!displayTitle.empty() && displayTitle.front() == ' ') displayTitle.erase(displayTitle.begin());
+    while (!displayTitle.empty() && displayTitle.back() == ' ')  displayTitle.pop_back();
+    if (displayTitle.empty()) return;
+
+    fs::path oldFs(path);
+    std::error_code ec;
+    if (!fs::exists(oldFs, ec)) return;
+
+    std::string oldTitle, oldAuthor;
+    if (kind == 0) {
+        ReadSongMeta(path, oldTitle, oldAuthor);
+    }
+
+    std::string safeStem = SanitizeFilename(displayTitle);
+    std::string ext      = oldFs.extension().string();
+    fs::path newFs       = oldFs.parent_path() / (safeStem + ext);
+
+    bool wasPlayingVideo = false;
+    bool wasVideoLoop    = m_Main->get_media_loop();
+    bool wasVideoMuted   = m_Main->get_media_muted();
+    bool wasPlayingMusic = false;
+
+    if (m_HoverVideoPath == path) {
+        StopHoverVideoPreview();
+    }
+
+    if (newFs != oldFs) {
+        if (fs::exists(newFs, ec)) {
+            for (int n = 1; n < 1000; ++n) {
+                fs::path candidate = oldFs.parent_path() / (safeStem + "_" + std::to_string(n) + ext);
+                if (!fs::exists(candidate, ec)) {
+                    newFs = candidate;
+                    break;
+                }
+            }
+        }
+        if (m_HasVideoBg && m_CurrentBgPath == path) {
+            wasPlayingVideo = true;
+            m_Player.Stop();
+        }
+        if (m_CurrentMusicIdx >= 0 && m_CurrentMusicIdx < static_cast<int>(m_MusicEntries.size()) &&
+            m_MusicEntries[m_CurrentMusicIdx].path == path && m_Main->get_music_playing()) {
+            wasPlayingMusic = true;
+            m_MusicPlayer.Stop();
+        }
+
+        fs::rename(oldFs, newFs, ec);
+        if (ec) {
+            AppendDebugLog("Error al renombrar archivo: " + ec.message());
+            return;
+        }
+    }
+
+    std::string newPath  = newFs.string();
+    std::string newTitle = (kind == 0) ? displayTitle : newFs.stem().string();
+
+    // Update song metadata sidecar and playlists
+    if (kind == 0) {
+        if (newPath != path) {
+            std::string oldMetaName = oldFs.filename().string();
+            for (char& ch : oldMetaName) { if (ch == ':') ch = '_'; }
+            fs::path oldMetaPath = fs::path(ProyecThor::GetAssetsPath()) / "songs_meta" / (oldMetaName + ".json");
+            fs::remove(oldMetaPath, ec);
+        }
+        WriteSongMeta(newPath, displayTitle, oldAuthor);
+
+        bool plChanged = false;
+        for (auto& pl : m_SongPlaylists) {
+            for (auto& sp : pl.songPaths) {
+                if (sp == path) { sp = newPath; plChanged = true; }
+            }
+        }
+        if (plChanged) SaveSongPlaylists();
+        if (m_EditingSongPath == path) {
+            m_EditingSongPath = newPath;
+            m_Main->set_editor_song_title(slint::SharedString(displayTitle));
+        }
+    }
+
+    // Update queues, live screens, thumbnails and preview references
+    for (auto& q : m_Queue) {
+        if (q.path == path) { q.path = newPath; q.title = newTitle; }
+    }
+    for (auto& vq : m_VideoQueue) {
+        if (vq.path == path) { vq.path = newPath; vq.title = newTitle; }
+    }
+    for (auto& oq : m_OverlayQueue) {
+        if (oq.path == path) { oq.path = newPath; oq.title = newTitle; }
+    }
+    for (auto& sc : m_Screens) {
+        if (sc.bgPath == path)      { sc.bgPath = newPath;      sc.bgName = newTitle; }
+        if (sc.overlayPath == path) { sc.overlayPath = newPath; sc.overlayName = newTitle; }
+    }
+    if (m_CurrentBgPath == path)     m_CurrentBgPath = newPath;
+    if (m_ActiveOverlayPath == path) m_ActiveOverlayPath = newPath;
+    if (m_StaticSrcPath == path)     m_StaticSrcPath = newPath;
+    if (m_HasSelectedPreviewEntry && m_SelectedPreviewEntry.path == path) {
+        m_SelectedPreviewEntry.path  = newPath;
+        m_SelectedPreviewEntry.title = newTitle;
+        m_Main->set_selected_item_title(slint::SharedString(newTitle));
+        m_Main->set_selected_library_path(slint::SharedString(newPath));
+        m_Main->set_selected_media_info(slint::SharedString(
+            m_SelectedPreviewEntry.subtitle + " • " + newFs.filename().string()));
+    }
+    auto thIt = m_ThumbCache.find(path);
+    if (thIt != m_ThumbCache.end()) {
+        slint::Image img = thIt->second;
+        m_ThumbCache.erase(thIt);
+        m_ThumbCache[newPath] = img;
+    }
+
+    if (wasPlayingVideo) {
+        m_Player.Play(newPath, wasVideoLoop, wasVideoMuted);
+        ApplyShaders();
+    }
+    if (wasPlayingMusic) {
+        if (m_CurrentMusicIdx >= 0 && m_CurrentMusicIdx < static_cast<int>(m_MusicEntries.size())) {
+            m_MusicEntries[m_CurrentMusicIdx].path  = newPath;
+            m_MusicEntries[m_CurrentMusicIdx].title = newTitle;
+        }
+        m_MusicPlayer.Play(newPath, m_Main->get_music_loop(), false);
+        m_Main->set_music_now_playing(slint::SharedString(newTitle));
+        ApplyMusicEqualizer(true);
+    }
+
+    RefreshAllLibraryViewsAfterMutation(kind, newPath);
+    AppendDebugLog("Renombrado: " + oldFs.filename().string() + " -> " + newFs.filename().string());
+}
+
+void SlintApp::HandleItemDelete(int kind, const std::string& path) {
+    if (path.empty()) return;
+    fs::path targetFs(path);
+
+    if (m_HoverVideoPath == path) {
+        StopHoverVideoPreview();
+    }
+
+    // Stop & clear live layers referencing this file
+    for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+        if (m_Screens[i].bgPath == path)      RemoveLayerOnScreen(i, "bg");
+        if (m_Screens[i].overlayPath == path) RemoveLayerOnScreen(i, "overlay");
+    }
+    if (m_CurrentBgPath == path) {
+        m_Player.Stop();
+        m_HasVideoBg     = false;
+        m_HasStaticImage = false;
+        m_CurrentBgPath.clear();
+    }
+    if (m_ActiveOverlayPath == path) {
+        m_ActiveOverlayPath.clear();
+    }
+    if (m_CurrentMusicIdx >= 0 && m_CurrentMusicIdx < static_cast<int>(m_MusicEntries.size()) &&
+        m_MusicEntries[m_CurrentMusicIdx].path == path) {
+        RemoveLayerOnScreen(0, "music");
+    }
+    if (m_HasSelectedPreviewEntry && m_SelectedPreviewEntry.path == path) {
+        m_HasSelectedPreviewEntry = false;
+        m_Main->set_has_selected_media_preview(false);
+        m_Main->set_selected_media_info("");
+    }
+    if (m_EditingSongPath == path) {
+        m_EditingSongPath.clear();
+        m_Main->set_song_editor_open(false);
+    }
+    if (kind == 2 && std::string(m_Main->get_selected_library_path()) == path) {
+        m_DocPagePaths.clear();
+        m_DocPagesModel->clear();
+        m_ActiveDocPageIdx = -1;
+        m_Main->set_active_doc_page_idx(-1);
+        m_Main->set_doc_title("Documentos — Selecciona un PDF o imagen");
+        m_Main->set_doc_status("");
+    }
+
+    // Delete file on disk
+    std::error_code ec;
+    fs::remove(targetFs, ec);
+    if (ec) {
+        AppendDebugLog("Error al eliminar " + targetFs.filename().string() + ": " + ec.message());
+    }
+
+    // Remove song metadata & playlist links
+    if (kind == 0) {
+        std::string fname = targetFs.filename().string();
+        for (char& ch : fname) { if (ch == ':') ch = '_'; }
+        fs::path metaPath = fs::path(ProyecThor::GetAssetsPath()) / "songs_meta" / (fname + ".json");
+        fs::remove(metaPath, ec);
+
+        bool plChanged = false;
+        for (auto& pl : m_SongPlaylists) {
+            auto oldSz = pl.songPaths.size();
+            pl.songPaths.erase(std::remove(pl.songPaths.begin(), pl.songPaths.end(), path), pl.songPaths.end());
+            if (pl.songPaths.size() != oldSz) plChanged = true;
+        }
+        if (plChanged) {
+            SaveSongPlaylists();
+            RefreshSongPlaylistsModel();
+        }
+    }
+
+    // Remove from all queues and thumbnail cache
+    m_Queue.erase(std::remove_if(m_Queue.begin(), m_Queue.end(),
+        [&](const ServiceQueueEntry& q) { return q.path == path; }), m_Queue.end());
+
+    for (int i = static_cast<int>(m_VideoQueue.size()) - 1; i >= 0; --i) {
+        if (m_VideoQueue[i].path == path) {
+            m_VideoQueue.erase(m_VideoQueue.begin() + i);
+            if (m_VideoQueueCurrentIdx == i) {
+                m_VideoQueueCurrentIdx = -1;
+                m_VideoQueuePlaying    = false;
+                m_Main->set_video_queue_playing(false);
+            } else if (m_VideoQueueCurrentIdx > i) {
+                --m_VideoQueueCurrentIdx;
+            }
+        }
+    }
+    m_OverlayQueue.erase(std::remove_if(m_OverlayQueue.begin(), m_OverlayQueue.end(),
+        [&](const OverlayQueueEntry& oq) { return oq.path == path; }), m_OverlayQueue.end());
+    m_ThumbCache.erase(path);
+
+    RefreshAllLibraryViewsAfterMutation(kind, "");
+    AppendDebugLog("Archivo eliminado: " + targetFs.filename().string());
+}
+
+void SlintApp::RefreshAllLibraryViewsAfterMutation(int kind, const std::string& selectPathAfter) {
+    if (kind == 0)      m_CachedTabEntries.erase(0);
+    else if (kind == 1) m_CachedTabEntries.erase(2);
+    else if (kind == 2) m_CachedTabEntries.erase(10);
+
+    if (kind == 4) RefreshBgDock();
+    if (kind == 5) RefreshOverlayLayers();
+    if (kind == 3) {
+        std::string playingPath;
+        if (m_CurrentMusicIdx >= 0 && m_CurrentMusicIdx < static_cast<int>(m_MusicEntries.size())) {
+            playingPath = m_MusicEntries[m_CurrentMusicIdx].path;
+        }
+        ScanMusicTracks();
+        m_CurrentMusicIdx = -1;
+        if (!playingPath.empty() && m_Main->get_music_playing()) {
+            for (int i = 0; i < static_cast<int>(m_MusicEntries.size()); ++i) {
+                if (m_MusicEntries[i].path == playingPath) {
+                    m_CurrentMusicIdx = i;
+                    break;
+                }
+            }
+            RefreshMusicModel();
+        }
+    }
+
+    if ((kind == 0 && m_ActiveTab == 0) ||
+        (kind == 1 && m_ActiveTab == 2) ||
+        (kind == 2 && m_ActiveTab == 10)) {
+        LoadTabData(m_ActiveTab);
+        if (!selectPathAfter.empty()) {
+            for (int i = 0; i < static_cast<int>(m_FilteredIndices.size()); ++i) {
+                if (m_AllEntries[m_FilteredIndices[i]].path == selectPathAfter) {
+                    m_Main->set_selected_library_index(i);
+                    SelectLibraryItem(i);
+                    break;
+                }
+            }
+        }
+    }
+
+    RefreshQueueModel();
+    RefreshVideoQueueModel();
+    RefreshOverlayQueueModel();
+    RefreshLibraryHub();
     SyncScreenOutputs();
 }
 
@@ -6286,6 +6785,16 @@ void SlintApp::SyncLanFromScreenState() {
     }
 }
 
+void SlintApp::SyncLanStyleProperties() {
+    if (m_Screens.size() <= 1) return;
+    const auto& lan = m_Screens[1];
+    std::string stName = lan.textStyle.name.empty() ? "Predeterminado" : lan.textStyle.name;
+    std::string summary = stName + " · " + std::to_string(static_cast<int>(lan.textStyle.textSize)) + "px";
+    m_Main->set_lan_own_style(lan.useOwnStyle);
+    m_Main->set_lan_assigned_style_idx(lan.assignedStyleIdx);
+    m_Main->set_lan_style_summary(slint::SharedString(summary));
+}
+
 void SlintApp::SyncInspectedScreenToPreview() {
     if (m_Screens.empty()) return;
     int idx = std::clamp(m_InspectedScreenIdx, 0, static_cast<int>(m_Screens.size()) - 1);
@@ -6304,6 +6813,7 @@ void SlintApp::SyncInspectedScreenToPreview() {
 
     std::string styleLabel = st.name.empty() ? "Predeterminado" : st.name;
     m_Main->set_preview_style_name(slint::SharedString(styleLabel));
+    m_Main->set_preview_own_style(sc.id > 0 && sc.useOwnStyle);
     m_Main->set_preview_text_size(st.textSize);
     m_Main->set_preview_text_align(st.textAlign);
     m_Main->set_preview_text_valign(st.textValign);
@@ -6412,7 +6922,8 @@ void SlintApp::SyncScreenOutputs() {
         m_Stage->set_timer_text(showStgTimer ? slint::SharedString(activeClock) : "");
     }
 
-    // 4. Inspected Screen -> Vista en Vivo + Capas Activas + Matriz Multi-Pantalla
+    // 4. Inspected Screen -> Vista en Vivo + LAN Style Status + Capas Activas + Matriz Multi-Pantalla
+    SyncLanStyleProperties();
     SyncInspectedScreenToPreview();
     RefreshActiveLayersModel();
     RefreshScreenMatrixModel();
@@ -6564,7 +7075,9 @@ void SlintApp::RefreshScreenMatrixModel() {
         item.pleca_title    = slint::SharedString(sc.plecaTitle);
 
         std::string stName = st.name.empty() ? "Predeterminado" : st.name;
-        item.style_name       = slint::SharedString(stName);
+        item.style_name         = slint::SharedString(stName);
+        item.use_own_style      = sc.useOwnStyle;
+        item.assigned_style_idx = sc.assignedStyleIdx;
         item.text_size        = st.textSize;
         item.text_align       = st.textAlign;
         item.text_valign      = st.textValign;
@@ -6828,6 +7341,7 @@ void SlintApp::CreateExtraScreen(const std::string& rawName) {
     if (!m_Screens.empty()) {
         room.textStyle        = m_Screens[0].textStyle;
         room.assignedStyleIdx = m_Screens[0].assignedStyleIdx;
+        room.useOwnStyle      = false;
     }
     m_Screens.push_back(std::move(room));
 
@@ -6837,6 +7351,7 @@ void SlintApp::CreateExtraScreen(const std::string& rawName) {
     m_Main->set_output_target_mode(m_OutputTargetMode);
     SyncScreenOutputs();
     RefreshSavedStylesModel();
+    SavePersistedState();
     AppendDebugLog("Nueva sala creada: " + clean);
 }
 
@@ -6859,6 +7374,7 @@ void SlintApp::DeleteExtraScreen(int screenIdx) {
     }
     SyncScreenOutputs();
     RefreshSavedStylesModel();
+    SavePersistedState();
 }
 
 } // namespace ProyecThor::SlintUI

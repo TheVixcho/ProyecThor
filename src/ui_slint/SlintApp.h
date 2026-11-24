@@ -159,6 +159,7 @@ private:
 
         SavedTextStyle textStyle;
         int            assignedStyleIdx = -1; // -1 = personalizado/predeterminado, >=0 = índice en m_SavedStyles
+        bool           useOwnStyle      = false; // true = estilo independiente (no sigue ni afecta a Público)
     };
 
     void InitAssetsAndSplash();
@@ -205,9 +206,11 @@ private:
     void LoadCustomStyle(int idx);
     void DeleteCustomStyle(int idx);
     void SelectStyleTarget(int targetMode);
+    void SetScreenOwnStyle(int screenIdx, bool enabled);
     void ApplyCustomStyleToScreen(int styleIdx, int screenIdx);
     void ApplyStyleToScreen(int screenIdx, const SavedTextStyle& st, int styleIdx);
     void ApplyStyleToProjector(const SavedTextStyle& st);
+    void SyncLanStyleProperties();
     void SetScreenLiveText(ScreenOutputState& sc, const std::string& rawText, const std::string& rawRef, bool isBible);
     std::string ResolveStyleFontName(const SavedTextStyle& st, bool indexBox = false) const;
     std::string ResolveFontFilePath(const std::string& family) const;
@@ -291,8 +294,15 @@ private:
 
     // Documents (Tab 10 - PDF/Image pages)
     void ScanDocuments();
-    void OpenDocumentAsync(const std::string& path);
+    void OpenDocumentAsync(const std::string& path, bool autoProjectFirst = false);
     void ProjectDocPage(int pageIdx);
+
+    // Unified File / Library Item Management (Play, Queue, Rename, Delete)
+    void HandleItemPlay(int kind, const std::string& path);
+    void HandleItemQueue(int kind, const std::string& path);
+    void HandleItemRename(int kind, const std::string& path, const std::string& newName);
+    void HandleItemDelete(int kind, const std::string& path);
+    void RefreshAllLibraryViewsAfterMutation(int kind, const std::string& selectPathAfter = "");
 
     // Changelog, Debug & Firewall diagnostics
     void LoadChangelogText();

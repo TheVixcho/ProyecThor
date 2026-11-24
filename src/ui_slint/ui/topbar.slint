@@ -46,7 +46,7 @@ export component TopBar inherits Rectangle {
             spacing: 10px;
             alignment: start;
 
-            // Isla 1: Principal — Biblioteca (menú desplegable) y Capturadora (aparte)
+            // Isla 1: Biblioteca Directa (todos los botones de acceso en 1 clic, sin menú extra) + Capturadora
             ToolbarIsland {
                 y: (parent.height - self.height) / 2;
                 HorizontalLayout {
@@ -55,26 +55,98 @@ export component TopBar inherits Rectangle {
 
                     CircleIslandButton {
                         icon: @image-url("icons/folder.svg");
-                        tooltip: "Biblioteca";
+                        tooltip: "Biblioteca (Resumen General)";
                         accent-color: #38bdf8;
-                        active: root.library-menu-open || root.active-tab == 13 || root.active-tab == 0 || root.active-tab == 1 || root.active-tab == 2 || root.active-tab == 9 || root.active-tab == 10;
+                        active: root.active-tab == 13;
                         clicked => {
+                            root.library-menu-open = false;
                             root.design-menu-open = false;
                             root.net-menu-open = false;
                             root.scale-menu-open = false;
-                            root.library-menu-open = !root.library-menu-open;
+                            root.active-tab = 13;
+                        }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/music.svg");
+                        tooltip: "Canciones y Letras";
+                        accent-color: #38bdf8;
+                        active: root.active-tab == 0;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.scale-menu-open = false;
+                            root.active-tab = 0;
+                        }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/book.svg");
+                        tooltip: "Biblia";
+                        accent-color: #fbbf24;
+                        active: root.active-tab == 1;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.scale-menu-open = false;
+                            root.active-tab = 1;
+                        }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/film.svg");
+                        tooltip: "Multimedia (Videos e Imágenes)";
+                        accent-color: #ec4899;
+                        active: root.active-tab == 2;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.scale-menu-open = false;
+                            root.active-tab = 2;
+                        }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/headphones.svg");
+                        tooltip: "Música y Audio";
+                        accent-color: #22c55e;
+                        active: root.active-tab == 9;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.scale-menu-open = false;
+                            root.active-tab = 9;
+                        }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/file_text.svg");
+                        tooltip: "Documentos (PDF e Imágenes)";
+                        accent-color: #a78bfa;
+                        active: root.active-tab == 10;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.scale-menu-open = false;
+                            root.active-tab = 10;
                         }
                         hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
                     }
                     CircleIslandButton {
                         icon: @image-url("icons/camera.svg");
-                        tooltip: "Capturadora";
+                        tooltip: "Capturadora HDMI / Cámara";
                         accent-color: #f97316;
                         active: root.active-tab == 8;
                         clicked => {
                             root.library-menu-open = false;
                             root.design-menu-open = false;
                             root.net-menu-open = false;
+                            root.scale-menu-open = false;
                             root.active-tab = 8;
                         }
                         hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
