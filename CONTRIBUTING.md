@@ -1,41 +1,46 @@
-# Guía de Contribución a ProyecThor
-*(Contributing to ProyecThor)*
+# Contributing to ProyecThor
 
-¡Gracias por tu interés en contribuir a ProyecThor! Para mantener la estabilidad en vivo, la coherencia arquitectónica y el rendimiento crítico del software, seguimos un proceso ordenado para todas las contribuciones.
-
----
-
-## 1. Proceso antes de enviar código
-
-1. **Coordinación previa en Discord**: Antes de implementar una gran característica o refactorización, únete a la comunidad de desarrollo en Discord y presenta tu propuesta.
-2. **Revisión de Arquitectura**: Lee [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) para comprender la separación unidireccional entre el Core, Media (libVLC/OpenGL) y la interfaz de usuario (ImGui).
-3. **Licencias y SDKs**: Consulta [`docs/THIRD_PARTY_LICENSES.md`](./docs/THIRD_PARTY_LICENSES.md) si tu cambio involucra librerías de terceros.
+Thank you for your interest in contributing to **ProyecThor**! To maintain live-production stability, architectural clarity, and native performance, all contributions follow a structured workflow.
 
 ---
 
-## 2. Manifiesto y Política sobre el uso de Inteligencia Artificial
+## 1. Before You Start
 
-Si utilizas herramientas o asistentes de IA (LLMs, Copilot, etc.) en tu flujo de trabajo, **debes leer y cumplir obligatoriamente nuestro manifiesto**:
-
-👉 **[Manifiesto y Política de Uso de IA (`docs/AI_POLICY.md`)](./docs/AI_POLICY.md)**
-
-### Puntos clave:
-- **La IA es solo una herramienta más del montón**: La idea inicial, la base, la arquitectura y el diseño deben ser concebidos y organizados por un ser humano.
-- **Pruebas exhaustivas**: Todo código debe probarse en hardware real para garantizar cero caídas de frames, fugas de memoria o inestabilidades.
-- **Tolerancia cero al AI Slop**: PRs con código desatendido, hinchado o no comprendido por el autor serán rechazados inmediatamente. Quien desee usar IA de forma irresponsable puede crear un fork independiente bajo la licencia MIT.
+1. **Discuss First on Discord**: Before implementing a major feature, UI change, or refactor, join our development community on [Discord](https://discord.gg/FKqgPDZpBF) and share your proposal.
+2. **Review the Architecture**: Read [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) to understand the separation between the C++ Core, Media Engine (`libmpv` / OpenGL), and the **Slint** UI (`src/ui_slint`).
+3. **Check Third-Party Licenses**: Review [`THIRD-PARTY-NOTICES.md`](./THIRD-PARTY-NOTICES.md) and [`docs/THIRD_PARTY_LICENSES.md`](./docs/THIRD_PARTY_LICENSES.md) if your changes introduce or modify external dependencies.
 
 ---
 
-## 3. Pruebas y Compilación Local
+## 2. Pull Request Guidelines (English Required)
 
-Antes de abrir un Pull Request, asegúrate de que el proyecto compila limpiamente sin advertencias y se ejecuta sin errores:
+To keep the repository accessible to all contributors worldwide:
+
+- **Language**: All Pull Request titles, descriptions, commit messages, and code review discussions **must be written in English**.
+- **Scope**: Keep PRs focused on a single feature, fix, or improvement. Avoid unrelated formatting or file changes.
+- **Describe Clearly**: Include what changed, why it was needed, how it was tested (OS, GPU, Slint/libmpv behavior), and screenshots/videos for UI changes.
+- **No Unreviewed AI Slop**: Read [`docs/AI_POLICY.md`](./docs/AI_POLICY.md). Human-led architecture and real-hardware testing are mandatory.
+
+---
+
+## 3. Local Build & Verification
+
+Ensure the project builds cleanly without errors and runs reliably before opening a Pull Request:
 
 ```bash
-# En Linux
-cmake -B build-linux -G Ninja
+# Linux (Arch / CachyOS / Ubuntu / Debian)
+cmake -B build-linux -G Ninja -DCMAKE_BUILD_TYPE=Release
 ninja -C build-linux
 
-# En Windows
+# Windows (MSVC / Visual Studio 2022)
 cmake -B build-win -G "Visual Studio 17 2022" -A x64
 cmake --build build-win --config Release
 ```
+
+For the Slint UI target (`ProyecThorSlint`), ensure `PROYECTHOR_BUILD_SLINT=ON` (enabled by default) and the Slint C++ SDK is present in `src/vendor/sdk/`.
+
+---
+
+## 4. License
+
+By contributing to ProyecThor, you agree that your contributions will be licensed under the **MIT License** (see [`LICENSE`](./LICENSE)).
