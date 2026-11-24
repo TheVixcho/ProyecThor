@@ -1,7 +1,9 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -16,6 +18,8 @@ namespace ProyecThor::SlintUI {
 
 class SlintVideoPlayer {
 public:
+    using FrameReadyCallback = std::function<void()>;
+
     explicit SlintVideoPlayer(bool lazyInit = false);
     ~SlintVideoPlayer();
 
@@ -42,6 +46,14 @@ public:
     bool  IsPlaying() const { return m_Playing.load(); }
     bool  ConsumeEndReached();
 
+    void SetFrameReadyCallback(FrameReadyCallback cb);
+    void SetMaxFps(int fps);
+    void SetGpuBackend(int hwdecMode); // 0=Auto, 1=NVIDIA(nvdec/cuda), 2=D3D11VA, 3=VAAPI/Vulkan, 4=CPU
+    void SetUpscaler(int upscalerMode, float sharpness01, bool smoothMotion60);
+
+    std::string GetActiveHwdec() const;
+    double      GetSourceFps() const { return m_SourceFps.load(std::memory_order_relaxed); }
+
     void SetLowResMode(bool lowRes);
     void SetRenderSize(int width, int height);
     void SetAudioOnlyMode(bool audioOnly);
@@ -51,7 +63,7 @@ public:
     void SetAudioEqualizer(bool enabled, float bassDb, float midDb, float trebleDb);
     void SetMusicAudioFx(bool eqEnabled, bool dynamicEq, float b60, float b230, float b910, float b3600, float b12000);
 
-    // Renders latest frame into outImage if dirty; returns true when updated.
+    // Non-blocking O(1) swap of latest background-rendered frame into outImage.
     bool PollFrame(slint::Image& outImage);
 
     // Encodes the latest decoded RGBA frame into JPEG bytes for LAN streaming.
@@ -65,17 +77,64 @@ private:
     void InitMpv();
     void ShutdownMpv();
     void EventLoop();
+    void RenderWorkerLoop();
+    void ApplyHwdecOption();
+    void ApplyScalerOptions();
+    void RebuildVideoFilterChain();
     static void OnRenderUpdate(void* ctx);
 
     mpv_handle*         m_Mpv       = nullptr;
     mpv_render_context* m_RenderCtx = nullptr;
     std::thread         m_EventThread;
+    std::thread         m_RenderThread;
     std::atomic<bool>   m_Quit{false};
     bool                m_AudioOnly = false;
     int                 m_ScaleMode = 0;
 
-    std::atomic<bool>   m_FrameDirty{false};
-    std::atomic<bool>   m_ForceRedraw{false};
+    // GPU Hardware Decoder & Real-Time Upscaler state
+    std::atomic<int>    m_HwdecMode{0};     // 0=Auto, 1=NVIDIA, 2=D3D11VA, 3=VAAPI, 4=CPU
+    std::atomic<int>    m_UpscalerMode{2};  // 0=Off(Bilinear), 1=FSR1, 2=CAS+, 3=NVIDIA NIS, 4=LanczosHQ
+    std::atomic<float>  m_UpscalerSharpness{0.55f};
+    std::atomic<bool>   m_SmoothMotion60{false};
+    std::atomic<int>    m_MaxFps{60};
+    std::atomic<double> m_SourceFps{0.0};
+
+    // Cached color/shader params so RebuildVideoFilterChain merges Upscaler + Color Grading + Motion
+    int  m_FiltBrightness  = 0;
+    int  m_FiltContrast    = 0;
+    int  m_FiltSaturation  = 0;
+    int  m_FiltGamma       = 0;
+    bool m_FiltBlur        = false;
+    int  m_FiltColorPreset = 0;
+    std::mutex m_FilterMutex;
+
+    // Deduplication caches so switching videos never tears down/rebuilds NVDEC or lavfi needlessly
+    std::string m_LastHwdecApplied;
+    std::string m_LastSwsScalerApplied;
+    bool        m_LastSwsFastApplied   = false;
+    bool        m_HasSwsApplied        = false;
+    int         m_LastScaleModeApplied = -1;
+    std::string m_LastVfApplied;
+    std::string m_LastCacheApplied;
+    std::string m_LastLoopApplied;
+
+    mutable std::mutex  m_InfoMutex;
+    std::string         m_ActiveHwdec = "auto";
+
+    // Async Render Worker synchronization (mutex-guarded wake flag -> zero lost wakeups!)
+    std::mutex              m_RenderWakeMutex;
+    std::condition_variable m_RenderCv;
+    bool                    m_RenderWakeFlag = false;
+    std::atomic<bool>       m_ForceRedraw{false};
+    std::atomic<bool>       m_AcceptingFrames{false};
+
+    // Single-slot latest-frame mailbox (worker -> UI thread)
+    std::mutex                                    m_ReadyMutex;
+    slint::SharedPixelBuffer<slint::Rgba8Pixel>   m_ReadyBuffer;
+    bool                                          m_HasReadyFrame = false;
+    std::atomic<bool>                             m_UiNotifyPending{false};
+    FrameReadyCallback                            m_OnFrameReady;
+
     std::atomic<bool>   m_Playing{false};
     std::atomic<bool>   m_EndReached{false};
     std::atomic<bool>   m_Paused{false};

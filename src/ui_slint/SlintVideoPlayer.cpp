@@ -16,6 +16,27 @@ int64_t NowSteadyMs() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now().time_since_epoch()).count();
 }
+
+int64_t NowSteadyUs() {
+    return std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+const char* HwdecStringForMode(int mode) {
+    switch (mode) {
+        case 1: // NVIDIA Dedicated (NVDEC / CUDA / VDPAU / D3D11VA fallback)
+            return "nvdec-copy,cuda-copy,vdpau-copy,d3d11va-copy,dxva2-copy,auto-copy";
+        case 2: // Windows Direct3D 11 / DXVA2 (great for GT 710 & Intel UHD on Windows)
+            return "d3d11va-copy,dxva2-copy,nvdec-copy,auto-copy";
+        case 3: // Linux VAAPI / Vulkan (Intel UHD / AMD / Mesa)
+            return "vaapi-copy,vulkan-copy,nvdec-copy,auto-copy";
+        case 4: // Software CPU Only
+            return "no";
+        case 0:
+        default: // Smart Auto
+            return "auto-copy";
+    }
+}
 } // namespace
 
 SlintVideoPlayer::SlintVideoPlayer(bool lazyInit) {
@@ -28,10 +49,78 @@ SlintVideoPlayer::~SlintVideoPlayer() {
     ShutdownMpv();
 }
 
+void SlintVideoPlayer::SetFrameReadyCallback(FrameReadyCallback cb) {
+    std::lock_guard<std::mutex> lk(m_ReadyMutex);
+    m_OnFrameReady = std::move(cb);
+}
+
+void SlintVideoPlayer::SetMaxFps(int fps) {
+    m_MaxFps.store(std::clamp(fps, 15, 240), std::memory_order_relaxed);
+    {
+        std::lock_guard<std::mutex> lk(m_RenderWakeMutex);
+        m_RenderWakeFlag = true;
+    }
+    m_RenderCv.notify_one();
+}
+
+void SlintVideoPlayer::SetGpuBackend(int hwdecMode) {
+    m_HwdecMode.store(std::clamp(hwdecMode, 0, 4), std::memory_order_relaxed);
+    if (m_Mpv && !m_AudioOnly) {
+        ApplyHwdecOption();
+    }
+}
+
+void SlintVideoPlayer::SetUpscaler(int upscalerMode, float sharpness01, bool smoothMotion60) {
+    m_UpscalerMode.store(std::clamp(upscalerMode, 0, 4), std::memory_order_relaxed);
+    m_UpscalerSharpness.store(std::clamp(sharpness01, 0.0f, 1.0f), std::memory_order_relaxed);
+    m_SmoothMotion60.store(smoothMotion60, std::memory_order_relaxed);
+    if (m_Mpv && !m_AudioOnly) {
+        ApplyScalerOptions();
+        RebuildVideoFilterChain();
+        m_ForceRedraw.store(true, std::memory_order_release);
+        {
+            std::lock_guard<std::mutex> lk(m_RenderWakeMutex);
+            m_RenderWakeFlag = true;
+        }
+        m_RenderCv.notify_one();
+    }
+}
+
+std::string SlintVideoPlayer::GetActiveHwdec() const {
+    std::lock_guard<std::mutex> lk(m_InfoMutex);
+    return m_ActiveHwdec;
+}
+
 void SlintVideoPlayer::EnsureInit() {
     if (!m_Mpv) {
         InitMpv();
     }
+}
+
+void SlintVideoPlayer::ApplyHwdecOption() {
+    if (!m_Mpv || m_AudioOnly) return;
+    const std::string hw = HwdecStringForMode(m_HwdecMode.load(std::memory_order_relaxed));
+    if (hw == m_LastHwdecApplied) return;
+    m_LastHwdecApplied = hw;
+    mpv_set_property_string(m_Mpv, "hwdec", hw.c_str());
+}
+
+void SlintVideoPlayer::ApplyScalerOptions() {
+    if (!m_Mpv || m_AudioOnly) return;
+    const int upMode = m_UpscalerMode.load(std::memory_order_relaxed);
+    const bool swsFast = (upMode <= 0);
+    const std::string scaler = (upMode <= 0) ? "fast-bilinear"
+                             : (upMode == 1) ? "bicubic"
+                             : (upMode == 3) ? "spline"
+                             : "lanczos";
+    if (m_HasSwsApplied && swsFast == m_LastSwsFastApplied && scaler == m_LastSwsScalerApplied) {
+        return;
+    }
+    m_HasSwsApplied        = true;
+    m_LastSwsFastApplied   = swsFast;
+    m_LastSwsScalerApplied = scaler;
+    mpv_set_property_string(m_Mpv, "sws-fast", swsFast ? "yes" : "no");
+    mpv_set_property_string(m_Mpv, "sws-scaler", scaler.c_str());
 }
 
 void SlintVideoPlayer::InitMpv() {
@@ -39,12 +128,37 @@ void SlintVideoPlayer::InitMpv() {
     m_Mpv = mpv_create();
     if (!m_Mpv) return;
 
+    const unsigned int hwCores = std::max(1u, std::thread::hardware_concurrency());
+    m_LastHwdecApplied.clear();
+    m_LastSwsScalerApplied.clear();
+    m_HasSwsApplied        = false;
+    m_LastScaleModeApplied = -1;
+    m_LastVfApplied.clear();
+    m_LastCacheApplied.clear();
+    m_LastLoopApplied.clear();
+
     mpv_set_option_string(m_Mpv, "vo", m_AudioOnly ? "null" : "libmpv");
     if (m_AudioOnly) {
         mpv_set_option_string(m_Mpv, "vid", "no");
     } else {
-        mpv_set_option_string(m_Mpv, "hwdec", "auto-copy");
-        mpv_set_option_string(m_Mpv, "sws-fast", "yes");
+        const std::string hw = HwdecStringForMode(m_HwdecMode.load(std::memory_order_relaxed));
+        m_LastHwdecApplied = hw;
+        mpv_set_option_string(m_Mpv, "hwdec", hw.c_str());
+        mpv_set_option_string(m_Mpv, "hwdec-codecs", "all");
+        mpv_set_option_string(m_Mpv, "vd-lavc-dr", "yes");
+        mpv_set_option_string(m_Mpv, "vd-lavc-fast", "yes");
+        mpv_set_option_string(m_Mpv, "vd-lavc-framedrop", "nonref");
+        mpv_set_option_string(m_Mpv, "vd-lavc-threads", hwCores <= 2 ? "2" : "4");
+        mpv_set_option_string(m_Mpv, "correct-downscaling", "no");
+        mpv_set_option_string(m_Mpv, "sigmoid-upscaling", "no");
+        mpv_set_option_string(m_Mpv, "deband", "no");
+        mpv_set_option_string(m_Mpv, "interpolation", "no");
+        mpv_set_option_string(m_Mpv, "video-sync", "audio");
+        mpv_set_option_string(m_Mpv, "framedrop", "vo");
+        // Compact demuxer ring buffers so switching >2 videos never bloats RAM or stalls
+        mpv_set_option_string(m_Mpv, "demuxer-donate-buffer", "no");
+        mpv_set_option_string(m_Mpv, "demuxer-max-bytes", hwCores <= 2 ? "6MiB" : "12MiB");
+        mpv_set_option_string(m_Mpv, "demuxer-max-back-bytes", "2MiB");
     }
     mpv_set_option_string(m_Mpv, "keep-open", "no");
     mpv_set_option_string(m_Mpv, "idle", "yes");
@@ -61,8 +175,15 @@ void SlintVideoPlayer::InitMpv() {
     mpv_observe_property(m_Mpv, 2, "duration", MPV_FORMAT_DOUBLE);
     mpv_observe_property(m_Mpv, 3, "pause", MPV_FORMAT_FLAG);
     mpv_observe_property(m_Mpv, 4, "core-idle", MPV_FORMAT_FLAG);
+    mpv_observe_property(m_Mpv, 5, "container-fps", MPV_FORMAT_DOUBLE);
+    mpv_observe_property(m_Mpv, 6, "hwdec-current", MPV_FORMAT_STRING);
+
+    m_Quit.store(false);
 
     if (!m_AudioOnly) {
+        ApplyScalerOptions();
+        RebuildVideoFilterChain();
+
         mpv_render_param params[] = {
             { MPV_RENDER_PARAM_API_TYPE, const_cast<char*>(MPV_RENDER_API_TYPE_SW) },
             { MPV_RENDER_PARAM_INVALID, nullptr }
@@ -70,25 +191,35 @@ void SlintVideoPlayer::InitMpv() {
 
         if (mpv_render_context_create(&m_RenderCtx, m_Mpv, params) >= 0) {
             mpv_render_context_set_update_callback(m_RenderCtx, &SlintVideoPlayer::OnRenderUpdate, this);
+            m_RenderThread = std::thread(&SlintVideoPlayer::RenderWorkerLoop, this);
         }
         SetScaleMode(m_ScaleMode);
     }
 
-    m_Quit.store(false);
     m_EventThread = std::thread(&SlintVideoPlayer::EventLoop, this);
 }
 
 void SlintVideoPlayer::ShutdownMpv() {
-    m_Quit.store(true);
+    m_Quit.store(true, std::memory_order_release);
+    {
+        std::lock_guard<std::mutex> lk(m_RenderWakeMutex);
+        m_RenderWakeFlag = true;
+    }
+    m_RenderCv.notify_all();
     if (m_Mpv) {
         mpv_wakeup(m_Mpv);
+    }
+    if (m_RenderCtx) {
+        mpv_render_context_set_update_callback(m_RenderCtx, nullptr, nullptr);
+    }
+    if (m_RenderThread.joinable()) {
+        m_RenderThread.join();
     }
     if (m_EventThread.joinable()) {
         m_EventThread.join();
     }
     std::lock_guard<std::mutex> lock(m_RenderMutex);
     if (m_RenderCtx) {
-        mpv_render_context_set_update_callback(m_RenderCtx, nullptr, nullptr);
         mpv_render_context_free(m_RenderCtx);
         m_RenderCtx = nullptr;
     }
@@ -100,8 +231,102 @@ void SlintVideoPlayer::ShutdownMpv() {
 
 void SlintVideoPlayer::OnRenderUpdate(void* ctx) {
     auto* self = static_cast<SlintVideoPlayer*>(ctx);
-    if (self) {
-        self->m_FrameDirty.store(true, std::memory_order_release);
+    if (!self) return;
+    {
+        std::lock_guard<std::mutex> lk(self->m_RenderWakeMutex);
+        self->m_RenderWakeFlag = true;
+    }
+    self->m_RenderCv.notify_one();
+}
+
+void SlintVideoPlayer::RenderWorkerLoop() {
+    int64_t lastRenderUs = 0;
+
+    while (!m_Quit.load(std::memory_order_acquire)) {
+        {
+            std::unique_lock<std::mutex> lk(m_RenderWakeMutex);
+            m_RenderCv.wait_for(lk, std::chrono::milliseconds(16), [this]() {
+                return m_Quit.load(std::memory_order_acquire) ||
+                       m_RenderWakeFlag ||
+                       m_ForceRedraw.load(std::memory_order_acquire);
+            });
+            m_RenderWakeFlag = false;
+        }
+
+        if (m_Quit.load(std::memory_order_acquire)) break;
+
+        std::unique_lock<std::mutex> rLock(m_RenderMutex);
+        if (!m_RenderCtx) continue;
+
+        const bool force = m_ForceRedraw.exchange(false, std::memory_order_acq_rel);
+        const uint64_t flags = mpv_render_context_update(m_RenderCtx);
+
+        if (!m_AcceptingFrames.load(std::memory_order_acquire)) {
+            continue;
+        }
+        if (!force && !(flags & MPV_RENDER_UPDATE_FRAME)) {
+            continue;
+        }
+
+        // Jitter-tolerant FPS limiter (82% period threshold so a 60fps video at 60fps cap NEVER drops frames!)
+        const int maxFps = m_MaxFps.load(std::memory_order_relaxed);
+        const int64_t nowUs = NowSteadyUs();
+        if (!force && maxFps > 0) {
+            const int64_t minGapUs = (1000000LL / maxFps) * 82 / 100;
+            if (nowUs - lastRenderUs < minGapUs) {
+                continue;
+            }
+        }
+        lastRenderUs = nowUs;
+
+        const int w = m_TargetW;
+        const int h = m_TargetH;
+        const bool wantLanCopy = m_CaptureForLan.load(std::memory_order_relaxed);
+
+        slint::SharedPixelBuffer<slint::Rgba8Pixel> buffer(
+            static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+        int size[2] = { w, h };
+        size_t stride = static_cast<size_t>(w) * 4;
+        int blockForTargetTime = 0; // CRITICAL: never sleep 33ms inside mpv_render_context_render!
+
+        char fmt[] = "rgba";
+        mpv_render_param params[] = {
+            { MPV_RENDER_PARAM_SW_SIZE, size },
+            { MPV_RENDER_PARAM_SW_FORMAT, fmt },
+            { MPV_RENDER_PARAM_SW_STRIDE, &stride },
+            { MPV_RENDER_PARAM_SW_POINTER, buffer.begin() },
+            { MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME, &blockForTargetTime },
+            { MPV_RENDER_PARAM_INVALID, nullptr }
+        };
+
+        const int rc = mpv_render_context_render(m_RenderCtx, params);
+        if (rc < 0) {
+            continue;
+        }
+        mpv_render_context_report_swap(m_RenderCtx);
+
+        if (wantLanCopy) {
+            const size_t bytes = stride * static_cast<size_t>(h);
+            m_LanPixelBuf.resize(bytes);
+            std::memcpy(m_LanPixelBuf.data(), buffer.begin(), bytes);
+            m_LanBufW = w;
+            m_LanBufH = h;
+        }
+        rLock.unlock();
+
+        // Publish finished buffer to single-slot mailbox & wake UI event loop without queuing duplicates
+        FrameReadyCallback cbCopy;
+        {
+            std::lock_guard<std::mutex> lk(m_ReadyMutex);
+            m_ReadyBuffer   = std::move(buffer);
+            m_HasReadyFrame = true;
+            if (m_OnFrameReady && !m_UiNotifyPending.exchange(true, std::memory_order_acq_rel)) {
+                cbCopy = m_OnFrameReady;
+            }
+        }
+        if (cbCopy) {
+            cbCopy();
+        }
     }
 }
 
@@ -114,6 +339,13 @@ void SlintVideoPlayer::EventLoop() {
         if (ev->event_id == MPV_EVENT_START_FILE) {
             m_Playing.store(true);
             m_EndReached.store(false);
+        } else if (ev->event_id == MPV_EVENT_PLAYBACK_RESTART || ev->event_id == MPV_EVENT_VIDEO_RECONFIG) {
+            m_AcceptingFrames.store(true, std::memory_order_release);
+            {
+                std::lock_guard<std::mutex> lk(m_RenderWakeMutex);
+                m_RenderWakeFlag = true;
+            }
+            m_RenderCv.notify_one();
         } else if (ev->event_id == MPV_EVENT_END_FILE) {
             m_Playing.store(false);
             auto* ef = static_cast<mpv_event_end_file*>(ev->data);
@@ -133,6 +365,15 @@ void SlintVideoPlayer::EventLoop() {
                 m_LengthMs.store(static_cast<int64_t>(std::max(0.0, d) * 1000.0));
             } else if (ev->reply_userdata == 3 && prop->format == MPV_FORMAT_FLAG) {
                 m_Paused.store(*static_cast<int*>(prop->data) != 0);
+            } else if (ev->reply_userdata == 5 && prop->format == MPV_FORMAT_DOUBLE) {
+                double fps = *static_cast<double*>(prop->data);
+                if (fps > 0.0 && fps < 1000.0) {
+                    m_SourceFps.store(fps, std::memory_order_relaxed);
+                }
+            } else if (ev->reply_userdata == 6 && prop->format == MPV_FORMAT_STRING) {
+                const char* hwStr = *static_cast<char**>(prop->data);
+                std::lock_guard<std::mutex> lk(m_InfoMutex);
+                m_ActiveHwdec = (hwStr && hwStr[0] != '\0') ? hwStr : "software (CPU)";
             }
         }
     }
@@ -143,11 +384,29 @@ void SlintVideoPlayer::Play(const std::string& path, bool loop, bool muted) {
     EnsureInit();
     if (!m_Mpv) return;
 
-    mpv_set_property_string(m_Mpv, "cache", "auto");
-    mpv_set_property_string(m_Mpv, "loop-file", loop ? "inf" : "no");
+    m_AcceptingFrames.store(false, std::memory_order_release);
+    m_ForceRedraw.store(false, std::memory_order_release);
+    {
+        std::lock_guard<std::mutex> lk(m_ReadyMutex);
+        m_HasReadyFrame = false;
+    }
+
+    if (m_LastCacheApplied != "no") {
+        m_LastCacheApplied = "no";
+        mpv_set_property_string(m_Mpv, "cache", "no");
+    }
+    const char* loopStr = loop ? "inf" : "no";
+    if (m_LastLoopApplied != loopStr) {
+        m_LastLoopApplied = loopStr;
+        mpv_set_property_string(m_Mpv, "loop-file", loopStr);
+    }
     SetMute(muted);
     SetVolume(m_Volume.load());
-    if (!m_AudioOnly) SetScaleMode(m_ScaleMode);
+    if (!m_AudioOnly) {
+        ApplyHwdecOption();
+        ApplyScalerOptions();
+        SetScaleMode(m_ScaleMode);
+    }
 
     int pauseFlag = 0;
     mpv_set_property_async(m_Mpv, 0, "pause", MPV_FORMAT_FLAG, &pauseFlag);
@@ -163,11 +422,30 @@ void SlintVideoPlayer::PlayLiveStream(const std::string& uri, bool loop, bool mu
     EnsureInit();
     if (!m_Mpv) return;
 
-    mpv_set_property_string(m_Mpv, "cache", lowLatency ? "no" : "yes");
-    mpv_set_property_string(m_Mpv, "loop-file", loop ? "inf" : "no");
+    m_AcceptingFrames.store(false, std::memory_order_release);
+    m_ForceRedraw.store(false, std::memory_order_release);
+    {
+        std::lock_guard<std::mutex> lk(m_ReadyMutex);
+        m_HasReadyFrame = false;
+    }
+
+    const char* cacheStr = lowLatency ? "no" : "yes";
+    if (m_LastCacheApplied != cacheStr) {
+        m_LastCacheApplied = cacheStr;
+        mpv_set_property_string(m_Mpv, "cache", cacheStr);
+    }
+    const char* loopStr = loop ? "inf" : "no";
+    if (m_LastLoopApplied != loopStr) {
+        m_LastLoopApplied = loopStr;
+        mpv_set_property_string(m_Mpv, "loop-file", loopStr);
+    }
     SetMute(muted);
     SetVolume(m_Volume.load());
-    if (!m_AudioOnly) SetScaleMode(m_ScaleMode);
+    if (!m_AudioOnly) {
+        ApplyHwdecOption();
+        ApplyScalerOptions();
+        SetScaleMode(m_ScaleMode);
+    }
 
     int pauseFlag = 0;
     mpv_set_property_async(m_Mpv, 0, "pause", MPV_FORMAT_FLAG, &pauseFlag);
@@ -181,7 +459,13 @@ void SlintVideoPlayer::PlayLiveStream(const std::string& uri, bool loop, bool mu
 void SlintVideoPlayer::Stop() {
     if (!m_Mpv) return;
     m_EndReached.store(false);
-    m_FrameDirty.store(false, std::memory_order_release);
+    m_AcceptingFrames.store(false, std::memory_order_release);
+    m_ForceRedraw.store(false, std::memory_order_release);
+    {
+        std::lock_guard<std::mutex> lk(m_ReadyMutex);
+        m_HasReadyFrame = false;
+        m_ReadyBuffer   = slint::SharedPixelBuffer<slint::Rgba8Pixel>();
+    }
     const char* cmd[] = { "stop", nullptr };
     mpv_command_async(m_Mpv, 0, cmd);
     m_Playing.store(false);
@@ -248,10 +532,17 @@ void SlintVideoPlayer::SetLowResMode(bool lowRes) {
 }
 
 void SlintVideoPlayer::SetRenderSize(int width, int height) {
-    std::lock_guard<std::mutex> lock(m_RenderMutex);
-    m_TargetW = std::clamp(width, 64, 1920);
-    m_TargetH = std::clamp(height, 36, 1080);
+    {
+        std::lock_guard<std::mutex> lock(m_RenderMutex);
+        m_TargetW = std::clamp(width, 64, 3840);
+        m_TargetH = std::clamp(height, 36, 2160);
+    }
     m_ForceRedraw.store(true, std::memory_order_release);
+    {
+        std::lock_guard<std::mutex> lk(m_RenderWakeMutex);
+        m_RenderWakeFlag = true;
+    }
+    m_RenderCv.notify_one();
 }
 
 void SlintVideoPlayer::SetAudioOnlyMode(bool audioOnly) {
@@ -263,22 +554,25 @@ void SlintVideoPlayer::SetAudioOnlyMode(bool audioOnly) {
 void SlintVideoPlayer::SetScaleMode(int mode) {
     m_ScaleMode = std::clamp(mode, 0, 2);
     if (!m_Mpv || m_AudioOnly) return;
+    if (m_ScaleMode == m_LastScaleModeApplied) return;
+    m_LastScaleModeApplied = m_ScaleMode;
 
     if (m_ScaleMode == 0) {
-        // 0 = Recortar / Llenar (Cover — fills 100% without black bars, preserves aspect)
         mpv_set_property_string(m_Mpv, "keepaspect", "yes");
         mpv_set_property_string(m_Mpv, "panscan", "1.0");
     } else if (m_ScaleMode == 1) {
-        // 1 = Estirar (Fill — stretches video to 100% width x height)
         mpv_set_property_string(m_Mpv, "panscan", "0.0");
         mpv_set_property_string(m_Mpv, "keepaspect", "no");
     } else {
-        // 2 = Original / Ajustar (Contain — shows entire frame without cropping or stretching)
         mpv_set_property_string(m_Mpv, "panscan", "0.0");
         mpv_set_property_string(m_Mpv, "keepaspect", "yes");
     }
-    m_FrameDirty.store(true, std::memory_order_release);
     m_ForceRedraw.store(true, std::memory_order_release);
+    {
+        std::lock_guard<std::mutex> lk(m_RenderWakeMutex);
+        m_RenderWakeFlag = true;
+    }
+    m_RenderCv.notify_one();
 }
 
 void SlintVideoPlayer::SetLanCaptureEnabled(bool enabled) {
@@ -293,20 +587,56 @@ void SlintVideoPlayer::SetLanCaptureEnabled(bool enabled) {
 }
 
 void SlintVideoPlayer::SetVideoFilters(int brightness, int contrast, int saturation, int gamma, bool blur, int colorPreset, bool fsrSharpen) {
-    if (!m_Mpv) return;
+    {
+        std::lock_guard<std::mutex> lk(m_FilterMutex);
+        m_FiltBrightness  = brightness;
+        m_FiltContrast    = contrast;
+        m_FiltSaturation  = saturation;
+        m_FiltGamma       = gamma;
+        m_FiltBlur        = blur;
+        m_FiltColorPreset = colorPreset;
+    }
+    (void)fsrSharpen;
+    if (m_Mpv && !m_AudioOnly) {
+        RebuildVideoFilterChain();
+    }
+}
+
+void SlintVideoPlayer::RebuildVideoFilterChain() {
+    if (!m_Mpv || m_AudioOnly) return;
+
+    int brightness = 0, contrast = 0, saturation = 0, gamma = 0, colorPreset = 0;
+    bool blur = false;
+    {
+        std::lock_guard<std::mutex> lk(m_FilterMutex);
+        brightness  = m_FiltBrightness;
+        contrast    = m_FiltContrast;
+        saturation  = m_FiltSaturation;
+        gamma       = m_FiltGamma;
+        blur        = m_FiltBlur;
+        colorPreset = m_FiltColorPreset;
+    }
 
     int b = std::clamp(brightness, -50, 50);
     int c = std::clamp(contrast, -50, 50);
     int s = std::clamp(saturation, -100, 100);
     int g = std::clamp(gamma, -50, 50);
 
-    // Apply color grading preset adjustments
+    const int   upMode   = m_UpscalerMode.load(std::memory_order_relaxed);
+    const float sharp01  = m_UpscalerSharpness.load(std::memory_order_relaxed);
+    const bool  smooth60 = m_SmoothMotion60.load(std::memory_order_relaxed);
+
     std::string vf;
     auto appendVf = [&vf](const std::string& f) {
         if (f.empty()) return;
         if (!vf.empty()) vf += ",";
         vf += f;
     };
+
+    // Optional real-time 24/25/30 -> 60 FPS frame interpolation (slice-multithreaded lavfi framerate)
+    if (smooth60) {
+        appendVf("framerate=fps=60");
+    }
 
     if (colorPreset == 1) { // Cálido
         appendVf("colorbalance=rs=0.14:gs=0.04:bs=-0.14");
@@ -323,7 +653,6 @@ void SlintVideoPlayer::SetVideoFilters(int brightness, int contrast, int saturat
         s = std::clamp(s + 24, -100, 100);
     }
 
-    // Use real FFmpeg lavfi eq filter so brightness/contrast/saturation/gamma ALWAYS apply in SW libmpv!
     if (b != 0 || c != 0 || s != 0 || g != 0) {
         float eqB = std::clamp(b / 100.0f, -0.5f, 0.5f);
         float eqC = std::clamp(1.0f + c / 50.0f, 0.2f, 2.5f);
@@ -337,19 +666,39 @@ void SlintVideoPlayer::SetVideoFilters(int brightness, int contrast, int saturat
 
     if (blur) {
         appendVf("gblur=sigma=8");
+    } else if (upMode > 0 && sharp01 > 0.01f) {
+        char shBuf[192];
+        if (upMode == 1) {
+            // Mode 1: AMD FSR 1.0 (RCAS mild unsharp)
+            float amt = std::clamp(0.25f + sharp01 * 0.75f, 0.1f, 1.2f);
+            std::snprintf(shBuf, sizeof(shBuf), "unsharp=5:5:%.2f:5:5:0.0", amt);
+            appendVf(shBuf);
+        } else if (upMode == 2) {
+            // Mode 2: AMD FidelityFX CAS+ (slice-multithreaded Contrast Adaptive Sharpen — zero ringing!)
+            float str = std::clamp(sharp01 * 0.92f, 0.05f, 1.0f);
+            std::snprintf(shBuf, sizeof(shBuf), "cas=strength=%.2f", str);
+            appendVf(shBuf);
+        } else if (upMode == 3) {
+            // Mode 3: NVIDIA Image Scaling — NIS (Spline directional upscale + adaptive contrast + fine 3x3 detail)
+            float casStr = std::clamp(0.18f + sharp01 * 0.68f, 0.10f, 0.95f);
+            float fineAmt = std::clamp(0.12f + sharp01 * 0.42f, 0.05f, 0.65f);
+            std::snprintf(shBuf, sizeof(shBuf), "cas=strength=%.2f,unsharp=3:3:%.2f:3:3:0.0", casStr, fineAmt);
+            appendVf(shBuf);
+        } else if (upMode == 4) {
+            // Mode 4: EWA LanczosHQ + Cinema Super-Resolution (best for 1080p -> 2160p 4K)
+            float casStr = std::clamp(0.22f + sharp01 * 0.72f, 0.10f, 0.98f);
+            float fineAmt = std::clamp(0.10f + sharp01 * 0.30f, 0.05f, 0.50f);
+            std::snprintf(shBuf, sizeof(shBuf), "cas=strength=%.2f,unsharp=3:3:%.2f:3:3:0.0", casStr, fineAmt);
+            appendVf(shBuf);
+        }
     }
 
-    if (fsrSharpen) {
-        // Contrast-adaptive unsharp pass complementing FSR/Lanczos scaling
-        appendVf("unsharp=5:5:0.75:5:5:0.0");
+    std::string finalVf = vf.empty() ? "" : ("lavfi=[" + vf + "]");
+    if (finalVf == m_LastVfApplied) {
+        return;
     }
-
-    if (vf.empty()) {
-        mpv_set_property_string(m_Mpv, "vf", "");
-    } else {
-        std::string lavfi = "lavfi=[" + vf + "]";
-        mpv_set_property_string(m_Mpv, "vf", lavfi.c_str());
-    }
+    m_LastVfApplied = finalVf;
+    mpv_set_property_string(m_Mpv, "vf", finalVf.c_str());
 }
 
 void SlintVideoPlayer::SetAudioEqualizer(bool enabled, float bassDb, float midDb, float trebleDb) {
@@ -383,7 +732,6 @@ void SlintVideoPlayer::SetMusicAudioFx(bool eqEnabled, bool dynamicEq,
         af += f;
     };
 
-    // Real-time 5-band parametric equalizer (applied when EQ or Dynamic EQ is active)
     auto cl = [](float v) { return std::clamp(v, -12.0f, 12.0f); };
     if (eqEnabled || dynamicEq) {
         char eqBuf[512];
@@ -397,7 +745,6 @@ void SlintVideoPlayer::SetMusicAudioFx(bool eqEnabled, bool dynamicEq,
         appendAf(eqBuf);
     }
 
-    // ProyecThor Dynamic EQ DSP: real-time adaptive loudness & smooth peak control
     if (dynamicEq) {
         appendAf("dynaudnorm=f=150:g=15:p=0.90:m=5.0:s=10");
     }
@@ -407,49 +754,20 @@ void SlintVideoPlayer::SetMusicAudioFx(bool eqEnabled, bool dynamicEq,
 }
 
 bool SlintVideoPlayer::PollFrame(slint::Image& outImage) {
-    const bool force = m_ForceRedraw.exchange(false, std::memory_order_acq_rel);
-    const bool dirty = m_FrameDirty.exchange(false, std::memory_order_acq_rel);
-    if (!m_RenderCtx || (!dirty && !force)) {
+    slint::SharedPixelBuffer<slint::Rgba8Pixel> ready;
+    {
+        std::lock_guard<std::mutex> lk(m_ReadyMutex);
+        m_UiNotifyPending.store(false, std::memory_order_release);
+        if (!m_HasReadyFrame) {
+            return false;
+        }
+        ready = std::move(m_ReadyBuffer);
+        m_HasReadyFrame = false;
+    }
+    if (ready.width() == 0 || ready.height() == 0) {
         return false;
     }
-
-    std::lock_guard<std::mutex> lock(m_RenderMutex);
-    if (!m_RenderCtx) return false;
-
-    uint64_t flags = mpv_render_context_update(m_RenderCtx);
-    if (!force && !(flags & MPV_RENDER_UPDATE_FRAME)) {
-        return false;
-    }
-
-    // Zero-copy direct render into Slint pixel buffer!
-    slint::SharedPixelBuffer<slint::Rgba8Pixel> buffer(
-        static_cast<uint32_t>(m_TargetW), static_cast<uint32_t>(m_TargetH));
-    int size[2] = { m_TargetW, m_TargetH };
-    size_t stride = static_cast<size_t>(m_TargetW) * 4;
-
-    char fmt[] = "rgba";
-    mpv_render_param params[] = {
-        { MPV_RENDER_PARAM_SW_SIZE, size },
-        { MPV_RENDER_PARAM_SW_FORMAT, fmt },
-        { MPV_RENDER_PARAM_SW_STRIDE, &stride },
-        { MPV_RENDER_PARAM_SW_POINTER, buffer.begin() },
-        { MPV_RENDER_PARAM_INVALID, nullptr }
-    };
-
-    if (mpv_render_context_render(m_RenderCtx, params) < 0) {
-        return false;
-    }
-
-    // Only keep a copy of RGBA bytes when Video LAN encoding is actively turned ON
-    if (m_CaptureForLan.load(std::memory_order_relaxed)) {
-        size_t bytes = stride * static_cast<size_t>(m_TargetH);
-        m_LanPixelBuf.resize(bytes);
-        std::memcpy(m_LanPixelBuf.data(), buffer.begin(), bytes);
-        m_LanBufW = m_TargetW;
-        m_LanBufH = m_TargetH;
-    }
-
-    outImage = slint::Image(buffer);
+    outImage = slint::Image(ready);
     return true;
 }
 

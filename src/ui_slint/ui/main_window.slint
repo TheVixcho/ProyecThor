@@ -3,6 +3,7 @@ import { Theme } from "theme.slint";
 import { GlassCard, GlassButton, IconButton, IslandIconButton, ItemRowActionBtn, ItemMoreBtn, SlideTile, SwitchRow, PadTile, ThemeSwatchButton, StyleGalleryCard, StyleScreenTarget, ScrubBar } from "components.slint";
 import { TopBar } from "topbar.slint";
 import { StyledTextBlock } from "projector_window.slint";
+import { AppleSettingsView } from "settings_view.slint";
 export { Theme } from "theme.slint";
 export { ProjectorWindow, StageWindow } from "projector_window.slint";
 export { SplashWindow } from "splash_window.slint";
@@ -273,7 +274,8 @@ export component MainWindow inherits Window {
     in-out property <bool> audience-frozen: false;
     in-out property <bool> scale-menu-open: false;
     in-out property <int> bg-scale-mode: 0; // 0=Recortar/Llenar, 1=Estirar, 2=Original
-    in-out property <int> output-res-preset: 1; // 0=720p, 1=1080p, 2=16:10, 3=4:3
+    in-out property <int> output-res-preset: 1; // 0=720p, 1=1080p, 2=16:10, 3=4:3, 4=2160p
+    in-out property <int> target-fps: 60; // 30, 60, 120
     in property <bool> bg-is-static-image: false;
     in property <string> live-text: "";
     in property <string> live-ref: "";
@@ -288,7 +290,7 @@ export component MainWindow inherits Window {
     in-out property <bool> bg-new-folder-open: false;
     in-out property <string> bg-new-folder-name: "";
     in property <[LibraryItem]> overlay-layer-items: [];
-    in-out property <int> bg-dock-tab: 0; // Capas panel: 0=Fondos, 1=Overlays PNG, 2=Color/Lower-Third
+    in-out property <int> bg-dock-tab: 0; // Contenido panel: 0=Fondos, 1=Overlays PNG, 2=Estilos rápidos
     in-out property <bool> bg-dock-expanded: true;
     in-out property <string> custom-overlay-title: "";
     in-out property <string> custom-overlay-sub: "";
@@ -324,6 +326,7 @@ export component MainWindow inherits Window {
     in-out property <bool> text-underline: false;
     in-out property <bool> text-uppercase: false;
     in-out property <bool> text-box-bg: false;
+    in-out property <int> text-fit-mode: 0; // 0=Normal, 1=Auto-Achicar si no cabe, 2=Auto-Cortar en bloques
     in-out property <float> text-margin-h: 64.0;
     in-out property <float> lyrics-pos-x: 0.5;
     in-out property <float> lyrics-pos-y: 0.5;
@@ -371,7 +374,7 @@ export component MainWindow inherits Window {
     in-out property <int> hovered-library-index: -1;
     in-out property <int> hovered-dock-index: -1;
     in property <image> hover-video-frame;
-    in property <bool> has-hover-video-frame: false;
+    in-out property <bool> has-hover-video-frame: false;
     in property <[VideoQueueItem]> video-queue-items: [];
     in-out property <bool> video-queue-playing: false;
     in-out property <bool> video-queue-loop: false;
@@ -445,6 +448,7 @@ export component MainWindow inherits Window {
     in property <bool> preview-text-3d: false;
     in property <bool> preview-text-underline: false;
     in property <bool> preview-text-box-bg: false;
+    in property <int> preview-text-fit-mode: 0;
     in property <float> preview-lyrics-pos-x: 0.5;
     in property <float> preview-lyrics-pos-y: 0.5;
     in property <float> preview-lyrics-width: 0.90;
@@ -560,6 +564,11 @@ export component MainWindow inherits Window {
 
     // Tab 12: Consola Debug
     in property <string> debug-stats: "";
+    in property <string> debug-fps-text: "0.0";
+    in property <string> debug-video-fps-text: "Sin video";
+    in property <string> debug-cpu-text: "0.0%";
+    in property <string> debug-ram-text: "0.0 MB";
+    in property <string> debug-peak-ram-text: "Pico 0.0 MB";
     in property <string> debug-paths: "";
     in property <string> debug-log: "";
 
@@ -583,11 +592,20 @@ export component MainWindow inherits Window {
     in-out property <string> osc-args: "1";
     in property <string> osc-status: "Listo para enviar mensajes OSC (QLC+, grandMA, Resolume, TouchOSC)";
 
-    // Settings, Themes & Updater
+    // Settings, Themes, GPU/NVENC, Upscalers & Updater
     in-out property <int> active-theme-idx: 0;
     in-out property <bool> fsr-enabled: true;
+    in-out property <int> gpu-hwdec-mode: 0;        // 0=Auto, 1=NVIDIA(NVDEC/CUDA), 2=D3D11VA, 3=VAAPI/Vulkan, 4=CPU
+    in-out property <bool> nvenc-enabled: false;
+    in property <string> gpu-status-label: "Detectando aceleración de hardware GPU...";
+    in-out property <int> upscaler-mode: 2;         // 0=Off(Bilinear), 1=FSR 1.0, 2=FidelityFX CAS+, 3=NVIDIA NIS, 4=LanczosHQ 4K
+    in-out property <float> upscaler-sharpness: 55.0; // 0..100%
+    in-out property <bool> smooth-motion-60: false; // Interpolación 24/30 -> 60 FPS
     in-out property <bool> performance-mode: false;
     in-out property <bool> fullscreen-output: true;
+    in-out property <bool> enable-glass-translucency: true;
+    in-out property <bool> enable-glass-sheen: true;
+    in-out property <bool> enable-ambient-bg: true;
     in property <string> update-status: "Listo para comprobar en GitHub Releases (TheVixcho/ProyecThor)";
 
     // ── Callbacks to C++ Core ──
@@ -652,6 +670,7 @@ export component MainWindow inherits Window {
     callback toggle-freeze();
     callback scale-mode-changed(int);
     callback output-res-changed(int);
+    callback target-fps-changed(int);
     callback scan-libraries();
     callback bg-folder-entered(string);
     callback bg-folder-up();
@@ -788,9 +807,14 @@ export component MainWindow inherits Window {
     callback custom-overlay-toggled(string, string, bool);
     callback open-legacy-imgui();
     callback fsr-changed(bool);
+    callback gpu-config-changed();
+    callback apply-low-spec-preset();
+    callback purge-ram-cache();
     callback performance-mode-changed(bool);
     callback fullscreen-changed(bool);
+    callback visual-effects-changed();
     callback check-github-updates();
+    callback open-kofi-donations();
 
     // Unified Library File Management (Play/Screen, Queue, Rename, Delete)
     callback item-action-play(int, string);
@@ -871,8 +895,17 @@ export component MainWindow inherits Window {
             return reject;
         }
 
+        // Ambient Liquid Glass depth backdrop (toggleable in Ajustes > Apariencia)
+        Rectangle {
+            width: 100%;
+            height: 100%;
+            background: root.enable-ambient-bg
+                ? @linear-gradient(135deg, Theme.accent.transparentize(0.90) 0%, Theme.bg-root 42%, Theme.accent-strong.transparentize(0.93) 100%)
+                : Theme.bg-root;
+        }
+
         VerticalLayout {
-            // ── Top Floating Bar (ImGui-style islands + circular buttons) ──
+            // ── Top Floating Bar (Apple Liquid Glass islands + circular buttons) ──
         topbar := TopBar {
             active-tab <=> root.active-tab;
             design-subtab <=> root.design-subtab;
@@ -893,18 +926,19 @@ export component MainWindow inherits Window {
             toggle-freeze => { root.toggle-freeze(); }
             clear-all => { root.clear-all(); }
             scan-libraries => { root.scan-libraries(); }
+            open-kofi-donations => { root.open-kofi-donations(); }
         }
 
-        // ── Main 3-Column Workspace ──
+        // ── Main 3-Column Workspace (Full-Screen when Style Editor or Settings is active) ──
         HorizontalLayout {
-            padding: 10px;
-            spacing: 10px;
+            padding: root.active-tab == 7 ? 6px : 10px;
+            spacing: root.active-tab == 7 ? 0px : 10px;
             vertical-stretch: 1;
 
             // ═════════════════════════════════════════════════════════════════
-            //  COLUMN 1: LIBRARY SIDEBAR + PANEL DE CAPAS (Fondos, Overlays, Notas)
+            //  COLUMN 1: LIBRARY SIDEBAR + PANEL DE CONTENIDO (Fondos, Overlays, Estilos)
             // ═════════════════════════════════════════════════════════════════
-            if !root.is-style-editor-active : VerticalLayout {
+            if !root.is-style-editor-active && root.active-tab != 7 : VerticalLayout {
                 width: 306px;
                 spacing: 10px;
 
@@ -1178,9 +1212,11 @@ export component MainWindow inherits Window {
                                         }
                                         changed has-hover => {
                                             if (self.has-hover) {
+                                                root.has-hover-video-frame = false;
                                                 root.hovered-library-index = idx;
                                                 root.library-item-hovered(idx);
                                             } else if (root.hovered-library-index == idx) {
+                                                root.has-hover-video-frame = false;
                                                 root.hovered-library-index = -1;
                                                 root.library-item-hovered(-1);
                                             }
@@ -1270,7 +1306,7 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // ── Left Bottom Card: CAPAS (Fondos en Bucle | Overlays PNG | Notas y Avisos) ──
+                // ── Left Bottom Card: CONTENIDO (Fondos en Bucle | Overlays PNG | Estilos Rápidos) ──
                 GlassCard {
                     vertical-stretch: 1;
 
@@ -1278,7 +1314,7 @@ export component MainWindow inherits Window {
                         padding: 11px;
                         spacing: 8px;
 
-                        // Capas Header + Quick Import / Clear
+                        // Contenido Header + Quick Import / Clear
                         HorizontalLayout {
                             alignment: space-between;
                             HorizontalLayout {
@@ -1291,7 +1327,7 @@ export component MainWindow inherits Window {
                                     colorize: Theme.accent-strong;
                                 }
                                 Text {
-                                    text: "Capas";
+                                    text: "Contenido";
                                     color: Theme.text-primary;
                                     font-size: 13px;
                                     font-weight: 700;
@@ -1310,19 +1346,18 @@ export component MainWindow inherits Window {
                                         else { root.import-overlay-clicked(); }
                                     }
                                 }
-                                IconButton {
+                                if root.bg-dock-tab == 0 || root.bg-dock-tab == 1 : IconButton {
                                     icon: @image-url("icons/trash.svg");
                                     danger: true;
                                     clicked => {
                                         if (root.bg-dock-tab == 1) { root.clear-overlay(); }
-                                        else if (root.bg-dock-tab == 2) { root.clear-alerts(); }
                                         else { root.clear-background(); }
                                     }
                                 }
                             }
                         }
 
-                        // 3 Layer Category Tabs: Fondos | Overlays | Notas
+                        // 3 Contenido Category Tabs: Fondos | Overlays | Estilos
                         HorizontalLayout {
                             spacing: 4px;
                             Rectangle {
@@ -1370,7 +1405,7 @@ export component MainWindow inherits Window {
                                 border-color: root.bg-dock-tab == 2 ? Theme.accent-strong : Theme.border-subtle;
                                 animate background { duration: 120ms; }
                                 Text {
-                                    text: "Notas";
+                                    text: "Estilos (" + root.saved-style-cards.length + ")";
                                     color: root.bg-dock-tab == 2 ? Theme.accent-fg : Theme.text-secondary;
                                     font-size: 10.5px;
                                     font-weight: 700;
@@ -1520,9 +1555,11 @@ export component MainWindow inherits Window {
                                             }
                                             changed has-hover => {
                                                 if (self.has-hover) {
+                                                    root.has-hover-video-frame = false;
                                                     root.hovered-dock-index = bidx;
                                                     root.dock-bg-hovered(bidx);
                                                 } else if (root.hovered-dock-index == bidx) {
+                                                    root.has-hover-video-frame = false;
                                                     root.hovered-dock-index = -1;
                                                     root.dock-bg-hovered(-1);
                                                 }
@@ -1700,63 +1737,240 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // Capas Tab 2: Notas Rápidas / Avisos Animados + Pleca + Colores Rápidos
+                        // Contenido Tab 2: Selector Rápido de Estilos Guardados (sin editor/creación)
                         if root.bg-dock-tab == 2 : ScrollView {
                             vertical-stretch: 1;
                             VerticalLayout {
-                                spacing: 8px;
+                                alignment: start;
+                                spacing: 7px;
                                 padding-right: 4px;
 
-                                Text { text: "Avisos en Pantalla (Letreros Animados)"; color: Theme.text-primary; font-size: 11.5px; font-weight: 700; }
-                                LineEdit { placeholder-text: "Ej: Atención patente AB-1234 / Quedan 2 min..."; text <=> root.alert-input; }
+                                // Selector rápido de pantalla destino
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
 
-                                HorizontalLayout {
-                                    spacing: 4px;
-                                    GlassButton { label: "Fijo";     compact: true; horizontal-stretch: 1; primary: root.alert-anim-mode == 0; clicked => { root.alert-anim-mode = 0; root.alert-config-changed(); } }
-                                    GlassButton { label: "Letrero";  compact: true; horizontal-stretch: 1; primary: root.alert-anim-mode == 1; clicked => { root.alert-anim-mode = 1; root.alert-config-changed(); } }
-                                    GlassButton { label: "Deslizar"; compact: true; horizontal-stretch: 1; primary: root.alert-anim-mode == 2; clicked => { root.alert-anim-mode = 2; root.alert-config-changed(); } }
-                                    GlassButton { label: "Pulso";    compact: true; horizontal-stretch: 1; primary: root.alert-anim-mode == 3; clicked => { root.alert-anim-mode = 3; root.alert-config-changed(); } }
-                                }
-                                HorizontalLayout {
-                                    spacing: 4px;
-                                    GlassButton { label: "Abajo";  compact: true; horizontal-stretch: 1; primary: root.alert-position == 0; clicked => { root.alert-position = 0; root.alert-config-changed(); } }
-                                    GlassButton { label: "Arriba"; compact: true; horizontal-stretch: 1; primary: root.alert-position == 1; clicked => { root.alert-position = 1; root.alert-config-changed(); } }
-                                    GlassButton { label: "Osc";    compact: true; horizontal-stretch: 1; primary: root.alert-theme == 0; clicked => { root.alert-theme = 0; root.alert-config-changed(); } }
-                                    GlassButton { label: "Rojo";   compact: true; horizontal-stretch: 1; primary: root.alert-theme == 1; clicked => { root.alert-theme = 1; root.alert-config-changed(); } }
-                                    GlassButton { label: "Ámbar";  compact: true; horizontal-stretch: 1; primary: root.alert-theme == 2; clicked => { root.alert-theme = 2; root.alert-config-changed(); } }
-                                    GlassButton { label: "Azul";   compact: true; horizontal-stretch: 1; primary: root.alert-theme == 3; clicked => { root.alert-theme = 3; root.alert-config-changed(); } }
-                                }
-                                HorizontalLayout {
-                                    spacing: 5px;
-                                    GlassButton { label: "Enviar Aviso"; compact: true; horizontal-stretch: 1; primary: true; clicked => { root.send-public-alert(root.alert-input); } }
-                                    GlassButton { label: "A Stage";      compact: true; horizontal-stretch: 1; clicked => { root.send-stage-alert(root.alert-input); } }
-                                    GlassButton { label: "Quitar";       compact: true; danger: true; clicked => { root.clear-alerts(); } }
-                                }
-
-                                Rectangle { height: 1px; background: Theme.border-subtle; }
-
-                                Text { text: "Pleca / Lower-Third"; color: Theme.text-secondary; font-size: 11px; font-weight: 700; }
-                                LineEdit { placeholder-text: "Título (ej. Pastor Juan Pérez)"; text <=> root.custom-overlay-title; }
-                                LineEdit { placeholder-text: "Subtítulo (ej. Mensaje del Domingo)"; text <=> root.custom-overlay-sub; }
-                                GlassButton {
-                                    label: root.custom-overlay-active ? "Ocultar Pleca" : "Mostrar Pleca";
-                                    compact: true;
-                                    primary: !root.custom-overlay-active;
-                                    danger: root.custom-overlay-active;
-                                    clicked => {
-                                        root.custom-overlay-active = !root.custom-overlay-active;
-                                        root.custom-overlay-toggled(root.custom-overlay-title, root.custom-overlay-sub, root.custom-overlay-active);
+                                    VerticalLayout {
+                                        padding: 7px;
+                                        spacing: 5px;
+                                        Text {
+                                            text: "Enviar estilo a:";
+                                            color: Theme.text-muted;
+                                            font-size: 10px;
+                                            font-weight: 700;
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 4px;
+                                            GlassButton {
+                                                label: "Todas";
+                                                compact: true;
+                                                horizontal-stretch: 1;
+                                                primary: root.style-target-mode == 0;
+                                                clicked => { root.select-style-target(0); }
+                                            }
+                                            for scr in root.screen-matrix-items : GlassButton {
+                                                label: scr.id == 0 ? "Público" : (scr.id == 1 ? "LAN" : (scr.id == 2 ? "Stage" : scr.name));
+                                                compact: true;
+                                                horizontal-stretch: 1;
+                                                primary: root.style-target-mode == (scr.id + 1);
+                                                clicked => { root.select-style-target(scr.id + 1); }
+                                            }
+                                        }
                                     }
                                 }
 
-                                Rectangle { height: 1px; background: Theme.border-subtle; }
+                                if root.saved-style-cards.length == 0 : Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
+                                    VerticalLayout {
+                                        padding: 14px;
+                                        spacing: 4px;
+                                        Text {
+                                            text: "Sin estilos guardados todavía.";
+                                            color: Theme.text-primary;
+                                            font-size: 11.5px;
+                                            font-weight: 700;
+                                            horizontal-alignment: center;
+                                        }
+                                        Text {
+                                            text: "Créalos desde el botón de Estilos (🎨) en la barra superior.";
+                                            color: Theme.text-muted;
+                                            font-size: 10.5px;
+                                            horizontal-alignment: center;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                }
 
-                                Text { text: "Colores Sólidos Rápidos"; color: Theme.text-muted; font-size: 10.5px; font-weight: 700; }
-                                HorizontalLayout {
-                                    spacing: 5px;
-                                    ThemeSwatchButton { label: "Negro";  bg-swatch: #000000; accent-swatch: #52525b; horizontal-stretch: 1; clicked => { root.dock-solid-color-selected(0); } }
-                                    ThemeSwatchButton { label: "Azul";   bg-swatch: #081226; accent-swatch: #38bdf8; horizontal-stretch: 1; clicked => { root.dock-solid-color-selected(2); } }
-                                    ThemeSwatchButton { label: "Burdeo"; bg-swatch: #240911; accent-swatch: #f43f5e; horizontal-stretch: 1; clicked => { root.dock-solid-color-selected(3); } }
+                                for sc[sidx] in root.saved-style-cards : Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: sc.active-on-target
+                                        ? Theme.bg-surface-hover
+                                        : (qs-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1);
+                                    border-width: sc.active-on-target ? 1.5px : 1px;
+                                    border-color: sc.active-on-target
+                                        ? Theme.live-green
+                                        : (qs-ta.has-hover ? Theme.border-accent : Theme.border-subtle);
+                                    animate background   { duration: 140ms; easing: ease-out; }
+                                    animate border-color { duration: 140ms; easing: ease-out; }
+
+                                    qs-ta := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            root.active-saved-style-idx = sidx;
+                                            root.load-custom-style(sidx);
+                                        }
+                                    }
+
+                                    VerticalLayout {
+                                        padding: 8px;
+                                        spacing: 6px;
+
+                                        HorizontalLayout {
+                                            spacing: 8px;
+
+                                            // Mini preview negro del estilo
+                                            Rectangle {
+                                                width: 58px;
+                                                height: 38px;
+                                                border-radius: 5px;
+                                                background: #050507;
+                                                border-width: 1px;
+                                                border-color: Theme.border-subtle;
+                                                clip: true;
+
+                                                Rectangle {
+                                                    width: 86%;
+                                                    height: 68%;
+                                                    x: (parent.width - self.width) / 2;
+                                                    y: (parent.height - self.height) / 2;
+                                                    border-radius: 3px;
+                                                    background: sc.box-bg ? #00000099 : transparent;
+                                                    Text {
+                                                        text: "Aa Bb";
+                                                        color: sc.text-color;
+                                                        font-family: sc.font-family-name;
+                                                        font-size: 11px;
+                                                        font-weight: sc.font-weight-val;
+                                                        horizontal-alignment: center;
+                                                        vertical-alignment: center;
+                                                    }
+                                                }
+                                            }
+
+                                            VerticalLayout {
+                                                horizontal-stretch: 1;
+                                                alignment: center;
+                                                spacing: 2px;
+
+                                                HorizontalLayout {
+                                                    spacing: 4px;
+                                                    alignment: space-between;
+                                                    Text {
+                                                        text: sc.name;
+                                                        color: Theme.text-primary;
+                                                        font-size: 11.5px;
+                                                        font-weight: 700;
+                                                        overflow: elide;
+                                                        horizontal-stretch: 1;
+                                                        vertical-alignment: center;
+                                                    }
+                                                    if sc.assigned-screens-label != "" : Rectangle {
+                                                        height: 17px;
+                                                        border-radius: 4px;
+                                                        background: Theme.live-green-soft;
+                                                        border-width: 1px;
+                                                        border-color: Theme.live-green.transparentize(0.4);
+                                                        HorizontalLayout {
+                                                            padding-left: 5px;
+                                                            padding-right: 5px;
+                                                            Text {
+                                                                text: "● " + sc.assigned-screens-label;
+                                                                color: Theme.live-green;
+                                                                font-size: 9px;
+                                                                font-weight: 700;
+                                                                vertical-alignment: center;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                Text {
+                                                    text: sc.summary;
+                                                    color: Theme.text-secondary;
+                                                    font-size: 10px;
+                                                    overflow: elide;
+                                                }
+                                            }
+                                        }
+
+                                        // Botones rápidos por pantalla (Todas / Público / LAN / Stage...)
+                                        HorizontalLayout {
+                                            spacing: 4px;
+                                            Rectangle {
+                                                height: 21px;
+                                                border-radius: 4px;
+                                                background: qall-ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-0;
+                                                border-width: 1px;
+                                                border-color: qall-ta.has-hover ? Theme.border-accent : Theme.border-subtle;
+                                                animate background   { duration: 120ms; }
+                                                animate border-color { duration: 120ms; }
+                                                HorizontalLayout {
+                                                    padding-left: 6px; padding-right: 6px;
+                                                    Text {
+                                                        text: "Todas";
+                                                        color: Theme.text-secondary;
+                                                        font-size: 9.5px;
+                                                        font-weight: 700;
+                                                        vertical-alignment: center;
+                                                    }
+                                                }
+                                                qall-ta := TouchArea {
+                                                    mouse-cursor: pointer;
+                                                    clicked => {
+                                                        root.active-saved-style-idx = sidx;
+                                                        root.apply-style-to-screen(sidx, -1);
+                                                    }
+                                                }
+                                            }
+                                            for tgt in sc.screen-targets : Rectangle {
+                                                height: 21px;
+                                                border-radius: 4px;
+                                                background: tgt.active
+                                                    ? (tgt.screen-id == 1 ? #0284c7 : (tgt.screen-id == 2 ? #d97706 : Theme.accent))
+                                                    : (qtgt-ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-0);
+                                                border-width: 1px;
+                                                border-color: tgt.active
+                                                    ? (tgt.screen-id == 1 ? #38bdf8 : (tgt.screen-id == 2 ? #fbbf24 : Theme.accent-strong))
+                                                    : (qtgt-ta.has-hover ? Theme.border-accent : Theme.border-subtle);
+                                                animate background   { duration: 130ms; }
+                                                animate border-color { duration: 130ms; }
+                                                HorizontalLayout {
+                                                    padding-left: 6px; padding-right: 6px;
+                                                    Text {
+                                                        text: tgt.active ? ("✓ " + tgt.label) : tgt.label;
+                                                        color: tgt.active
+                                                            ? (tgt.screen-id == 0 ? Theme.accent-fg : #ffffff)
+                                                            : Theme.text-secondary;
+                                                        font-size: 9.5px;
+                                                        font-weight: 700;
+                                                        vertical-alignment: center;
+                                                    }
+                                                }
+                                                qtgt-ta := TouchArea {
+                                                    mouse-cursor: pointer;
+                                                    clicked => {
+                                                        root.active-saved-style-idx = sidx;
+                                                        root.apply-style-to-screen(sidx, tgt.screen-id);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1775,8 +1989,8 @@ export component MainWindow inherits Window {
                     vertical-stretch: 1;
 
                     VerticalLayout {
-                    padding: 15px;
-                    spacing: 12px;
+                    padding: root.active-tab == 7 ? 0px : 15px;
+                    spacing: root.active-tab == 7 ? 0px : 12px;
 
                     // ── Inline Song Editor (when active-tab == 0 && song-editor-open) ──
                     if root.active-tab == 0 && root.song-editor-open : VerticalLayout {
@@ -2770,6 +2984,8 @@ export component MainWindow inherits Window {
                                                 height: 100%;
                                                 text-body: root.live-text == "" ? "Porque de tal manera amó Dios al mundo que ha dado a su Hijo unigénito, para que todo aquel que en él cree no se pierda" : root.live-text;
                                                 text-size: Math.max(8.0, root.text-size * (style-canvas.width / 1280px));
+                                                text-fit-mode: root.text-fit-mode;
+                                                fit-box-height: Math.clamp(root.lyrics-height, 0.08, 1.0) * style-canvas.height;
                                                 text-align: root.text-align;
                                                 text-valign: root.text-valign;
                                                 text-color: root.text-color;
@@ -2785,61 +3001,22 @@ export component MainWindow inherits Window {
                                                 box-padding: 8px;
                                             }
 
-                                            // Drag body to reposition box
-                                            lyr-drag := TouchArea {
-                                                mouse-cursor: move;
-                                                property <float> start-px;
-                                                property <float> start-py;
-                                                pointer-event(ev) => {
-                                                    if (ev.kind == PointerEventKind.down) {
-                                                        root.style-editor-box = 0;
-                                                        self.start-px = root.lyrics-pos-x;
-                                                        self.start-py = root.lyrics-pos-y;
-                                                    }
-                                                }
-                                                moved => {
-                                                    if (self.pressed && style-canvas.width > 1px && style-canvas.height > 1px) {
-                                                        root.lyrics-pos-x = Math.clamp(self.start-px + (self.mouse-x - self.pressed-x) / style-canvas.width, 0.05, 0.95);
-                                                        root.lyrics-pos-y = Math.clamp(self.start-py + (self.mouse-y - self.pressed-y) / style-canvas.height, 0.05, 0.95);
-                                                        root.style-changed();
-                                                    }
-                                                }
-                                            }
-
-                                            // Bottom-right corner resize handle (resizes space ONLY, never font size!)
+                                            // Bottom-right corner resize handle (visual indicator, handled by stationary canvas-ta!)
                                             if root.style-editor-box == 0 : Rectangle {
                                                 x: parent.width - 14px;
                                                 y: parent.height - 14px;
                                                 width: 14px;
                                                 height: 14px;
-                                                border-radius: 2px;
+                                                border-radius: 3px;
                                                 background: Theme.accent-strong;
                                                 border-width: 1px;
                                                 border-color: #09090b;
-
-                                                lyr-res := TouchArea {
-                                                    mouse-cursor: nwse-resize;
-                                                    property <float> start-w;
-                                                    property <float> start-h;
-                                                    pointer-event(ev) => {
-                                                        if (ev.kind == PointerEventKind.down) {
-                                                            self.start-w = root.lyrics-width;
-                                                            self.start-h = root.lyrics-height;
-                                                        }
-                                                    }
-                                                    moved => {
-                                                        if (self.pressed && style-canvas.width > 1px && style-canvas.height > 1px) {
-                                                            root.lyrics-width = Math.clamp(self.start-w + 2.0 * (self.mouse-x - self.pressed-x) / style-canvas.width, 0.15, 1.0);
-                                                            root.lyrics-height = Math.clamp(self.start-h + 2.0 * (self.mouse-y - self.pressed-y) / style-canvas.height, 0.08, 1.0);
-                                                            root.style-changed();
-                                                        }
-                                                    }
-                                                }
                                             }
                                         }
 
                                         // Independent Bible Index Bounded Box on Canvas (100% own style & bounds!)
-                                        if root.index-box-enabled : Rectangle {
+                                        idx-box := Rectangle {
+                                            visible: root.index-box-enabled;
                                             width: Math.clamp(root.index-width, 0.12, 1.0) * style-canvas.width;
                                             height: Math.clamp(root.index-height, 0.06, 0.60) * style-canvas.height;
                                             x: Math.clamp(root.index-pos-x * style-canvas.width - self.width / 2, 0px, Math.max(0px, style-canvas.width - self.width));
@@ -2867,52 +3044,86 @@ export component MainWindow inherits Window {
                                                 box-padding: 5px;
                                             }
 
-                                            idx-drag := TouchArea {
-                                                mouse-cursor: move;
-                                                property <float> start-px;
-                                                property <float> start-py;
-                                                pointer-event(ev) => {
-                                                    if (ev.kind == PointerEventKind.down) {
+                                            if root.style-editor-box == 1 : Rectangle {
+                                                x: parent.width - 14px;
+                                                y: parent.height - 14px;
+                                                width: 14px;
+                                                height: 14px;
+                                                border-radius: 3px;
+                                                background: Theme.stage-amber;
+                                                border-width: 1px;
+                                                border-color: #09090b;
+                                            }
+                                        }
+
+                                        // Stationary Canvas TouchArea (fixes coordinate feedback loop / flicker when dragging or resizing!)
+                                        canvas-ta := TouchArea {
+                                            width: 100%;
+                                            height: 100%;
+                                            property <int> drag-mode: 0; // 0=none, 1=move lyr, 2=resize lyr, 3=move idx, 4=resize idx
+                                            property <float> start-px;
+                                            property <float> start-py;
+                                            property <float> start-w;
+                                            property <float> start-h;
+
+                                            property <bool> hover-lyr-res: root.style-editor-box == 0
+                                                && self.mouse-x >= lyr-box.x + lyr-box.width - 20px && self.mouse-x <= lyr-box.x + lyr-box.width + 6px
+                                                && self.mouse-y >= lyr-box.y + lyr-box.height - 20px && self.mouse-y <= lyr-box.y + lyr-box.height + 6px;
+                                            property <bool> hover-idx-res: root.index-box-enabled && root.style-editor-box == 1
+                                                && self.mouse-x >= idx-box.x + idx-box.width - 20px && self.mouse-x <= idx-box.x + idx-box.width + 6px
+                                                && self.mouse-y >= idx-box.y + idx-box.height - 20px && self.mouse-y <= idx-box.y + idx-box.height + 6px;
+
+                                            mouse-cursor: (self.drag-mode == 2 || self.drag-mode == 4 || self.hover-lyr-res || self.hover-idx-res)
+                                                ? nwse-resize
+                                                : (self.drag-mode == 1 || self.drag-mode == 3 ? move : pointer);
+
+                                            pointer-event(ev) => {
+                                                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
+                                                    if (self.hover-lyr-res) {
+                                                        self.drag-mode = 2;
+                                                        self.start-w = root.lyrics-width;
+                                                        self.start-h = root.lyrics-height;
+                                                    } else if (self.hover-idx-res) {
+                                                        self.drag-mode = 4;
+                                                        self.start-w = root.index-width;
+                                                        self.start-h = root.index-height;
+                                                    } else if (root.index-box-enabled
+                                                        && self.mouse-x >= idx-box.x && self.mouse-x <= idx-box.x + idx-box.width
+                                                        && self.mouse-y >= idx-box.y && self.mouse-y <= idx-box.y + idx-box.height) {
                                                         root.style-editor-box = 1;
+                                                        self.drag-mode = 3;
                                                         self.start-px = root.index-pos-x;
                                                         self.start-py = root.index-pos-y;
+                                                    } else if (self.mouse-x >= lyr-box.x && self.mouse-x <= lyr-box.x + lyr-box.width
+                                                        && self.mouse-y >= lyr-box.y && self.mouse-y <= lyr-box.y + lyr-box.height) {
+                                                        root.style-editor-box = 0;
+                                                        self.drag-mode = 1;
+                                                        self.start-px = root.lyrics-pos-x;
+                                                        self.start-py = root.lyrics-pos-y;
+                                                    } else {
+                                                        self.drag-mode = 0;
                                                     }
-                                                }
-                                                moved => {
-                                                    if (self.pressed && style-canvas.width > 1px && style-canvas.height > 1px) {
-                                                        root.index-pos-x = Math.clamp(self.start-px + (self.mouse-x - self.pressed-x) / style-canvas.width, 0.05, 0.95);
-                                                        root.index-pos-y = Math.clamp(self.start-py + (self.mouse-y - self.pressed-y) / style-canvas.height, 0.05, 0.95);
+                                                } else if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left) {
+                                                    if (self.drag-mode != 0) {
+                                                        self.drag-mode = 0;
                                                         root.style-changed();
                                                     }
                                                 }
                                             }
-
-                                            if root.style-editor-box == 1 : Rectangle {
-                                                x: parent.width - 13px;
-                                                y: parent.height - 13px;
-                                                width: 13px;
-                                                height: 13px;
-                                                border-radius: 2px;
-                                                background: Theme.stage-amber;
-                                                border-width: 1px;
-                                                border-color: #09090b;
-
-                                                idx-res := TouchArea {
-                                                    mouse-cursor: nwse-resize;
-                                                    property <float> start-w;
-                                                    property <float> start-h;
-                                                    pointer-event(ev) => {
-                                                        if (ev.kind == PointerEventKind.down) {
-                                                            self.start-w = root.index-width;
-                                                            self.start-h = root.index-height;
-                                                        }
-                                                    }
-                                                    moved => {
-                                                        if (self.pressed && style-canvas.width > 1px && style-canvas.height > 1px) {
-                                                            root.index-width = Math.clamp(self.start-w + 2.0 * (self.mouse-x - self.pressed-x) / style-canvas.width, 0.12, 1.0);
-                                                            root.index-height = Math.clamp(self.start-h + 2.0 * (self.mouse-y - self.pressed-y) / style-canvas.height, 0.06, 0.60);
-                                                            root.style-changed();
-                                                        }
+                                            moved => {
+                                                if (self.pressed && style-canvas.width > 1px && style-canvas.height > 1px) {
+                                                    if (self.drag-mode == 1) {
+                                                        root.lyrics-pos-x = Math.clamp(self.start-px + (self.mouse-x - self.pressed-x) / style-canvas.width, 0.05, 0.95);
+                                                        root.lyrics-pos-y = Math.clamp(self.start-py + (self.mouse-y - self.pressed-y) / style-canvas.height, 0.05, 0.95);
+                                                    } else if (self.drag-mode == 2) {
+                                                        root.lyrics-width = Math.clamp(self.start-w + 2.0 * (self.mouse-x - self.pressed-x) / style-canvas.width, 0.15, 1.0);
+                                                        root.lyrics-height = Math.clamp(self.start-h + 2.0 * (self.mouse-y - self.pressed-y) / style-canvas.height, 0.08, 1.0);
+                                                    } else if (self.drag-mode == 3) {
+                                                        root.index-pos-x = Math.clamp(self.start-px + (self.mouse-x - self.pressed-x) / style-canvas.width, 0.05, 0.95);
+                                                        root.index-pos-y = Math.clamp(self.start-py + (self.mouse-y - self.pressed-y) / style-canvas.height, 0.05, 0.95);
+                                                    } else if (self.drag-mode == 4) {
+                                                        root.index-width = Math.clamp(self.start-w + 2.0 * (self.mouse-x - self.pressed-x) / style-canvas.width, 0.12, 1.0);
+                                                        root.index-height = Math.clamp(self.start-h + 2.0 * (self.mouse-y - self.pressed-y) / style-canvas.height, 0.06, 0.60);
                                                     }
                                                 }
                                             }
@@ -3076,6 +3287,23 @@ export component MainWindow inherits Window {
                                                 SwitchRow { title: "Subrayado"; checked <=> root.text-underline; toggled(v) => { root.style-changed(); } }
                                                 SwitchRow { title: "TODO EN MAYÚSCULAS"; checked <=> root.text-uppercase; toggled(v) => { root.style-changed(); } }
                                                 SwitchRow { title: "Caja Oscura detrás del Texto"; checked <=> root.text-box-bg; toggled(v) => { root.style-changed(); } }
+
+                                                Rectangle { height: 1px; background: Theme.border-subtle; }
+                                                Text { text: "Ajuste Automático si el Texto No Cabe (Biblia / Letras)"; color: Theme.text-secondary; font-size: 12px; font-weight: 700; }
+                                                HorizontalLayout {
+                                                    spacing: 5px;
+                                                    GlassButton { label: "Normal";       compact: true; horizontal-stretch: 1; primary: root.text-fit-mode == 0; clicked => { root.text-fit-mode = 0; root.style-changed(); } }
+                                                    GlassButton { label: "Auto-Achicar"; compact: true; horizontal-stretch: 1; primary: root.text-fit-mode == 1; clicked => { root.text-fit-mode = 1; root.style-changed(); } }
+                                                    GlassButton { label: "Auto-Cortar";  compact: true; horizontal-stretch: 1; primary: root.text-fit-mode == 2; clicked => { root.text-fit-mode = 2; root.style-changed(); } }
+                                                }
+                                                Text {
+                                                    text: root.text-fit-mode == 1 ? "Reduce automáticamente el tamaño de la fuente cuando un versículo o estrofa supera el alto del área."
+                                                        : (root.text-fit-mode == 2 ? "Divide automáticamente versículos largos en diapositivas consecutivas para que sigan abajo sin cortarse."
+                                                        : "Usa el tamaño de fuente exacto sin reescalar ni dividir bloques.");
+                                                    color: Theme.text-muted;
+                                                    font-size: 10.5px;
+                                                    wrap: word-wrap;
+                                                }
                                             }
 
                                             // ── PANEL B: ESTILO INDEPENDIENTE DE ÍNDICE (SOLO BIBLIA) ──
@@ -4323,204 +4551,62 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // ── Mode 7: Ajustes, Temas (14 Presets ImGui) & GitHub Auto-Updater ──
-                    if root.active-tab == 7 : ScrollView {
+                    // ── Mode 7: Ajustes Estilo Apple (Pantalla Completa, Secciones, Animaciones y Preview de 14 Temas) ──
+                    if root.active-tab == 7 : AppleSettingsView {
                         vertical-stretch: 1;
-                        VerticalLayout {
-                            spacing: 10px;
-                            padding-right: 8px;
+                        horizontal-stretch: 1;
+                        app-version: root.app-version;
+                        logo-image: root.logo-image;
+                        has-logo: root.has-logo;
 
-                            // 14 Themes migrated from ImGui (with visual color swatches)
-                            Rectangle {
-                                border-radius: Theme.radius-md;
-                                background: Theme.bg-surface-1;
-                                border-width: 1px;
-                                border-color: Theme.border-subtle;
+                        active-theme-idx <=> root.active-theme-idx;
+                        bg-scale-mode <=> root.bg-scale-mode;
+                        output-res-preset <=> root.output-res-preset;
+                        target-fps <=> root.target-fps;
+                        gpu-hwdec-mode <=> root.gpu-hwdec-mode;
+                        nvenc-enabled <=> root.nvenc-enabled;
+                        gpu-status-label: root.gpu-status-label;
+                        upscaler-mode <=> root.upscaler-mode;
+                        upscaler-sharpness <=> root.upscaler-sharpness;
+                        smooth-motion-60 <=> root.smooth-motion-60;
+                        performance-mode <=> root.performance-mode;
+                        fullscreen-output <=> root.fullscreen-output;
+                        enable-glass-translucency <=> root.enable-glass-translucency;
+                        enable-glass-sheen <=> root.enable-glass-sheen;
+                        enable-ambient-bg <=> root.enable-ambient-bg;
 
-                                VerticalLayout {
-                                    padding: 14px;
-                                    spacing: 8px;
+                        music-scan-folders: root.music-scan-folders;
+                        music-folder-input <=> root.music-folder-input;
 
-                                    Text { text: "Temas de la Aplicación (14 Presets)"; color: Theme.text-secondary; font-size: 12.5px; font-weight: 700; }
+                        debug-fps-text: root.debug-fps-text;
+                        debug-video-fps-text: root.debug-video-fps-text;
+                        debug-cpu-text: root.debug-cpu-text;
+                        debug-ram-text: root.debug-ram-text;
+                        debug-peak-ram-text: root.debug-peak-ram-text;
+                        debug-paths: root.debug-paths;
+                        update-status: root.update-status;
 
-                                    HorizontalLayout {
-                                        spacing: 6px;
-                                        ThemeSwatchButton { label: "Oscuro (Plomo)";  bg-swatch: #08080a; accent-swatch: #d4d4d8; horizontal-stretch: 1; active: root.active-theme-idx == 0;  clicked => { root.theme-selected(0); } }
-                                        ThemeSwatchButton { label: "Claro";           bg-swatch: #dcdfe3; accent-swatch: #405775; horizontal-stretch: 1; active: root.active-theme-idx == 1;  clicked => { root.theme-selected(1); } }
-                                        ThemeSwatchButton { label: "Naranja y Negro"; bg-swatch: #0d0b0a; accent-swatch: #c7701f; horizontal-stretch: 1; active: root.active-theme-idx == 2;  clicked => { root.theme-selected(2); } }
-                                        ThemeSwatchButton { label: "Jazz";            bg-swatch: #170d12; accent-swatch: #b88c42; horizontal-stretch: 1; active: root.active-theme-idx == 3;  clicked => { root.theme-selected(3); } }
-                                        ThemeSwatchButton { label: "Ko-fi";           bg-swatch: #ede6d9; accent-swatch: #d96b6b; horizontal-stretch: 1; active: root.active-theme-idx == 4;  clicked => { root.theme-selected(4); } }
-                                    }
-                                    HorizontalLayout {
-                                        spacing: 6px;
-                                        ThemeSwatchButton { label: "Deadlock";        bg-swatch: #0b110e; accent-swatch: #6bb352; horizontal-stretch: 1; active: root.active-theme-idx == 5;  clicked => { root.theme-selected(5); } }
-                                        ThemeSwatchButton { label: "Galaxia";         bg-swatch: #0b0a13; accent-swatch: #8c61cc; horizontal-stretch: 1; active: root.active-theme-idx == 6;  clicked => { root.theme-selected(6); } }
-                                        ThemeSwatchButton { label: "Mek";             bg-swatch: #1e1e2e; accent-swatch: #89b4fa; horizontal-stretch: 1; active: root.active-theme-idx == 7;  clicked => { root.theme-selected(7); } }
-                                        ThemeSwatchButton { label: "Cyberpunk Neón";  bg-swatch: #0b0c16; accent-swatch: #00ebf9; horizontal-stretch: 1; active: root.active-theme-idx == 8;  clicked => { root.theme-selected(8); } }
-                                        ThemeSwatchButton { label: "Emerald Studio";  bg-swatch: #07100d; accent-swatch: #10b981; horizontal-stretch: 1; active: root.active-theme-idx == 9;  clicked => { root.theme-selected(9); } }
-                                    }
-                                    HorizontalLayout {
-                                        spacing: 6px;
-                                        ThemeSwatchButton { label: "Crimson Velvet";  bg-swatch: #0f0608; accent-swatch: #ef4444; horizontal-stretch: 1; active: root.active-theme-idx == 10; clicked => { root.theme-selected(10); } }
-                                        ThemeSwatchButton { label: "Midnight Blue";   bg-swatch: #050811; accent-swatch: #38bdf8; horizontal-stretch: 1; active: root.active-theme-idx == 11; clicked => { root.theme-selected(11); } }
-                                        ThemeSwatchButton { label: "Amethyst Violet"; bg-swatch: #0a0512; accent-swatch: #a855f7; horizontal-stretch: 1; active: root.active-theme-idx == 12; clicked => { root.theme-selected(12); } }
-                                        ThemeSwatchButton { label: "Titanium Silver"; bg-swatch: #0e0f12; accent-swatch: #9eaec2; horizontal-stretch: 1; active: root.active-theme-idx == 13; clicked => { root.theme-selected(13); } }
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                border-radius: Theme.radius-md;
-                                background: Theme.bg-surface-1;
-                                border-width: 1px;
-                                border-color: Theme.border-subtle;
-
-                                VerticalLayout {
-                                    padding: 14px;
-                                    spacing: 8px;
-
-                                    Text { text: "Proyección y Rendimiento"; color: Theme.text-secondary; font-size: 12px; font-weight: 700; }
-
-                                    SwitchRow {
-                                        title: "Proyección a Pantalla Completa";
-                                        subtitle: "Cubre todo el monitor sin bordes ni barra de título";
-                                        checked <=> root.fullscreen-output;
-                                        toggled(v) => { root.fullscreen-changed(v); }
-                                    }
-
-                                    SwitchRow {
-                                        title: "Escalado AMD FSR 1.0";
-                                        subtitle: "Mejora la nitidez en fondos y videos";
-                                        checked <=> root.fsr-enabled;
-                                        toggled(v) => { root.fsr-changed(v); }
-                                    }
-
-                                    SwitchRow {
-                                        title: "Modo Ahorro de Energía / Rendimiento";
-                                        subtitle: "Reduce resolución interna de decodificación de video para PCs modestas";
-                                        checked <=> root.performance-mode;
-                                        toggled(v) => { root.performance-mode-changed(v); }
-                                    }
-                                }
-                            }
-
-                            // User-configurable Music Scan Folders
-                            Rectangle {
-                                border-radius: Theme.radius-md;
-                                background: Theme.bg-surface-1;
-                                border-width: 1px;
-                                border-color: Theme.border-subtle;
-
-                                VerticalLayout {
-                                    padding: 14px;
-                                    spacing: 9px;
-
-                                    HorizontalLayout {
-                                        alignment: space-between;
-                                        VerticalLayout {
-                                            spacing: 2px;
-                                            Text { text: "Carpetas de Escaneo de Música"; color: Theme.text-primary; font-size: 12.5px; font-weight: 700; }
-                                            Text { text: "Agrega tus carpetas locales de música para que aparezcan automáticamente en el panel de Música."; color: Theme.text-muted; font-size: 11px; }
-                                        }
-                                        GlassButton {
-                                            label: "+ Elegir Carpeta";
-                                            icon: @image-url("icons/folder.svg");
-                                            has-icon: true;
-                                            compact: true;
-                                            primary: true;
-                                            clicked => { root.browse-music-folder(); }
-                                        }
-                                    }
-
-                                    HorizontalLayout {
-                                        spacing: 6px;
-                                        LineEdit {
-                                            horizontal-stretch: 1;
-                                            placeholder-text: "O pega una ruta de carpeta (ej. /home/usuario/Música)...";
-                                            text <=> root.music-folder-input;
-                                            accepted(p) => {
-                                                if (p != "") {
-                                                    root.add-music-folder(p);
-                                                    root.music-folder-input = "";
-                                                }
-                                            }
-                                        }
-                                        GlassButton {
-                                            label: "Agregar";
-                                            compact: true;
-                                            clicked => {
-                                                if (root.music-folder-input != "") {
-                                                    root.add-music-folder(root.music-folder-input);
-                                                    root.music-folder-input = "";
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    if root.music-scan-folders.length == 0 : Text {
-                                        text: "Solo escaneando carpetas internas por defecto (assets/audio y assets/music).";
-                                        color: Theme.text-muted;
-                                        font-size: 11px;
-                                    }
-
-                                    for mdir[mdidx] in root.music-scan-folders : Rectangle {
-                                        height: 34px;
-                                        border-radius: Theme.radius-sm;
-                                        background: Theme.bg-surface-0;
-                                        border-width: 1px;
-                                        border-color: Theme.border-subtle;
-
-                                        HorizontalLayout {
-                                            padding-left: 10px;
-                                            padding-right: 6px;
-                                            spacing: 8px;
-                                            Text { text: "📁 " + mdir; color: Theme.text-primary; font-size: 11.5px; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
-                                            GlassButton {
-                                                label: "✕";
-                                                compact: true;
-                                                danger: true;
-                                                clicked => { root.remove-music-folder(mdidx); }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                border-radius: Theme.radius-md;
-                                background: Theme.bg-surface-1;
-                                border-width: 1px;
-                                border-color: Theme.border-subtle;
-
-                                VerticalLayout {
-                                    padding: 14px;
-                                    spacing: 10px;
-
-                                    Text { text: "Actualizaciones (GitHub Releases)"; color: Theme.text-secondary; font-size: 12px; font-weight: 700; }
-                                    Text {
-                                        text: "Versión instalada: v" + root.app-version + "  •  github.com/TheVixcho/ProyecThor";
-                                        color: Theme.text-secondary;
-                                        font-size: 12px;
-                                    }
-                                    Text {
-                                        text: root.update-status;
-                                        color: Theme.text-primary;
-                                        font-size: 12px;
-                                        wrap: word-wrap;
-                                    }
-                                    HorizontalLayout {
-                                        alignment: start;
-                                        GlassButton {
-                                            label: "Buscar actualizaciones en GitHub";
-                                            icon: @image-url("icons/refresh.svg");
-                                            has-icon: true;
-                                            primary: true;
-                                            clicked => { root.check-github-updates(); }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        theme-selected(idx) => { root.theme-selected(idx); }
+                        scale-mode-changed(m) => { root.scale-mode-changed(m); }
+                        output-res-changed(p) => { root.output-res-changed(p); }
+                        target-fps-changed(f) => { root.target-fps-changed(f); }
+                        gpu-config-changed => { root.gpu-config-changed(); }
+                        apply-low-spec-preset => { root.apply-low-spec-preset(); }
+                        purge-ram-cache => { root.purge-ram-cache(); }
+                        performance-mode-changed(v) => { root.performance-mode-changed(v); }
+                        fullscreen-changed(v) => { root.fullscreen-changed(v); }
+                        visual-effects-changed => { root.visual-effects-changed(); }
+                        browse-music-folder => { root.browse-music-folder(); }
+                        add-music-folder(p) => { root.add-music-folder(p); }
+                        remove-music-folder(i) => { root.remove-music-folder(i); }
+                        scan-libraries => { root.scan-libraries(); }
+                        import-file-clicked => { root.import-file-clicked(); }
+                        import-background-clicked => { root.import-background-clicked(); }
+                        import-overlay-clicked => { root.import-overlay-clicked(); }
+                        check-github-updates => { root.check-github-updates(); }
+                        open-legacy-imgui => { root.open-legacy-imgui(); }
+                        open-kofi-donations => { root.open-kofi-donations(); }
+                        navigate-to-tab(t) => { root.active-tab = t; }
                     }
 
                     // ── Mode 8: Capturadora de Video y Cámaras (USB / HDMI / V4L2) ──
@@ -5362,6 +5448,65 @@ export component MainWindow inherits Window {
                             GlassButton { label: "Limpiar Log"; compact: true; danger: true; clicked => { root.debug-clear-log(); } }
                         }
 
+                        // Telemetry KPI Strip: FPS, CPU % y Consumo de RAM
+                        HorizontalLayout {
+                            spacing: 8px;
+                            height: 66px;
+
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                border-radius: Theme.radius-md;
+                                background: Theme.bg-surface-1;
+                                border-width: 1px;
+                                border-color: #22c55e55;
+                                VerticalLayout {
+                                    padding: 10px;
+                                    alignment: center;
+                                    spacing: 2px;
+                                    Text { text: "FPS (UI / Video)"; color: Theme.text-muted; font-size: 10px; font-weight: 700; }
+                                    HorizontalLayout {
+                                        spacing: 6px;
+                                        Text { text: root.debug-fps-text; color: #22c55e; font-size: 18px; font-weight: 800; vertical-alignment: center; }
+                                        Text { text: root.debug-video-fps-text; color: Theme.text-secondary; font-size: 10.5px; vertical-alignment: center; }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                border-radius: Theme.radius-md;
+                                background: Theme.bg-surface-1;
+                                border-width: 1px;
+                                border-color: #38bdf855;
+                                VerticalLayout {
+                                    padding: 10px;
+                                    alignment: center;
+                                    spacing: 2px;
+                                    Text { text: "USO DE CPU"; color: Theme.text-muted; font-size: 10px; font-weight: 700; }
+                                    Text { text: root.debug-cpu-text; color: #38bdf8; font-size: 18px; font-weight: 800; }
+                                }
+                            }
+
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                border-radius: Theme.radius-md;
+                                background: Theme.bg-surface-1;
+                                border-width: 1px;
+                                border-color: #a855f755;
+                                VerticalLayout {
+                                    padding: 10px;
+                                    alignment: center;
+                                    spacing: 2px;
+                                    Text { text: "CONSUMO RAM"; color: Theme.text-muted; font-size: 10px; font-weight: 700; }
+                                    HorizontalLayout {
+                                        spacing: 6px;
+                                        Text { text: root.debug-ram-text; color: #c084fc; font-size: 18px; font-weight: 800; vertical-alignment: center; }
+                                        Text { text: root.debug-peak-ram-text; color: Theme.text-muted; font-size: 10px; vertical-alignment: center; overflow: elide; }
+                                    }
+                                }
+                            }
+                        }
+
                         Rectangle {
                             border-radius: Theme.radius-md;
                             background: Theme.bg-surface-1;
@@ -5968,7 +6113,7 @@ export component MainWindow inherits Window {
             // ═════════════════════════════════════════════════════════════════
             //  COLUMN 3: VISTA EN VIVO + CAPAS EN VIVO (Photoshop) + COLA DE SERVICIO
             // ═════════════════════════════════════════════════════════════════
-            if !root.is-style-editor-active : VerticalLayout {
+            if !root.is-style-editor-active && root.active-tab != 7 : VerticalLayout {
                 width: 364px;
                 spacing: 10px;
 
@@ -6146,6 +6291,8 @@ export component MainWindow inherits Window {
                                 y: Math.clamp(root.preview-lyrics-pos-y * parent.height - self.height / 2, 0px, Math.max(0px, parent.height - self.height));
                                 text-body: root.live-text;
                                 text-size: Math.max(7.0, root.preview-text-size * 0.25);
+                                text-fit-mode: root.preview-text-fit-mode;
+                                fit-box-height: Math.clamp(root.preview-lyrics-height, 0.08, 1.0) * parent.height;
                                 text-align: root.preview-text-align;
                                 text-valign: root.preview-text-valign;
                                 text-color: root.preview-text-color;
@@ -6566,13 +6713,13 @@ export component MainWindow inherits Window {
                                                 padding-bottom: 3px;
                                                 spacing: 7px;
 
-                                                // Layer Mini Thumbnail / Preview Box
+                                                // Layer Mini Thumbnail / Real Black-Background Layer Preview Box
                                                 Rectangle {
-                                                    width: 44px;
-                                                    height: 29px;
+                                                    width: 52px;
+                                                    height: 30px;
                                                     y: (parent.height - self.height) / 2;
                                                     border-radius: 3px;
-                                                    background: #070709;
+                                                    background: #000000;
                                                     border-width: 1px;
                                                     border-color: lyr.accent.transparentize(0.45);
                                                     clip: true;
@@ -6583,15 +6730,130 @@ export component MainWindow inherits Window {
                                                         width: 100%;
                                                         height: 100%;
                                                         source: lyr.thumbnail;
-                                                        image-fit: cover;
+                                                        image-fit: lyr.id == "overlay" ? contain : cover;
                                                     }
-                                                    if !lyr.has-thumbnail : Text {
-                                                        text: lyr.kind;
-                                                        color: lyr.accent;
-                                                        font-size: 8.5px;
-                                                        font-weight: 800;
-                                                        horizontal-alignment: center;
-                                                        vertical-alignment: center;
+
+                                                    // Real miniature preview on pure black background for Text / Bible layer
+                                                    if !lyr.has-thumbnail && lyr.id == "text" : Rectangle {
+                                                        width: 100%;
+                                                        height: 100%;
+                                                        background: #000000;
+                                                        Text {
+                                                            x: 2px;
+                                                            y: 1px;
+                                                            width: parent.width - 4px;
+                                                            height: parent.height - (root.live-is-bible && root.live-ref != "" ? 8px : 2px);
+                                                            text: root.live-text;
+                                                            color: root.preview-text-color;
+                                                            font-family: root.preview-font-family-name;
+                                                            font-weight: root.preview-font-weight-val;
+                                                            font-size: 5.5px;
+                                                            horizontal-alignment: root.preview-text-align == 0 ? left : (root.preview-text-align == 2 ? right : center);
+                                                            vertical-alignment: root.preview-text-valign == 0 ? top : (root.preview-text-valign == 2 ? bottom : center);
+                                                            wrap: word-wrap;
+                                                            overflow: clip;
+                                                        }
+                                                        if root.live-is-bible && root.live-ref != "" : Text {
+                                                            x: 2px;
+                                                            y: parent.height - 8px;
+                                                            width: parent.width - 4px;
+                                                            height: 7px;
+                                                            text: root.live-ref;
+                                                            color: root.preview-index-color;
+                                                            font-size: 4.5px;
+                                                            font-weight: 700;
+                                                            horizontal-alignment: center;
+                                                            overflow: elide;
+                                                        }
+                                                    }
+
+                                                    // Real miniature preview on pure black background for Clock / Timer layer
+                                                    if !lyr.has-thumbnail && lyr.id == "clock" : Rectangle {
+                                                        width: 100%;
+                                                        height: 100%;
+                                                        background: #000000;
+                                                        Text {
+                                                            text: root.preview-clock-text != "" ? root.preview-clock-text : "00:00";
+                                                            color: #38bdf8;
+                                                            font-size: 7.5px;
+                                                            font-weight: 800;
+                                                            horizontal-alignment: center;
+                                                            vertical-alignment: center;
+                                                        }
+                                                    }
+
+                                                    // Real miniature preview on pure black background for Alert banner layer
+                                                    if !lyr.has-thumbnail && lyr.id == "alert" : Rectangle {
+                                                        width: 100%;
+                                                        height: 100%;
+                                                        background: #000000;
+                                                        Rectangle {
+                                                            y: root.alert-position == 1 ? 2px : parent.height - 9px;
+                                                            width: 100%;
+                                                            height: 7px;
+                                                            background: root.alert-theme == 1 ? #991b1b
+                                                                      : root.alert-theme == 2 ? #92400e
+                                                                      : root.alert-theme == 3 ? #1e40af
+                                                                      : #27272a;
+                                                            Text {
+                                                                x: 2px;
+                                                                width: parent.width - 4px;
+                                                                text: lyr.title;
+                                                                color: #ffffff;
+                                                                font-size: 4.5px;
+                                                                font-weight: 700;
+                                                                vertical-alignment: center;
+                                                                overflow: elide;
+                                                            }
+                                                        }
+                                                    }
+
+                                                    // Real miniature preview on pure black background for Pleca / Lower-Third
+                                                    if !lyr.has-thumbnail && lyr.id == "pleca" : Rectangle {
+                                                        width: 100%;
+                                                        height: 100%;
+                                                        background: #000000;
+                                                        Rectangle {
+                                                            x: 3px;
+                                                            y: parent.height - 10px;
+                                                            width: parent.width - 6px;
+                                                            height: 8px;
+                                                            border-radius: 1.5px;
+                                                            background: #18181b;
+                                                            border-width: 1px;
+                                                            border-color: #a855f7aa;
+                                                            Text {
+                                                                x: 2px;
+                                                                width: parent.width - 4px;
+                                                                text: root.preview-pleca-title;
+                                                                color: #ffffff;
+                                                                font-size: 4.5px;
+                                                                font-weight: 700;
+                                                                vertical-alignment: center;
+                                                                overflow: elide;
+                                                            }
+                                                        }
+                                                    }
+
+                                                    // Solid color background layer preview
+                                                    if !lyr.has-thumbnail && lyr.id == "bg" : Rectangle {
+                                                        width: 100%;
+                                                        height: 100%;
+                                                        background: root.live-bg-solid-color;
+                                                    }
+
+                                                    // Music fallback when track has no embedded cover
+                                                    if !lyr.has-thumbnail && lyr.id == "music" : Rectangle {
+                                                        width: 100%;
+                                                        height: 100%;
+                                                        background: #000000;
+                                                        Text {
+                                                            text: "♫";
+                                                            color: lyr.accent;
+                                                            font-size: 13px;
+                                                            horizontal-alignment: center;
+                                                            vertical-alignment: center;
+                                                        }
                                                     }
                                                 }
 
@@ -6935,7 +7197,7 @@ export component MainWindow inherits Window {
 
     // ── BOTTOM-DOCKED DYNAMIC ISLAND (Seamless concave Linux-dock corners + smooth spring hide/show/expand) ──
     ctx-island-wrap := Rectangle {
-        property <bool> has-any-ctx: !root.is-style-editor-active && !root.song-editor-open && (
+        property <bool> has-any-ctx: !root.is-style-editor-active && !root.song-editor-open && root.active-tab != 7 && (
             root.active-tab == 9
             || root.music-playing
             || root.island-expanded
@@ -7010,15 +7272,23 @@ export component MainWindow inherits Window {
             y: 0px;
             width: parent.width - 36px;
             height: parent.height;
-            border-top-left-radius: root.island-hidden ? 10px : 16px;
-            border-top-right-radius: root.island-hidden ? 10px : 16px;
+            border-top-left-radius: root.island-hidden ? 12px : 20px;
+            border-top-right-radius: root.island-hidden ? 12px : 20px;
             border-bottom-left-radius: 0px;
             border-bottom-right-radius: 0px;
             background: Theme.bg-surface-0;
-            drop-shadow-blur: 22px;
-            drop-shadow-color: #00000066;
-            drop-shadow-offset-y: -3px;
+            drop-shadow-blur: 28px;
+            drop-shadow-color: #00000077;
+            drop-shadow-offset-y: -4px;
             clip: true;
+
+            // Specular Liquid Glass top rim on Dynamic Island
+            Rectangle {
+                y: 0px;
+                width: 100%;
+                height: 1px;
+                background: @linear-gradient(90deg, transparent 0%, Theme.glass-rim-top 20%, Theme.glass-rim-top 80%, transparent 100%);
+            }
 
             TouchArea {} // absorb inner clicks
 
@@ -7958,10 +8228,10 @@ export component MainWindow inherits Window {
         }
 
         Rectangle {
-            x: Math.max(24px, parent.width - 372px);
+            x: Math.max(24px, parent.width - 384px);
             y: 58px;
-            width: 356px;
-            height: 392px;
+            width: 368px;
+            height: 492px;
             border-radius: Theme.radius-lg;
             background: Theme.bg-surface-0;
             border-width: 1.5px;
@@ -7972,11 +8242,11 @@ export component MainWindow inherits Window {
 
             VerticalLayout {
                 padding: 13px;
-                spacing: 9px;
+                spacing: 8px;
 
                 HorizontalLayout {
                     alignment: space-between;
-                    Text { text: "Escalado de Pantalla y Nitidez FSR"; color: Theme.text-primary; font-size: 13px; font-weight: 700; vertical-alignment: center; }
+                    Text { text: "Escalado, Resolución, FPS y Super-Res"; color: Theme.text-primary; font-size: 13px; font-weight: 700; vertical-alignment: center; }
                     GlassButton { label: "✕"; compact: true; clicked => { root.scale-menu-open = false; } }
                 }
 
@@ -7998,23 +8268,48 @@ export component MainWindow inherits Window {
 
                 Rectangle { height: 1px; background: Theme.border-subtle; }
 
-                Text { text: "Resolución de Salida (Reescalado Real de Imágenes y Video)"; color: Theme.text-secondary; font-size: 11px; font-weight: 700; }
+                Text { text: "Resolución de Salida (Imágenes y Video)"; color: Theme.text-secondary; font-size: 11px; font-weight: 700; }
                 HorizontalLayout {
                     spacing: 4px;
                     GlassButton { label: "720p";  compact: true; horizontal-stretch: 1; primary: root.output-res-preset == 0; clicked => { root.output-res-preset = 0; root.output-res-changed(0); } }
                     GlassButton { label: "1080p"; compact: true; horizontal-stretch: 1; primary: root.output-res-preset == 1; clicked => { root.output-res-preset = 1; root.output-res-changed(1); } }
+                    GlassButton { label: "2160p"; compact: true; horizontal-stretch: 1; primary: root.output-res-preset == 4; clicked => { root.output-res-preset = 4; root.output-res-changed(4); } }
                     GlassButton { label: "16:10"; compact: true; horizontal-stretch: 1; primary: root.output-res-preset == 2; clicked => { root.output-res-preset = 2; root.output-res-changed(2); } }
                     GlassButton { label: "4:3";   compact: true; horizontal-stretch: 1; primary: root.output-res-preset == 3; clicked => { root.output-res-preset = 3; root.output-res-changed(3); } }
                 }
 
-                Rectangle { height: 1px; background: Theme.border-subtle; }
-
-                SwitchRow {
-                    title: "Nitidez FSR / Super-Resolución";
-                    subtitle: "Aplica realce adaptativo al escalar video en libmpv";
-                    checked <=> root.fsr-enabled;
-                    toggled(v) => { root.fsr-changed(v); }
+                Text { text: "Límite de FPS de Video (Entrega Asíncrona Directa)"; color: Theme.text-secondary; font-size: 11px; font-weight: 700; }
+                HorizontalLayout {
+                    spacing: 4px;
+                    GlassButton { label: "30 FPS";  compact: true; horizontal-stretch: 1; primary: root.target-fps == 30;  clicked => { root.target-fps = 30;  root.target-fps-changed(30); } }
+                    GlassButton { label: "60 FPS";  compact: true; horizontal-stretch: 1; primary: root.target-fps == 60;  clicked => { root.target-fps = 60;  root.target-fps-changed(60); } }
+                    GlassButton { label: "120 FPS"; compact: true; horizontal-stretch: 1; primary: root.target-fps == 120; clicked => { root.target-fps = 120; root.target-fps-changed(120); } }
+                    GlassButton {
+                        label: "24→60";
+                        compact: true;
+                        primary: root.smooth-motion-60;
+                        clicked => {
+                            root.smooth-motion-60 = !root.smooth-motion-60;
+                            if (root.smooth-motion-60 && root.target-fps < 60) {
+                                root.target-fps = 60;
+                                root.target-fps-changed(60);
+                            }
+                            root.gpu-config-changed();
+                        }
+                    }
                 }
+
+                Text { text: "Super-Resolución / Reescalado en Tiempo Real"; color: Theme.text-secondary; font-size: 11px; font-weight: 700; }
+                HorizontalLayout {
+                    spacing: 4px;
+                    GlassButton { label: "Off";     compact: true; horizontal-stretch: 1; primary: root.upscaler-mode == 0; clicked => { root.upscaler-mode = 0; root.gpu-config-changed(); } }
+                    GlassButton { label: "FSR 1";   compact: true; horizontal-stretch: 1; primary: root.upscaler-mode == 1; clicked => { root.upscaler-mode = 1; root.gpu-config-changed(); } }
+                    GlassButton { label: "CAS+";    compact: true; horizontal-stretch: 1; primary: root.upscaler-mode == 2; clicked => { root.upscaler-mode = 2; root.gpu-config-changed(); } }
+                    GlassButton { label: "NIS";     compact: true; horizontal-stretch: 1; primary: root.upscaler-mode == 3; clicked => { root.upscaler-mode = 3; root.gpu-config-changed(); } }
+                    GlassButton { label: "Lanczos"; compact: true; horizontal-stretch: 1; primary: root.upscaler-mode == 4; clicked => { root.upscaler-mode = 4; root.gpu-config-changed(); } }
+                }
+
+                Rectangle { height: 1px; background: Theme.border-subtle; }
 
                 SwitchRow {
                     title: "Salida Público Pantalla Completa";

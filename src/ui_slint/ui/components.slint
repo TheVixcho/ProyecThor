@@ -1,19 +1,42 @@
 import { Theme } from "theme.slint";
 
 export component GlassCard inherits Rectangle {
-    background: Theme.bg-surface-0;
+    background: Theme.bg-glass;
     border-radius: Theme.radius-lg;
     border-width: 1px;
-    border-color: Theme.border-subtle;
+    border-color: Theme.border-medium;
+    drop-shadow-blur: 18px;
+    drop-shadow-color: Theme.shadow-ambient;
+    drop-shadow-offset-y: 4px;
     clip: true;
+
+    // Specular Liquid Glass top rim
+    Rectangle {
+        y: 0px;
+        width: 100%;
+        height: 1px;
+        background: @linear-gradient(90deg, transparent 0%, Theme.glass-rim-top 22%, Theme.glass-rim-top 78%, transparent 100%);
+    }
 }
 
 export component ToolbarIsland inherits Rectangle {
-    height: 40px;
-    border-radius: 20px;
-    background: Theme.bg-surface-0;
+    height: 42px;
+    border-radius: 21px;
+    background: Theme.bg-glass;
     border-width: 1px;
     border-color: Theme.border-medium;
+    drop-shadow-blur: 16px;
+    drop-shadow-color: Theme.shadow-ambient;
+    drop-shadow-offset-y: 3px;
+    clip: true;
+
+    // Subtle top liquid sheen
+    Rectangle {
+        y: 0px;
+        width: 100%;
+        height: 48%;
+        background: @linear-gradient(180deg, Theme.glass-sheen 0%, transparent 100%);
+    }
 }
 
 export component CircleIslandButton inherits Rectangle {
@@ -28,19 +51,22 @@ export component CircleIslandButton inherits Rectangle {
     height: 34px;
     border-radius: 17px;
     background: ta.pressed
-        ? root.accent-color.transparentize(0.45)
+        ? root.accent-color.transparentize(0.42)
         : (root.active
-            ? root.accent-color.transparentize(0.64)
-            : (ta.has-hover ? root.accent-color.transparentize(0.76) : #ffffff08));
-    border-width: root.active ? 1.6px : 1px;
+            ? root.accent-color.transparentize(0.62)
+            : (ta.has-hover ? root.accent-color.transparentize(0.76) : #ffffff0a));
+    border-width: root.active ? 1.5px : 1px;
     border-color: ta.pressed
         ? root.accent-color
         : (root.active
             ? root.accent-color.transparentize(0.08)
-            : (ta.has-hover ? root.accent-color.transparentize(0.40) : #ffffff16));
+            : (ta.has-hover ? root.accent-color.transparentize(0.36) : Theme.border-subtle));
+    drop-shadow-blur: root.active ? 10px : 0px;
+    drop-shadow-color: root.active ? root.accent-color.transparentize(0.55) : transparent;
 
-    animate background   { duration: 150ms; easing: ease-out; }
-    animate border-color { duration: 150ms; easing: ease-out; }
+    animate background       { duration: 160ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+    animate border-color     { duration: 160ms; easing: ease-out; }
+    animate drop-shadow-blur { duration: 180ms; easing: ease-out; }
 
     Image {
         source: root.icon;
@@ -194,30 +220,40 @@ export component GlassButton inherits Rectangle {
     in property <bool> compact: false;
     callback clicked();
 
-    height: root.compact ? 28px : 32px;
+    height: root.compact ? 29px : 33px;
     border-radius: Theme.radius-md;
     background: root.danger
-        ? (ta.pressed ? Theme.danger.transparentize(0.45) : (ta.has-hover ? Theme.danger.transparentize(0.60) : Theme.danger-soft))
+        ? (ta.pressed ? Theme.danger.transparentize(0.42) : (ta.has-hover ? Theme.danger.transparentize(0.58) : Theme.danger-soft))
         : (root.primary
             ? (ta.pressed ? Theme.accent.darker(0.15) : (ta.has-hover ? Theme.accent-strong : Theme.accent))
             : (ta.pressed ? Theme.bg-surface-1 : (ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-2)));
     border-width: 1px;
     border-color: root.danger
-        ? (ta.has-hover ? Theme.danger : Theme.danger.transparentize(0.45))
+        ? (ta.has-hover ? Theme.danger : Theme.danger.transparentize(0.42))
         : (root.primary
             ? Theme.accent-strong
             : (ta.has-hover ? Theme.border-medium : Theme.border-subtle));
+    drop-shadow-blur: root.primary ? (ta.has-hover ? 12px : 7px) : (ta.has-hover ? 8px : 0px);
+    drop-shadow-color: root.primary ? Theme.accent.transparentize(0.65) : Theme.shadow-ambient;
+    drop-shadow-offset-y: 2px;
     clip: true;
 
-    animate background   { duration: 130ms; easing: ease-out; }
-    animate border-color { duration: 130ms; easing: ease-out; }
+    animate background       { duration: 150ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+    animate border-color     { duration: 150ms; easing: ease-out; }
+    animate drop-shadow-blur { duration: 160ms; easing: ease-out; }
 
-    // Subtle top specular highlight for macOS/ProPresenter depth
+    // Apple Liquid Glass top sheen + specular rim
+    Rectangle {
+        y: 0;
+        width: 100%;
+        height: 48%;
+        background: @linear-gradient(180deg, root.primary ? #ffffff36 : Theme.glass-sheen 0%, transparent 100%);
+    }
     Rectangle {
         y: 0;
         width: 100%;
         height: 1px;
-        background: root.primary ? #ffffff45 : #ffffff12;
+        background: root.primary ? #ffffff55 : Theme.glass-rim-top;
     }
 
     HorizontalLayout {
@@ -427,7 +463,7 @@ export component SlideTile inherits Rectangle {
     callback clicked();
 
     height: root.card-height;
-    border-radius: 4px;
+    border-radius: Theme.radius-md;
     background: root.active
         ? Theme.bg-surface-hover
         : (ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1);
@@ -435,10 +471,14 @@ export component SlideTile inherits Rectangle {
     border-color: root.active
         ? Theme.accent-strong
         : (ta.has-hover ? Theme.border-medium : Theme.border-subtle);
+    drop-shadow-blur: root.active ? 12px : (ta.has-hover ? 8px : 0px);
+    drop-shadow-color: root.active ? Theme.accent.transparentize(0.65) : Theme.shadow-ambient;
+    drop-shadow-offset-y: 2px;
     clip: true;
 
-    animate background   { duration: 140ms; easing: ease-out; }
-    animate border-color { duration: 140ms; easing: ease-out; }
+    animate background       { duration: 150ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+    animate border-color     { duration: 150ms; easing: ease-out; }
+    animate drop-shadow-blur { duration: 160ms; easing: ease-out; }
 
     VerticalLayout {
         padding: 0px;
@@ -543,23 +583,29 @@ export component SwitchRow inherits Rectangle {
         }
 
         Rectangle {
-            width: 42px;
-            height: 24px;
+            width: 46px;
+            height: 26px;
             y: (parent.height - self.height) / 2;
-            border-radius: 12px;
-            background: root.checked ? Theme.accent : Theme.bg-surface-2;
+            border-radius: 13px;
+            background: root.checked ? #34c759 : Theme.bg-surface-2;
             border-width: 1px;
-            border-color: root.checked ? Theme.accent-strong : Theme.border-medium;
-            animate background { duration: 130ms; }
+            border-color: root.checked ? #30d158 : Theme.border-medium;
+            animate background   { duration: 200ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+            animate border-color { duration: 200ms; easing: ease-out; }
 
             Rectangle {
-                width: 18px;
-                height: 18px;
-                border-radius: 9px;
-                x: root.checked ? parent.width - self.width - 3px : 3px;
+                property <length> knob-w: ta.pressed ? 24px : 20px;
+                width: self.knob-w;
+                height: 20px;
+                border-radius: 10px;
+                x: root.checked ? (parent.width - self.knob-w - 3px) : 3px;
                 y: 3px;
-                background: root.checked ? #09090b : Theme.text-primary;
-                animate x { duration: 130ms; easing: ease-out; }
+                background: #ffffff;
+                drop-shadow-blur: 5px;
+                drop-shadow-color: #00000044;
+                drop-shadow-offset-y: 1px;
+                animate x     { duration: 200ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+                animate width { duration: 120ms; easing: ease-out; }
             }
         }
     }

@@ -1,0 +1,2394 @@
+import { ScrollView, Slider, LineEdit } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { GlassButton } from "components.slint";
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  PROYECTHOR — AJUSTES ESTILO APPLE (Full-Screen, Secciones, Animaciones
+//  Suaves y Vista Previa Interactiva en Vivo para los 14 Temas)
+// ═════════════════════════════════════════════════════════════════════════════
+
+export struct ThemePresetMeta {
+    idx: int,
+    name: string,
+    tag: string,
+    is-light: bool,
+    c-root: color,
+    c-s0: color,
+    c-s1: color,
+    c-s2: color,
+    c-acc: color,
+    c-acc2: color,
+    c-txt: color,
+    c-muted: color,
+}
+
+// ── Icono Squircle estilo macOS System Settings con brillo superior ──────────
+component AppleSquircleIcon inherits Rectangle {
+    in property <image> icon;
+    in property <color> badge-color: #007aff;
+    in property <length> box-size: 26px;
+    in property <length> icon-size: 14px;
+    in property <bool> hovered: false;
+
+    width: root.box-size;
+    height: root.box-size;
+    border-radius: root.box-size * 0.27;
+    background: root.badge-color;
+    clip: true;
+    animate background { duration: 240ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+
+    // Brillo especular sutil estilo macOS Sequoia
+    Rectangle {
+        width: 100%;
+        height: 55%;
+        y: 0px;
+        background: @linear-gradient(180deg, #ffffff42 0%, #ffffff00 100%);
+    }
+
+    Image {
+        source: root.icon;
+        width: root.hovered ? root.icon-size + 1.5px : root.icon-size;
+        height: root.hovered ? root.icon-size + 1.5px : root.icon-size;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        colorize: #ffffff;
+        animate width  { duration: 150ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+        animate height { duration: 150ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+    }
+}
+
+// ── Elemento de barra lateral de Ajustes (estilo macOS) ──────────────────────
+component AppleSidebarItem inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <color> badge-color: #007aff;
+    in property <string> pill-text: "";
+    in property <bool> active: false;
+    callback clicked();
+
+    height: 40px;
+    border-radius: 10px;
+    background: root.active
+        ? Theme.accent.transparentize(0.80)
+        : (ta.pressed ? Theme.bg-surface-2 : (ta.has-hover ? Theme.bg-surface-1 : transparent));
+    border-width: 1px;
+    border-color: root.active
+        ? Theme.accent.transparentize(0.45)
+        : (ta.has-hover ? Theme.border-subtle : transparent);
+    clip: true;
+
+    animate background   { duration: 180ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+    animate border-color { duration: 180ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+
+    // Barra indicadora lateral animada
+    Rectangle {
+        x: 3px;
+        width: 3px;
+        height: root.active ? 18px : 0px;
+        y: (parent.height - self.height) / 2;
+        border-radius: 1.5px;
+        background: root.badge-color;
+        opacity: root.active ? 1.0 : 0.0;
+        animate height  { duration: 220ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+        animate opacity { duration: 180ms; easing: ease-out; }
+    }
+
+    HorizontalLayout {
+        padding-left: 11px;
+        padding-right: 10px;
+        spacing: 10px;
+        alignment: start;
+
+        Rectangle {
+            width: 26px;
+            height: 26px;
+            y: (parent.height - self.height) / 2;
+            AppleSquircleIcon {
+                icon: root.icon;
+                badge-color: root.badge-color;
+                box-size: 26px;
+                icon-size: 13.5px;
+                hovered: ta.has-hover || root.active;
+            }
+        }
+
+        Text {
+            text: root.label;
+            color: root.active ? Theme.text-primary : (ta.has-hover ? Theme.text-primary : Theme.text-secondary);
+            font-size: 13px;
+            font-weight: root.active ? 700 : 500;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+            animate color { duration: 150ms; easing: ease-out; }
+        }
+
+        if root.pill-text != "" : Rectangle {
+            height: 20px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 10px;
+            background: root.active ? root.badge-color.transparentize(0.75) : Theme.bg-surface-2;
+            border-width: 1px;
+            border-color: root.active ? root.badge-color.transparentize(0.35) : Theme.border-subtle;
+            animate background   { duration: 180ms; easing: ease-out; }
+            animate border-color { duration: 180ms; easing: ease-out; }
+
+            HorizontalLayout {
+                padding-left: 7px;
+                padding-right: 7px;
+                Text {
+                    text: root.pill-text;
+                    color: root.active ? Theme.text-primary : Theme.text-muted;
+                    font-size: 9.5px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// ── Contenedor agrupado estilo Apple Inset Card ──────────────────────────────
+component AppleInsetGroup inherits VerticalLayout {
+    in property <string> header: "";
+    in property <string> footer: "";
+    alignment: start;
+    spacing: 6px;
+
+    if root.header != "" : HorizontalLayout {
+        padding-left: 12px;
+        Text {
+            text: root.header;
+            color: Theme.text-muted;
+            font-size: 11px;
+            font-weight: 700;
+        }
+    }
+
+    Rectangle {
+        border-radius: 13px;
+        background: Theme.bg-surface-1;
+        border-width: 1px;
+        border-color: Theme.border-subtle;
+        clip: true;
+
+        // Línea especular superior sutil
+        Rectangle {
+            y: 0px;
+            width: 100%;
+            height: 1px;
+            background: #ffffff10;
+        }
+
+        VerticalLayout {
+            alignment: start;
+            padding: 0px;
+            @children
+        }
+    }
+
+    if root.footer != "" : HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        Text {
+            text: root.footer;
+            color: Theme.text-muted;
+            font-size: 11px;
+            wrap: word-wrap;
+        }
+    }
+}
+
+// ── Botón Premium de Donación Ko-fi (https://ko-fi.com/vixcho) ───────────────
+component KofiDonateButton inherits Rectangle {
+    in property <string> label: "Apoyar en Ko-fi";
+    in property <string> sublabel: "";
+    in property <bool> compact: false;
+    callback clicked();
+
+    height: root.compact ? 38px : 44px;
+    border-radius: 11px;
+    background: ta.pressed
+        ? @linear-gradient(135deg, #d93f4b 0%, #e02f52 100%)
+        : (ta.has-hover
+            ? @linear-gradient(135deg, #ff706d 0%, #ff4769 100%)
+            : @linear-gradient(135deg, #ff5e5b 0%, #f43f5e 100%));
+    border-width: 1px;
+    border-color: ta.has-hover ? #ffffff55 : #ffffff28;
+    drop-shadow-blur: ta.has-hover ? 14px : 6px;
+    drop-shadow-color: ta.has-hover ? #ff5e5b66 : #ff5e5b33;
+    drop-shadow-offset-y: ta.has-hover ? 3px : 1px;
+    clip: true;
+
+    animate border-color     { duration: 160ms; easing: ease-out; }
+    animate drop-shadow-blur { duration: 180ms; easing: ease-out; }
+
+    // Brillo superior sutil
+    Rectangle {
+        y: 0px;
+        width: 100%;
+        height: 45%;
+        background: @linear-gradient(180deg, #ffffff28 0%, #ffffff00 100%);
+    }
+
+    HorizontalLayout {
+        padding-left: root.compact ? 12px : 16px;
+        padding-right: root.compact ? 12px : 16px;
+        spacing: 8px;
+        alignment: center;
+
+        Image {
+            source: @image-url("icons/coffee.svg");
+            width: ta.has-hover ? 17px : 15.5px;
+            height: ta.has-hover ? 17px : 15.5px;
+            y: (parent.height - self.height) / 2;
+            colorize: #ffffff;
+            animate width  { duration: 150ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+            animate height { duration: 150ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+        }
+
+        Text {
+            text: root.label;
+            color: #ffffff;
+            font-size: root.compact ? 12px : 13px;
+            font-weight: 800;
+            vertical-alignment: center;
+        }
+
+        if root.sublabel != "" : Rectangle {
+            height: 20px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 10px;
+            background: #ffffff26;
+            HorizontalLayout {
+                padding-left: 7px;
+                padding-right: 7px;
+                Text {
+                    text: root.sublabel;
+                    color: #ffffff;
+                    font-size: 10px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// ── Separador hairline indentado estilo Apple ────────────────────────────────
+component AppleDivider inherits Rectangle {
+    height: 1px;
+    background: transparent;
+    Rectangle {
+        x: 16px;
+        width: Math.max(0px, parent.width - 32px);
+        height: 1px;
+        background: Theme.border-subtle;
+    }
+}
+
+// ── Interruptor iOS/macOS animado con estiramiento táctil ────────────────────
+component AppleSwitchRow inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle: "";
+    in property <color> active-color: #34c759;
+    in-out property <bool> checked: false;
+    callback toggled(bool);
+
+    min-height: root.subtitle == "" ? 50px : 62px;
+    background: ta.pressed
+        ? Theme.bg-surface-2.transparentize(0.30)
+        : (ta.has-hover ? Theme.bg-surface-2.transparentize(0.55) : transparent);
+    animate background { duration: 150ms; easing: ease-out; }
+
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+        spacing: 14px;
+        alignment: space-between;
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.title;
+                color: Theme.text-primary;
+                font-size: 13px;
+                font-weight: 600;
+            }
+            if root.subtitle != "" : Text {
+                text: root.subtitle;
+                color: Theme.text-muted;
+                font-size: 11px;
+                wrap: word-wrap;
+            }
+        }
+
+        // Píldora iOS/macOS con thumb blanco elástico
+        Rectangle {
+            width: 46px;
+            height: 26px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 13px;
+            background: root.checked ? root.active-color : Theme.bg-surface-2;
+            border-width: 1px;
+            border-color: root.checked ? root.active-color.brighter(0.15) : Theme.border-medium;
+            animate background   { duration: 200ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+            animate border-color { duration: 200ms; easing: ease-out; }
+
+            Rectangle {
+                property <length> knob-w: ta.pressed ? 24px : 20px;
+                width: self.knob-w;
+                height: 20px;
+                border-radius: 10px;
+                x: root.checked ? (parent.width - self.knob-w - 3px) : 3px;
+                y: 3px;
+                background: #ffffff;
+                drop-shadow-blur: 5px;
+                drop-shadow-color: #00000044;
+                drop-shadow-offset-y: 1px;
+                animate x     { duration: 210ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+                animate width { duration: 120ms; easing: ease-out; }
+            }
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.checked = !root.checked;
+            root.toggled(root.checked);
+        }
+    }
+}
+
+// ── Opción segmentada estilo macOS Segmented Control ─────────────────────────
+component AppleSegmentOption inherits Rectangle {
+    in property <string> label;
+    in property <string> sublabel: "";
+    in property <bool> active: false;
+    callback clicked();
+
+    height: root.sublabel == "" ? 32px : 44px;
+    border-radius: 7.5px;
+    background: root.active
+        ? Theme.accent
+        : (ta.pressed ? Theme.bg-surface-2 : (ta.has-hover ? Theme.bg-surface-hover : transparent));
+    border-width: 1px;
+    border-color: root.active
+        ? Theme.accent-strong
+        : (ta.has-hover ? Theme.border-subtle : transparent);
+    drop-shadow-blur: root.active ? 8px : 0px;
+    drop-shadow-color: root.active ? #00000033 : transparent;
+    drop-shadow-offset-y: root.active ? 2px : 0px;
+
+    animate background       { duration: 180ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+    animate border-color     { duration: 180ms; easing: ease-out; }
+    animate drop-shadow-blur { duration: 180ms; easing: ease-out; }
+
+    VerticalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        alignment: center;
+        spacing: 1px;
+
+        Text {
+            text: root.label;
+            color: root.active ? Theme.accent-fg : (ta.has-hover ? Theme.text-primary : Theme.text-secondary);
+            font-size: 11.5px;
+            font-weight: root.active ? 700 : 600;
+            horizontal-alignment: center;
+            overflow: elide;
+            animate color { duration: 150ms; }
+        }
+        if root.sublabel != "" : Text {
+            text: root.sublabel;
+            color: root.active ? Theme.accent-fg.transparentize(0.25) : Theme.text-muted;
+            font-size: 9.5px;
+            font-weight: 600;
+            horizontal-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// ── Fila de acción clicable con chevron animado (estilo Apple Settings) ──────
+component AppleActionRow inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle: "";
+    in property <image> icon;
+    in property <bool> has-icon: true;
+    in property <color> badge-color: #007aff;
+    in property <string> trailing-label: "";
+    in property <bool> show-chevron: true;
+    callback clicked();
+
+    min-height: root.subtitle == "" ? 50px : 60px;
+    background: ta.pressed
+        ? Theme.bg-surface-2.transparentize(0.25)
+        : (ta.has-hover ? Theme.bg-surface-2.transparentize(0.55) : transparent);
+    animate background { duration: 150ms; easing: ease-out; }
+
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+        spacing: 12px;
+        alignment: space-between;
+
+        if root.has-icon : Rectangle {
+            width: 30px;
+            height: 30px;
+            y: (parent.height - self.height) / 2;
+            AppleSquircleIcon {
+                icon: root.icon;
+                badge-color: root.badge-color;
+                box-size: 30px;
+                icon-size: 15px;
+                hovered: ta.has-hover;
+            }
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.title;
+                color: Theme.text-primary;
+                font-size: 13px;
+                font-weight: 600;
+            }
+            if root.subtitle != "" : Text {
+                text: root.subtitle;
+                color: Theme.text-muted;
+                font-size: 11px;
+                wrap: word-wrap;
+            }
+        }
+
+        if root.trailing-label != "" : Text {
+            text: root.trailing-label;
+            color: ta.has-hover ? Theme.accent-strong : Theme.text-secondary;
+            font-size: 12px;
+            font-weight: 600;
+            vertical-alignment: center;
+            animate color { duration: 140ms; }
+        }
+
+        if root.show-chevron : Rectangle {
+            width: 16px;
+            height: 20px;
+            y: (parent.height - self.height) / 2;
+            Text {
+                x: ta.has-hover ? 5px : 2px;
+                text: "›";
+                color: ta.has-hover ? Theme.text-primary : Theme.text-muted;
+                font-size: 18px;
+                font-weight: 600;
+                vertical-alignment: center;
+                animate x     { duration: 160ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+                animate color { duration: 140ms; }
+            }
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// ── Tarjeta Visual con Vista Previa Real en Miniatura de cada Tema ───────────
+component ThemePreviewCard inherits Rectangle {
+    in property <ThemePresetMeta> meta;
+    in property <bool> active: false;
+    callback clicked();
+    callback hover-changed(bool);
+
+    height: 158px;
+    background: transparent;
+
+    // Contenedor interno que se eleva suavemente al pasar el ratón
+    Rectangle {
+        x: 0px;
+        y: ta.pressed ? 1px : (ta.has-hover ? -3px : 0px);
+        width: parent.width;
+        height: parent.height - 4px;
+        border-radius: 13px;
+        background: root.active
+            ? Theme.bg-surface-2
+            : (ta.has-hover ? Theme.bg-surface-2.transparentize(0.25) : Theme.bg-surface-1);
+        border-width: root.active ? 2px : 1px;
+        border-color: root.active
+            ? Theme.accent-strong
+            : (ta.has-hover ? root.meta.c-acc : Theme.border-subtle);
+        drop-shadow-blur: root.active ? 16px : (ta.has-hover ? 14px : 4px);
+        drop-shadow-color: root.active
+            ? root.meta.c-acc.transparentize(0.62)
+            : (ta.has-hover ? #00000048 : #00000018);
+        drop-shadow-offset-y: ta.has-hover ? 5px : 2px;
+        clip: true;
+
+        animate y                { duration: 190ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+        animate background       { duration: 180ms; easing: ease-out; }
+        animate border-color     { duration: 180ms; easing: ease-out; }
+        animate drop-shadow-blur { duration: 200ms; easing: ease-out; }
+
+        VerticalLayout {
+            padding: 8px;
+            spacing: 7px;
+
+            // ── Miniatura interactiva real de la ventana de ProyecThor ──
+            Rectangle {
+                vertical-stretch: 1;
+                border-radius: 8px;
+                background: root.meta.c-root;
+                border-width: 1px;
+                border-color: root.meta.is-light ? #0000001e : #ffffff1c;
+                clip: true;
+
+                VerticalLayout {
+                    padding: 5px;
+                    spacing: 4px;
+
+                    // Mini barra superior + semáforo macOS + píldora isla
+                    HorizontalLayout {
+                        height: 11px;
+                        spacing: 4px;
+                        alignment: space-between;
+
+                        HorizontalLayout {
+                            spacing: 2.5px;
+                            Rectangle { width: 4.5px; height: 4.5px; y: 3px; border-radius: 2.25px; background: #ff5f57; }
+                            Rectangle { width: 4.5px; height: 4.5px; y: 3px; border-radius: 2.25px; background: #febc2e; }
+                            Rectangle { width: 4.5px; height: 4.5px; y: 3px; border-radius: 2.25px; background: #28c840; }
+                        }
+
+                        Rectangle {
+                            width: 46%;
+                            height: 8px;
+                            y: 1.5px;
+                            border-radius: 4px;
+                            background: root.meta.c-s0;
+                            border-width: 0.7px;
+                            border-color: root.meta.c-acc.transparentize(0.55);
+
+                            HorizontalLayout {
+                                padding-left: 4px;
+                                padding-right: 4px;
+                                spacing: 3px;
+                                alignment: center;
+                                Rectangle { width: 10px; height: 3px; y: 2.5px; border-radius: 1.5px; background: root.meta.c-acc; }
+                                Rectangle { width: 7px; height: 3px; y: 2.5px; border-radius: 1.5px; background: root.meta.c-muted.transparentize(0.45); }
+                                Rectangle { width: 7px; height: 3px; y: 2.5px; border-radius: 1.5px; background: root.meta.c-muted.transparentize(0.45); }
+                            }
+                        }
+
+                        Rectangle {
+                            width: 14px;
+                            height: 6px;
+                            y: 2.5px;
+                            border-radius: 3px;
+                            background: #22c55e;
+                        }
+                    }
+
+                    // Mini espacio de 3 columnas (Biblioteca | Estrofas | Vista en Vivo)
+                    HorizontalLayout {
+                        vertical-stretch: 1;
+                        spacing: 4px;
+
+                        // Columna 1: Mini Biblioteca
+                        Rectangle {
+                            width: 24%;
+                            border-radius: 4px;
+                            background: root.meta.c-s0;
+                            VerticalLayout {
+                                padding: 4px;
+                                spacing: 3px;
+                                Rectangle { height: 5px; border-radius: 2px; background: root.meta.c-acc.transparentize(0.25); }
+                                Rectangle { height: 4px; width: 82%; border-radius: 2px; background: root.meta.c-s2; }
+                                Rectangle { height: 4px; width: 70%; border-radius: 2px; background: root.meta.c-s2; }
+                                Rectangle { height: 4px; width: 90%; border-radius: 2px; background: root.meta.c-s2; }
+                            }
+                        }
+
+                        // Columna 2: Mini Estrofas (2x2 con diapositiva activa iluminada)
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            border-radius: 4px;
+                            background: root.meta.c-s0;
+                            VerticalLayout {
+                                padding: 4px;
+                                spacing: 3px;
+                                HorizontalLayout {
+                                    vertical-stretch: 1;
+                                    spacing: 3px;
+                                    Rectangle {
+                                        horizontal-stretch: 1;
+                                        border-radius: 3px;
+                                        background: root.meta.c-s1;
+                                        border-width: 1.2px;
+                                        border-color: root.meta.c-acc;
+                                        VerticalLayout {
+                                            padding: 2px;
+                                            spacing: 2px;
+                                            Rectangle { height: 4px; border-radius: 1.5px; background: root.meta.c-acc; }
+                                            Rectangle { height: 3px; width: 75%; border-radius: 1px; background: root.meta.c-txt.transparentize(0.25); }
+                                            Rectangle { height: 3px; width: 55%; border-radius: 1px; background: root.meta.c-muted.transparentize(0.35); }
+                                        }
+                                    }
+                                    Rectangle {
+                                        horizontal-stretch: 1;
+                                        border-radius: 3px;
+                                        background: root.meta.c-s1;
+                                        VerticalLayout {
+                                            padding: 2px;
+                                            spacing: 2px;
+                                            Rectangle { height: 4px; border-radius: 1.5px; background: root.meta.c-s2; }
+                                            Rectangle { height: 3px; width: 80%; border-radius: 1px; background: root.meta.c-muted.transparentize(0.45); }
+                                        }
+                                    }
+                                }
+                                HorizontalLayout {
+                                    vertical-stretch: 1;
+                                    spacing: 3px;
+                                    Rectangle { horizontal-stretch: 1; border-radius: 3px; background: root.meta.c-s1; }
+                                    Rectangle { horizontal-stretch: 1; border-radius: 3px; background: root.meta.c-s1; }
+                                }
+                            }
+                        }
+
+                        // Columna 3: Mini Monitor En Vivo
+                        Rectangle {
+                            width: 28%;
+                            border-radius: 4px;
+                            background: root.meta.c-s0;
+                            VerticalLayout {
+                                padding: 4px;
+                                spacing: 3px;
+                                Rectangle {
+                                    height: 60%;
+                                    border-radius: 3px;
+                                    background: #050507;
+                                    border-width: 1px;
+                                    border-color: root.meta.c-acc.transparentize(0.40);
+                                    VerticalLayout {
+                                        alignment: center;
+                                        padding: 4px;
+                                        spacing: 2px;
+                                        HorizontalLayout {
+                                            alignment: center;
+                                            Rectangle { height: 3px; width: 72%; border-radius: 1.5px; background: #ffffffcc; }
+                                        }
+                                        HorizontalLayout {
+                                            alignment: center;
+                                            Rectangle { height: 2.5px; width: 52%; border-radius: 1.2px; background: root.meta.c-acc2; }
+                                        }
+                                    }
+                                }
+                                Rectangle {
+                                    vertical-stretch: 1;
+                                    border-radius: 3px;
+                                    background: root.meta.c-acc;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Insignia animada "Activo" en esquina superior derecha
+                Rectangle {
+                    x: parent.width - self.width - 5px;
+                    y: 5px;
+                    height: 17px;
+                    border-radius: 8.5px;
+                    background: root.active ? root.meta.c-acc : #000000aa;
+                    opacity: root.active ? 1.0 : (ta.has-hover ? 0.92 : 0.0);
+                    animate opacity { duration: 160ms; easing: ease-out; }
+
+                    HorizontalLayout {
+                        padding-left: 6px;
+                        padding-right: 6px;
+                        Text {
+                            text: root.active ? "✓ Activo" : "Probar";
+                            color: root.active ? (root.meta.is-light ? #ffffff : #09090b) : #ffffff;
+                            font-size: 9px;
+                            font-weight: 800;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+
+            // ── Pie de la tarjeta: Nombre + etiqueta + 3 muestras de paleta ──
+            HorizontalLayout {
+                alignment: space-between;
+                spacing: 6px;
+                padding-left: 3px;
+                padding-right: 3px;
+
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 1px;
+                    Text {
+                        text: root.meta.name;
+                        color: root.active ? Theme.text-primary : (ta.has-hover ? Theme.text-primary : Theme.text-secondary);
+                        font-size: 11.5px;
+                        font-weight: root.active ? 800 : 700;
+                        overflow: elide;
+                        animate color { duration: 140ms; }
+                    }
+                    Text {
+                        text: root.meta.tag;
+                        color: Theme.text-muted;
+                        font-size: 9.5px;
+                        font-weight: 600;
+                        overflow: elide;
+                    }
+                }
+
+                // 3 bolitas con la paleta exacta del tema
+                HorizontalLayout {
+                    spacing: 3px;
+                    alignment: center;
+                    Rectangle {
+                        width: 10px; height: 10px; y: (parent.height - self.height) / 2;
+                        border-radius: 5px; background: root.meta.c-root;
+                        border-width: 1px; border-color: Theme.border-medium;
+                    }
+                    Rectangle {
+                        width: 10px; height: 10px; y: (parent.height - self.height) / 2;
+                        border-radius: 5px; background: root.meta.c-s1;
+                        border-width: 1px; border-color: Theme.border-medium;
+                    }
+                    Rectangle {
+                        width: 10px; height: 10px; y: (parent.height - self.height) / 2;
+                        border-radius: 5px; background: root.meta.c-acc;
+                        border-width: 1px; border-color: #ffffff44;
+                    }
+                }
+            }
+        }
+
+        ta := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.clicked(); }
+            changed has-hover => { root.hover-changed(self.has-hover); }
+        }
+    }
+}
+
+// ── Panel de sección animado (deslizamiento + desvanecimiento estilo macOS) ──
+component AppleSectionPane inherits Rectangle {
+    in property <bool> active: false;
+
+    x: 0px;
+    y: root.active ? 0px : 14px;
+    width: 100%;
+    height: 100%;
+    opacity: root.active ? 1.0 : 0.0;
+    visible: self.opacity > 0.01;
+    clip: true;
+
+    animate opacity { duration: 200ms; easing: ease-out; }
+    animate y       { duration: 250ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+
+    ScrollView {
+        width: 100%;
+        height: 100%;
+        VerticalLayout {
+            alignment: start;
+            padding-left: 28px;
+            padding-right: 32px;
+            padding-top: 20px;
+            padding-bottom: 48px;
+            spacing: 16px;
+            @children
+        }
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  COMPONENTE PRINCIPAL: APPLE SETTINGS VIEW (PANTALLA COMPLETA)
+// ═════════════════════════════════════════════════════════════════════════════
+export component AppleSettingsView inherits Rectangle {
+    // ── Propiedades enlazadas desde MainWindow ──
+    in property <string> app-version: "2.0.0";
+    in property <image>  logo-image;
+    in property <bool>   has-logo: false;
+
+    in-out property <int>   active-theme-idx: 0;
+    in-out property <int>   bg-scale-mode: 0;
+    in-out property <int>   output-res-preset: 1;
+    in-out property <int>   target-fps: 60;
+    in-out property <int>   gpu-hwdec-mode: 0;
+    in-out property <bool>  nvenc-enabled: false;
+    in property     <string> gpu-status-label: "Detectando GPU...";
+    in-out property <int>   upscaler-mode: 2;
+    in-out property <float> upscaler-sharpness: 55.0;
+    in-out property <bool>  smooth-motion-60: false;
+    in-out property <bool>  performance-mode: false;
+    in-out property <bool>  fullscreen-output: true;
+    in-out property <bool>  enable-glass-translucency: true;
+    in-out property <bool>  enable-glass-sheen: true;
+    in-out property <bool>  enable-ambient-bg: true;
+
+    in property     <[string]> music-scan-folders: [];
+    in-out property <string>   music-folder-input: "";
+
+    in property <string> debug-fps-text: "0.0";
+    in property <string> debug-video-fps-text: "UI";
+    in property <string> debug-cpu-text: "0.0%";
+    in property <string> debug-ram-text: "0.0 MB";
+    in property <string> debug-peak-ram-text: "";
+    in property <string> debug-paths: "";
+    in property <string> update-status: "";
+
+    // ── Estado interno de navegación y vista previa ──
+    in-out property <int> active-section: 0;   // 0=Apariencia, 1=Pantalla, 2=Rendimiento, 3=Biblioteca, 4=Sistema, 5=Actualizaciones
+    in-out property <int> theme-filter: 0;     // 0=Todos (14), 1=Oscuros (12), 2=Claros (2)
+    in-out property <int> hovered-theme-idx: -1;
+
+    // ── Callbacks hacia MainWindow / C++ ──
+    callback theme-selected(int);
+    callback scale-mode-changed(int);
+    callback output-res-changed(int);
+    callback target-fps-changed(int);
+    callback gpu-config-changed();
+    callback apply-low-spec-preset();
+    callback purge-ram-cache();
+    callback performance-mode-changed(bool);
+    callback fullscreen-changed(bool);
+    callback visual-effects-changed();
+    callback browse-music-folder();
+    callback add-music-folder(string);
+    callback remove-music-folder(int);
+    callback scan-libraries();
+    callback import-file-clicked();
+    callback import-background-clicked();
+    callback import-overlay-clicked();
+    callback check-github-updates();
+    callback open-legacy-imgui();
+    callback open-kofi-donations();
+    callback navigate-to-tab(int);
+
+    // ── Catálogo exacto de los 14 temas (colores fieles a ApplyThemePreset) ──
+    property <[ThemePresetMeta]> themes: [
+        { idx: 0,  name: "Oscuro (Plomo)",  tag: "Oscuro • Neutro",    is-light: false, c-root: #08080a, c-s0: #111113, c-s1: #17171a, c-s2: #212125, c-acc: #d4d4d8, c-acc2: #f4f4f5, c-txt: #f4f4f5, c-muted: #a1a1aa },
+        { idx: 1,  name: "Claro",           tag: "Claro • Minimal",    is-light: true,  c-root: #dcdfe3, c-s0: #ebedf0, c-s1: #f2f2f5, c-s2: #d1d4d9, c-acc: #405775, c-acc2: #597394, c-txt: #1f2126, c-muted: #61636b },
+        { idx: 2,  name: "Naranja y Negro", tag: "Oscuro • Ámbar",     is-light: false, c-root: #0d0b0a, c-s0: #14110b, c-s1: #1c160f, c-s2: #241b12, c-acc: #c7701f, c-acc2: #e09440, c-txt: #ebe0d1, c-muted: #b38c66 },
+        { idx: 3,  name: "Jazz",            tag: "Oscuro • Dorado",    is-light: false, c-root: #170d12, c-s0: #21121a, c-s1: #2b1721, c-s2: #381f2b, c-acc: #b88c42, c-acc2: #d6ad61, c-txt: #e6dbcc, c-muted: #b38f82 },
+        { idx: 4,  name: "Ko-fi",           tag: "Claro • Cálido",     is-light: true,  c-root: #ede6d9, c-s0: #f2ebde, c-s1: #f5f5f0, c-s2: #e0d1bd, c-acc: #d96b6b, c-acc2: #e68c8c, c-txt: #33211a, c-muted: #73594d },
+        { idx: 5,  name: "Deadlock",        tag: "Oscuro • Bosque",    is-light: false, c-root: #0b110e, c-s0: #0f1814, c-s1: #14201b, c-s2: #1a2721, c-acc: #6bb352, c-acc2: #8ccc73, c-txt: #d9e6db, c-muted: #94b39e },
+        { idx: 6,  name: "Galaxia",         tag: "Oscuro • Cósmico",   is-light: false, c-root: #0b0a13, c-s0: #110d20, c-s1: #17112b, c-s2: #1f1738, c-acc: #8c61cc, c-acc2: #ad85e6, c-txt: #e0dbf0, c-muted: #9e94bf },
+        { idx: 7,  name: "Mek",             tag: "Oscuro • Pastel",    is-light: false, c-root: #1e1e2e, c-s0: #2a2b3c, c-s1: #313244, c-s2: #45475a, c-acc: #89b4fa, c-acc2: #b4befe, c-txt: #cdd6f4, c-muted: #a6adc8 },
+        { idx: 8,  name: "Cyberpunk Neón",  tag: "Oscuro • Neón",      is-light: false, c-root: #0b0c16, c-s0: #121324, c-s1: #1a1c33, c-s2: #242645, c-acc: #00ebf9, c-acc2: #ff268c, c-txt: #e6ffff, c-muted: #7a99ab },
+        { idx: 9,  name: "Emerald Studio",  tag: "Oscuro • Estudio",   is-light: false, c-root: #07100d, c-s0: #0c1814, c-s1: #12241e, c-s2: #1a3028, c-acc: #10b981, c-acc2: #34d399, c-txt: #e6f7f0, c-muted: #6e9c87 },
+        { idx: 10, name: "Crimson Velvet",  tag: "Oscuro • Carmesí",   is-light: false, c-root: #0f0608, c-s0: #170a0e, c-s1: #221015, c-s2: #2e161c, c-acc: #ef4444, c-acc2: #f87171, c-txt: #ffe6e6, c-muted: #a66b73 },
+        { idx: 11, name: "Midnight Blue",   tag: "Oscuro • Zafiro",    is-light: false, c-root: #050811, c-s0: #0a0f1f, c-s1: #10172e, c-s2: #18223f, c-acc: #38bdf8, c-acc2: #7dd3fc, c-txt: #e0f2fe, c-muted: #738aa6 },
+        { idx: 12, name: "Amethyst Violet", tag: "Oscuro • Amatista",  is-light: false, c-root: #0a0512, c-s0: #11091f, c-s1: #1b0f2e, c-s2: #261640, c-acc: #a855f7, c-acc2: #c084fc, c-txt: #f3e8ff, c-muted: #9376a8 },
+        { idx: 13, name: "Titanium Silver", tag: "Oscuro • Titanio",   is-light: false, c-root: #0e0f12, c-s0: #14161a, c-s1: #1b1e24, c-s2: #23272f, c-acc: #9eaec2, c-acc2: #d1dbe6, c-txt: #f1f5f9, c-muted: #808fa3 },
+    ];
+
+    property <int> preview-idx: Math.clamp(root.hovered-theme-idx >= 0 ? root.hovered-theme-idx : root.active-theme-idx, 0, 13);
+    property <ThemePresetMeta> preview-theme: root.themes[root.preview-idx];
+    property <ThemePresetMeta> active-theme:  root.themes[Math.clamp(root.active-theme-idx, 0, 13)];
+
+    property <string> res-label: root.output-res-preset == 0 ? "720p"
+                               : root.output-res-preset == 1 ? "1080p"
+                               : root.output-res-preset == 2 ? "16:10"
+                               : root.output-res-preset == 3 ? "4:3"
+                               : "4K 2160p";
+
+    background: Theme.bg-root;
+    clip: true;
+
+    HorizontalLayout {
+        spacing: 0px;
+        padding: 0px;
+
+        // ═════════════════════════════════════════════════════════════════════
+        //  BARRA LATERAL IZQUIERDA ESTILO APPLE SYSTEM SETTINGS
+        // ═════════════════════════════════════════════════════════════════════
+        Rectangle {
+            width: 268px;
+            background: Theme.bg-surface-0;
+
+            // Separador derecho limpio
+            Rectangle {
+                x: parent.width - 1px;
+                width: 1px;
+                height: 100%;
+                background: Theme.border-subtle;
+            }
+
+            VerticalLayout {
+                padding: 14px;
+                spacing: 12px;
+
+                // Tarjeta superior de perfil de la app (estilo Apple ID banner)
+                Rectangle {
+                    height: 68px;
+                    border-radius: 13px;
+                    background: Theme.bg-surface-1;
+                    border-width: 1px;
+                    border-color: Theme.border-subtle;
+
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        spacing: 11px;
+                        alignment: start;
+
+                        Rectangle {
+                            width: 42px;
+                            height: 42px;
+                            y: (parent.height - self.height) / 2;
+                            border-radius: 11px;
+                            background: @linear-gradient(145deg, #2563eb 0%, #7c3aed 100%);
+                            border-width: 1px;
+                            border-color: #ffffff30;
+                            clip: true;
+
+                            if root.has-logo : Image {
+                                source: root.logo-image;
+                                width: 32px;
+                                height: 32px;
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                image-fit: contain;
+                            }
+                            if !root.has-logo : Text {
+                                text: "P";
+                                color: #ffffff;
+                                font-size: 20px;
+                                font-weight: 900;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            spacing: 2px;
+                            Text {
+                                text: "ProyecThor";
+                                color: Theme.text-primary;
+                                font-size: 14px;
+                                font-weight: 800;
+                                overflow: elide;
+                            }
+                            Text {
+                                text: "Ajustes • v" + root.app-version;
+                                color: Theme.text-muted;
+                                font-size: 11px;
+                                font-weight: 600;
+                                overflow: elide;
+                            }
+                        }
+                    }
+                }
+
+                // Lista de secciones agrupadas estilo macOS (empaquetada desde arriba sin huecos!)
+                ScrollView {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        alignment: start;
+                        spacing: 14px;
+                        padding-right: 4px;
+
+                        // Grupo 1: Personalización
+                        VerticalLayout {
+                            alignment: start;
+                            spacing: 4px;
+                            HorizontalLayout {
+                                padding-left: 10px;
+                                padding-bottom: 2px;
+                                Text { text: "PERSONALIZACIÓN"; color: Theme.text-muted; font-size: 10px; font-weight: 700; }
+                            }
+                            AppleSidebarItem {
+                                label: "Apariencia y Temas";
+                                icon: @image-url("icons/palette.svg");
+                                badge-color: #8b5cf6;
+                                pill-text: "14";
+                                active: root.active-section == 0;
+                                clicked => { root.active-section = 0; }
+                            }
+                        }
+
+                        // Grupo 2: Proyección y Hardware
+                        VerticalLayout {
+                            alignment: start;
+                            spacing: 4px;
+                            HorizontalLayout {
+                                padding-left: 10px;
+                                padding-bottom: 2px;
+                                Text { text: "PROYECCIÓN Y HARDWARE"; color: Theme.text-muted; font-size: 10px; font-weight: 700; }
+                            }
+                            AppleSidebarItem {
+                                label: "Pantalla y Video";
+                                icon: @image-url("icons/monitor.svg");
+                                badge-color: #007aff;
+                                pill-text: root.res-label;
+                                active: root.active-section == 1;
+                                clicked => { root.active-section = 1; }
+                            }
+                            AppleSidebarItem {
+                                label: "Rendimiento y GPU";
+                                icon: @image-url("icons/zap.svg");
+                                badge-color: #34c759;
+                                pill-text: root.performance-mode ? "LITE" : (root.nvenc-enabled ? "NVENC" : "GPU");
+                                active: root.active-section == 2;
+                                clicked => { root.active-section = 2; }
+                            }
+                        }
+
+                        // Grupo 3: Contenido y Sistema
+                        VerticalLayout {
+                            alignment: start;
+                            spacing: 4px;
+                            HorizontalLayout {
+                                padding-left: 10px;
+                                padding-bottom: 2px;
+                                Text { text: "CONTENIDO Y SISTEMA"; color: Theme.text-muted; font-size: 10px; font-weight: 700; }
+                            }
+                            AppleSidebarItem {
+                                label: "Biblioteca y Música";
+                                icon: @image-url("icons/folder.svg");
+                                badge-color: #ff9500;
+                                pill-text: root.music-scan-folders.length > 0 ? ("" + root.music-scan-folders.length) : "";
+                                active: root.active-section == 3;
+                                clicked => { root.active-section = 3; }
+                            }
+                            AppleSidebarItem {
+                                label: "Sistema y Diagnóstico";
+                                icon: @image-url("icons/terminal.svg");
+                                badge-color: #64748b;
+                                pill-text: root.debug-fps-text + " FPS";
+                                active: root.active-section == 4;
+                                clicked => { root.active-section = 4; }
+                            }
+                            AppleSidebarItem {
+                                label: "Actualizaciones";
+                                icon: @image-url("icons/refresh.svg");
+                                badge-color: #ff2d55;
+                                active: root.active-section == 5;
+                                clicked => { root.active-section = 5; }
+                            }
+                        }
+                    }
+                }
+
+                // Botón directo de donaciones Ko-fi en la barra lateral
+                KofiDonateButton {
+                    label: "Donar en Ko-fi";
+                    sublabel: "♥";
+                    compact: true;
+                    clicked => { root.open-kofi-donations(); }
+                }
+
+                // Resumen inferior compacto del tema & salida activa
+                Rectangle {
+                    height: 46px;
+                    border-radius: 10px;
+                    background: Theme.bg-surface-1;
+                    border-width: 1px;
+                    border-color: Theme.border-subtle;
+
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        padding-right: 10px;
+                        spacing: 8px;
+                        alignment: space-between;
+
+                        HorizontalLayout {
+                            spacing: 7px;
+                            Rectangle {
+                                width: 10px;
+                                height: 10px;
+                                y: (parent.height - self.height) / 2;
+                                border-radius: 5px;
+                                background: root.active-theme.c-acc;
+                                animate background { duration: 200ms; }
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                spacing: 1px;
+                                Text { text: root.active-theme.name; color: Theme.text-primary; font-size: 11px; font-weight: 700; overflow: elide; }
+                                Text { text: root.res-label + " • " + root.target-fps + " FPS"; color: Theme.text-muted; font-size: 9.5px; font-weight: 600; }
+                            }
+                        }
+
+                        Rectangle {
+                            width: 7px;
+                            height: 7px;
+                            y: (parent.height - self.height) / 2;
+                            border-radius: 3.5px;
+                            background: #34c759;
+                        }
+                    }
+                }
+            }
+        }
+
+        // ═════════════════════════════════════════════════════════════════════
+        //  PANEL DE DETALLE DERECHO A PANTALLA COMPLETA
+        // ═════════════════════════════════════════════════════════════════════
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 0px;
+
+            // Cabecera fija de la sección seleccionada (con color de insignia animado)
+            Rectangle {
+                height: 68px;
+                background: Theme.bg-surface-0.transparentize(0.25);
+
+                Rectangle {
+                    y: parent.height - 1px;
+                    width: 100%;
+                    height: 1px;
+                    background: Theme.border-subtle;
+                }
+
+                HorizontalLayout {
+                    padding-left: 28px;
+                    padding-right: 32px;
+                    spacing: 14px;
+                    alignment: space-between;
+
+                    HorizontalLayout {
+                        spacing: 13px;
+                        Rectangle {
+                            width: 36px;
+                            height: 36px;
+                            y: (parent.height - self.height) / 2;
+                            AppleSquircleIcon {
+                                box-size: 36px;
+                                icon-size: 18px;
+                                icon: root.active-section == 0 ? @image-url("icons/palette.svg")
+                                    : root.active-section == 1 ? @image-url("icons/monitor.svg")
+                                    : root.active-section == 2 ? @image-url("icons/zap.svg")
+                                    : root.active-section == 3 ? @image-url("icons/folder.svg")
+                                    : root.active-section == 4 ? @image-url("icons/terminal.svg")
+                                    : @image-url("icons/refresh.svg");
+                                badge-color: root.active-section == 0 ? #8b5cf6
+                                           : root.active-section == 1 ? #007aff
+                                           : root.active-section == 2 ? #34c759
+                                           : root.active-section == 3 ? #ff9500
+                                           : root.active-section == 4 ? #64748b
+                                           : #ff2d55;
+                            }
+                        }
+
+                        VerticalLayout {
+                            alignment: center;
+                            spacing: 2px;
+                            Text {
+                                text: root.active-section == 0 ? "Apariencia y Temas"
+                                    : root.active-section == 1 ? "Pantalla y Video"
+                                    : root.active-section == 2 ? "Rendimiento y GPU"
+                                    : root.active-section == 3 ? "Biblioteca y Música"
+                                    : root.active-section == 4 ? "Sistema y Diagnóstico"
+                                    : "Actualizaciones y Acerca de";
+                                color: Theme.text-primary;
+                                font-size: 18px;
+                                font-weight: 800;
+                            }
+                            Text {
+                                text: root.active-section == 0 ? "Pasa el ratón por cualquier tema para previsualizarlo al instante o haz clic para aplicarlo."
+                                    : root.active-section == 1 ? "Resolución de salida, límite de FPS, modo de escalado y reescalado en tiempo real."
+                                    : root.active-section == 2 ? "Decodificación por hardware, NVIDIA NVDEC/NVENC y optimización para PCs modestas."
+                                    : root.active-section == 3 ? "Carpetas locales de música, escaneo rápido e importación directa de medios."
+                                    : root.active-section == 4 ? "Telemetría en vivo, accesos de diagnóstico y modo legado ImGui."
+                                    : "Comprobación de nuevas versiones desde GitHub Releases.";
+                                color: Theme.text-muted;
+                                font-size: 11.5px;
+                                overflow: elide;
+                            }
+                        }
+                    }
+
+                    // Píldora derecha contextual
+                    Rectangle {
+                        height: 28px;
+                        y: (parent.height - self.height) / 2;
+                        border-radius: 14px;
+                        background: Theme.bg-surface-1;
+                        border-width: 1px;
+                        border-color: Theme.border-subtle;
+
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            spacing: 6px;
+                            Rectangle {
+                                width: 7px;
+                                height: 7px;
+                                y: (parent.height - self.height) / 2;
+                                border-radius: 3.5px;
+                                background: root.active-section == 0 ? root.preview-theme.c-acc
+                                          : root.active-section == 1 ? #007aff
+                                          : root.active-section == 2 ? #34c759
+                                          : root.active-section == 3 ? #ff9500
+                                          : root.active-section == 4 ? #38bdf8
+                                          : #ff2d55;
+                                animate background { duration: 200ms; }
+                            }
+                            Text {
+                                text: root.active-section == 0 ? (root.hovered-theme-idx >= 0 ? ("Vista previa: " + root.preview-theme.name) : ("Tema: " + root.active-theme.name))
+                                    : root.active-section == 1 ? (root.res-label + " • " + root.target-fps + " FPS")
+                                    : root.active-section == 2 ? (root.performance-mode ? "Perfil Ultra-Ligero" : "Rendimiento Estándar")
+                                    : root.active-section == 3 ? (root.music-scan-folders.length + " carpetas extra")
+                                    : root.active-section == 4 ? ("CPU " + root.debug-cpu-text + " • " + root.debug-ram-text)
+                                    : ("v" + root.app-version);
+                                color: Theme.text-secondary;
+                                font-size: 11px;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Escenario con transiciones suaves entre las 6 secciones ──
+            Rectangle {
+                vertical-stretch: 1;
+                clip: true;
+
+                // ═════════════════════════════════════════════════════════════
+                //  SECCIÓN 0: APARIENCIA Y TEMAS (CON PREVIEW INTERACTIVO VIVO)
+                // ═════════════════════════════════════════════════════════════
+                AppleSectionPane {
+                    active: root.active-section == 0;
+
+                    // ── Hero Stage: Vista Previa Grande en Vivo del Tema Activo / Hover ──
+                    Rectangle {
+                        height: 212px;
+                        border-radius: 16px;
+                        background: Theme.bg-surface-1;
+                        border-width: 1px;
+                        border-color: Theme.border-subtle;
+                        clip: true;
+
+                        HorizontalLayout {
+                            padding: 16px;
+                            spacing: 20px;
+
+                            // Ventana de demostración ProyecThor que se transforma suavemente al pasar el mouse
+                            Rectangle {
+                                width: 356px;
+                                border-radius: 11px;
+                                background: root.preview-theme.c-root;
+                                border-width: 1.5px;
+                                border-color: root.preview-theme.c-acc.transparentize(0.35);
+                                drop-shadow-blur: 20px;
+                                drop-shadow-color: root.preview-theme.c-acc.transparentize(0.75);
+                                drop-shadow-offset-y: 4px;
+                                clip: true;
+
+                                animate background        { duration: 240ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+                                animate border-color      { duration: 240ms; easing: ease-out; }
+                                animate drop-shadow-color { duration: 240ms; easing: ease-out; }
+
+                                VerticalLayout {
+                                    padding: 8px;
+                                    spacing: 6px;
+
+                                    // Barra superior simulada
+                                    HorizontalLayout {
+                                        height: 18px;
+                                        alignment: space-between;
+                                        spacing: 8px;
+
+                                        HorizontalLayout {
+                                            spacing: 4px;
+                                            Rectangle { width: 7px; height: 7px; y: 5px; border-radius: 3.5px; background: #ff5f57; }
+                                            Rectangle { width: 7px; height: 7px; y: 5px; border-radius: 3.5px; background: #febc2e; }
+                                            Rectangle { width: 7px; height: 7px; y: 5px; border-radius: 3.5px; background: #28c840; }
+                                        }
+
+                                        Rectangle {
+                                            width: 160px;
+                                            height: 16px;
+                                            border-radius: 8px;
+                                            background: root.preview-theme.c-s0;
+                                            border-width: 1px;
+                                            border-color: root.preview-theme.c-acc.transparentize(0.55);
+                                            animate background   { duration: 220ms; }
+                                            animate border-color { duration: 220ms; }
+
+                                            HorizontalLayout {
+                                                padding-left: 8px; padding-right: 8px; spacing: 6px; alignment: center;
+                                                Rectangle { width: 22px; height: 5px; y: 5px; border-radius: 2.5px; background: root.preview-theme.c-acc; animate background { duration: 220ms; } }
+                                                Rectangle { width: 16px; height: 5px; y: 5px; border-radius: 2.5px; background: root.preview-theme.c-muted.transparentize(0.4); animate background { duration: 220ms; } }
+                                                Rectangle { width: 16px; height: 5px; y: 5px; border-radius: 2.5px; background: root.preview-theme.c-muted.transparentize(0.4); animate background { duration: 220ms; } }
+                                                Rectangle { width: 16px; height: 5px; y: 5px; border-radius: 2.5px; background: root.preview-theme.c-muted.transparentize(0.4); animate background { duration: 220ms; } }
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            height: 14px;
+                                            y: 2px;
+                                            border-radius: 7px;
+                                            background: #22c55e30;
+                                            border-width: 1px;
+                                            border-color: #22c55e;
+                                            HorizontalLayout {
+                                                padding-left: 6px; padding-right: 6px;
+                                                Text { text: "EN VIVO"; color: #22c55e; font-size: 7.5px; font-weight: 800; vertical-alignment: center; }
+                                            }
+                                        }
+                                    }
+
+                                    // 3 columnas simuladas
+                                    HorizontalLayout {
+                                        vertical-stretch: 1;
+                                        spacing: 6px;
+
+                                        // Biblioteca simulada
+                                        Rectangle {
+                                            width: 82px;
+                                            border-radius: 6px;
+                                            background: root.preview-theme.c-s0;
+                                            animate background { duration: 220ms; }
+                                            VerticalLayout {
+                                                padding: 6px;
+                                                spacing: 5px;
+                                                Text { text: "Canciones"; color: root.preview-theme.c-txt; font-size: 8.5px; font-weight: 700; animate color { duration: 200ms; } }
+                                                Rectangle {
+                                                    height: 15px; border-radius: 4px; background: root.preview-theme.c-acc.transparentize(0.75);
+                                                    border-width: 1px; border-color: root.preview-theme.c-acc;
+                                                    animate background { duration: 220ms; }
+                                                    animate border-color { duration: 220ms; }
+                                                    HorizontalLayout {
+                                                        padding-left: 5px;
+                                                        Text { text: "Way Maker"; color: root.preview-theme.c-txt; font-size: 8px; font-weight: 700; vertical-alignment: center; animate color { duration: 200ms; } }
+                                                    }
+                                                }
+                                                Rectangle { height: 11px; border-radius: 3px; background: root.preview-theme.c-s1; animate background { duration: 220ms; } }
+                                                Rectangle { height: 11px; border-radius: 3px; background: root.preview-theme.c-s1; animate background { duration: 220ms; } }
+                                                Rectangle { height: 11px; border-radius: 3px; background: root.preview-theme.c-s1; animate background { duration: 220ms; } }
+                                            }
+                                        }
+
+                                        // Diapositivas simuladas
+                                        Rectangle {
+                                            horizontal-stretch: 1;
+                                            border-radius: 6px;
+                                            background: root.preview-theme.c-s0;
+                                            animate background { duration: 220ms; }
+                                            VerticalLayout {
+                                                padding: 6px;
+                                                spacing: 5px;
+                                                HorizontalLayout {
+                                                    vertical-stretch: 1; spacing: 5px;
+                                                    Rectangle {
+                                                        horizontal-stretch: 1; border-radius: 4px; background: root.preview-theme.c-s1;
+                                                        border-width: 1.5px; border-color: root.preview-theme.c-acc;
+                                                        animate background { duration: 220ms; }
+                                                        animate border-color { duration: 220ms; }
+                                                        VerticalLayout {
+                                                            spacing: 0px;
+                                                            Rectangle {
+                                                                height: 12px; background: root.preview-theme.c-acc; animate background { duration: 220ms; }
+                                                                HorizontalLayout {
+                                                                    padding-left: 4px;
+                                                                    Text { text: "Coro"; color: root.preview-theme.is-light ? #ffffff : #09090b; font-size: 7.5px; font-weight: 800; vertical-alignment: center; }
+                                                                }
+                                                            }
+                                                            VerticalLayout {
+                                                                padding: 4px; alignment: center; spacing: 2px;
+                                                                Rectangle { height: 3px; width: 85%; border-radius: 1.5px; background: root.preview-theme.c-txt; animate background { duration: 220ms; } }
+                                                                Rectangle { height: 3px; width: 62%; border-radius: 1.5px; background: root.preview-theme.c-muted; animate background { duration: 220ms; } }
+                                                            }
+                                                        }
+                                                    }
+                                                    Rectangle {
+                                                        horizontal-stretch: 1; border-radius: 4px; background: root.preview-theme.c-s1;
+                                                        animate background { duration: 220ms; }
+                                                        VerticalLayout {
+                                                            spacing: 0px;
+                                                            Rectangle { height: 12px; background: root.preview-theme.c-s2; animate background { duration: 220ms; } }
+                                                            VerticalLayout {
+                                                                padding: 4px; alignment: center; spacing: 2px;
+                                                                Rectangle { height: 3px; width: 78%; border-radius: 1.5px; background: root.preview-theme.c-muted; animate background { duration: 220ms; } }
+                                                                Rectangle { height: 3px; width: 50%; border-radius: 1.5px; background: root.preview-theme.c-muted.transparentize(0.4); animate background { duration: 220ms; } }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                HorizontalLayout {
+                                                    vertical-stretch: 1; spacing: 5px;
+                                                    Rectangle { horizontal-stretch: 1; border-radius: 4px; background: root.preview-theme.c-s1; animate background { duration: 220ms; } }
+                                                    Rectangle { horizontal-stretch: 1; border-radius: 4px; background: root.preview-theme.c-s1; animate background { duration: 220ms; } }
+                                                }
+                                            }
+                                        }
+
+                                        // Vista en Vivo simulada
+                                        Rectangle {
+                                            width: 96px;
+                                            border-radius: 6px;
+                                            background: root.preview-theme.c-s0;
+                                            animate background { duration: 220ms; }
+                                            VerticalLayout {
+                                                padding: 6px;
+                                                spacing: 5px;
+                                                Text { text: "Vista en Vivo"; color: root.preview-theme.c-muted; font-size: 8px; font-weight: 700; animate color { duration: 200ms; } }
+                                                Rectangle {
+                                                    height: 54px; border-radius: 4px; background: #040406;
+                                                    border-width: 1px; border-color: root.preview-theme.c-acc.transparentize(0.35);
+                                                    animate border-color { duration: 220ms; }
+                                                    VerticalLayout {
+                                                        alignment: center; spacing: 2px; padding: 4px;
+                                                        Text { text: "Aquí Estás"; color: #ffffff; font-size: 9px; font-weight: 800; horizontal-alignment: center; }
+                                                        Text { text: "Obrando en mí"; color: root.preview-theme.c-acc2; font-size: 7.5px; font-weight: 600; horizontal-alignment: center; animate color { duration: 200ms; } }
+                                                    }
+                                                }
+                                                Rectangle {
+                                                    height: 18px; border-radius: 5px; background: root.preview-theme.c-acc;
+                                                    animate background { duration: 220ms; }
+                                                    Text { text: "Proyectar"; color: root.preview-theme.is-light ? #ffffff : #09090b; font-size: 8.5px; font-weight: 800; horizontal-alignment: center; vertical-alignment: center; }
+                                                }
+                                                Rectangle { vertical-stretch: 1; border-radius: 4px; background: root.preview-theme.c-s1; animate background { duration: 220ms; } }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Detalles y paleta de colores del tema previsualizado
+                            VerticalLayout {
+                                horizontal-stretch: 1;
+                                alignment: space-between;
+                                spacing: 10px;
+
+                                VerticalLayout {
+                                    spacing: 5px;
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        alignment: start;
+                                        Rectangle {
+                                            height: 22px;
+                                            border-radius: 11px;
+                                            background: root.preview-theme.c-acc.transparentize(0.78);
+                                            border-width: 1px;
+                                            border-color: root.preview-theme.c-acc.transparentize(0.30);
+                                            animate background   { duration: 220ms; }
+                                            animate border-color { duration: 220ms; }
+                                            HorizontalLayout {
+                                                padding-left: 9px; padding-right: 9px;
+                                                Text {
+                                                    text: root.hovered-theme-idx >= 0 ? "VISTA PREVIA EN VIVO" : "TEMA ACTIVO";
+                                                    color: Theme.text-primary;
+                                                    font-size: 9.5px;
+                                                    font-weight: 800;
+                                                    vertical-alignment: center;
+                                                }
+                                            }
+                                        }
+                                        Rectangle {
+                                            height: 22px;
+                                            border-radius: 11px;
+                                            background: Theme.bg-surface-2;
+                                            HorizontalLayout {
+                                                padding-left: 9px; padding-right: 9px;
+                                                Text { text: root.preview-theme.tag; color: Theme.text-secondary; font-size: 10px; font-weight: 600; vertical-alignment: center; }
+                                            }
+                                        }
+                                    }
+
+                                    Text {
+                                        text: root.preview-theme.name;
+                                        color: Theme.text-primary;
+                                        font-size: 22px;
+                                        font-weight: 800;
+                                    }
+
+                                    Text {
+                                        text: "Pasa el puntero sobre cualquier tarjeta de abajo para inspeccionar su contraste y superficies antes de aplicarlo a toda la interfaz.";
+                                        color: Theme.text-muted;
+                                        font-size: 11.5px;
+                                        wrap: word-wrap;
+                                    }
+                                }
+
+                                // Muestra de los 5 tokens cromáticos reales
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    alignment: start;
+
+                                    for sw in [
+                                        { label: "Fondo",    col: root.preview-theme.c-root },
+                                        { label: "Panel",    col: root.preview-theme.c-s0 },
+                                        { label: "Tarjeta",  col: root.preview-theme.c-s1 },
+                                        { label: "Acento",   col: root.preview-theme.c-acc },
+                                        { label: "Realce",   col: root.preview-theme.c-acc2 },
+                                    ] : VerticalLayout {
+                                        spacing: 3px;
+                                        Rectangle {
+                                            width: 44px;
+                                            height: 22px;
+                                            border-radius: 6px;
+                                            background: sw.col;
+                                            border-width: 1px;
+                                            border-color: Theme.border-medium;
+                                            animate background { duration: 220ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+                                        }
+                                        Text {
+                                            text: sw.label;
+                                            color: Theme.text-muted;
+                                            font-size: 9.5px;
+                                            font-weight: 600;
+                                            horizontal-alignment: center;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Barra de filtro de temas (Todos / Oscuros / Claros) ──
+                    HorizontalLayout {
+                        alignment: space-between;
+                        spacing: 12px;
+
+                        Text {
+                            text: "GALERÍA DE TEMAS (14 PRESETS)";
+                            color: Theme.text-muted;
+                            font-size: 11px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+
+                        Rectangle {
+                            height: 36px;
+                            border-radius: 10px;
+                            background: Theme.bg-surface-0;
+                            border-width: 1px;
+                            border-color: Theme.border-subtle;
+                            HorizontalLayout {
+                                padding: 3px;
+                                spacing: 3px;
+                                AppleSegmentOption { label: "Todos (14)";   active: root.theme-filter == 0; clicked => { root.theme-filter = 0; } }
+                                AppleSegmentOption { label: "Oscuros (12)"; active: root.theme-filter == 1; clicked => { root.theme-filter = 1; } }
+                                AppleSegmentOption { label: "Claros (2)";   active: root.theme-filter == 2; clicked => { root.theme-filter = 2; } }
+                            }
+                        }
+                    }
+
+                    // ── Cuadrícula de tarjetas con preview (Todos: 4x3 + 2) ──
+                    if root.theme-filter == 0 : VerticalLayout {
+                        spacing: 12px;
+
+                        HorizontalLayout {
+                            spacing: 12px;
+                            ThemePreviewCard { meta: root.themes[0];  horizontal-stretch: 1; active: root.active-theme-idx == 0;  clicked => { root.theme-selected(0); }  hover-changed(h) => { root.hovered-theme-idx = h ? 0  : (root.hovered-theme-idx == 0  ? -1 : root.hovered-theme-idx); } }
+                            ThemePreviewCard { meta: root.themes[1];  horizontal-stretch: 1; active: root.active-theme-idx == 1;  clicked => { root.theme-selected(1); }  hover-changed(h) => { root.hovered-theme-idx = h ? 1  : (root.hovered-theme-idx == 1  ? -1 : root.hovered-theme-idx); } }
+                            ThemePreviewCard { meta: root.themes[2];  horizontal-stretch: 1; active: root.active-theme-idx == 2;  clicked => { root.theme-selected(2); }  hover-changed(h) => { root.hovered-theme-idx = h ? 2  : (root.hovered-theme-idx == 2  ? -1 : root.hovered-theme-idx); } }
+                            ThemePreviewCard { meta: root.themes[3];  horizontal-stretch: 1; active: root.active-theme-idx == 3;  clicked => { root.theme-selected(3); }  hover-changed(h) => { root.hovered-theme-idx = h ? 3  : (root.hovered-theme-idx == 3  ? -1 : root.hovered-theme-idx); } }
+                        }
+                        HorizontalLayout {
+                            spacing: 12px;
+                            ThemePreviewCard { meta: root.themes[4];  horizontal-stretch: 1; active: root.active-theme-idx == 4;  clicked => { root.theme-selected(4); }  hover-changed(h) => { root.hovered-theme-idx = h ? 4  : (root.hovered-theme-idx == 4  ? -1 : root.hovered-theme-idx); } }
+                            ThemePreviewCard { meta: root.themes[5];  horizontal-stretch: 1; active: root.active-theme-idx == 5;  clicked => { root.theme-selected(5); }  hover-changed(h) => { root.hovered-theme-idx = h ? 5  : (root.hovered-theme-idx == 5  ? -1 : root.hovered-theme-idx); } }
+                            ThemePreviewCard { meta: root.themes[6];  horizontal-stretch: 1; active: root.active-theme-idx == 6;  clicked => { root.theme-selected(6); }  hover-changed(h) => { root.hovered-theme-idx = h ? 6  : (root.hovered-theme-idx == 6  ? -1 : root.hovered-theme-idx); } }
+                            ThemePreviewCard { meta: root.themes[7];  horizontal-stretch: 1; active: root.active-theme-idx == 7;  clicked => { root.theme-selected(7); }  hover-changed(h) => { root.hovered-theme-idx = h ? 7  : (root.hovered-theme-idx == 7  ? -1 : root.hovered-theme-idx); } }
+                        }
+                        HorizontalLayout {
+                            spacing: 12px;
+                            ThemePreviewCard { meta: root.themes[8];  horizontal-stretch: 1; active: root.active-theme-idx == 8;  clicked => { root.theme-selected(8); }  hover-changed(h) => { root.hovered-theme-idx = h ? 8  : (root.hovered-theme-idx == 8  ? -1 : root.hovered-theme-idx); } }
+                            ThemePreviewCard { meta: root.themes[9];  horizontal-stretch: 1; active: root.active-theme-idx == 9;  clicked => { root.theme-selected(9); }  hover-changed(h) => { root.hovered-theme-idx = h ? 9  : (root.hovered-theme-idx == 9  ? -1 : root.hovered-theme-idx); } }
+                            ThemePreviewCard { meta: root.themes[10]; horizontal-stretch: 1; active: root.active-theme-idx == 10; clicked => { root.theme-selected(10); } hover-changed(h) => { root.hovered-theme-idx = h ? 10 : (root.hovered-theme-idx == 10 ? -1 : root.hovered-theme-idx); } }
+                            ThemePreviewCard { meta: root.themes[11]; horizontal-stretch: 1; active: root.active-theme-idx == 11; clicked => { root.theme-selected(11); } hover-changed(h) => { root.hovered-theme-idx = h ? 11 : (root.hovered-theme-idx == 11 ? -1 : root.hovered-theme-idx); } }
+                        }
+                        HorizontalLayout {
+                            spacing: 12px;
+                            ThemePreviewCard { meta: root.themes[12]; horizontal-stretch: 1; active: root.active-theme-idx == 12; clicked => { root.theme-selected(12); } hover-changed(h) => { root.hovered-theme-idx = h ? 12 : (root.hovered-theme-idx == 12 ? -1 : root.hovered-theme-idx); } }
+                            ThemePreviewCard { meta: root.themes[13]; horizontal-stretch: 1; active: root.active-theme-idx == 13; clicked => { root.theme-selected(13); } hover-changed(h) => { root.hovered-theme-idx = h ? 13 : (root.hovered-theme-idx == 13 ? -1 : root.hovered-theme-idx); } }
+                            Rectangle { horizontal-stretch: 1; }
+                            Rectangle { horizontal-stretch: 1; }
+                        }
+                    }
+
+                    // ── Filtro: Solo Oscuros (12) ──
+                    if root.theme-filter == 1 : VerticalLayout {
+                        spacing: 12px;
+                        HorizontalLayout {
+                            spacing: 12px;
+                            ThemePreviewCard { meta: root.themes[0];  horizontal-stretch: 1; active: root.active-theme-idx == 0;  clicked => { root.theme-selected(0); }  hover-changed(h) => { root.hovered-theme-idx = h ? 0  : (root.hovered-theme-idx == 0  ? -1 : root.hovered-theme-idx); } }
+                            ThemePreviewCard { meta: root.themes[2];  horizontal-stretch: 1; active: root.active-theme-idx == 2;  clicked => { root.theme-selected(2); }  hover-changed(h) => { root.hovered-theme-idx = h ? 2  : (root.hovered-theme-idx == 2  ? -1 : root.hovered-theme-idx); } }
+                            ThemePreviewCard { meta: root.themes[3];  horizontal-stretch: 1; active: root.active-theme-idx == 3;  clicked => { root.theme-selected(3); }  hover-changed(h) => { root.hovered-theme-idx = h ? 3  : (root.hovered-theme-idx == 3  ? -1 : root.hovered-theme-idx); } }
+                            ThemePreviewCard { meta: root.themes[5];  horizontal-stretch: 1; active: root.active-theme-idx == 5;  clicked => { root.theme-selected(5); }  hover-changed(h) => { root.hovered-theme-idx = h ? 5  : (root.hovered-theme-idx == 5  ? -1 : root.hovered-theme-idx); } }
+                        }
+                        HorizontalLayout {
+                            spacing: 12px;
+                            ThemePreviewCard { meta: root.themes[6];  horizontal-stretch: 1; active: root.active-theme-idx == 6;  clicked => { root.theme-selected(6); }  hover-changed(h) => { root.hovered-theme-idx = h ? 6  : (root.hovered-theme-idx == 6  ? -1 : root.hovered-theme-idx); } }
+                            ThemePreviewCard { meta: root.themes[7];  horizontal-stretch: 1; active: root.active-theme-idx == 7;  clicked => { root.theme-selected(7); }  hover-changed(h) => { root.hovered-theme-idx = h ? 7  : (root.hovered-theme-idx == 7  ? -1 : root.hovered-theme-idx); } }
+                            ThemePreviewCard { meta: root.themes[8];  horizontal-stretch: 1; active: root.active-theme-idx == 8;  clicked => { root.theme-selected(8); }  hover-changed(h) => { root.hovered-theme-idx = h ? 8  : (root.hovered-theme-idx == 8  ? -1 : root.hovered-theme-idx); } }
+                            ThemePreviewCard { meta: root.themes[9];  horizontal-stretch: 1; active: root.active-theme-idx == 9;  clicked => { root.theme-selected(9); }  hover-changed(h) => { root.hovered-theme-idx = h ? 9  : (root.hovered-theme-idx == 9  ? -1 : root.hovered-theme-idx); } }
+                        }
+                        HorizontalLayout {
+                            spacing: 12px;
+                            ThemePreviewCard { meta: root.themes[10]; horizontal-stretch: 1; active: root.active-theme-idx == 10; clicked => { root.theme-selected(10); } hover-changed(h) => { root.hovered-theme-idx = h ? 10 : (root.hovered-theme-idx == 10 ? -1 : root.hovered-theme-idx); } }
+                            ThemePreviewCard { meta: root.themes[11]; horizontal-stretch: 1; active: root.active-theme-idx == 11; clicked => { root.theme-selected(11); } hover-changed(h) => { root.hovered-theme-idx = h ? 11 : (root.hovered-theme-idx == 11 ? -1 : root.hovered-theme-idx); } }
+                            ThemePreviewCard { meta: root.themes[12]; horizontal-stretch: 1; active: root.active-theme-idx == 12; clicked => { root.theme-selected(12); } hover-changed(h) => { root.hovered-theme-idx = h ? 12 : (root.hovered-theme-idx == 12 ? -1 : root.hovered-theme-idx); } }
+                            ThemePreviewCard { meta: root.themes[13]; horizontal-stretch: 1; active: root.active-theme-idx == 13; clicked => { root.theme-selected(13); } hover-changed(h) => { root.hovered-theme-idx = h ? 13 : (root.hovered-theme-idx == 13 ? -1 : root.hovered-theme-idx); } }
+                        }
+                    }
+
+                    // ── Filtro: Solo Claros (2) ──
+                    if root.theme-filter == 2 : HorizontalLayout {
+                        spacing: 12px;
+                        ThemePreviewCard { meta: root.themes[1]; horizontal-stretch: 1; active: root.active-theme-idx == 1; clicked => { root.theme-selected(1); } hover-changed(h) => { root.hovered-theme-idx = h ? 1 : (root.hovered-theme-idx == 1 ? -1 : root.hovered-theme-idx); } }
+                        ThemePreviewCard { meta: root.themes[4]; horizontal-stretch: 1; active: root.active-theme-idx == 4; clicked => { root.theme-selected(4); } hover-changed(h) => { root.hovered-theme-idx = h ? 4 : (root.hovered-theme-idx == 4 ? -1 : root.hovered-theme-idx); } }
+                        Rectangle { horizontal-stretch: 1; }
+                        Rectangle { horizontal-stretch: 1; }
+                    }
+
+                    // ── Controles de Efectos Visuales Liquid Glass ──
+                    AppleInsetGroup {
+                        header: "EFECTOS VISUALES Y LIQUID GLASS";
+                        footer: "Puedes desactivar las transparencias o los brillos blancos superiores si prefieres un estilo sólido o para ahorrar aún más recursos en PCs modestas.";
+
+                        AppleSwitchRow {
+                            title: "Transparencias Liquid Glass";
+                            subtitle: "Muestra paneles, tarjetas e islas translúcidos con profundidad";
+                            active-color: #8b5cf6;
+                            checked <=> root.enable-glass-translucency;
+                            toggled(v) => { root.visual-effects-changed(); }
+                        }
+
+                        AppleDivider {}
+
+                        AppleSwitchRow {
+                            title: "Degradado Blanco y Brillo Superior";
+                            subtitle: "Reflejo especular blanco en la barra superior, botones e islas flotantes";
+                            active-color: #007aff;
+                            checked <=> root.enable-glass-sheen;
+                            toggled(v) => { root.visual-effects-changed(); }
+                        }
+
+                        AppleDivider {}
+
+                        AppleSwitchRow {
+                            title: "Fondo Ambiental Degradado";
+                            subtitle: "Resplandor sutil del color de acento detrás de los paneles principales";
+                            active-color: #34c759;
+                            checked <=> root.enable-ambient-bg;
+                            toggled(v) => { root.visual-effects-changed(); }
+                        }
+                    }
+                }
+
+                // ═════════════════════════════════════════════════════════════
+                //  SECCIÓN 1: PANTALLA, RESOLUCIÓN, FPS Y SUPER-RESOLUCIÓN
+                // ═════════════════════════════════════════════════════════════
+                AppleSectionPane {
+                    active: root.active-section == 1;
+
+                    AppleInsetGroup {
+                        header: "RESOLUCIÓN Y FRECUENCIA DE PROYECCIÓN";
+                        footer: "Afecta la ventana de Público y la nitidez interna de videos e imágenes. Para pantallas 4K elige 2160p; para proyectores HD clásicos 1080p o 720p.";
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 10px;
+                            Text { text: "Resolución de Salida"; color: Theme.text-primary; font-size: 13px; font-weight: 600; }
+                            Rectangle {
+                                border-radius: 10px;
+                                background: Theme.bg-surface-0;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+                                HorizontalLayout {
+                                    padding: 4px;
+                                    spacing: 4px;
+                                    AppleSegmentOption { label: "720p HD";  sublabel: "1280×720";  horizontal-stretch: 1; active: root.output-res-preset == 0; clicked => { root.output-res-preset = 0; root.output-res-changed(0); } }
+                                    AppleSegmentOption { label: "1080p FHD"; sublabel: "1920×1080"; horizontal-stretch: 1; active: root.output-res-preset == 1; clicked => { root.output-res-preset = 1; root.output-res-changed(1); } }
+                                    AppleSegmentOption { label: "2160p 4K"; sublabel: "3840×2160"; horizontal-stretch: 1; active: root.output-res-preset == 4; clicked => { root.output-res-preset = 4; root.output-res-changed(4); } }
+                                    AppleSegmentOption { label: "16:10";    sublabel: "1920×1200"; horizontal-stretch: 1; active: root.output-res-preset == 2; clicked => { root.output-res-preset = 2; root.output-res-changed(2); } }
+                                    AppleSegmentOption { label: "4:3";      sublabel: "1440×1080"; horizontal-stretch: 1; active: root.output-res-preset == 3; clicked => { root.output-res-preset = 3; root.output-res-changed(3); } }
+                                }
+                            }
+                        }
+
+                        AppleDivider {}
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 10px;
+                            Text { text: "Límite de FPS de Video y UI"; color: Theme.text-primary; font-size: 13px; font-weight: 600; }
+                            Rectangle {
+                                border-radius: 10px;
+                                background: Theme.bg-surface-0;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+                                HorizontalLayout {
+                                    padding: 4px;
+                                    spacing: 4px;
+                                    AppleSegmentOption { label: "30 FPS";  sublabel: "Ahorro CPU";    horizontal-stretch: 1; active: root.target-fps == 30;  clicked => { root.target-fps = 30;  root.target-fps-changed(30); } }
+                                    AppleSegmentOption { label: "60 FPS";  sublabel: "Fluido Estándar"; horizontal-stretch: 1; active: root.target-fps == 60;  clicked => { root.target-fps = 60;  root.target-fps-changed(60); } }
+                                    AppleSegmentOption { label: "120 FPS"; sublabel: "Ultra Fluido";   horizontal-stretch: 1; active: root.target-fps == 120; clicked => { root.target-fps = 120; root.target-fps-changed(120); } }
+                                }
+                            }
+                        }
+
+                        AppleDivider {}
+
+                        AppleSwitchRow {
+                            title: "Interpolación Fluida de Movimiento (24/30 → 60 FPS)";
+                            subtitle: "Convierte fondos y videos grabados a 24, 25 o 30 FPS en 60 FPS suaves en tiempo real";
+                            active-color: #007aff;
+                            checked <=> root.smooth-motion-60;
+                            toggled(v) => {
+                                if (v && root.target-fps < 60) {
+                                    root.target-fps = 60;
+                                    root.target-fps-changed(60);
+                                }
+                                root.gpu-config-changed();
+                            }
+                        }
+                    }
+
+                    AppleInsetGroup {
+                        header: "AJUSTE DE PANTALLA Y ENCUADRE";
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 10px;
+                            Text { text: "Modo de Escalado del Fondo"; color: Theme.text-primary; font-size: 13px; font-weight: 600; }
+                            Rectangle {
+                                border-radius: 10px;
+                                background: Theme.bg-surface-0;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+                                HorizontalLayout {
+                                    padding: 4px;
+                                    spacing: 4px;
+                                    AppleSegmentOption { label: "Recortar (Cover)";   sublabel: "Sin barras negras"; horizontal-stretch: 1; active: root.bg-scale-mode == 0; clicked => { root.bg-scale-mode = 0; root.scale-mode-changed(0); } }
+                                    AppleSegmentOption { label: "Estirar (Fill)";     sublabel: "Llena 100% pantalla"; horizontal-stretch: 1; active: root.bg-scale-mode == 1; clicked => { root.bg-scale-mode = 1; root.scale-mode-changed(1); } }
+                                    AppleSegmentOption { label: "Original (Contain)"; sublabel: "Sin recortar bordes"; horizontal-stretch: 1; active: root.bg-scale-mode == 2; clicked => { root.bg-scale-mode = 2; root.scale-mode-changed(2); } }
+                                }
+                            }
+                        }
+
+                        AppleDivider {}
+
+                        AppleSwitchRow {
+                            title: "Proyección a Pantalla Completa";
+                            subtitle: "Cubre todo el monitor del proyector sin bordes ni barra de título (Esc para salir)";
+                            active-color: #34c759;
+                            checked <=> root.fullscreen-output;
+                            toggled(v) => { root.fullscreen-changed(v); }
+                        }
+                    }
+
+                    AppleInsetGroup {
+                        header: "SUPER-RESOLUCIÓN Y NITIDEZ EN TIEMPO REAL";
+                        footer: "NVIDIA NIS y FidelityFX CAS+ funcionan en tiempo real en cualquier gráfica (GT 710, GTX, RTX, Intel UHD y AMD) superando la claridad de FSR 1.0 sin requerir Tensor Cores.";
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 12px;
+                            Text { text: "Algoritmo de Reescalado"; color: Theme.text-primary; font-size: 13px; font-weight: 600; }
+                            Rectangle {
+                                border-radius: 10px;
+                                background: Theme.bg-surface-0;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+                                HorizontalLayout {
+                                    padding: 4px;
+                                    spacing: 4px;
+                                    AppleSegmentOption { label: "Off";             sublabel: "Bilineal rápido"; horizontal-stretch: 1; active: root.upscaler-mode == 0; clicked => { root.upscaler-mode = 0; root.gpu-config-changed(); } }
+                                    AppleSegmentOption { label: "AMD FSR 1.0";     sublabel: "RCAS clásico";    horizontal-stretch: 1; active: root.upscaler-mode == 1; clicked => { root.upscaler-mode = 1; root.gpu-config-changed(); } }
+                                    AppleSegmentOption { label: "FidelityFX CAS+"; sublabel: "Recomendado";     horizontal-stretch: 1; active: root.upscaler-mode == 2; clicked => { root.upscaler-mode = 2; root.gpu-config-changed(); } }
+                                    AppleSegmentOption { label: "NVIDIA NIS";      sublabel: "Direccional HD";  horizontal-stretch: 1; active: root.upscaler-mode == 3; clicked => { root.upscaler-mode = 3; root.gpu-config-changed(); } }
+                                    AppleSegmentOption { label: "LanczosHQ 4K";    sublabel: "Máximo detalle";  horizontal-stretch: 1; active: root.upscaler-mode == 4; clicked => { root.upscaler-mode = 4; root.gpu-config-changed(); } }
+                                }
+                            }
+
+                            if root.upscaler-mode > 0 : VerticalLayout {
+                                spacing: 5px;
+                                HorizontalLayout {
+                                    alignment: space-between;
+                                    Text { text: "Intensidad de Nitidez / Reconstrucción de Bordes"; color: Theme.text-secondary; font-size: 12px; font-weight: 600; }
+                                    Rectangle {
+                                        height: 22px;
+                                        border-radius: 11px;
+                                        background: Theme.accent.transparentize(0.80);
+                                        HorizontalLayout {
+                                            padding-left: 9px; padding-right: 9px;
+                                            Text { text: Math.round(root.upscaler-sharpness) + "%"; color: Theme.accent-strong; font-size: 11px; font-weight: 800; vertical-alignment: center; }
+                                        }
+                                    }
+                                }
+                                Slider {
+                                    minimum: 0.0;
+                                    maximum: 100.0;
+                                    value <=> root.upscaler-sharpness;
+                                    changed(v) => { root.gpu-config-changed(); }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ═════════════════════════════════════════════════════════════
+                //  SECCIÓN 2: RENDIMIENTO, GPU, NVDEC/NVENC Y PC MODESTA
+                // ═════════════════════════════════════════════════════════════
+                AppleSectionPane {
+                    active: root.active-section == 2;
+
+                    // Banner de hardware GPU detectada
+                    Rectangle {
+                        border-radius: 14px;
+                        background: Theme.bg-surface-1;
+                        border-width: 1px;
+                        border-color: #34c75955;
+
+                        HorizontalLayout {
+                            padding: 16px;
+                            spacing: 14px;
+                            alignment: space-between;
+
+                            HorizontalLayout {
+                                spacing: 12px;
+                                horizontal-stretch: 1;
+                                Rectangle {
+                                    width: 40px;
+                                    height: 40px;
+                                    y: (parent.height - self.height) / 2;
+                                    AppleSquircleIcon {
+                                        icon: @image-url("icons/zap.svg");
+                                        badge-color: #34c759;
+                                        box-size: 40px;
+                                        icon-size: 20px;
+                                    }
+                                }
+                                VerticalLayout {
+                                    alignment: center;
+                                    spacing: 3px;
+                                    horizontal-stretch: 1;
+                                    Text { text: "Hardware Gráfico Detectado"; color: Theme.text-muted; font-size: 11px; font-weight: 700; }
+                                    Text { text: root.gpu-status-label; color: Theme.text-primary; font-size: 13.5px; font-weight: 700; wrap: word-wrap; }
+                                }
+                            }
+
+                            GlassButton {
+                                label: "Liberar RAM";
+                                icon: @image-url("icons/refresh.svg");
+                                has-icon: true;
+                                clicked => { root.purge-ram-cache(); }
+                            }
+                        }
+                    }
+
+                    AppleInsetGroup {
+                        header: "ACELERACIÓN POR HARDWARE (GPU / NVIDIA)";
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 10px;
+                            Text { text: "Motor de Decodificación de Video"; color: Theme.text-primary; font-size: 13px; font-weight: 600; }
+                            Rectangle {
+                                border-radius: 10px;
+                                background: Theme.bg-surface-0;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+                                HorizontalLayout {
+                                    padding: 4px;
+                                    spacing: 4px;
+                                    AppleSegmentOption { label: "Auto";       sublabel: "Inteligente";  horizontal-stretch: 1; active: root.gpu-hwdec-mode == 0; clicked => { root.gpu-hwdec-mode = 0; root.gpu-config-changed(); } }
+                                    AppleSegmentOption { label: "NVIDIA";     sublabel: "CUDA / NVDEC"; horizontal-stretch: 1; active: root.gpu-hwdec-mode == 1; clicked => { root.gpu-hwdec-mode = 1; root.gpu-config-changed(); } }
+                                    AppleSegmentOption { label: "Direct3D 11"; sublabel: "Windows GPU"; horizontal-stretch: 1; active: root.gpu-hwdec-mode == 2; clicked => { root.gpu-hwdec-mode = 2; root.gpu-config-changed(); } }
+                                    AppleSegmentOption { label: "VAAPI";      sublabel: "Linux/Vulkan"; horizontal-stretch: 1; active: root.gpu-hwdec-mode == 3; clicked => { root.gpu-hwdec-mode = 3; root.gpu-config-changed(); } }
+                                    AppleSegmentOption { label: "Solo CPU";   sublabel: "Software";     horizontal-stretch: 1; active: root.gpu-hwdec-mode == 4; clicked => { root.gpu-hwdec-mode = 4; root.gpu-config-changed(); } }
+                                }
+                            }
+                        }
+
+                        AppleDivider {}
+
+                        AppleSwitchRow {
+                            title: "Soporte NVIDIA NVENC / CUDA";
+                            subtitle: "Prioriza NVDEC + NVENC en gráficas NVIDIA con respaldo seguro automático en GPUs sin NVENC (ej. GT 710)";
+                            active-color: #34c759;
+                            checked <=> root.nvenc-enabled;
+                            toggled(v) => {
+                                if (v && root.gpu-hwdec-mode == 0) {
+                                    root.gpu-hwdec-mode = 1;
+                                }
+                                root.gpu-config-changed();
+                            }
+                        }
+                    }
+
+                    AppleInsetGroup {
+                        header: "OPTIMIZACIÓN PARA EQUIPOS MODESTOS (2 NÚCLEOS / 4 GB RAM)";
+
+                        AppleSwitchRow {
+                            title: "Modo Ultra-Ligero (Pentium Gold / GT 710 / 4GB RAM)";
+                            subtitle: "Optimiza resolución interna de decodificación, limita caché en RAM y prioriza 100% la fluidez del proyector";
+                            active-color: #ff9500;
+                            checked <=> root.performance-mode;
+                            toggled(v) => { root.performance-mode-changed(v); }
+                        }
+
+                        AppleDivider {}
+
+                        AppleActionRow {
+                            title: "Aplicar Perfil Recomendado para PC Modesta";
+                            subtitle: "Configura automáticamente 720p, 30 FPS, Modo Ultra-Ligero, Reescalado Off y limpieza de buffers";
+                            icon: @image-url("icons/zap.svg");
+                            badge-color: #ff9500;
+                            trailing-label: "Aplicar ahora";
+                            clicked => { root.apply-low-spec-preset(); }
+                        }
+
+                        AppleDivider {}
+
+                        AppleActionRow {
+                            title: "Purgar Caché de Miniaturas y Buffers en RAM";
+                            subtitle: "Libera memoria acumulada sin detener tu proyección en vivo";
+                            icon: @image-url("icons/refresh.svg");
+                            badge-color: #0ea5e9;
+                            trailing-label: "Limpiar";
+                            clicked => { root.purge-ram-cache(); }
+                        }
+                    }
+                }
+
+                // ═════════════════════════════════════════════════════════════
+                //  SECCIÓN 3: BIBLIOTECA, CARPETAS DE MÚSICA E IMPORTACIÓN
+                // ═════════════════════════════════════════════════════════════
+                AppleSectionPane {
+                    active: root.active-section == 3;
+
+                    AppleInsetGroup {
+                        header: "CARPETAS DE ESCANEO DE MÚSICA";
+                        footer: "Además de las carpetas internas (assets/audio y assets/music), las carpetas que agregues aquí se escanearán automáticamente en la pestaña Música.";
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 10px;
+
+                            HorizontalLayout {
+                                alignment: space-between;
+                                spacing: 10px;
+                                VerticalLayout {
+                                    spacing: 2px;
+                                    Text { text: "Carpetas Locales Personalizadas"; color: Theme.text-primary; font-size: 13px; font-weight: 600; }
+                                    Text { text: "Elige carpetas de tu PC o pega una ruta directamente."; color: Theme.text-muted; font-size: 11px; }
+                                }
+                                GlassButton {
+                                    label: "+ Elegir Carpeta";
+                                    icon: @image-url("icons/folder.svg");
+                                    has-icon: true;
+                                    primary: true;
+                                    clicked => { root.browse-music-folder(); }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                LineEdit {
+                                    horizontal-stretch: 1;
+                                    placeholder-text: "Pega una ruta (ej. /home/usuario/Música)...";
+                                    text <=> root.music-folder-input;
+                                    accepted(p) => {
+                                        if (p != "") {
+                                            root.add-music-folder(p);
+                                            root.music-folder-input = "";
+                                        }
+                                    }
+                                }
+                                GlassButton {
+                                    label: "Agregar";
+                                    clicked => {
+                                        if (root.music-folder-input != "") {
+                                            root.add-music-folder(root.music-folder-input);
+                                            root.music-folder-input = "";
+                                        }
+                                    }
+                                }
+                            }
+
+                            if root.music-scan-folders.length == 0 : Rectangle {
+                                height: 42px;
+                                border-radius: 9px;
+                                background: Theme.bg-surface-0;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    Text {
+                                        text: "Solo escaneando carpetas internas por defecto (assets/audio y assets/music).";
+                                        color: Theme.text-muted;
+                                        font-size: 11.5px;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+
+                            for mdir[mdidx] in root.music-scan-folders : Rectangle {
+                                height: 40px;
+                                border-radius: 9px;
+                                background: Theme.bg-surface-0;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    padding-right: 8px;
+                                    spacing: 10px;
+                                    Image {
+                                        source: @image-url("icons/folder.svg");
+                                        width: 15px;
+                                        height: 15px;
+                                        y: (parent.height - self.height) / 2;
+                                        colorize: #ff9500;
+                                    }
+                                    Text {
+                                        text: mdir;
+                                        color: Theme.text-primary;
+                                        font-size: 12px;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                        horizontal-stretch: 1;
+                                    }
+                                    GlassButton {
+                                        label: "Quitar";
+                                        compact: true;
+                                        danger: true;
+                                        clicked => { root.remove-music-folder(mdidx); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    AppleInsetGroup {
+                        header: "ACCIONES RÁPIDAS DE BIBLIOTECA";
+
+                        AppleActionRow {
+                            title: "Re-escanear Todas las Bibliotecas";
+                            subtitle: "Actualiza canciones, multimedia, fondos, overlays, música y documentos desde el disco";
+                            icon: @image-url("icons/refresh.svg");
+                            badge-color: #ff9500;
+                            trailing-label: "Escanear";
+                            clicked => { root.scan-libraries(); }
+                        }
+                        AppleDivider {}
+                        AppleActionRow {
+                            title: "Importar Archivo a Biblioteca";
+                            subtitle: "Canciones (.txt/.song), videos, imágenes, PDFs o Biblias XML";
+                            icon: @image-url("icons/upload.svg");
+                            badge-color: #007aff;
+                            trailing-label: "Importar";
+                            clicked => { root.import-file-clicked(); }
+                        }
+                        AppleDivider {}
+                        AppleActionRow {
+                            title: "Importar Fondo en Bucle";
+                            subtitle: "Añade videos MP4/WebM o fondos estáticos directamente a assets/backgrounds";
+                            icon: @image-url("icons/film.svg");
+                            badge-color: #8b5cf6;
+                            trailing-label: "Importar";
+                            clicked => { root.import-background-clicked(); }
+                        }
+                        AppleDivider {}
+                        AppleActionRow {
+                            title: "Importar Overlay PNG Transparente";
+                            subtitle: "Añade logos, marcos o plecas transparentes a assets/overlays";
+                            icon: @image-url("icons/layers.svg");
+                            badge-color: #10b981;
+                            trailing-label: "Importar";
+                            clicked => { root.import-overlay-clicked(); }
+                        }
+                    }
+
+                    if root.debug-paths != "" : AppleInsetGroup {
+                        header: "UBICACIÓN DE DATOS EN ESTE EQUIPO (RETROCOMPATIBLE CON IMGUI)";
+                        VerticalLayout {
+                            padding: 14px;
+                            Text {
+                                text: root.debug-paths;
+                                color: Theme.text-secondary;
+                                font-size: 11px;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+                }
+
+                // ═════════════════════════════════════════════════════════════
+                //  SECCIÓN 4: SISTEMA, TELEMETRÍA Y MODO LEGADO
+                // ═════════════════════════════════════════════════════════════
+                AppleSectionPane {
+                    active: root.active-section == 4;
+
+                    // Tarjetas KPI en tiempo real
+                    HorizontalLayout {
+                        spacing: 12px;
+                        for kpi in [
+                            { title: "FPS ACTUALES", val: root.debug-fps-text, sub: root.debug-video-fps-text, accent: #34c759 },
+                            { title: "USO DE CPU",   val: root.debug-cpu-text, sub: "Proceso ProyecThor",      accent: #007aff },
+                            { title: "MEMORIA RAM",  val: root.debug-ram-text, sub: root.debug-peak-ram-text,  accent: #a855f7 },
+                        ] : Rectangle {
+                            horizontal-stretch: 1;
+                            height: 86px;
+                            border-radius: 13px;
+                            background: Theme.bg-surface-1;
+                            border-width: 1px;
+                            border-color: Theme.border-subtle;
+
+                            VerticalLayout {
+                                padding: 14px;
+                                spacing: 3px;
+                                alignment: center;
+                                Text { text: kpi.title; color: Theme.text-muted; font-size: 10px; font-weight: 700; }
+                                Text { text: kpi.val; color: kpi.accent; font-size: 20px; font-weight: 800; }
+                                Text { text: kpi.sub; color: Theme.text-secondary; font-size: 10.5px; overflow: elide; }
+                            }
+                        }
+                    }
+
+                    AppleInsetGroup {
+                        header: "HERRAMIENTAS DEL SISTEMA";
+
+                        AppleActionRow {
+                            title: "Consola de Diagnóstico y Telemetría";
+                            subtitle: "Ver registros en vivo, estado de decodificador GPU, hilos y puertos activos";
+                            icon: @image-url("icons/terminal.svg");
+                            badge-color: #64748b;
+                            trailing-label: "Abrir";
+                            clicked => { root.navigate-to-tab(12); }
+                        }
+                        AppleDivider {}
+                        AppleActionRow {
+                            title: "Red Local, Smart TV, Chat y Control Celular";
+                            subtitle: "Configurar servidor LAN (8080), estilos propios de LAN, QR móvil y firewall";
+                            icon: @image-url("icons/wifi.svg");
+                            badge-color: #0ea5e9;
+                            trailing-label: "Abrir";
+                            clicked => { root.navigate-to-tab(5); }
+                        }
+                        AppleDivider {}
+                        AppleActionRow {
+                            title: "Guía Rápida, Atajos de Teclado y Novedades";
+                            subtitle: "Consulta el changelog completo y atajos de operación en vivo";
+                            icon: @image-url("icons/help.svg");
+                            badge-color: #8b5cf6;
+                            trailing-label: "Abrir";
+                            clicked => { root.navigate-to-tab(11); }
+                        }
+                    }
+
+                    AppleInsetGroup {
+                        header: "COMPATIBILIDAD Y VERSIÓN CLÁSICA";
+                        footer: "Tus canciones, biblias, fondos y estilos se comparten en la misma carpeta de datos entre Slint e ImGui.";
+
+                        AppleActionRow {
+                            title: "Abrir ProyecThor Clásico (Interfaz ImGui)";
+                            subtitle: "Inicia la interfaz legada ImGui manteniendo todos tus archivos intactos";
+                            icon: @image-url("icons/sliders.svg");
+                            badge-color: #f59e0b;
+                            trailing-label: "Ejecutar";
+                            clicked => { root.open-legacy-imgui(); }
+                        }
+                    }
+                }
+
+                // ═════════════════════════════════════════════════════════════
+                //  SECCIÓN 5: ACTUALIZACIONES, ACERCA DE Y DONACIONES KO-FI
+                // ═════════════════════════════════════════════════════════════
+                AppleSectionPane {
+                    active: root.active-section == 5;
+
+                    Rectangle {
+                        border-radius: 16px;
+                        background: Theme.bg-surface-1;
+                        border-width: 1px;
+                        border-color: Theme.border-subtle;
+
+                        VerticalLayout {
+                            alignment: start;
+                            padding: 24px;
+                            spacing: 12px;
+
+                            HorizontalLayout {
+                                alignment: center;
+                                Rectangle {
+                                    width: 68px;
+                                    height: 68px;
+                                    border-radius: 17px;
+                                    background: @linear-gradient(145deg, #2563eb 0%, #7c3aed 100%);
+                                    border-width: 1.5px;
+                                    border-color: #ffffff35;
+                                    drop-shadow-blur: 20px;
+                                    drop-shadow-color: #7c3aed55;
+                                    drop-shadow-offset-y: 5px;
+                                    clip: true;
+
+                                    if root.has-logo : Image {
+                                        source: root.logo-image;
+                                        width: 50px;
+                                        height: 50px;
+                                        x: (parent.width - self.width) / 2;
+                                        y: (parent.height - self.height) / 2;
+                                        image-fit: contain;
+                                    }
+                                    if !root.has-logo : Text {
+                                        text: "P";
+                                        color: #ffffff;
+                                        font-size: 34px;
+                                        font-weight: 900;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+
+                            Text {
+                                text: "ProyecThor Studio";
+                                color: Theme.text-primary;
+                                font-size: 21px;
+                                font-weight: 800;
+                                horizontal-alignment: center;
+                            }
+
+                            Text {
+                                text: "Versión instalada v" + root.app-version + "  •  Motor Slint 1.19 + Async libmpv";
+                                color: Theme.text-secondary;
+                                font-size: 12px;
+                                horizontal-alignment: center;
+                            }
+
+                            Rectangle {
+                                border-radius: 10px;
+                                background: Theme.bg-surface-0;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+                                HorizontalLayout {
+                                    padding: 11px;
+                                    alignment: center;
+                                    Text {
+                                        text: root.update-status;
+                                        color: Theme.text-primary;
+                                        font-size: 12px;
+                                        horizontal-alignment: center;
+                                        wrap: word-wrap;
+                                    }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                alignment: center;
+                                spacing: 10px;
+                                GlassButton {
+                                    label: "Buscar Actualizaciones en GitHub";
+                                    icon: @image-url("icons/refresh.svg");
+                                    has-icon: true;
+                                    primary: true;
+                                    clicked => { root.check-github-updates(); }
+                                }
+                            }
+
+                            Text {
+                                text: "Repositorio oficial: github.com/TheVixcho/ProyecThor";
+                                color: Theme.text-muted;
+                                font-size: 11px;
+                                horizontal-alignment: center;
+                            }
+                        }
+                    }
+
+                    // ── Tarjeta de Donaciones Ko-fi (https://ko-fi.com/vixcho) ──
+                    AppleInsetGroup {
+                        header: "APOYA EL PROYECTO";
+                        footer: "Al pulsar el botón se abrirá https://ko-fi.com/vixcho en tu navegador predeterminado.";
+
+                        Rectangle {
+                            background: @linear-gradient(135deg, #ff5e5b18 0%, transparent 65%);
+                            HorizontalLayout {
+                                padding: 18px;
+                                spacing: 16px;
+                                alignment: space-between;
+
+                                HorizontalLayout {
+                                    spacing: 14px;
+                                    horizontal-stretch: 1;
+
+                                    Rectangle {
+                                        width: 44px;
+                                        height: 44px;
+                                        y: (parent.height - self.height) / 2;
+                                        AppleSquircleIcon {
+                                            icon: @image-url("icons/coffee.svg");
+                                            badge-color: #ff5e5b;
+                                            box-size: 44px;
+                                            icon-size: 22px;
+                                        }
+                                    }
+
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        alignment: center;
+                                        spacing: 3px;
+                                        Text {
+                                            text: "Invítame un café en Ko-fi";
+                                            color: Theme.text-primary;
+                                            font-size: 15px;
+                                            font-weight: 800;
+                                        }
+                                        Text {
+                                            text: "ProyecThor es gratuito. Tu donación ayuda a seguir desarrollando nuevas funciones, mejoras de rendimiento y actualizaciones.";
+                                            color: Theme.text-secondary;
+                                            font-size: 11.5px;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    width: 220px;
+                                    height: 44px;
+                                    y: (parent.height - self.height) / 2;
+                                    KofiDonateButton {
+                                        width: 100%;
+                                        label: "Donar en Ko-fi";
+                                        sublabel: "vixcho";
+                                        clicked => { root.open-kofi-donations(); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

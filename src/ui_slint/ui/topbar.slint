@@ -24,10 +24,18 @@ export component TopBar inherits Rectangle {
     callback toggle-freeze();
     callback clear-all();
     callback scan-libraries();
+    callback open-kofi-donations();
 
-    height: 52px;
+    height: 54px;
     background: Theme.bg-glass;
 
+    // Specular glass rim at top & soft divider at bottom
+    Rectangle {
+        y: 0px;
+        width: 100%;
+        height: 1px;
+        background: Theme.glass-rim-top;
+    }
     Rectangle {
         y: parent.height - 1px;
         width: 100%;
@@ -40,10 +48,10 @@ export component TopBar inherits Rectangle {
         padding-right: 16px;
         spacing: 10px;
 
-        // ── Left Floating Islands (fixed position, NEVER shifts on hover) ──
+        // ── Left Floating Islands (clearly spaced by category: Biblioteca | Diseño | Red y Sistema) ──
         HorizontalLayout {
             horizontal-stretch: 0;
-            spacing: 10px;
+            spacing: 14px;
             alignment: start;
 
             // Isla 1: Biblioteca Directa (todos los botones de acceso en 1 clic, sin menú extra) + Capturadora
@@ -154,6 +162,14 @@ export component TopBar inherits Rectangle {
                 }
             }
 
+            // Separador visual entre Biblioteca y Diseño
+            Rectangle {
+                width: 1px;
+                height: 22px;
+                y: (parent.height - self.height) / 2;
+                background: Theme.border-subtle;
+            }
+
             // Isla 2: Estilos y Diseño (menú desplegable unificado) + Tiles (aparte)
             ToolbarIsland {
                 y: (parent.height - self.height) / 2;
@@ -189,6 +205,14 @@ export component TopBar inherits Rectangle {
                         hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
                     }
                 }
+            }
+
+            // Separador visual entre Diseño y Red / Sistema
+            Rectangle {
+                width: 1px;
+                height: 22px;
+                y: (parent.height - self.height) / 2;
+                background: Theme.border-subtle;
             }
 
             // Isla 3: Redes (menú desplegable unificado), Escanear, Ajustes, Ayuda/Novedades, Debug
@@ -259,6 +283,18 @@ export component TopBar inherits Rectangle {
                             root.design-menu-open = false;
                             root.net-menu-open = false;
                             root.active-tab = 12;
+                        }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/coffee.svg");
+                        tooltip: "Donar en Ko-fi (ko-fi.com/vixcho)";
+                        accent-color: #ff5e5b;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.open-kofi-donations();
                         }
                         hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
                     }

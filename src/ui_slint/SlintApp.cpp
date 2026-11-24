@@ -24,6 +24,14 @@
 #include <sstream>
 #include <thread>
 
+#ifdef _WIN32
+#include <windows.h>
+#include <shellapi.h>
+#include <psapi.h>
+#else
+#include <unistd.h>
+#endif
+
 namespace fs = std::filesystem;
 
 namespace ProyecThor::SlintUI {
@@ -119,7 +127,9 @@ SlintApp::SlintApp()
     , m_ScreenMatrixModel(std::make_shared<slint::VectorModel<ScreenMatrixItem>>())
     , m_MusicLiveWaveModel(std::make_shared<slint::VectorModel<float>>())
     , m_MusicTrackWaveModel(std::make_shared<slint::VectorModel<float>>())
+    , m_AppAliveFlag(std::make_shared<std::atomic<bool>>(true))
     , m_MusicPlayer(true)
+    , m_Player(true)
     , m_HoverPlayer(true)
 {
     for (int i = 0; i < 8; ++i) {
@@ -205,8 +215,21 @@ SlintApp::SlintApp()
     BindCallbacks();
     ScanSystemFonts();
     LoadPersistedState();
+    ApplyGpuAndUpscalerConfig();
     UpdatePlayerRenderSize();
     m_Player.SetScaleMode(m_BgScaleMode);
+
+    // Event-driven video frame delivery directly from SlintVideoPlayer's async render worker
+    // (eliminates 33ms timer bottleneck that capped 60/120 FPS video at ~24 FPS!)
+    auto aliveFlag = m_AppAliveFlag;
+    m_Player.SetFrameReadyCallback([this, aliveFlag]() {
+        slint::invoke_from_event_loop([this, aliveFlag]() {
+            if (!aliveFlag || !aliveFlag->load(std::memory_order_acquire)) return;
+            DeliverVideoFrameToOutputs();
+        });
+    });
+
+    DetectGpuCapabilitiesAsync();
     LoadThemeFilesFromDisk();
     LoadSongPlaylists();
     ApplyThemePreset(m_ActiveThemeIdx);
@@ -289,14 +312,21 @@ SlintApp::SlintApp()
     m_ChatServer.SetChatStore(&m_ChatStore);
     (void)weakMain;
 
-    // 30 FPS tick timer for libmpv video frames, playback progress, clock & countdown
-    m_TickTimer = std::make_unique<slint::Timer>(
-        std::chrono::milliseconds(33),
-        [this]() { OnTick(); }
-    );
+    // Start tick timer at configured target FPS (30 / 60 / 120 FPS)
+    if (!m_TickTimer) {
+        int tickMs = (m_TargetFps >= 120) ? 8 : (m_TargetFps >= 60 ? 16 : 33);
+        m_TickTimer = std::make_unique<slint::Timer>(
+            std::chrono::milliseconds(tickMs),
+            [this]() { OnTick(); }
+        );
+    }
 }
 
 SlintApp::~SlintApp() {
+    if (m_AppAliveFlag) {
+        m_AppAliveFlag->store(false, std::memory_order_release);
+    }
+    m_Player.SetFrameReadyCallback(nullptr);
     SavePersistedState();
     if (m_LanServer) {
         m_LanServer->Stop();
@@ -438,7 +468,7 @@ void SlintApp::BindCallbacks() {
             RefreshCaptureDevices();
         } else if (tab == 9) {
             if (!m_MusicScanned) ScanMusicTracks();
-        } else if (tab == 12) {
+        } else if (tab == 12 || tab == 7) {
             RefreshDebugInfo();
         } else if (tab == 14) {
             RefreshScreenMatrixModel();
@@ -641,6 +671,7 @@ void SlintApp::BindCallbacks() {
     m_Main->on_toggle_freeze([this]() { ToggleFreeze(); });
     m_Main->on_scale_mode_changed([this](int mode) { ApplyScalingMode(mode); });
     m_Main->on_output_res_changed([this](int preset) { ApplyOutputResolution(preset); });
+    m_Main->on_target_fps_changed([this](int fps) { ApplyTargetFps(fps); });
     m_Main->on_scan_libraries([this]() { ScanAllLibrariesManual(); });
     m_Main->on_bg_folder_entered([this](slint::SharedString rel) {
         StopHoverVideoPreview();
@@ -1096,12 +1127,27 @@ void SlintApp::BindCallbacks() {
         SyncScreenOutputs();
     });
     m_Main->on_open_legacy_imgui([this]() { LaunchLegacyImGui(); });
-    m_Main->on_fsr_changed([this](bool) {
-        ApplyShaders();
+    m_Main->on_fsr_changed([this](bool enabled) {
+        m_UpscalerMode = enabled ? (m_UpscalerMode > 0 ? m_UpscalerMode : 2) : 0;
+        m_Main->set_upscaler_mode(m_UpscalerMode);
+        ApplyGpuAndUpscalerConfig();
         SavePersistedState();
     });
-    m_Main->on_performance_mode_changed([this](bool) {
+    m_Main->on_gpu_config_changed([this]() {
+        ApplyGpuAndUpscalerConfig();
+        SavePersistedState();
+    });
+    m_Main->on_apply_low_spec_preset([this]() {
+        ApplyLowSpecPreset();
+    });
+    m_Main->on_purge_ram_cache([this]() {
+        PurgeMemoryCaches();
+    });
+    m_Main->on_performance_mode_changed([this](bool perf) {
+        m_HoverPlayer.SetRenderSize(perf ? 256 : 320, perf ? 144 : 180);
         UpdatePlayerRenderSize();
+        ApplyTargetFps(m_TargetFps);
+        if (perf) PurgeMemoryCaches();
         SavePersistedState();
     });
     m_Main->on_fullscreen_changed([this](bool fs) {
@@ -1110,7 +1156,25 @@ void SlintApp::BindCallbacks() {
         }
         SavePersistedState();
     });
+    m_Main->on_visual_effects_changed([this]() {
+        m_EnableGlassTranslucency = m_Main->get_enable_glass_translucency();
+        m_EnableGlassSheen        = m_Main->get_enable_glass_sheen();
+        m_EnableAmbientBg         = m_Main->get_enable_ambient_bg();
+        ApplyThemePreset(m_ActiveThemeIdx);
+        SavePersistedState();
+    });
     m_Main->on_check_github_updates([this]() { CheckGitHubUpdatesAsync(); });
+    m_Main->on_open_kofi_donations([this]() {
+        AppendDebugLog("Abriendo Ko-fi en el navegador: https://ko-fi.com/vixcho");
+        std::thread([]() {
+#ifdef _WIN32
+            ShellExecuteA(nullptr, "open", "https://ko-fi.com/vixcho", nullptr, nullptr, SW_SHOWNORMAL);
+#else
+            int rc = std::system("xdg-open 'https://ko-fi.com/vixcho' >/dev/null 2>&1 &");
+            (void)rc;
+#endif
+        }).detach();
+    });
     m_Main->on_item_action_play([this](int kind, slint::SharedString path) {
         HandleItemPlay(kind, std::string(path));
     });
@@ -1521,6 +1585,7 @@ void SlintApp::ApplyStyleToProjector(const SavedTextStyle& st) {
     std::string idxFont  = ResolveStyleFontName(st, true);
 
     m_Projector->set_text_size(st.textSize);
+    m_Projector->set_text_fit_mode(st.textFitMode);
     m_Projector->set_text_align(st.textAlign);
     m_Projector->set_text_valign(st.textValign);
     m_Projector->set_text_shadow(st.shadow);
@@ -1633,6 +1698,7 @@ SlintApp::SavedTextStyle SlintApp::CaptureCurrentStyleFromUI(const std::string& 
     st.underline       = m_Main->get_text_underline();
     st.uppercase       = m_Main->get_text_uppercase();
     st.boxBg           = m_Main->get_text_box_bg();
+    st.textFitMode     = m_Main->get_text_fit_mode();
     return st;
 }
 
@@ -1673,6 +1739,7 @@ void SlintApp::ApplyStyleStructToUI(const SavedTextStyle& st) {
     m_Main->set_text_underline(st.underline);
     m_Main->set_text_uppercase(st.uppercase);
     m_Main->set_text_box_bg(st.boxBg);
+    m_Main->set_text_fit_mode(st.textFitMode);
     SetIndexColorRGB(st.indexColorR, st.indexColorG, st.indexColorB);
     SetTextColorRGB(st.colorR, st.colorG, st.colorB);
 }
@@ -2009,6 +2076,7 @@ void SlintApp::SaveThemeFileToDisk(const SavedTextStyle& st) {
     f << "slintUnder="  << (st.underline ? 1 : 0) << "\n";
     f << "slintUpper="  << (st.uppercase ? 1 : 0) << "\n";
     f << "slintBoxBg="  << (st.boxBg ? 1 : 0) << "\n";
+    f << "slintTextFit="<< st.textFitMode << "\n";
 }
 
 void SlintApp::LoadThemeFilesFromDisk() {
@@ -2079,6 +2147,7 @@ void SlintApp::LoadThemeFilesFromDisk() {
                 else if (k == "slintUnder")   st.underline    = (std::stoi(v) != 0);
                 else if (k == "slintUpper")   st.uppercase    = (std::stoi(v) != 0);
                 else if (k == "slintBoxBg")   st.boxBg        = (std::stoi(v) != 0);
+                else if (k == "slintTextFit") st.textFitMode  = std::clamp(std::stoi(v), 0, 2);
                 else if (k == "lyricsColor" || k == "color") {
                     std::istringstream ss(v);
                     std::string tok;
@@ -2332,6 +2401,7 @@ void SlintApp::GetOutputResolution(int& outW, int& outH) const {
         case 0:  outW = 1280; outH = 720;  break; // 720p (16:9)
         case 2:  outW = 1440; outH = 900;  break; // 16:10
         case 3:  outW = 1280; outH = 960;  break; // 4:3
+        case 4:  outW = 3840; outH = 2160; break; // 2160p (4K UHD)
         case 1:
         default: outW = 1920; outH = 1080; break; // 1080p (16:9)
     }
@@ -2350,10 +2420,25 @@ bool SlintApp::RenderScaledStaticImage(const std::string& path, slint::Image& ou
             return true;
         }
         m_StaticSrcPath = path;
-        m_StaticSrcW    = w;
-        m_StaticSrcH    = h;
-        m_StaticSrcRgba.assign(data, data + static_cast<size_t>(w) * static_cast<size_t>(h) * 4);
-        stbi_image_free(data);
+        const bool perf = m_Main->get_performance_mode();
+        const int maxCacheW = perf ? 1280 : 3840;
+        const int maxCacheH = perf ? 720  : 2160;
+        if (w > maxCacheW || h > maxCacheH) {
+            // Downscale oversized source (e.g. 6000x4000 96MB photo -> 3.5MB in Low-Spec mode) to protect 4GB RAM!
+            double sc = std::min(static_cast<double>(maxCacheW) / w, static_cast<double>(maxCacheH) / h);
+            int cw = std::max(1, static_cast<int>(std::round(w * sc)));
+            int ch = std::max(1, static_cast<int>(std::round(h * sc)));
+            m_StaticSrcRgba.resize(static_cast<size_t>(cw) * static_cast<size_t>(ch) * 4);
+            stbir_resize_uint8_srgb(data, w, h, w * 4, m_StaticSrcRgba.data(), cw, ch, cw * 4, STBIR_RGBA);
+            stbi_image_free(data);
+            m_StaticSrcW = cw;
+            m_StaticSrcH = ch;
+        } else {
+            m_StaticSrcW = w;
+            m_StaticSrcH = h;
+            m_StaticSrcRgba.assign(data, data + static_cast<size_t>(w) * static_cast<size_t>(h) * 4);
+            stbi_image_free(data);
+        }
     }
 
     int outW = 1920, outH = 1080;
@@ -2433,34 +2518,206 @@ void SlintApp::ReapplyCurrentStaticImage() {
 
 void SlintApp::UpdatePlayerRenderSize() {
     const bool perf = m_Main->get_performance_mode();
+    const bool lowCoreCpu = (std::thread::hardware_concurrency() <= 2);
     const bool lanNeedsVideo = IsLanRunning() && !m_LanConfig.transparentMode && m_LanConfig.sendBackground;
-    int outW = 1280, outH = 720;
+    int outW = 1920, outH = 1080;
     GetOutputResolution(outW, outH);
 
     if (m_ProjectorVisible) {
-        int maxW = perf ? 960 : 1280;
+        int maxW = (perf || lowCoreCpu) ? (lowCoreCpu ? 854 : 960) : outW;
         int w = std::min(outW, maxW);
         int h = std::max(360, static_cast<int>(std::round(static_cast<double>(w) * outH / std::max(1, outW))));
         w &= ~1; h &= ~1;
         m_Player.SetRenderSize(w, h);
     } else if (lanNeedsVideo) {
-        int w = std::clamp(m_LanConfig.frameWidth, 640, perf ? 960 : 1280);
-        int h = std::clamp(m_LanConfig.frameHeight, 360, perf ? 540 : 720);
+        int w = std::clamp(m_LanConfig.frameWidth, 640, (perf || lowCoreCpu) ? 960 : 1280);
+        int h = std::clamp(m_LanConfig.frameHeight, 360, (perf || lowCoreCpu) ? 540 : 720);
         m_Player.SetRenderSize(w, h);
     } else {
-        int w = 640;
-        int h = std::max(360, static_cast<int>(std::round(640.0 * outH / std::max(1, outW))));
-        h &= ~1;
+        int w = (perf || lowCoreCpu) ? 480 : 640;
+        int h = std::max(270, static_cast<int>(std::round(static_cast<double>(w) * outH / std::max(1, outW))));
+        w &= ~1; h &= ~1;
         m_Player.SetRenderSize(w, h);
     }
 }
 
 void SlintApp::ApplyOutputResolution(int preset) {
-    m_OutputResPreset = std::clamp(preset, 0, 3);
+    m_OutputResPreset = std::clamp(preset, 0, 4);
     m_Main->set_output_res_preset(m_OutputResPreset);
     UpdatePlayerRenderSize();
     ReapplyCurrentStaticImage();
     SavePersistedState();
+}
+
+void SlintApp::ApplyTargetFps(int fps) {
+    if (fps != 30 && fps != 60 && fps != 120) fps = 60;
+    m_TargetFps = fps;
+    m_Main->set_target_fps(m_TargetFps);
+    m_Player.SetMaxFps(m_TargetFps);
+
+    // Run UI tick timer at exact target FPS (30 FPS = 33ms, 60 FPS = 16ms, 120 FPS = 8ms)
+    int tickMs = (m_TargetFps >= 120) ? 8 : (m_TargetFps >= 60 ? 16 : 33);
+    m_TickTimer = std::make_unique<slint::Timer>(
+        std::chrono::milliseconds(tickMs),
+        [this]() { OnTick(); }
+    );
+    SavePersistedState();
+}
+
+void SlintApp::ApplyGpuAndUpscalerConfig() {
+    m_GpuHwdecMode      = std::clamp(m_Main->get_gpu_hwdec_mode(), 0, 4);
+    m_NvencEnabled      = m_Main->get_nvenc_enabled();
+    m_UpscalerMode      = std::clamp(m_Main->get_upscaler_mode(), 0, 4);
+    m_UpscalerSharpness = std::clamp(m_Main->get_upscaler_sharpness() / 100.0f, 0.0f, 1.0f);
+    m_SmoothMotion60    = m_Main->get_smooth_motion_60();
+
+    m_Main->set_fsr_enabled(m_UpscalerMode > 0);
+    m_Player.SetGpuBackend(m_GpuHwdecMode);
+    // Keep hover preview on lightweight CPU decode (256x144 / 320x180) so it NEVER
+    // steals or thrashes NVIDIA NVDEC hardware decoder sessions from the main player!
+    m_HoverPlayer.SetGpuBackend(4);
+    m_HoverPlayer.SetMaxFps(20);
+    m_Player.SetUpscaler(m_UpscalerMode, m_UpscalerSharpness, m_SmoothMotion60);
+    m_Player.SetMaxFps(m_TargetFps);
+    ApplyShaders();
+
+    static const char* kHwLabels[] = { "Auto GPU", "NVIDIA NVDEC/CUDA", "Direct3D 11", "VAAPI/Vulkan", "Solo CPU" };
+    static const char* kUpLabels[] = { "Bilineal Rápido", "AMD FSR 1.0", "FidelityFX CAS+", "NVIDIA NIS", "LanczosHQ 4K" };
+
+    std::string status = "GPU: " + m_DetectedGpuName +
+                         " • Decode: " + std::string(kHwLabels[m_GpuHwdecMode]) +
+                         " • Reescalado: " + std::string(kUpLabels[m_UpscalerMode]);
+    if (m_NvencEnabled) {
+        status += m_NvencAvailable ? " • NVENC: ACTIVO" : " • NVENC: Fallback seguro (GPU sin NVENC)";
+    }
+    m_Main->set_gpu_status_label(slint::SharedString(status));
+}
+
+void SlintApp::ApplyLowSpecPreset() {
+    const unsigned int cores = std::max(1u, std::thread::hardware_concurrency());
+    m_Main->set_performance_mode(true);
+    // Use hardware GPU decode (Auto -> uses GT 710 NVDEC/D3D11VA or Intel QuickSync so the 2-core CPU stays free!)
+    m_GpuHwdecMode = 0;
+    m_Main->set_gpu_hwdec_mode(0);
+    // On <=2 cores use ultra-fast bilinear (0); otherwise FidelityFX CAS+ (2)
+    m_UpscalerMode = (cores <= 2) ? 0 : 2;
+    m_Main->set_upscaler_mode(m_UpscalerMode);
+    m_SmoothMotion60 = false;
+    m_Main->set_smooth_motion_60(false);
+    m_HoverPlayer.SetRenderSize(256, 144);
+
+    ApplyGpuAndUpscalerConfig();
+    UpdatePlayerRenderSize();
+    ApplyTargetFps(30);
+    PurgeMemoryCaches();
+    SavePersistedState();
+    AppendDebugLog("Perfil PC Modesta activado (2 núcleos / GT 710 / 4GB RAM): GPU Decode + RAM optimizada.");
+}
+
+void SlintApp::PurgeMemoryCaches() {
+    m_ThumbCache.clear();
+    if (!m_HasStaticImage) {
+        m_StaticSrcPath.clear();
+        m_StaticSrcRgba.clear();
+        m_StaticSrcRgba.shrink_to_fit();
+        m_StaticSrcW = 0;
+        m_StaticSrcH = 0;
+    }
+    AppendDebugLog("Caché de miniaturas y buffers en RAM liberados.");
+    if (m_ActiveTab == 12) RefreshDebugInfo();
+}
+
+void SlintApp::DeliverVideoFrameToOutputs() {
+    if (!m_HasVideoBg) return;
+    slint::Image frame;
+    if (!m_Player.PollFrame(frame)) return;
+
+    ++m_PerfVideoFrames;
+    const uint64_t seq = ++m_DeliveredVideoSeq;
+
+    // 1. Audience ProjectorWindow ALWAYS receives 100% of frames (full 30 / 60 / 120 FPS!)
+    if (!m_Screens.empty() && m_Screens[0].bgIsVideo) {
+        m_Screens[0].bgImage    = frame;
+        m_Screens[0].hasBgImage = true;
+        if (!m_AudienceFrozen) {
+            m_Projector->set_bg_image(frame);
+            m_Projector->set_has_bg_image(true);
+        }
+    }
+
+    // 2. Smart decimation for MainWindow's small preview monitor so MainWindow's eglSwapBuffers
+    //    never serializes against ProjectorWindow VSync on Wayland/OpenGL (eliminates 20/30fps VSync cap!)
+    const bool perf = m_Main->get_performance_mode();
+    uint64_t previewDecim = 1;
+    if (m_ProjectorVisible) {
+        if (perf) {
+            previewDecim = (m_TargetFps >= 120) ? 8 : (m_TargetFps >= 60 ? 4 : 2);
+        } else {
+            previewDecim = (m_TargetFps >= 120) ? 6 : (m_TargetFps >= 60 ? 3 : 2);
+        }
+    } else if (perf && m_TargetFps >= 60) {
+        previewDecim = (m_TargetFps >= 120) ? 4 : 2;
+    }
+
+    if ((seq % previewDecim) == 0 || seq <= 2) {
+        if (m_InspectedScreenIdx >= 0 && m_InspectedScreenIdx < static_cast<int>(m_Screens.size()) &&
+            m_Screens[m_InspectedScreenIdx].bgIsVideo) {
+            if (m_InspectedScreenIdx > 0) {
+                m_Screens[m_InspectedScreenIdx].bgImage    = frame;
+                m_Screens[m_InspectedScreenIdx].hasBgImage = true;
+            }
+            m_Main->set_live_preview_image(frame);
+            m_Main->set_has_live_preview_image(true);
+        }
+        if ((m_ActiveTab == 2 || m_ActiveTab == 3) && !m_HoverVideoActive) {
+            m_Main->set_selected_media_preview(frame);
+            m_Main->set_has_selected_media_preview(true);
+        }
+    }
+}
+
+void SlintApp::DetectGpuCapabilitiesAsync() {
+    auto aliveFlag = m_AppAliveFlag;
+    std::thread([this, aliveFlag]() {
+        std::string gpuName;
+        bool hasNvenc = false;
+
+#ifdef _WIN32
+        gpuName = RunCommandCapture("nvidia-smi --query-gpu=name --format=csv,noheader 2>nul");
+        if (gpuName.empty()) {
+            gpuName = RunCommandCapture("powershell -NoProfile -Command \"(Get-CimInstance Win32_VideoController | Select-Object -First 1 -ExpandProperty Name)\" 2>nul");
+        }
+        std::string encs = RunCommandCapture("ffmpeg -hide_banner -encoders 2>nul");
+#else
+        gpuName = RunCommandCapture("nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null");
+        if (gpuName.empty()) {
+            gpuName = RunCommandCapture("lspci 2>/dev/null | grep -iE 'vga|3d|display' | head -n 1 | sed 's/^.*: //'");
+        }
+        std::string encs = RunCommandCapture("ffmpeg -hide_banner -encoders 2>/dev/null");
+#endif
+        while (!gpuName.empty() && (gpuName.back() == '\n' || gpuName.back() == '\r' || gpuName.back() == ' ')) {
+            gpuName.pop_back();
+        }
+        auto nlPos = gpuName.find('\n');
+        if (nlPos != std::string::npos) gpuName = gpuName.substr(0, nlPos);
+        if (gpuName.empty()) gpuName = "GPU Estándar del Sistema";
+
+        std::string lowGpu = ToLowerUtf8(gpuName);
+        bool isNvidia = (lowGpu.find("nvidia") != std::string::npos || lowGpu.find("geforce") != std::string::npos ||
+                         lowGpu.find("quadro") != std::string::npos || lowGpu.find("rtx") != std::string::npos ||
+                         lowGpu.find("gtx") != std::string::npos);
+        bool isGt710  = (lowGpu.find("gt 710") != std::string::npos || lowGpu.find("gt710") != std::string::npos);
+        if (isNvidia && !isGt710 && encs.find("h264_nvenc") != std::string::npos) {
+            hasNvenc = true;
+        }
+
+        slint::invoke_from_event_loop([this, aliveFlag, gpuName, hasNvenc]() {
+            if (!aliveFlag || !aliveFlag->load(std::memory_order_acquire)) return;
+            m_DetectedGpuName = gpuName;
+            m_NvencAvailable  = hasNvenc;
+            ApplyGpuAndUpscalerConfig();
+        });
+    }).detach();
 }
 
 void SlintApp::ToggleStageWindow() {
@@ -2946,6 +3203,9 @@ void SlintApp::StartHoverVideoPreview(const std::string& path) {
         return;
     }
     if (m_HoverVideoActive && m_HoverVideoPath == path) return;
+    // Clear previous cached hover frame immediately so the new item never flashes the old thumbnail
+    m_Main->set_has_hover_video_frame(false);
+    m_Main->set_hover_video_frame(slint::Image());
     m_HoverVideoPath   = path;
     m_HoverVideoActive = true;
     m_HoverPlayer.Play(path, true, true);
@@ -2958,6 +3218,7 @@ void SlintApp::StopHoverVideoPreview() {
         m_HoverVideoPath.clear();
     }
     m_Main->set_has_hover_video_frame(false);
+    m_Main->set_hover_video_frame(slint::Image());
 }
 
 // ── Scene Pads ───────────────────────────────────────────────────────────────
@@ -3074,7 +3335,7 @@ static nlohmann::json SavedStyleToJson(const StyleT& st) {
         {"fontFamIdx", st.fontFamIdx}, {"fontName", st.fontName}, {"fontWtIdx", st.fontWtIdx},
         {"shadow", st.shadow}, {"outline", st.outline}, {"glow", st.glow},
         {"neon", st.neon}, {"text3d", st.text3d}, {"underline", st.underline},
-        {"uppercase", st.uppercase}, {"boxBg", st.boxBg}
+        {"uppercase", st.uppercase}, {"boxBg", st.boxBg}, {"textFitMode", st.textFitMode}
     };
 }
 
@@ -3151,6 +3412,7 @@ void SlintApp::LoadPersistedState() {
             st.underline       = js.value("underline", base.underline);
             st.uppercase       = js.value("uppercase", base.uppercase);
             st.boxBg           = js.value("boxBg", base.boxBg);
+            st.textFitMode     = std::clamp(js.value("textFitMode", base.textFitMode), 0, 2);
             return st;
         };
 
@@ -3211,17 +3473,49 @@ void SlintApp::LoadPersistedState() {
         m_Main->set_fullscreen_output(j.value("fullscreen", true));
         m_Main->set_fsr_enabled(j.value("fsr", true));
         m_BgScaleMode = std::clamp(j.value("bgScaleMode", 0), 0, 2);
-        m_OutputResPreset = std::clamp(j.value("outputResPreset", 1), 0, 3);
+        m_OutputResPreset = std::clamp(j.value("outputResPreset", 1), 0, 4);
         m_Main->set_bg_scale_mode(m_BgScaleMode);
         m_Main->set_output_res_preset(m_OutputResPreset);
         m_Projector->set_bg_scale_mode(m_BgScaleMode);
         m_Player.SetScaleMode(m_BgScaleMode);
         m_Main->set_slide_columns(std::clamp(j.value("slideColumns", 3), 1, 4));
         m_Main->set_slide_card_size(std::clamp(j.value("slideCardSize", 1), 0, 2));
-        bool perf = j.value("performanceMode", false);
+        bool defaultPerf = (std::thread::hardware_concurrency() <= 2);
+        bool perf = j.value("performanceMode", defaultPerf);
         m_Main->set_performance_mode(perf);
+        m_HoverPlayer.SetRenderSize(perf ? 256 : 320, perf ? 144 : 180);
+
+        m_GpuHwdecMode      = std::clamp(j.value("gpuHwdecMode", 0), 0, 4);
+        m_NvencEnabled      = j.value("nvencEnabled", false);
+        int defaultUpscaler = defaultPerf ? 0 : (j.value("fsr", true) ? 2 : 0);
+        m_UpscalerMode      = std::clamp(j.value("upscalerMode", defaultUpscaler), 0, 4);
+        m_UpscalerSharpness = std::clamp(j.value("upscalerSharpness", 0.55f), 0.0f, 1.0f);
+        m_SmoothMotion60    = j.value("smoothMotion60", false);
+        m_Main->set_gpu_hwdec_mode(m_GpuHwdecMode);
+        m_Main->set_nvenc_enabled(m_NvencEnabled);
+        m_Main->set_upscaler_mode(m_UpscalerMode);
+        m_Main->set_upscaler_sharpness(m_UpscalerSharpness * 100.0f);
+        m_Main->set_smooth_motion_60(m_SmoothMotion60);
+        m_Main->set_fsr_enabled(m_UpscalerMode > 0);
+
+        int savedFps = j.value("targetFps", defaultPerf ? 30 : 60);
+        if (savedFps != 30 && savedFps != 60 && savedFps != 120) savedFps = 60;
+        m_TargetFps = savedFps;
+        m_Main->set_target_fps(m_TargetFps);
+        m_Player.SetMaxFps(m_TargetFps);
+        int tickMs = (m_TargetFps >= 120) ? 8 : (m_TargetFps >= 60 ? 16 : 33);
+        m_TickTimer = std::make_unique<slint::Timer>(
+            std::chrono::milliseconds(tickMs),
+            [this]() { OnTick(); }
+        );
         UpdatePlayerRenderSize();
         m_ActiveThemeIdx = j.value("themeIdx", 0);
+        m_EnableGlassTranslucency = j.value("enableGlassTranslucency", true);
+        m_EnableGlassSheen        = j.value("enableGlassSheen", true);
+        m_EnableAmbientBg         = j.value("enableAmbientBg", true);
+        m_Main->set_enable_glass_translucency(m_EnableGlassTranslucency);
+        m_Main->set_enable_glass_sheen(m_EnableGlassSheen);
+        m_Main->set_enable_ambient_bg(m_EnableAmbientBg);
         m_MusicScanFolders.clear();
         if (j.contains("musicScanFolders") && j["musicScanFolders"].is_array()) {
             for (const auto& dirVal : j["musicScanFolders"]) {
@@ -3312,12 +3606,21 @@ void SlintApp::SavePersistedState() {
     j["textColorIdx"]    = m_Main->get_text_color_idx();
     j["fullscreen"]      = m_Main->get_fullscreen_output();
     j["fsr"]             = m_Main->get_fsr_enabled();
-    j["bgScaleMode"]     = m_BgScaleMode;
-    j["outputResPreset"] = m_OutputResPreset;
-    j["slideColumns"]    = m_Main->get_slide_columns();
+    j["bgScaleMode"]       = m_BgScaleMode;
+    j["outputResPreset"]   = m_OutputResPreset;
+    j["targetFps"]         = m_TargetFps;
+    j["gpuHwdecMode"]      = m_GpuHwdecMode;
+    j["nvencEnabled"]      = m_NvencEnabled;
+    j["upscalerMode"]      = m_UpscalerMode;
+    j["upscalerSharpness"] = m_UpscalerSharpness;
+    j["smoothMotion60"]    = m_SmoothMotion60;
+    j["slideColumns"]      = m_Main->get_slide_columns();
     j["slideCardSize"]   = m_Main->get_slide_card_size();
     j["performanceMode"] = m_Main->get_performance_mode();
     j["themeIdx"]        = m_ActiveThemeIdx;
+    j["enableGlassTranslucency"] = m_EnableGlassTranslucency;
+    j["enableGlassSheen"]        = m_EnableGlassSheen;
+    j["enableAmbientBg"]         = m_EnableAmbientBg;
     j["musicScanFolders"] = m_MusicScanFolders;
     j["musicEqEnabled"]   = m_Main->get_music_eq_enabled();
     j["musicDynamicEq"]   = m_Main->get_music_dynamic_eq();
@@ -3354,30 +3657,11 @@ void SlintApp::SavePersistedState() {
 }
 
 void SlintApp::OnTick() {
-    // 1. Poll libmpv decoded video frame
+    ++m_PerfTickFrames;
+
+    // 1. Drain any pending video frame if event-loop wakeup coalesced
     if (m_HasVideoBg) {
-        slint::Image frame;
-        if (m_Player.PollFrame(frame)) {
-            for (auto& sc : m_Screens) {
-                if (sc.bgIsVideo) {
-                    sc.bgImage    = frame;
-                    sc.hasBgImage = true;
-                }
-            }
-            if (m_InspectedScreenIdx >= 0 && m_InspectedScreenIdx < static_cast<int>(m_Screens.size()) &&
-                m_Screens[m_InspectedScreenIdx].bgIsVideo) {
-                m_Main->set_live_preview_image(frame);
-                m_Main->set_has_live_preview_image(true);
-            }
-            if (!m_AudienceFrozen && !m_Screens.empty() && m_Screens[0].bgIsVideo) {
-                m_Projector->set_bg_image(frame);
-                m_Projector->set_has_bg_image(true);
-            }
-            if ((m_ActiveTab == 2 || m_ActiveTab == 3) && !m_HoverVideoActive) {
-                m_Main->set_selected_media_preview(frame);
-                m_Main->set_has_selected_media_preview(true);
-            }
-        }
+        DeliverVideoFrameToOutputs();
     }
 
     // 1a. ImGui StreamingPanel::Update() parity — async JPEG encode on dedicated FrameEncodeWorker thread
@@ -3392,16 +3676,17 @@ void SlintApp::OnTick() {
         }
     }
 
-    // 1c. Animate Public Alert Banner (Marquee Letrero & Pulse at 30 FPS — zero alloc when inactive)
+    // 1c. Animate Public Alert Banner (Marquee Letrero & Pulse, speed normalized to 30 FPS)
     if (m_HasActivePublicAlert) {
+        const float fpsScale = 30.0f / static_cast<float>(std::max(1, m_TargetFps));
         int anim = m_Main->get_alert_anim_mode();
         if (anim == 1) {
-            m_AlertTickerPos += 0.0042f;
+            m_AlertTickerPos += 0.0042f * fpsScale;
             if (m_AlertTickerPos > 1.0f) m_AlertTickerPos = 0.0f;
             m_Main->set_alert_ticker_pos(m_AlertTickerPos);
             if (!m_AudienceFrozen) m_Projector->set_alert_ticker_pos(m_AlertTickerPos);
         } else if (anim == 3) {
-            m_AlertPulsePhase += 0.14f;
+            m_AlertPulsePhase += 0.14f * fpsScale;
             float alpha = 0.72f + 0.28f * std::sin(m_AlertPulsePhase);
             m_Main->set_alert_pulse_alpha(alpha);
             if (!m_AudienceFrozen) m_Projector->set_alert_pulse_alpha(alpha);
@@ -3490,8 +3775,9 @@ void SlintApp::OnTick() {
         }
     }
 
-    // 3. Clock & Countdown (update every ~1 second = 30 ticks)
-    if (++m_TickCounter >= 30) {
+    // 3. Clock & Countdown (update every ~1 second = m_TargetFps ticks)
+    const int oneSecTicks = std::max(1, m_TargetFps);
+    if (++m_TickCounter >= oneSecTicks) {
         m_TickCounter = 0;
 
         if (m_TimerRunning && m_TimerRemainingSec > 0) {
@@ -3514,6 +3800,8 @@ void SlintApp::OnTick() {
             RefreshChatLog();
         }
     }
+
+    SampleAppTelemetry();
 }
 
 void SlintApp::ScanSongs() {
@@ -3835,6 +4123,13 @@ void SlintApp::ProjectSelectedMedia() {
             m_VideoQueuePlaying = false;
             m_Main->set_video_queue_playing(false);
         }
+        // Stop hover video decoder & free static image RGBA cache before playing main video
+        StopHoverVideoPreview();
+        m_StaticSrcPath.clear();
+        m_StaticSrcRgba.clear();
+        m_StaticSrcRgba.shrink_to_fit();
+        m_StaticSrcW = 0;
+        m_StaticSrcH = 0;
         m_CurrentBgPath  = entry.path;
         m_HasVideoBg     = entry.isVideo;
         slint::Image thumb;
@@ -3845,6 +4140,7 @@ void SlintApp::ProjectSelectedMedia() {
             m_Screens[i].bgPath     = entry.path;
             m_Screens[i].bgIsStatic = false;
             m_Screens[i].bgIsVideo  = entry.isVideo;
+            if (i > 0 && i != m_InspectedScreenIdx) m_Screens[i].bgImage = slint::Image();
             m_Screens[i].hasBgThumb = hasThumb;
             if (hasThumb) m_Screens[i].bgThumb = thumb;
         }
@@ -3933,6 +4229,12 @@ void SlintApp::PlayVideoQueueIndex(int idx) {
         m_HasStaticImage = m_Screens[0].bgIsStatic;
         if (IsScreenTargeted(1) && IsLanRunning()) UpdateLanStaticFrame(img);
     } else {
+        StopHoverVideoPreview();
+        m_StaticSrcPath.clear();
+        m_StaticSrcRgba.clear();
+        m_StaticSrcRgba.shrink_to_fit();
+        m_StaticSrcW = 0;
+        m_StaticSrcH = 0;
         m_HasVideoBg     = true;
         for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
             if (!IsScreenTargeted(i)) continue;
@@ -3940,6 +4242,7 @@ void SlintApp::PlayVideoQueueIndex(int idx) {
             m_Screens[i].bgPath     = item.path;
             m_Screens[i].bgIsStatic = false;
             m_Screens[i].bgIsVideo  = true;
+            if (i > 0 && i != m_InspectedScreenIdx) m_Screens[i].bgImage = slint::Image();
             m_Screens[i].hasBgThumb = hasThumb;
             if (hasThumb) m_Screens[i].bgThumb = thumb;
         }
@@ -4007,12 +4310,68 @@ void SlintApp::LoadBibleChapter(int bookIdx, int chapterOneBased) {
 
     m_SlidesModel->clear();
     m_Main->set_active_slide_index(-1);
+    const SavedTextStyle activeSt = !m_Screens.empty() ? m_Screens[0].textStyle : SavedTextStyle{};
+    const bool autoSplit = (activeSt.textFitMode == 2);
+
+    auto splitVerseToBox = [&activeSt](const std::string& text) -> std::vector<std::string> {
+        const float boxW = std::clamp(activeSt.lyricsWidth, 0.15f, 1.0f) * 1280.0f;
+        const float boxH = std::clamp(activeSt.lyricsHeight, 0.08f, 1.0f) * 720.0f;
+        const float fSz  = std::max(14.0f, activeSt.textSize);
+        const int charsPerLine = std::max(12, static_cast<int>(boxW / (fSz * 0.56f)));
+        const int maxLines     = std::max(1,  static_cast<int>(boxH / (fSz * 1.32f)));
+        const size_t maxChars  = static_cast<size_t>(charsPerLine * maxLines);
+        if (text.size() <= maxChars) return { text };
+
+        std::vector<std::string> chunks;
+        size_t pos = 0;
+        while (pos < text.size()) {
+            if (text.size() - pos <= maxChars) {
+                chunks.push_back(text.substr(pos));
+                break;
+            }
+            size_t end = pos + maxChars;
+            size_t cut = std::string::npos;
+            // Prefer sentence or clause punctuation, then space
+            for (size_t i = end; i > pos + maxChars / 2; --i) {
+                char c = text[i - 1];
+                if (c == '.' || c == ';' || c == ':' || c == '?' || c == '!') { cut = i; break; }
+            }
+            if (cut == std::string::npos) {
+                for (size_t i = end; i > pos + maxChars / 3; --i) {
+                    if (text[i - 1] == ',' || text[i - 1] == ' ') { cut = i; break; }
+                }
+            }
+            if (cut == std::string::npos) cut = end;
+            std::string part = text.substr(pos, cut - pos);
+            while (!part.empty() && part.back() == ' ') part.pop_back();
+            if (!part.empty()) chunks.push_back(std::move(part));
+            pos = cut;
+            while (pos < text.size() && text[pos] == ' ') ++pos;
+        }
+        return chunks.empty() ? std::vector<std::string>{ text } : chunks;
+    };
+
     for (const auto& v : chap.verses) {
-        SlideItem s;
-        s.badge    = slint::SharedString(book.name + " " + std::to_string(chap.number) + ":" + std::to_string(v.number));
-        s.body     = slint::SharedString(v.text);
-        s.ref_text = s.badge;
-        m_SlidesModel->push_back(s);
+        std::string baseRef = book.name + " " + std::to_string(chap.number) + ":" + std::to_string(v.number);
+        if (!autoSplit) {
+            SlideItem s;
+            s.badge    = slint::SharedString(baseRef);
+            s.body     = slint::SharedString(v.text);
+            s.ref_text = s.badge;
+            m_SlidesModel->push_back(s);
+        } else {
+            auto parts = splitVerseToBox(v.text);
+            for (size_t pi = 0; pi < parts.size(); ++pi) {
+                SlideItem s;
+                std::string badge = (parts.size() > 1)
+                    ? (baseRef + " (" + std::to_string(pi + 1) + "/" + std::to_string(parts.size()) + ")")
+                    : baseRef;
+                s.badge    = slint::SharedString(badge);
+                s.body     = slint::SharedString(parts[pi]);
+                s.ref_text = slint::SharedString(baseRef);
+                m_SlidesModel->push_back(s);
+            }
+        }
     }
 }
 
@@ -4262,28 +4621,40 @@ void SlintApp::ApplyThemePreset(int idx) {
     };
 
     const auto& p = kPalettes[m_ActiveThemeIdx];
+    const float aS0 = m_EnableGlassTranslucency ? 0.84f : 1.0f;
+    const float aS1 = m_EnableGlassTranslucency ? (p.lightTheme ? 0.80f : 0.78f) : 1.0f;
+    const float aS2 = m_EnableGlassTranslucency ? (p.lightTheme ? 0.84f : 0.82f) : 1.0f;
+    const float aS3 = m_EnableGlassTranslucency ? 0.88f : 1.0f;
+    const float aGl = m_EnableGlassTranslucency ? (p.lightTheme ? 0.80f : 0.78f) : 1.0f;
+
     th.set_bg_root(col(p.base[0], p.base[1], p.base[2]));
-    th.set_bg_surface_0(col(p.s0[0], p.s0[1], p.s0[2]));
-    th.set_bg_surface_1(col(p.s1[0], p.s1[1], p.s1[2]));
-    th.set_bg_surface_2(col(p.s2[0], p.s2[1], p.s2[2]));
-    th.set_bg_surface_hover(col(p.s3[0], p.s3[1], p.s3[2]));
-    th.set_bg_glass(col(p.s0[0], p.s0[1], p.s0[2], 0.95f));
-    th.set_bg_input(col(p.base[0], p.base[1], p.base[2]));
+    th.set_bg_surface_0(col(p.s0[0], p.s0[1], p.s0[2], aS0));
+    th.set_bg_surface_1(col(p.s1[0], p.s1[1], p.s1[2], aS1));
+    th.set_bg_surface_2(col(p.s2[0], p.s2[1], p.s2[2], aS2));
+    th.set_bg_surface_hover(col(p.s3[0], p.s3[1], p.s3[2], aS3));
+    th.set_bg_glass(col(p.s0[0], p.s0[1], p.s0[2], aGl));
+    th.set_bg_input(col(p.base[0], p.base[1], p.base[2], m_EnableGlassTranslucency ? 0.85f : 1.0f));
     th.set_accent(col(p.acc[0], p.acc[1], p.acc[2]));
     th.set_accent_strong(col(p.accL[0], p.accL[1], p.accL[2]));
-    th.set_accent_soft(col(p.acc[0], p.acc[1], p.acc[2], 0.18f));
-    th.set_border_accent(col(p.acc[0], p.acc[1], p.acc[2], 0.55f));
+    th.set_accent_soft(col(p.acc[0], p.acc[1], p.acc[2], 0.20f));
+    th.set_border_accent(col(p.acc[0], p.acc[1], p.acc[2], 0.62f));
     th.set_text_primary(col(p.txt[0], p.txt[1], p.txt[2]));
     th.set_text_secondary(col(p.txtD[0], p.txtD[1], p.txtD[2]));
 
     if (p.lightTheme) {
-        th.set_border_subtle(col(0, 0, 0, 0.10f));
+        th.set_border_subtle(col(0, 0, 0, 0.11f));
         th.set_border_medium(col(0, 0, 0, 0.22f));
+        th.set_glass_rim_top(col(1, 1, 1, m_EnableGlassSheen ? 0.72f : 0.0f));
+        th.set_glass_sheen(col(1, 1, 1, m_EnableGlassSheen ? 0.42f : 0.0f));
+        th.set_shadow_ambient(col(0, 0, 0, 0.14f));
         th.set_text_muted(col(0.35f, 0.35f, 0.38f));
         th.set_accent_fg(col(1, 1, 1));
     } else {
-        th.set_border_subtle(col(1, 1, 1, 0.08f));
-        th.set_border_medium(col(1, 1, 1, 0.16f));
+        th.set_border_subtle(col(1, 1, 1, 0.11f));
+        th.set_border_medium(col(1, 1, 1, 0.21f));
+        th.set_glass_rim_top(col(1, 1, 1, m_EnableGlassSheen ? 0.24f : 0.0f));
+        th.set_glass_sheen(col(1, 1, 1, m_EnableGlassSheen ? 0.10f : 0.0f));
+        th.set_shadow_ambient(col(0, 0, 0, 0.36f));
         th.set_text_muted(col(0.50f, 0.50f, 0.54f));
         // Dark text on bright accents, light text on dark/saturated accents
         float lum = 0.299f * p.acc[0] + 0.587f * p.acc[1] + 0.114f * p.acc[2];
@@ -4387,13 +4758,21 @@ bool SlintApp::LoadOrCreateThumbnail(const std::string& path, bool isVideo, slin
     std::error_code ec;
     if (!fs::exists(path, ec)) return false;
 
+    // Bounded thumbnail cache so 4GB RAM systems never bloat (while avoiding thrashing on ~130+ video libraries)
+    const size_t maxThumbCache = m_Main->get_performance_mode() ? 64 : 256;
+    if (m_ThumbCache.size() >= maxThumbCache) {
+        m_ThumbCache.clear();
+    }
+
     if (!isVideo) {
-        // Resize large static images (e.g. 6000x6000) to lightweight 320x180 thumbnail so RAM stays tiny!
+        // Resize large static images to lightweight thumbnail (240x135 in Ultra-Lite, 320x180 normal)
+        const int maxTw = m_Main->get_performance_mode() ? 240 : 320;
+        const int maxTh = m_Main->get_performance_mode() ? 135 : 180;
         int w = 0, h = 0, comp = 0;
         unsigned char* data = stbi_load(path.c_str(), &w, &h, &comp, 4);
         if (data && w > 0 && h > 0) {
-            if (w > 320 || h > 180) {
-                double sc = std::min(320.0 / w, 180.0 / h);
+            if (w > maxTw || h > maxTh) {
+                double sc = std::min(static_cast<double>(maxTw) / w, static_cast<double>(maxTh) / h);
                 int tw = std::max(1, static_cast<int>(std::round(w * sc)));
                 int th = std::max(1, static_cast<int>(std::round(h * sc)));
                 slint::SharedPixelBuffer<slint::Rgba8Pixel> tb(
@@ -4419,15 +4798,16 @@ bool SlintApp::LoadOrCreateThumbnail(const std::string& path, bool isVideo, slin
         return true;
     }
 
-    // Cache video thumbnail via ffmpeg into assets/thumbnails/slint_<hash>.jpg
+    // Cache video thumbnail via ffmpeg (uses CUDA/auto hwaccel when NVENC/GPU mode is active, with safe fallback)
     fs::path thumbDir = fs::path(ProyecThor::GetAssetsPath()) / "thumbnails";
     fs::create_directories(thumbDir, ec);
     size_t h = std::hash<std::string>{}(path);
     fs::path thumbPath = thumbDir / ("slint_" + std::to_string(h) + ".jpg");
+    const std::string hwArg = m_NvencEnabled ? "-hwaccel auto " : "";
 
     if (!fs::exists(thumbPath, ec)) {
 #ifdef _WIN32
-        std::string cmd = "ffmpeg -y -ss 00:00:01 -i \"" + path +
+        std::string cmd = "ffmpeg -y " + hwArg + "-ss 00:00:01 -i \"" + path +
                           "\" -vframes 1 -vf scale=320:-1 -q:v 5 \"" + thumbPath.string() +
                           "\" >nul 2>&1";
         int rc = std::system(cmd.c_str());
@@ -4438,7 +4818,7 @@ bool SlintApp::LoadOrCreateThumbnail(const std::string& path, bool isVideo, slin
             std::system(cmd.c_str());
         }
 #else
-        std::string cmd = "ffmpeg -y -ss 00:00:01 -i \"" + path +
+        std::string cmd = "ffmpeg -y " + hwArg + "-ss 00:00:01 -i \"" + path +
                           "\" -vframes 1 -vf scale=320:-1 -q:v 5 \"" + thumbPath.string() +
                           "\" >/dev/null 2>&1";
         int rc = std::system(cmd.c_str());
@@ -4575,6 +4955,12 @@ void SlintApp::SelectDockBackground(int index) {
         m_HasStaticImage = m_Screens[0].bgIsStatic;
         if (IsScreenTargeted(1) && IsLanRunning()) UpdateLanStaticFrame(img);
     } else {
+        StopHoverVideoPreview();
+        m_StaticSrcPath.clear();
+        m_StaticSrcRgba.clear();
+        m_StaticSrcRgba.shrink_to_fit();
+        m_StaticSrcW = 0;
+        m_StaticSrcH = 0;
         m_HasVideoBg = true;
         for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
             if (!IsScreenTargeted(i)) continue;
@@ -4582,6 +4968,7 @@ void SlintApp::SelectDockBackground(int index) {
             m_Screens[i].bgPath     = entry.path;
             m_Screens[i].bgIsStatic = false;
             m_Screens[i].bgIsVideo  = true;
+            if (i > 0 && i != m_InspectedScreenIdx) m_Screens[i].bgImage = slint::Image();
             m_Screens[i].hasBgThumb = hasThumb;
             if (hasThumb) m_Screens[i].bgThumb = thumb;
         }
@@ -6537,20 +6924,173 @@ void SlintApp::AppendDebugLog(const std::string& msg) {
     m_Main->set_debug_log(slint::SharedString(oss.str()));
 }
 
+void SlintApp::SampleAppTelemetry() {
+    auto now = std::chrono::steady_clock::now();
+    if (m_PerfLastSampleTime.time_since_epoch().count() == 0) {
+        m_PerfLastSampleTime = now;
+#ifndef _WIN32
+        std::ifstream statF("/proc/self/stat");
+        std::string line;
+        if (std::getline(statF, line)) {
+            auto rparen = line.rfind(')');
+            if (rparen != std::string::npos) {
+                std::istringstream iss(line.substr(rparen + 2));
+                std::string tok;
+                uint64_t utime = 0, stime = 0;
+                for (int idx = 3; idx <= 15 && (iss >> tok); ++idx) {
+                    if (idx == 14) utime = std::strtoull(tok.c_str(), nullptr, 10);
+                    else if (idx == 15) stime = std::strtoull(tok.c_str(), nullptr, 10);
+                }
+                long clkTck = sysconf(_SC_CLK_TCK);
+                if (clkTck > 0) {
+                    m_PerfLastCpuNs = ((utime + stime) * 1000000000ULL) / static_cast<uint64_t>(clkTck);
+                }
+            }
+        }
+#else
+        FILETIME ftC, ftE, ftK, ftU;
+        if (GetProcessTimes(GetCurrentProcess(), &ftC, &ftE, &ftK, &ftU)) {
+            ULARGE_INTEGER k, u;
+            k.LowPart = ftK.dwLowDateTime; k.HighPart = ftK.dwHighDateTime;
+            u.LowPart = ftU.dwLowDateTime; u.HighPart = ftU.dwHighDateTime;
+            m_PerfLastCpuNs = (k.QuadPart + u.QuadPart) * 100ULL;
+        }
+#endif
+        return;
+    }
+
+    double elapsed = std::chrono::duration<double>(now - m_PerfLastSampleTime).count();
+    if (elapsed < 0.5) return;
+
+    m_PerfFps      = static_cast<double>(m_PerfTickFrames) / elapsed;
+    m_PerfVideoFps = static_cast<double>(m_PerfVideoFrames) / elapsed;
+    m_PerfTickFrames  = 0;
+    m_PerfVideoFrames = 0;
+    m_PerfLastSampleTime = now;
+
+    unsigned int cores = std::max(1u, std::thread::hardware_concurrency());
+
+#ifndef _WIN32
+    // CPU time from /proc/self/stat
+    {
+        std::ifstream statF("/proc/self/stat");
+        std::string line;
+        if (std::getline(statF, line)) {
+            auto rparen = line.rfind(')');
+            if (rparen != std::string::npos) {
+                std::istringstream iss(line.substr(rparen + 2));
+                std::string tok;
+                uint64_t utime = 0, stime = 0;
+                for (int idx = 3; idx <= 15 && (iss >> tok); ++idx) {
+                    if (idx == 14) utime = std::strtoull(tok.c_str(), nullptr, 10);
+                    else if (idx == 15) stime = std::strtoull(tok.c_str(), nullptr, 10);
+                }
+                long clkTck = sysconf(_SC_CLK_TCK);
+                if (clkTck > 0) {
+                    uint64_t curNs = ((utime + stime) * 1000000000ULL) / static_cast<uint64_t>(clkTck);
+                    if (curNs >= m_PerfLastCpuNs) {
+                        double cpuSec = static_cast<double>(curNs - m_PerfLastCpuNs) / 1e9;
+                        m_PerfCpuPercent = std::clamp((cpuSec / (elapsed * cores)) * 100.0, 0.0, 100.0);
+                    }
+                    m_PerfLastCpuNs = curNs;
+                }
+            }
+        }
+    }
+    // RAM & Threads from /proc/self/status
+    {
+        std::ifstream statusF("/proc/self/status");
+        std::string line;
+        while (std::getline(statusF, line)) {
+            if (line.rfind("VmRSS:", 0) == 0) {
+                double kb = std::strtod(line.c_str() + 6, nullptr);
+                m_PerfRamMb = kb / 1024.0;
+            } else if (line.rfind("VmHWM:", 0) == 0) {
+                double kb = std::strtod(line.c_str() + 6, nullptr);
+                m_PerfPeakRamMb = kb / 1024.0;
+            } else if (line.rfind("Threads:", 0) == 0) {
+                m_PerfThreads = static_cast<int>(std::strtol(line.c_str() + 8, nullptr, 10));
+            }
+        }
+    }
+#else
+    FILETIME ftC, ftE, ftK, ftU;
+    if (GetProcessTimes(GetCurrentProcess(), &ftC, &ftE, &ftK, &ftU)) {
+        ULARGE_INTEGER k, u;
+        k.LowPart = ftK.dwLowDateTime; k.HighPart = ftK.dwHighDateTime;
+        u.LowPart = ftU.dwLowDateTime; u.HighPart = ftU.dwHighDateTime;
+        uint64_t curNs = (k.QuadPart + u.QuadPart) * 100ULL;
+        if (curNs >= m_PerfLastCpuNs) {
+            double cpuSec = static_cast<double>(curNs - m_PerfLastCpuNs) / 1e9;
+            m_PerfCpuPercent = std::clamp((cpuSec / (elapsed * cores)) * 100.0, 0.0, 100.0);
+        }
+        m_PerfLastCpuNs = curNs;
+    }
+    PROCESS_MEMORY_COUNTERS pmc{};
+    if (K32GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
+        m_PerfRamMb     = static_cast<double>(pmc.WorkingSetSize) / (1024.0 * 1024.0);
+        m_PerfPeakRamMb = static_cast<double>(pmc.PeakWorkingSetSize) / (1024.0 * 1024.0);
+    }
+#endif
+
+    if (m_ActiveTab == 12 || m_ActiveTab == 7) {
+        RefreshDebugInfo();
+    }
+}
+
 void SlintApp::RefreshDebugInfo() {
     static const char* kScaleNames[] = { "Recortar (Cover)", "Estirar (Fill)", "Original (Contain)" };
+    static const char* kUpNames[]    = { "Off (Bilineal)", "AMD FSR 1.0", "FidelityFX CAS+", "NVIDIA NIS", "LanczosHQ 4K" };
+
+    // Show real rendered video FPS when video is active (event-driven 30/60/120 FPS), or idle tick FPS otherwise
+    const double primaryFps = (m_HasVideoBg && m_Player.IsPlaying() && !m_Player.IsPaused())
+        ? m_PerfVideoFps
+        : m_PerfFps;
+    const double srcFps = m_Player.GetSourceFps();
+    const std::string activeHw = m_Player.GetActiveHwdec();
+
+    std::ostringstream fpsStr, vidSubStr, cpuStr, ramStr, peakStr;
+    fpsStr  << std::fixed << std::setprecision(1) << primaryFps;
+    cpuStr  << std::fixed << std::setprecision(1) << m_PerfCpuPercent << "%";
+    ramStr  << std::fixed << std::setprecision(1) << m_PerfRamMb << " MB";
+    peakStr << std::fixed << std::setprecision(1) << m_PerfPeakRamMb << " MB";
+
+    if (m_HasVideoBg && m_Player.IsPlaying()) {
+        vidSubStr << "UI " << static_cast<int>(std::round(m_PerfFps)) << " • Límite " << m_TargetFps;
+        if (srcFps > 0.1) {
+            vidSubStr << " • Clip " << static_cast<int>(std::round(srcFps)) << "fps";
+        }
+    } else {
+        vidSubStr << "UI • Límite " << m_TargetFps;
+    }
+
+    m_Main->set_debug_fps_text(slint::SharedString(fpsStr.str()));
+    m_Main->set_debug_video_fps_text(slint::SharedString(vidSubStr.str()));
+    m_Main->set_debug_cpu_text(slint::SharedString(cpuStr.str()));
+    m_Main->set_debug_ram_text(slint::SharedString(ramStr.str()));
+    m_Main->set_debug_peak_ram_text(slint::SharedString(
+        m_PerfThreads > 0 ? ("Pico " + peakStr.str() + " • " + std::to_string(m_PerfThreads) + " hilos")
+                          : ("Pico " + peakStr.str())));
+
     std::ostringstream st;
-    st << "Versión: v" << PROYECTHOR_VERSION_STRING << " (Slint 1.19 + libmpv)  |  "
+    st << "Versión: v" << PROYECTHOR_VERSION_STRING << " (Slint 1.19 + Async libmpv)  |  "
+       << "FPS: " << fpsStr.str() << " (" << vidSubStr.str() << ")  |  CPU: " << cpuStr.str()
+       << "  |  RAM: " << ramStr.str() << " (Pico " << peakStr.str() << ")\n"
+       << "GPU: " << m_DetectedGpuName << "  |  HWDec Activo: " << activeHw
+       << "  |  NVENC: " << (m_NvencEnabled ? (m_NvencAvailable ? "ON" : "Fallback") : "OFF") << "\n"
+       << "Reescalado: " << kUpNames[std::clamp(m_UpscalerMode, 0, 4)]
+       << " (" << static_cast<int>(std::round(m_UpscalerSharpness * 100.0f)) << "%)"
+       << "  |  Escalado: " << kScaleNames[std::clamp(m_BgScaleMode, 0, 2)]
+       << "  |  24→60 FPS: " << (m_SmoothMotion60 ? "ON" : "OFF") << "\n"
        << "Público: " << (m_ProjectorVisible ? "ACTIVO" : "OFF") << "  |  "
-       << "Freeze: " << (m_AudienceFrozen ? "CONGELADO" : "NO") << "\n"
-       << "Escalado: " << kScaleNames[std::clamp(m_BgScaleMode, 0, 2)]
-       << "  |  FSR Nitidez: " << (m_Main->get_fsr_enabled() ? "ON" : "OFF") << "\n"
+       << "Freeze: " << (m_AudienceFrozen ? "CONGELADO" : "NO")
+       << "  |  Modo Ultra-Ligero: " << (m_Main->get_performance_mode() ? "ON" : "OFF") << "\n"
        << "Video LAN (8080): " << (IsLanRunning() ? m_LanServer->GetBaseURL() : "OFF")
        << "  |  Chat LAN (8082): " << (m_ChatServer.IsRunning() ? "ON" : "OFF")
        << "  |  Celular (8090): " << (m_MobileServer.IsRunning() ? "ON" : "OFF") << "\n"
        << "Reproductor Video: " << (m_Player.IsPlaying() ? "PLAYING" : "IDLE")
        << "  |  Reproductor Música: " << (m_MusicPlayer.IsPlaying() ? "PLAYING" : "IDLE")
-       << "  |  Tabs Cacheadas: " << m_CachedTabEntries.size();
+       << "  |  Miniaturas en RAM: " << m_ThumbCache.size();
     m_Main->set_debug_stats(slint::SharedString(st.str()));
 
     std::ostringstream p;
@@ -6827,6 +7367,7 @@ void SlintApp::SyncInspectedScreenToPreview() {
     m_Main->set_preview_text_3d(st.text3d);
     m_Main->set_preview_text_underline(st.underline);
     m_Main->set_preview_text_box_bg(st.boxBg);
+    m_Main->set_preview_text_fit_mode(st.textFitMode);
     m_Main->set_preview_lyrics_pos_x(st.lyricsPosX);
     m_Main->set_preview_lyrics_pos_y(st.lyricsPosY);
     m_Main->set_preview_lyrics_width(st.lyricsWidth);

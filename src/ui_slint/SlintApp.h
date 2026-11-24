@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -102,6 +103,7 @@ private:
         bool        underline   = false;
         bool        uppercase   = false;
         bool        boxBg       = false;
+        int         textFitMode = 0; // 0=Normal, 1=Auto-Achicar, 2=Auto-Cortar en bloques
     };
 
     struct VideoQueueEntry {
@@ -185,6 +187,12 @@ private:
     void ResyncProjectorFromLive();
     void ApplyScalingMode(int mode);
     void ApplyOutputResolution(int preset);
+    void ApplyTargetFps(int fps);
+    void ApplyGpuAndUpscalerConfig();
+    void ApplyLowSpecPreset();
+    void PurgeMemoryCaches();
+    void DeliverVideoFrameToOutputs();
+    void DetectGpuCapabilitiesAsync();
     void GetOutputResolution(int& outW, int& outH) const;
     bool RenderScaledStaticImage(const std::string& path, slint::Image& outImg);
     void ReapplyCurrentStaticImage();
@@ -307,6 +315,7 @@ private:
     // Changelog, Debug & Firewall diagnostics
     void LoadChangelogText();
     void AppendDebugLog(const std::string& msg);
+    void SampleAppTelemetry();
     void RefreshDebugInfo();
     void CheckFirewallStatusAsync();
     void OpenFirewallPortsAsync();
@@ -402,7 +411,20 @@ private:
     bool m_StageVisible     = false;
     bool m_AudienceFrozen   = false;
     int  m_BgScaleMode      = 0;
-    int  m_OutputResPreset  = 1; // 0=1280x720, 1=1920x1080, 2=1440x900 (16:10), 3=1280x960 (4:3)
+    int  m_OutputResPreset  = 1; // 0=720p, 1=1080p, 2=16:10, 3=4:3, 4=2160p
+    int  m_TargetFps        = 60; // 30, 60, 120
+    int  m_GpuHwdecMode     = 0;  // 0=Auto, 1=NVIDIA(NVDEC/CUDA), 2=D3D11VA, 3=VAAPI/Vulkan, 4=CPU
+    bool m_NvencEnabled     = false;
+    bool m_NvencAvailable   = false;
+    std::string m_DetectedGpuName = "Detectando GPU...";
+    int   m_UpscalerMode      = 2;     // 0=Off(Bilinear), 1=FSR 1.0, 2=FidelityFX CAS+, 3=NVIDIA NIS, 4=LanczosHQ 4K
+    float m_UpscalerSharpness = 0.55f; // 0.0 .. 1.0
+    bool  m_SmoothMotion60    = false; // Real-time 24/30 -> 60 FPS motion interpolation
+    bool  m_EnableGlassTranslucency = true;
+    bool  m_EnableGlassSheen        = true;
+    bool  m_EnableAmbientBg         = true;
+    uint64_t m_DeliveredVideoSeq = 0;
+    std::shared_ptr<std::atomic<bool>> m_AppAliveFlag;
     std::string          m_StaticSrcPath;
     std::vector<uint8_t> m_StaticSrcRgba;
     int                  m_StaticSrcW = 0;
@@ -588,6 +610,18 @@ private:
     bool    m_TimerRunning         = false;
     int     m_TickCounter          = 0;
     bool    m_HasActivePublicAlert = false;
+
+    // Live Telemetry (FPS, CPU %, RAM MB, Threads)
+    std::chrono::steady_clock::time_point m_PerfLastSampleTime{};
+    int      m_PerfTickFrames     = 0;
+    int      m_PerfVideoFrames    = 0;
+    uint64_t m_PerfLastCpuNs      = 0;
+    double   m_PerfFps            = 0.0;
+    double   m_PerfVideoFps       = 0.0;
+    double   m_PerfCpuPercent     = 0.0;
+    double   m_PerfRamMb          = 0.0;
+    double   m_PerfPeakRamMb      = 0.0;
+    int      m_PerfThreads        = 0;
     float   m_LastMediaPos         = -1.0f;
     int64_t m_LastMediaSec         = -1;
     int64_t m_LastMediaLenSec      = -1;
