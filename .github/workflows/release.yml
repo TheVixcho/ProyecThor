@@ -170,7 +170,7 @@ jobs:
         with:
           arch: x64
 
-      - name: Cachear SDKs externos de Windows (Slint, libmpv, ffmpeg)
+      - name: Cachear SDKs externos de Windows (Slint, libmpv, ffmpeg, NSIS)
         id: cache-win-sdks
         uses: actions/cache@v4
         with:
@@ -178,7 +178,8 @@ jobs:
             src/vendor/sdk/slint-win
             src/vendor/sdk/mpv/libmpv-2.dll
             extrabuild/ffmpeg.exe
-          key: win-sdks-slint${{ env.SLINT_VERSION }}-v2
+            .ci-tools/nsis
+          key: win-sdks-slint${{ env.SLINT_VERSION }}-v3
 
       - name: Descargar y extraer Slint C++ SDK ${{ env.SLINT_VERSION }} (MSVC x64)
         if: steps.cache-win-sdks.outputs.cache-hit != 'true'
@@ -317,15 +318,48 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $makensisCmd = Get-Command makensis -ErrorAction SilentlyContinue
-          $makensis = if ($makensisCmd) { $makensisCmd.Source } else { $null }
+          $ProgressPreference = 'SilentlyContinue'
+          $nsisDir = Join-Path $PWD ".ci-tools\nsis"
+          $makensis = $null
+          if (Test-Path "$nsisDir\makensis.exe") {
+            $makensis = "$nsisDir\makensis.exe"
+          }
+          if (-not $makensis) {
+            $makensisCmd = Get-Command makensis -ErrorAction SilentlyContinue
+            if ($makensisCmd) { $makensis = $makensisCmd.Source }
+          }
           if (-not $makensis -and (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe")) {
             $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
           }
           if (-not $makensis) {
-            choco install nsis -y
-            $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
+            Write-Host "Descargando NSIS 3.10 portable directamente (sin depender de Chocolatey)..."
+            $nsisZip = "$env:TEMP\nsis-3.10.zip"
+            $nsisTmp = "$env:TEMP\nsis-extract"
+            Remove-Item -Recurse -Force $nsisTmp, $nsisZip -ErrorAction SilentlyContinue
+            & curl.exe -fSL --retry 4 --retry-delay 3 -o $nsisZip "https://downloads.sourceforge.net/project/nsis/NSIS%203/3.10/nsis-3.10.zip"
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $nsisZip)) {
+              & 7z x $nsisZip "-o$nsisTmp" -y | Out-Null
+              $exe = Get-ChildItem -Path $nsisTmp -Recurse -Filter "makensis.exe" | Select-Object -First 1
+              if ($exe) {
+                Remove-Item -Recurse -Force $nsisDir -ErrorAction SilentlyContinue
+                New-Item -ItemType Directory -Force -Path $nsisDir | Out-Null
+                Copy-Item -Recurse -Force "$($exe.DirectoryName)\*" $nsisDir
+                $makensis = "$nsisDir\makensis.exe"
+              }
+              Remove-Item -Recurse -Force $nsisTmp, $nsisZip -ErrorAction SilentlyContinue
+            }
           }
+          if (-not $makensis) {
+            Write-Host "Fallback a Chocolatey para instalar NSIS..."
+            choco install nsis -y --no-progress
+            if (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe") {
+              $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
+            }
+          }
+          if (-not $makensis -or -not (Test-Path $makensis)) {
+            throw "No se pudo obtener makensis.exe por ningun metodo"
+          }
+          Write-Host "[OK] Usando NSIS: $makensis"
           New-Item -ItemType Directory -Force -Path "packaging\windows\dist" | Out-Null
           Remove-Item -Force "packaging\windows\dist\*.exe" -ErrorAction SilentlyContinue
           $ver = "${{ needs.resolve-meta.outputs.version }}"
