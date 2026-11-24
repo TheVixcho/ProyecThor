@@ -106,17 +106,11 @@ jobs:
             & curl.exe -fSL --retry 3 -o $installer $url
             if ($LASTEXITCODE -ne 0) { throw "curl.exe fallo descargando Slint SDK ($LASTEXITCODE)" }
 
-            # Extraer con innoextract (100% desatendido, sin UI ni bloqueos de instalador)
-            $innoZip = "$env:TEMP\innoextract.zip"
-            $innoDir = "$env:TEMP\innoextract-bin"
+            # Slint-cpp-*.exe es un paquete NSIS autoextraible; 7z lo extrae sin GUI ni interaccion
             $extractDir = "$env:TEMP\slint-extract"
-            Remove-Item -Recurse -Force $innoDir, $extractDir -ErrorAction SilentlyContinue
-            & curl.exe -fSL --retry 3 -o $innoZip "https://github.com/dscharrer/innoextract/releases/download/1.9/innoextract-1.9-windows.zip"
-            if ($LASTEXITCODE -ne 0) { throw "curl.exe fallo descargando innoextract ($LASTEXITCODE)" }
-            Expand-Archive -Path $innoZip -DestinationPath $innoDir -Force
-            $innoExe = (Get-ChildItem -Path $innoDir -Recurse -Filter "innoextract.exe" | Select-Object -First 1).FullName
-            & $innoExe -q -d $extractDir $installer
-            if ($LASTEXITCODE -ne 0) { throw "innoextract fallo con codigo $LASTEXITCODE" }
+            Remove-Item -Recurse -Force $extractDir -ErrorAction SilentlyContinue
+            & 7z x $installer "-o$extractDir" -y | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "7z fallo extrayendo Slint SDK ($LASTEXITCODE)" }
 
             $cfg = Get-ChildItem -Path $extractDir -Recurse -Filter "SlintConfig.cmake" | Select-Object -First 1
             if (-not $cfg) { throw "No se encontro SlintConfig.cmake dentro de $extractDir" }
@@ -124,13 +118,13 @@ jobs:
             Remove-Item -Recurse -Force $slintDir -ErrorAction SilentlyContinue
             New-Item -ItemType Directory -Force -Path $slintDir | Out-Null
             Copy-Item -Recurse -Force "$sdkRoot\*" $slintDir
-            Remove-Item -Recurse -Force $innoDir, $extractDir, $innoZip, $installer -ErrorAction SilentlyContinue
+            Remove-Item -Recurse -Force $extractDir, $installer -ErrorAction SilentlyContinue
           }
           if (-not (Test-Path "$slintDir\lib\cmake\Slint\SlintConfig.cmake")) {
             throw "No se encontro SlintConfig.cmake en $slintDir"
           }
-          if (-not (Test-Path "$slintDir\bin\slint_cpp.dll")) {
-            throw "No se encontro slint_cpp.dll en $slintDir\bin"
+          if (-not ((Test-Path "$slintDir\bin\slint_cpp.dll") -or (Test-Path "$slintDir\lib\slint_cpp.dll"))) {
+            throw "No se encontro slint_cpp.dll ni en $slintDir\bin ni en $slintDir\lib"
           }
           Write-Host "[OK] Slint C++ SDK listo en $slintDir"
 

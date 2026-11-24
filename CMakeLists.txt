@@ -772,10 +772,16 @@ if(PROYECTHOR_BUILD_SLINT)
             if(MSVC)
                 target_link_options(ProyecThorSlint PRIVATE "/ENTRY:mainCRTStartup")
             endif()
+            set(SLINT_WIN_DLL "")
             if(EXISTS "${SLINT_SDK_WIN}/bin/slint_cpp.dll")
+                set(SLINT_WIN_DLL "${SLINT_SDK_WIN}/bin/slint_cpp.dll")
+            elseif(EXISTS "${SLINT_SDK_WIN}/lib/slint_cpp.dll")
+                set(SLINT_WIN_DLL "${SLINT_SDK_WIN}/lib/slint_cpp.dll")
+            endif()
+            if(SLINT_WIN_DLL)
                 add_custom_command(TARGET ProyecThorSlint POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                        "${SLINT_SDK_WIN}/bin/slint_cpp.dll"
+                        "${SLINT_WIN_DLL}"
                         "$<TARGET_FILE_DIR:ProyecThorSlint>"
                     COMMENT "Copiando slint_cpp.dll al directorio de salida"
                 )
