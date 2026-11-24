@@ -718,6 +718,25 @@ if(PROYECTHOR_BUILD_SLINT)
     if(Slint_FOUND)
         message(STATUS "Slint C++ SDK encontrado (${Slint_VERSION}): habilitando target ProyecThorSlint")
 
+        # Biblioteca estática dedicada para el código C++ autogenerado por Slint:
+        # - Divide main_window.slint (~228k líneas / 22 MB) en 12 unidades paralelas (evita cuelgues de 15+ min en MSVC).
+        # - Embebe los recursos SVG (@image-url) dentro del ejecutable para que funcionen en cualquier PC.
+        # - Usa /Od /Ob0 /bigobj en MSVC y -O1 en GCC/Clang solo para el pegamento generado por Slint
+        #   (el motor gráfico/layout ya corre en Release dentro de slint_cpp.dll / libslint_cpp.so).
+        add_library(ProyecThorSlintUI STATIC)
+        set_target_properties(ProyecThorSlintUI PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            SLINT_EMBED_RESOURCES "embed-files"
+        )
+        slint_target_sources(ProyecThorSlintUI src/ui_slint/ui/main_window.slint COMPILATION_UNITS 12)
+        target_link_libraries(ProyecThorSlintUI PUBLIC Slint::Slint)
+        if(MSVC)
+            target_compile_options(ProyecThorSlintUI PRIVATE /Od /Ob0 /bigobj)
+        else()
+            target_compile_options(ProyecThorSlintUI PRIVATE -O1)
+        endif()
+
         if(WIN32)
             add_executable(ProyecThorSlint WIN32
                 src/ui_slint/main_slint.cpp
@@ -755,8 +774,9 @@ if(PROYECTHOR_BUILD_SLINT)
 
         set_target_properties(ProyecThorSlint PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
         target_compile_definitions(ProyecThorSlint PRIVATE CPPHTTPLIB_NO_EXCEPTIONS)
-
-        slint_target_sources(ProyecThorSlint src/ui_slint/ui/main_window.slint)
+        if(MSVC)
+            target_compile_options(ProyecThorSlint PRIVATE /bigobj)
+        endif()
 
         target_include_directories(ProyecThorSlint PRIVATE
             "${CMAKE_BINARY_DIR}/generated"
@@ -771,6 +791,7 @@ if(PROYECTHOR_BUILD_SLINT)
         )
 
         target_link_libraries(ProyecThorSlint PRIVATE
+            ProyecThorSlintUI
             Slint::Slint
             nlohmann_json::nlohmann_json
         )

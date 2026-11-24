@@ -451,12 +451,15 @@ jobs:
           cp packaging/proyecthor.png build-appimage/AppDir/io.github.thevixcho.ProyecThor.png
           cp packaging/proyecthor.png build-appimage/AppDir/.DirIcon
 
+          # linuxdeploy crea AppDir/AppRun como symlink hacia usr/bin/proyecthor;
+          # eliminarlo antes de escribir evita seguir el symlink y romper HERE.
+          rm -f build-appimage/AppDir/AppRun
           cat << 'EOF' > build-appimage/AppDir/AppRun
           #!/bin/sh
           set -e
-          HERE="$(dirname "$(readlink -f "$0")")"
+          HERE="${APPDIR:-$(dirname "$(readlink -f "$0")")}"
           export PATH="${HERE}/usr/bin:${PATH}"
-          export LD_LIBRARY_PATH="${HERE}/usr/lib/proyecthor:${HERE}/usr/lib:${HERE}/usr/lib64:${LD_LIBRARY_PATH}"
+          export LD_LIBRARY_PATH="${HERE}/usr/lib/proyecthor:${HERE}/usr/lib:${HERE}/usr/lib64:${LD_LIBRARY_PATH:-}"
 
           if [ -d "${HERE}/usr/lib/proyecthor" ]; then
               cd "${HERE}/usr/lib/proyecthor"
@@ -503,10 +506,15 @@ jobs:
             exit 1
           fi
 
-          # 2. Probar arranque rápido bajo Xvfb (software rendering)
+          # 2. Verificar que AppRun sea archivo regular (no symlink) y probar arranque bajo Xvfb
+          if [ -L /tmp/appimage-check/squashfs-root/AppRun ]; then
+            echo "ERROR: AppRun sigue siendo un symlink"
+            exit 1
+          fi
+          rc=0
           timeout 4s xvfb-run -a env SLINT_BACKEND=winit-software "$APPIMAGE" --appimage-extract-and-run || rc=$?
           # timeout devuelve 124 cuando la app sigue viva tras 4s (éxito)
-          if [ "${rc:-124}" -ne 0 ] && [ "${rc:-124}" -ne 124 ]; then
+          if [ "$rc" -ne 0 ] && [ "$rc" -ne 124 ]; then
             echo "ERROR: La app fallo al iniciar (exit code $rc)"
             exit "$rc"
           fi
