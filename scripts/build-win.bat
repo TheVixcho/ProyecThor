@@ -36,10 +36,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "$verDir = 'build-win/generated'; " ^
     "if (Test-Path $verDir) { " ^
     "    $verPath = Join-Path $verDir 'Version.h'; " ^
-    "    $content = \"#pragma once`r`n`r`n#define PROYECTHOR_VERSION_MAJOR 1`r`n#define PROYECTHOR_VERSION_MINOR 1`r`n#define PROYECTHOR_VERSION_PATCH 4`r`n#define PROYECTHOR_VERSION_STRING `\"1.1.4`\"`r`n#define PROYECTHOR_BUILD_NUMBER $num`r`n\"; " ^
+    "    $content = \"#pragma once`r`n`r`n#define PROYECTHOR_VERSION_MAJOR 1`r`n#define PROYECTHOR_VERSION_MINOR 1`r`n#define PROYECTHOR_VERSION_PATCH 5`r`n#define PROYECTHOR_VERSION_STRING `\"1.1.5`\"`r`n#define PROYECTHOR_BUILD_NUMBER $num`r`n\"; " ^
     "    Set-Content -Path $verPath -Value $content -NoNewline; " ^
     "}; " ^
-    "Write-Host ('[BUILD] Compilando ProyecThor v1.1.4 - Build #' + $num) -ForegroundColor Cyan"
+    "Write-Host ('[BUILD] Compilando ProyecThor v1.1.5 - Build #' + $num) -ForegroundColor Cyan"
 
 set "BUILD_TYPE=%~1"
 if "%BUILD_TYPE%"=="" set "BUILD_TYPE=Debug"

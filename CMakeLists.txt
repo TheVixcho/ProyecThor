@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.11)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 project(ProyecThor
-    VERSION 1.1.4
+    VERSION 1.1.5
     LANGUAGES C CXX
 )
 
@@ -48,6 +48,17 @@ if(NOT DEFINED PROYECTHOR_BUILD_NUMBER)
     if(EXISTS "${_build_count_file}")
         file(READ "${_build_count_file}" PROYECTHOR_BUILD_NUMBER)
         string(STRIP "${PROYECTHOR_BUILD_NUMBER}" PROYECTHOR_BUILD_NUMBER)
+    endif()
+endif()
+
+if(DEFINED PROYECTHOR_VERSION_OVERRIDE AND NOT "${PROYECTHOR_VERSION_OVERRIDE}" STREQUAL "")
+    string(REPLACE "." ";" _pt_ver_list "${PROYECTHOR_VERSION_OVERRIDE}")
+    list(LENGTH _pt_ver_list _pt_ver_len)
+    if(_pt_ver_len GREATER_EQUAL 3)
+        list(GET _pt_ver_list 0 PROJECT_VERSION_MAJOR)
+        list(GET _pt_ver_list 1 PROJECT_VERSION_MINOR)
+        list(GET _pt_ver_list 2 PROJECT_VERSION_PATCH)
+        set(PROJECT_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}")
     endif()
 endif()
 
@@ -593,6 +604,9 @@ else
     INSTALL_DIR=\"${CMAKE_INSTALL_PREFIX}/${PROYECTHOR_INSTALL_DIR}\"
 fi
 cd \"\$INSTALL_DIR\" || exit 1
+if [ -x ./ProyecThorSlint ]; then
+    exec ./ProyecThorSlint \"\$@\"
+fi
 exec ./ProyecThor \"\$@\"
 ")
     install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/proyecthor-wrapper.sh"
@@ -749,6 +763,10 @@ if(PROYECTHOR_BUILD_SLINT)
         )
 
         if(WIN32)
+            target_compile_definitions(ProyecThorSlint PRIVATE
+                NOMINMAX
+                WIN32_LEAN_AND_MEAN
+            )
             target_include_directories(ProyecThorSlint PRIVATE "${MPV_SDK}/include")
             target_link_libraries(ProyecThorSlint PRIVATE "${MPV_WIN_LIB}" ws2_32 iphlpapi)
             if(MSVC)
@@ -793,7 +811,13 @@ if(PROYECTHOR_BUILD_SLINT)
                         "$<TARGET_FILE_DIR:ProyecThorSlint>"
                     COMMENT "Copiando libslint_cpp.so al directorio de salida"
                 )
+                install(FILES "${SLINT_SDK_LINUX}/lib/libslint_cpp.so"
+                    DESTINATION ${PROYECTHOR_INSTALL_DIR}
+                )
             endif()
+            install(TARGETS ProyecThorSlint
+                RUNTIME DESTINATION ${PROYECTHOR_INSTALL_DIR}
+            )
         endif()
 
         if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets")

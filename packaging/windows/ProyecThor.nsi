@@ -18,7 +18,7 @@ SetCompressor /SOLID lzma
 !define PRODUCT_WEB_SITE "https://github.com/TheVixcho/ProyecThor"
 
 !ifndef VERSION
-  !define VERSION "1.1.4"
+  !define VERSION "1.1.5"
 !endif
 
 !ifndef BUILD_DIR
@@ -59,7 +59,7 @@ RequestExecutionLevel user
 !insertmacro MUI_PAGE_INSTFILES
 
 ; Página final con opción de ejecutar la aplicación
-!define MUI_FINISHPAGE_RUN "$INSTDIR\ProyecThor.exe"
+!define MUI_FINISHPAGE_RUN "$INSTDIR\ProyecThorSlint.exe"
 !define MUI_FINISHPAGE_RUN_TEXT "Ejecutar ProyecThor ahora"
 !insertmacro MUI_PAGE_FINISH
 
@@ -78,6 +78,7 @@ RequestExecutionLevel user
 ; -----------------------------------------------------------------------------
 Function .onInit
     ; 0. Cerrar instancias en ejecución de ProyecThor antes de cualquier acción
+    nsExec::Exec 'cmd.exe /c taskkill /f /im ProyecThorSlint.exe >nul 2>&1'
     nsExec::Exec 'cmd.exe /c taskkill /f /im ProyecThor.exe >nul 2>&1'
 
     ; 1. Detectar y desinstalar versión previa de NSIS si existía
@@ -135,22 +136,27 @@ Section "ProyecThor" SEC01
 
     ; Asegurar que no hay procesos corriendo
     DetailPrint "Verificando procesos..."
+    nsExec::Exec 'cmd.exe /c taskkill /f /im ProyecThorSlint.exe >nul 2>&1'
     nsExec::Exec 'cmd.exe /c taskkill /f /im ProyecThor.exe >nul 2>&1'
     Sleep 500
 
     ; Limpiar residuos de versiones anteriores antes de copiar archivos nuevos
     Delete "$INSTDIR\unins000.*"
     Delete "$INSTDIR\ProyecThor.old.*"
+    Delete "$INSTDIR\ProyecThorSlint.exe"
     Delete "$INSTDIR\ProyecThor.exe"
     Delete "$INSTDIR\Uninstall.exe"
     Delete "$INSTDIR\*.dll"
 
     ; Copiar ejecutables y dependencias binarias runtime
     SetOverwrite on
-    File "${BUILD_DIR}\ProyecThor.exe"
+    File "${BUILD_DIR}\ProyecThorSlint.exe"
+    File /nonfatal "${BUILD_DIR}\ProyecThor.exe"
     File "${BUILD_DIR}\*.dll"
     File /nonfatal "${BUILD_DIR}\ffmpeg.exe"
     File /nonfatal "${BUILD_DIR}\yt-dlp.exe"
+    File /nonfatal "${BUILD_DIR}\catalog.json"
+    File /nonfatal "${BUILD_DIR}\munin_catalog.json"
     File /nonfatal "${BUILD_DIR}\proyecthor.ico"
     File /nonfatal "${BUILD_DIR}\proyecthor.png"
     File /nonfatal "${BUILD_DIR}\proyecthor_ui.ini"
@@ -175,11 +181,13 @@ Section "ProyecThor" SEC01
     SetOutPath "$INSTDIR"
     WriteUninstaller "$INSTDIR\Uninstall.exe"
 
-    ; Crear accesos directos
+    ; Crear accesos directos (ProyecThorSlint como app principal + modo clásico opcional)
     CreateDirectory "$SMPROGRAMS\ProyecThor"
-    CreateShortcut "$SMPROGRAMS\ProyecThor\ProyecThor.lnk" "$INSTDIR\ProyecThor.exe" "" "$INSTDIR\proyecthor.ico" 0
+    CreateShortcut "$SMPROGRAMS\ProyecThor\ProyecThor.lnk" "$INSTDIR\ProyecThorSlint.exe" "" "$INSTDIR\proyecthor.ico" 0
+    IfFileExists "$INSTDIR\ProyecThor.exe" 0 +2
+        CreateShortcut "$SMPROGRAMS\ProyecThor\ProyecThor (Modo Clásico).lnk" "$INSTDIR\ProyecThor.exe" "" "$INSTDIR\proyecthor.ico" 0
     CreateShortcut "$SMPROGRAMS\ProyecThor\Desinstalar ProyecThor.lnk" "$INSTDIR\Uninstall.exe" "" "$INSTDIR\Uninstall.exe" 0
-    CreateShortcut "$DESKTOP\ProyecThor.lnk" "$INSTDIR\ProyecThor.exe" "" "$INSTDIR\proyecthor.ico" 0
+    CreateShortcut "$DESKTOP\ProyecThor.lnk" "$INSTDIR\ProyecThorSlint.exe" "" "$INSTDIR\proyecthor.ico" 0
 
     ; Registro único y exclusivo en Agregar o Quitar Programas (HKCU)
     WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\ProyecThor" "DisplayName" "ProyecThor"
@@ -195,7 +203,7 @@ Section "ProyecThor" SEC01
 
     ; Registro de tipos de archivos soportados en "Abrir con..."
     WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe" "FriendlyAppName" "ProyecThor"
-    WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe\shell\open\command" "" '"$INSTDIR\ProyecThor.exe" "%1"'
+    WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe\shell\open\command" "" '"$INSTDIR\ProyecThorSlint.exe" "%1"'
     WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe\SupportedTypes" ".mp3" ""
     WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe\SupportedTypes" ".flac" ""
     WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe\SupportedTypes" ".wav" ""
@@ -221,7 +229,7 @@ Section "ProyecThor" SEC01
     ; Menú contextual clic derecho directo en Windows Explorer: "Abrir con ProyecThor"
     WriteRegStr HKCU "Software\Classes\*\shell\ProyecThor" "" "Abrir con ProyecThor"
     WriteRegStr HKCU "Software\Classes\*\shell\ProyecThor" "Icon" '"$INSTDIR\proyecthor.ico"'
-    WriteRegStr HKCU "Software\Classes\*\shell\ProyecThor\command" "" '"$INSTDIR\ProyecThor.exe" "%1"'
+    WriteRegStr HKCU "Software\Classes\*\shell\ProyecThor\command" "" '"$INSTDIR\ProyecThorSlint.exe" "%1"'
 SectionEnd
 
 ; -----------------------------------------------------------------------------
@@ -229,12 +237,14 @@ SectionEnd
 ; -----------------------------------------------------------------------------
 Section "Uninstall"
     ; Cerrar aplicación si estuviera en ejecución
+    nsExec::Exec 'cmd.exe /c taskkill /f /im ProyecThorSlint.exe >nul 2>&1'
     nsExec::Exec 'cmd.exe /c taskkill /f /im ProyecThor.exe >nul 2>&1'
     Sleep 500
 
     ; Eliminar accesos directos
     Delete "$DESKTOP\ProyecThor.lnk"
     Delete "$SMPROGRAMS\ProyecThor\ProyecThor.lnk"
+    Delete "$SMPROGRAMS\ProyecThor\ProyecThor (Modo Clásico).lnk"
     Delete "$SMPROGRAMS\ProyecThor\Desinstalar ProyecThor.lnk"
     RMDir "$SMPROGRAMS\ProyecThor"
 
@@ -255,12 +265,15 @@ Section "Uninstall"
     RMDir /r "$INSTDIR\shaders"
 
     ; Eliminar archivos de la carpeta raíz
+    Delete "$INSTDIR\ProyecThorSlint.exe"
     Delete "$INSTDIR\ProyecThor.exe"
     Delete "$INSTDIR\Uninstall.exe"
     Delete "$INSTDIR\unins000.*"
     Delete "$INSTDIR\*.dll"
     Delete "$INSTDIR\ffmpeg.exe"
     Delete "$INSTDIR\yt-dlp.exe"
+    Delete "$INSTDIR\catalog.json"
+    Delete "$INSTDIR\munin_catalog.json"
     Delete "$INSTDIR\proyecthor.ico"
     Delete "$INSTDIR\proyecthor.png"
     Delete "$INSTDIR\proyecthor_ui.ini"

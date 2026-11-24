@@ -1,0 +1,458 @@
+name: Release Windows (.exe) & Linux (.AppImage)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versión manual (ej. 1.1.5). Si se deja vacío, toma CMakeLists.txt.'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+env:
+  SLINT_VERSION: "1.19.0"
+
+jobs:
+  resolve-meta:
+    name: Resolver Versión y Metadatos
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      suffix: ${{ steps.meta.outputs.suffix }}
+      tag_name: ${{ steps.meta.outputs.tag_name }}
+      is_prerelease: ${{ steps.meta.outputs.is_prerelease }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Calcular versión desde tag o CMakeLists.txt
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          CMAKE_VER=$(grep -A 2 'project(ProyecThor' CMakeLists.txt | grep -oP 'VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || echo "1.1.5")
+
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            RAW_REF="${{ github.ref_name }}"
+            CLEAN="${RAW_REF#v}"
+            CLEAN="${CLEAN#V}"
+            BASE_VER=$(echo "$CLEAN" | grep -oP '^[0-9]+\.[0-9]+\.[0-9]+' || echo "$CMAKE_VER")
+            SUFFIX="${CLEAN#"$BASE_VER"}"
+            TAG_NAME="$RAW_REF"
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            CLEAN="${{ github.event.inputs.version }}"
+            CLEAN="${CLEAN#v}"
+            CLEAN="${CLEAN#V}"
+            BASE_VER=$(echo "$CLEAN" | grep -oP '^[0-9]+\.[0-9]+\.[0-9]+' || echo "$CMAKE_VER")
+            SUFFIX="${CLEAN#"$BASE_VER"}"
+            TAG_NAME="v${CLEAN}"
+          else
+            BASE_VER="$CMAKE_VER"
+            SUFFIX=""
+            TAG_NAME="v${BASE_VER}"
+          fi
+
+          IS_PRE="false"
+          if [[ "$TAG_NAME" == *"beta"* || "$TAG_NAME" == *"alpha"* || "$TAG_NAME" == *"rc"* ]]; then
+            IS_PRE="true"
+          fi
+
+          echo "version=${BASE_VER}" >> "$GITHUB_OUTPUT"
+          echo "suffix=${SUFFIX}" >> "$GITHUB_OUTPUT"
+          echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=${IS_PRE}" >> "$GITHUB_OUTPUT"
+          echo "Resolved: version=${BASE_VER} suffix=${SUFFIX} tag=${TAG_NAME} prerelease=${IS_PRE}"
+
+  build-windows:
+    name: Windows MSVC + Instalador (.exe)
+    needs: resolve-meta
+    runs-on: windows-latest
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar MSVC x64 (Visual Studio)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Cachear SDKs externos de Windows (Slint, libmpv, ffmpeg)
+        id: cache-win-sdks
+        uses: actions/cache@v4
+        with:
+          path: |
+            src/vendor/sdk/slint-win
+            src/vendor/sdk/mpv/libmpv-2.dll
+            extrabuild/ffmpeg.exe
+          key: win-sdks-slint${{ env.SLINT_VERSION }}-v1
+
+      - name: Descargar Slint C++ SDK ${{ env.SLINT_VERSION }} (MSVC x64)
+        if: steps.cache-win-sdks.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $slintDir = Join-Path $PWD "src\vendor\sdk\slint-win"
+          if (-not (Test-Path "$slintDir\lib\cmake\Slint\SlintConfig.cmake")) {
+            $url = "https://github.com/slint-ui/slint/releases/download/v${{ env.SLINT_VERSION }}/Slint-cpp-${{ env.SLINT_VERSION }}-win64-MSVC-AMD64.exe"
+            $installer = "$env:TEMP\Slint-cpp-win64.exe"
+            Write-Host "Descargando $url ..."
+            Invoke-WebRequest -Uri $url -OutFile $installer
+            New-Item -ItemType Directory -Force -Path $slintDir | Out-Null
+            $proc = Start-Process -FilePath $installer -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$slintDir" -Wait -PassThru
+            if ($proc.ExitCode -ne 0) {
+              throw "Error al instalar Slint C++ SDK (exit code $($proc.ExitCode))"
+            }
+            Remove-Item -Force $installer -ErrorAction SilentlyContinue
+          }
+          if (-not (Test-Path "$slintDir\lib\cmake\Slint\SlintConfig.cmake")) {
+            throw "No se encontro SlintConfig.cmake en $slintDir"
+          }
+
+      - name: Descargar libmpv-2.dll para Windows x64
+        if: steps.cache-win-sdks.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dst = "src\vendor\sdk\mpv\libmpv-2.dll"
+          if (-not (Test-Path $dst)) {
+            $headers = @{ "User-Agent" = "ProyecThor-CI"; "Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}" }
+            $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest" -Headers $headers
+            $asset = $rel.assets | Where-Object { $_.name -match '^mpv-dev-x86_64-\d+.*\.7z$' } | Select-Object -First 1
+            if (-not $asset) {
+              $asset = $rel.assets | Where-Object { $_.name -match '^mpv-dev-x86_64.*\.7z$' } | Select-Object -First 1
+            }
+            if (-not $asset) { throw "No se encontro mpv-dev-x86_64 en shinchiro/mpv-winbuild-cmake" }
+            $archive = "$env:TEMP\mpv-dev.7z"
+            Write-Host "Descargando $($asset.browser_download_url) ..."
+            Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $archive
+            $tmpDir = "$env:TEMP\mpv-extract"
+            Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
+            & 7z x $archive "-o$tmpDir" -y | Out-Null
+            $dll = Get-ChildItem -Path $tmpDir -Recurse -Filter "libmpv-2.dll" | Select-Object -First 1
+            if (-not $dll) { throw "No se encontro libmpv-2.dll dentro del paquete" }
+            Copy-Item -Force $dll.FullName $dst
+            Remove-Item -Recurse -Force $tmpDir, $archive -ErrorAction SilentlyContinue
+          }
+
+      - name: Descargar ffmpeg.exe para ondas FFT y miniaturas
+        if: steps.cache-win-sdks.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path "extrabuild" | Out-Null
+          $dst = "extrabuild\ffmpeg.exe"
+          if (-not (Test-Path $dst)) {
+            $zip = "$env:TEMP\ffmpeg-win.zip"
+            Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile $zip
+            $tmpDir = "$env:TEMP\ffmpeg-extract"
+            Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
+            Expand-Archive -Path $zip -DestinationPath $tmpDir -Force
+            $ff = Get-ChildItem -Path $tmpDir -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
+            if (-not $ff) { throw "No se encontro ffmpeg.exe en ffmpeg-release-essentials.zip" }
+            Copy-Item -Force $ff.FullName $dst
+            Remove-Item -Recurse -Force $tmpDir, $zip -ErrorAction SilentlyContinue
+          }
+
+      - name: Configurar CMake (Release)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cmake -B build-win -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DPROYECTHOR_VERSION_OVERRIDE="${{ needs.resolve-meta.outputs.version }}" `
+            -DPROYECTHOR_VERSION_SUFFIX="${{ needs.resolve-meta.outputs.suffix }}" `
+            -DPROYECTHOR_BUILD_NUMBER=${{ github.run_number }}
+          if ($LASTEXITCODE -ne 0) { throw "CMake configure fallo con codigo $LASTEXITCODE" }
+
+      - name: Compilar ProyecThorSlint y ProyecThor
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cmake --build build-win --parallel
+          if ($LASTEXITCODE -ne 0) { throw "CMake build fallo con codigo $LASTEXITCODE" }
+
+      - name: Verificar binarios y DLLs de Windows (Smoke Check)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $required = @(
+            "build-win\ProyecThorSlint.exe",
+            "build-win\ProyecThor.exe",
+            "build-win\slint_cpp.dll",
+            "build-win\libmpv-2.dll",
+            "build-win\pdfium.dll",
+            "build-win\WebView2Loader.dll",
+            "build-win\ffmpeg.exe"
+          )
+          foreach ($f in $required) {
+            if (-not (Test-Path $f)) { throw "Falta archivo requerido en build-win: $f" }
+            Write-Host "[OK] $f ($([Math]::Round((Get-Item $f).Length / 1MB, 2)) MB)"
+          }
+
+      - name: Generar Instalador Windows (.exe) con NSIS
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $makensisCmd = Get-Command makensis -ErrorAction SilentlyContinue
+          $makensis = if ($makensisCmd) { $makensisCmd.Source } else { $null }
+          if (-not $makensis -and (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe")) {
+            $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
+          }
+          if (-not $makensis) {
+            choco install nsis -y
+            $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
+          }
+          New-Item -ItemType Directory -Force -Path "packaging\windows\dist" | Out-Null
+          $ver = "${{ needs.resolve-meta.outputs.version }}"
+          $suffix = "${{ needs.resolve-meta.outputs.suffix }}"
+          $fullVer = "$ver$suffix"
+          & $makensis `
+            "-DVERSION=$ver" `
+            "-DBUILD_DIR=$PWD\build-win" `
+            "-DOUT_DIR=$PWD\packaging\windows\dist" `
+            "packaging\windows\ProyecThor.nsi"
+          if ($LASTEXITCODE -ne 0) { throw "makensis fallo con codigo $LASTEXITCODE" }
+          Copy-Item -Force "packaging\windows\dist\ProyecThor_Setup.exe" "packaging\windows\dist\ProyecThor_Setup_v$fullVer.exe"
+          Get-ChildItem "packaging\windows\dist\*.exe"
+
+      - name: Subir artefacto Windows (.exe)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ProyecThor-Windows-Setup
+          path: packaging/windows/dist/*.exe
+          if-no-files-found: error
+
+  build-linux-appimage:
+    name: Linux Ubuntu 22.04 + AppImage (.AppImage)
+    needs: resolve-meta
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Instalar dependencias de compilación y runtime
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build pkg-config curl xz-utils file \
+            libmpv-dev libgl1-mesa-dev libx11-dev libxcomposite-dev \
+            libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev \
+            libwayland-dev libxkbcommon-dev wayland-protocols extra-cmake-modules \
+            libpipewire-0.3-dev libdbus-1-dev libssl-dev libopencv-dev \
+            libglib2.0-dev libfuse2 xvfb
+
+      - name: Cachear Slint C++ SDK ${{ env.SLINT_VERSION }} y herramientas AppImage
+        id: cache-linux-tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            src/vendor/sdk/slint-linux
+            .ci-tools
+          key: linux-sdks-slint${{ env.SLINT_VERSION }}-v1
+
+      - name: Descargar Slint C++ SDK ${{ env.SLINT_VERSION }} (Linux x86_64) y AppImage tools
+        if: steps.cache-linux-tools.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p src/vendor/sdk/slint-linux .ci-tools
+
+          if [ ! -f src/vendor/sdk/slint-linux/lib/cmake/Slint/SlintConfig.cmake ]; then
+            curl -fSL -o /tmp/slint-linux.tar.gz \
+              "https://github.com/slint-ui/slint/releases/download/v${SLINT_VERSION}/Slint-cpp-${SLINT_VERSION}-Linux-x86_64.tar.gz"
+            tar -xzf /tmp/slint-linux.tar.gz --strip-components=1 -C src/vendor/sdk/slint-linux
+            rm -f /tmp/slint-linux.tar.gz
+          fi
+
+          if [ ! -x .ci-tools/linuxdeploy-x86_64.AppImage ]; then
+            curl -fSL -o .ci-tools/linuxdeploy-x86_64.AppImage \
+              "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
+            chmod +x .ci-tools/linuxdeploy-x86_64.AppImage
+          fi
+
+          if [ ! -x .ci-tools/appimagetool-x86_64.AppImage ]; then
+            curl -fSL -o .ci-tools/appimagetool-x86_64.AppImage \
+              "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+            chmod +x .ci-tools/appimagetool-x86_64.AppImage
+          fi
+
+          if [ ! -x .ci-tools/ffmpeg ]; then
+            curl -fSL -o /tmp/ffmpeg-linux.tar.xz \
+              "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
+            tar -xJf /tmp/ffmpeg-linux.tar.xz -C /tmp
+            cp /tmp/ffmpeg-master-latest-linux64-gpl/bin/ffmpeg .ci-tools/ffmpeg
+            chmod +x .ci-tools/ffmpeg
+            rm -rf /tmp/ffmpeg-linux.tar.xz /tmp/ffmpeg-master-latest-linux64-gpl
+          fi
+
+      - name: Configurar y Compilar (Release)
+        run: |
+          set -euo pipefail
+          cmake -B build-linux -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DCMAKE_INSTALL_LIBDIR=lib \
+            -DPROYECTHOR_VERSION_OVERRIDE="${{ needs.resolve-meta.outputs.version }}" \
+            -DPROYECTHOR_VERSION_SUFFIX="${{ needs.resolve-meta.outputs.suffix }}" \
+            -DPROYECTHOR_BUILD_NUMBER=${{ github.run_number }}
+          cmake --build build-linux --parallel
+
+      - name: Construir AppDir y Empaquetar AppImage
+        run: |
+          set -euo pipefail
+          rm -rf build-appimage dist-linux
+          mkdir -p build-appimage/AppDir dist-linux
+          DESTDIR="$(pwd)/build-appimage/AppDir" cmake --install build-linux --prefix=/usr
+
+          # Incluir ffmpeg estático dentro del AppImage para ondas FFT reales y miniaturas
+          mkdir -p build-appimage/AppDir/usr/bin
+          cp .ci-tools/ffmpeg build-appimage/AppDir/usr/bin/ffmpeg
+          chmod +x build-appimage/AppDir/usr/bin/ffmpeg
+
+          # Empaquetar librerías compartidas (libmpv, libslint_cpp, libpdfium, códecs) sin sistema base glibc/GL/Wayland/X11
+          cp packaging/proyecthor.png /tmp/io.github.thevixcho.ProyecThor.png
+          NO_STRIP=1 ./.ci-tools/linuxdeploy-x86_64.AppImage --appimage-extract-and-run \
+            --appdir build-appimage/AppDir \
+            -e build-appimage/AppDir/usr/lib/proyecthor/ProyecThorSlint \
+            -e build-appimage/AppDir/usr/lib/proyecthor/ProyecThor \
+            -d packaging/io.github.thevixcho.ProyecThor.desktop \
+            -i /tmp/io.github.thevixcho.ProyecThor.png
+
+          cp packaging/io.github.thevixcho.ProyecThor.desktop build-appimage/AppDir/io.github.thevixcho.ProyecThor.desktop
+          cp packaging/proyecthor.png build-appimage/AppDir/io.github.thevixcho.ProyecThor.png
+          cp packaging/proyecthor.png build-appimage/AppDir/.DirIcon
+
+          cat << 'EOF' > build-appimage/AppDir/AppRun
+          #!/bin/sh
+          set -e
+          HERE="$(dirname "$(readlink -f "$0")")"
+          export PATH="${HERE}/usr/bin:${PATH}"
+          export LD_LIBRARY_PATH="${HERE}/usr/lib/proyecthor:${HERE}/usr/lib:${HERE}/usr/lib64:${LD_LIBRARY_PATH}"
+
+          if [ -d "${HERE}/usr/lib/proyecthor" ]; then
+              cd "${HERE}/usr/lib/proyecthor"
+          elif [ -d "${HERE}/usr/lib64/proyecthor" ]; then
+              cd "${HERE}/usr/lib64/proyecthor"
+          fi
+
+          if [ -x ./ProyecThorSlint ]; then
+              exec ./ProyecThorSlint "$@"
+          fi
+          exec ./ProyecThor "$@"
+          EOF
+          chmod +x build-appimage/AppDir/AppRun
+
+          FULL_VER="${{ needs.resolve-meta.outputs.version }}${{ needs.resolve-meta.outputs.suffix }}"
+          OUT_VERSIONED="dist-linux/ProyecThor-${FULL_VER}-x86_64.AppImage"
+          OUT_GENERIC="dist-linux/ProyecThor-x86_64.AppImage"
+
+          ARCH=x86_64 ./.ci-tools/appimagetool-x86_64.AppImage --appimage-extract-and-run \
+            -n build-appimage/AppDir "$OUT_VERSIONED"
+          chmod +x "$OUT_VERSIONED"
+          cp "$OUT_VERSIONED" "$OUT_GENERIC"
+          ls -lh dist-linux/
+
+      - name: Smoke Test del AppImage en entorno Headless (Xvfb + ldd)
+        run: |
+          set -euo pipefail
+          FULL_VER="${{ needs.resolve-meta.outputs.version }}${{ needs.resolve-meta.outputs.suffix }}"
+          APPIMAGE="dist-linux/ProyecThor-${FULL_VER}-x86_64.AppImage"
+
+          # 1. Extraer y verificar que no falte ninguna librería .so en ProyecThorSlint ni ProyecThor
+          rm -rf /tmp/appimage-check
+          mkdir -p /tmp/appimage-check
+          (cd /tmp/appimage-check && "$OLDPWD/$APPIMAGE" --appimage-extract >/dev/null)
+          export LD_LIBRARY_PATH="/tmp/appimage-check/squashfs-root/usr/lib/proyecthor:/tmp/appimage-check/squashfs-root/usr/lib"
+          echo "Verificando dependencias de ProyecThorSlint:"
+          if ldd /tmp/appimage-check/squashfs-root/usr/lib/proyecthor/ProyecThorSlint | grep -i "not found"; then
+            echo "ERROR: Faltan dependencias en ProyecThorSlint"
+            exit 1
+          fi
+          echo "Verificando dependencias de ProyecThor (Clásico):"
+          if ldd /tmp/appimage-check/squashfs-root/usr/lib/proyecthor/ProyecThor | grep -i "not found"; then
+            echo "ERROR: Faltan dependencias en ProyecThor"
+            exit 1
+          fi
+
+          # 2. Probar arranque rápido bajo Xvfb (software rendering)
+          timeout 4s xvfb-run -a env SLINT_BACKEND=winit-software "$APPIMAGE" --appimage-extract-and-run || rc=$?
+          # timeout devuelve 124 cuando la app sigue viva tras 4s (éxito)
+          if [ "${rc:-124}" -ne 0 ] && [ "${rc:-124}" -ne 124 ]; then
+            echo "ERROR: La app fallo al iniciar (exit code $rc)"
+            exit "$rc"
+          fi
+          rm -rf /tmp/appimage-check
+          echo "[OK] Smoke Test de AppImage superado correctamente."
+
+      - name: Subir artefacto Linux (.AppImage)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ProyecThor-Linux-AppImage
+          path: dist-linux/*.AppImage
+          if-no-files-found: error
+
+  publish-release:
+    name: Publicar Release en GitHub
+    needs: [resolve-meta, build-windows, build-linux-appimage]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Descargar artefacto Windows
+        uses: actions/download-artifact@v4
+        with:
+          name: ProyecThor-Windows-Setup
+          path: release-assets
+
+      - name: Descargar artefacto Linux AppImage
+        uses: actions/download-artifact@v4
+        with:
+          name: ProyecThor-Linux-AppImage
+          path: release-assets
+
+      - name: Generar notas de lanzamiento
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.resolve-meta.outputs.tag_name }}"
+          cat <<EOF > release_notes.md
+          ## ProyecThor ${TAG}
+
+          ### Descargas
+          - **Windows (Instalador .exe):** \`ProyecThor_Setup_v${{ needs.resolve-meta.outputs.version }}${{ needs.resolve-meta.outputs.suffix }}.exe\`
+          - **Linux (.AppImage portable):** \`ProyecThor-${{ needs.resolve-meta.outputs.version }}${{ needs.resolve-meta.outputs.suffix }}-x86_64.AppImage\`
+
+          ### Cambios incluidos desde el tag anterior
+          EOF
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            git log "${PREV_TAG}..HEAD" --pretty=format:"* %s (%h)" >> release_notes.md
+          else
+            git log -n 20 --pretty=format:"* %s (%h)" >> release_notes.md
+          fi
+          echo "" >> release_notes.md
+          ls -lh release-assets/
+
+      - name: Crear / Actualizar GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve-meta.outputs.tag_name }}
+          name: "ProyecThor ${{ needs.resolve-meta.outputs.tag_name }}"
+          body_path: release_notes.md
+          prerelease: ${{ needs.resolve-meta.outputs.is_prerelease == 'true' }}
+          make_latest: ${{ needs.resolve-meta.outputs.is_prerelease != 'true' }}
+          generate_release_notes: true
+          files: |
+            release-assets/*.exe
+            release-assets/*.AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

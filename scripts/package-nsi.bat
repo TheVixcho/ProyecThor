@@ -31,15 +31,15 @@ if "%MAKENSIS%"=="" (
     exit /b 1
 )
 
-if not exist "build-win\ProyecThor.exe" (
-    echo [ERROR] No se encontro build-win\ProyecThor.exe.
+if not exist "build-win\ProyecThorSlint.exe" (
+    echo [ERROR] No se encontro build-win\ProyecThorSlint.exe.
     echo Compila la aplicacion primero ejecutando scripts\build-win.bat
     exit /b 1
 )
 
 if not exist "packaging\windows\dist" mkdir "packaging\windows\dist"
 
-set "VERSION=1.1.4"
+set "VERSION=1.1.5"
 "%MAKENSIS%" -DVERSION="%VERSION%" "-DBUILD_DIR=%CD%\build-win" "-DOUT_DIR=%CD%\packaging\windows\dist" "packaging\windows\ProyecThor.nsi"
 
 if errorlevel 1 (

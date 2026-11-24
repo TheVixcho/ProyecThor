@@ -17,6 +17,17 @@ struct UpdateVersionInfo {
 inline const std::vector<UpdateVersionInfo>& GetPatchNotesRegistry() {
     static const std::vector<UpdateVersionInfo> s_Registry = {
         {
+            28, "1.1.5",
+            "VERSIÓN 1.1.5 - NUEVA INTERFAZ SLINT, MATRIZ MULTI-PANTALLA E ISLA DINÁMICA", "LANZAMIENTO OFICIAL",
+            "splash_bg7.jpg",
+            "### Nueva Interfaz Moderna Slint + libmpv (Open Source)\n"
+            "• [NUEVO] Matriz Multi-Pantalla y Salas: Control independiente de Público Principal, LAN / Smart TV (8080), Stage Display y Salas virtuales adicionales con enrutamiento selectivo por pantalla.\n"
+            "• [NUEVO] Capas Activas estilo Photoshop: Panel en vivo dentro de Vista en Vivo con miniaturas de cada capa (Tiempo, Aviso, Pleca, Overlay PNG, Letras/Biblia, Fondo y Música) y eliminación individual.\n"
+            "• [NUEVO] Isla Dinámica Acoplada con Estudio de Audio: Ondas FFT reales de 256 puntos sincronizadas con la pista, barra de onda interactiva de 56 barras, Ecualizador de 5 Bandas y EQ Dinámica ProyecThor.\n"
+            "• [MEJORA] Barra Superior Unificada, Fondos con Árbol de Carpetas, Portadas de Música, Reescalado Real 720p/1080p/16:10/4:3 + FSR, Botón Freeze y Transmisión LAN/Smart TV/Celular independientes.",
+            false
+        },
+        {
             27, "1.1.4",
             "VERSIÓN 1.1.4 - HOTFIX MENORES Y MEJORAS DE RENDIMIENTO GENERAL", "HOTFIX OFICIAL",
             "splash_bg7.jpg",

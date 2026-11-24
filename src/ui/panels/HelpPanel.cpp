@@ -165,7 +165,7 @@ void HelpPanel::Render(bool* isOpen) {
         ImVec2 bMin(badgeX, badgeY), bMax(badgeX + 60.0f, badgeY + 22.0f);
         winDl->AddRectFilled(bMin, bMax, IM_COL32(45, 212, 191, 40), 11.0f);
         winDl->AddRect(bMin, bMax, IM_COL32(45, 212, 191, 130), 11.0f, 0, 1.0f);
-        const char* verStr = "v1.1.4";
+        const char* verStr = "v1.1.5";
         ImVec2 vSz = ImGui::CalcTextSize(verStr);
         winDl->AddText(ImVec2(badgeX + (60.0f - vSz.x) * 0.5f, badgeY + (22.0f - vSz.y) * 0.5f),
                        IM_COL32(45, 212, 191, 255), verStr);
@@ -292,7 +292,7 @@ void HelpPanel::RenderSidebar() {
           IM_COL32(245, 180, 50, 255) },
 
         { Tr("Notas de Versión", "Release Notes", "Notas de Versão"),
-          Tr("Novedades y cambios de la v1.1.4", "What's new in v1.1.4", "Novidades e alterações da v1.1.4"),
+          Tr("Novedades y cambios de la v1.1.5", "What's new in v1.1.5", "Novidades e alterações da v1.1.5"),
           IM_COL32(56, 189, 248, 255) },
 
         { Tr("Atajos de Teclado", "Keyboard Shortcuts", "Teclas de Atalho"),

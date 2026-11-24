@@ -15,6 +15,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -3811,9 +3812,15 @@ void SlintApp::CheckGitHubUpdatesAsync() {
     slint::ComponentWeakHandle<MainWindow> weakMain(m_Main);
 
     std::thread([weakMain]() {
+#ifdef _WIN32
+        std::string cmd =
+            "curl -fsSL -H \"User-Agent: ProyecThor\" "
+            "\"https://api.github.com/repos/TheVixcho/ProyecThor/releases/latest\" 2>nul";
+#else
         std::string cmd =
             "curl -fsSL -H \"User-Agent: ProyecThor\" "
             "\"https://api.github.com/repos/TheVixcho/ProyecThor/releases/latest\" 2>/dev/null";
+#endif
         std::string resp = RunCommandCapture(cmd);
 
         std::string msg;
@@ -4139,6 +4146,18 @@ bool SlintApp::LoadOrCreateThumbnail(const std::string& path, bool isVideo, slin
     fs::path thumbPath = thumbDir / ("slint_" + std::to_string(h) + ".jpg");
 
     if (!fs::exists(thumbPath, ec)) {
+#ifdef _WIN32
+        std::string cmd = "ffmpeg -y -ss 00:00:01 -i \"" + path +
+                          "\" -vframes 1 -vf scale=320:-1 -q:v 5 \"" + thumbPath.string() +
+                          "\" >nul 2>&1";
+        int rc = std::system(cmd.c_str());
+        if (rc != 0 || !fs::exists(thumbPath, ec)) {
+            cmd = "ffmpeg -y -ss 00:00:00 -i \"" + path +
+                  "\" -vframes 1 -vf scale=320:-1 -q:v 5 \"" + thumbPath.string() +
+                  "\" >nul 2>&1";
+            std::system(cmd.c_str());
+        }
+#else
         std::string cmd = "ffmpeg -y -ss 00:00:01 -i \"" + path +
                           "\" -vframes 1 -vf scale=320:-1 -q:v 5 \"" + thumbPath.string() +
                           "\" >/dev/null 2>&1";
@@ -4150,6 +4169,7 @@ bool SlintApp::LoadOrCreateThumbnail(const std::string& path, bool isVideo, slin
                   "\" >/dev/null 2>&1";
             std::system(cmd.c_str());
         }
+#endif
     }
 
     if (fs::exists(thumbPath, ec) && fs::file_size(thumbPath, ec) > 0) {
