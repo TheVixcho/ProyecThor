@@ -109,6 +109,8 @@ ProyecThor is open source and welcomes community contributions! To keep the code
 ## Community and Support
 
 - **Discord**: [Join the ProyecThor Discord](https://discord.gg/FKqgPDZpBF) for development discussions, support, and beta testing.
+- **Instagram**: [Follow @theproyecthor](https://www.instagram.com/theproyecthor/) for updates and showcases.
+- **WhatsApp Channel**: [Join the WhatsApp Channel](https://whatsapp.com/channel/0029Vb7e9tj3WHTdNivIxR19) for release announcements.
 - **GitHub Issues**: [Report bugs or request features](https://github.com/TheVixcho/ProyecThor/issues).
 - **Donations**: ProyecThor is a free, non-profit open-source project. Voluntary contributions help cover hosting, testing, and development costs.
 

@@ -230,8 +230,9 @@ private:
     void ApplyStyleStructToUI(const SavedTextStyle& st);
 
     // Bible Fullscreen helpers
-    void RefreshBibleBooks();
+    void RefreshBibleBooks(const std::string& bookFilter = "");
     void SelectBibleBook(int filteredBookIdx);
+    void OnBibleSearchEdited(const std::string& query);
     void SearchBible(const std::string& query);
     void AddCurrentVerseToFavorites();
     void PushBibleHistory(const std::string& badge, const std::string& body, const std::string& ref);

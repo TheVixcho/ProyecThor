@@ -561,7 +561,10 @@ void SlintApp::BindCallbacks() {
     });
     m_Main->on_import_bible_clicked([this]() { ImportFileAsync(false); });
     m_Main->on_bible_search_submitted([this](slint::SharedString q) { SearchBible(std::string(q)); });
-    m_Main->on_bible_filter_changed([this](int) { RefreshBibleBooks(); });
+    m_Main->on_bible_search_edited([this](slint::SharedString q) { OnBibleSearchEdited(std::string(q)); });
+    m_Main->on_bible_filter_changed([this](int) {
+        RefreshBibleBooks(std::string(m_Main->get_bible_search_query()));
+    });
     m_Main->on_bible_book_selected([this](int idx) { SelectBibleBook(idx); });
     m_Main->on_bible_chapter_changed([this](int chap) {
         if (m_CurrentBibleBookIdx >= 0) {
@@ -1184,6 +1187,34 @@ void SlintApp::BindCallbacks() {
     });
     m_Main->on_open_discord([openExternalUrl]() {
         openExternalUrl("https://discord.gg/FKqgPDZpBF");
+    });
+    m_Main->on_open_instagram([openExternalUrl]() {
+        openExternalUrl("https://www.instagram.com/theproyecthor/");
+    });
+    m_Main->on_open_whatsapp([openExternalUrl]() {
+        openExternalUrl("https://whatsapp.com/channel/0029Vb7e9tj3WHTdNivIxR19");
+    });
+    auto updateHelpQr = [this](int idx) {
+        struct HelpQrEntry {
+            const char* label;
+            const char* url;
+        };
+        static constexpr HelpQrEntry kHelpQrEntries[] = {
+            {"Sitio Web Oficial", "https://thevixcho.github.io/ProyecThor/"},
+            {"Discord (Soporte y Comunidad)", "https://discord.gg/FKqgPDZpBF"},
+            {"Instagram (@theproyecthor)", "https://www.instagram.com/theproyecthor/"},
+            {"Canal de WhatsApp", "https://whatsapp.com/channel/0029Vb7e9tj3WHTdNivIxR19"},
+        };
+        const int safeIdx = (idx >= 0 && idx < 4) ? idx : 1;
+        const auto& entry = kHelpQrEntries[safeIdx];
+        m_Main->set_help_qr_idx(safeIdx);
+        m_Main->set_help_qr_label(slint::SharedString(entry.label));
+        m_Main->set_help_qr_url(slint::SharedString(entry.url));
+        m_Main->set_help_qr_image(GenerateQrImage(entry.url, 5, 2));
+    };
+    updateHelpQr(1);
+    m_Main->on_select_help_qr([updateHelpQr](int idx) {
+        updateHelpQr(idx);
     });
     m_Main->on_item_action_play([this](int kind, slint::SharedString path) {
         HandleItemPlay(kind, std::string(path));
@@ -2831,6 +2862,8 @@ void SlintApp::ReadSongMeta(const std::string& songPath, std::string& outTitle, 
             mf >> j;
             std::string mt = j.value("title", "");
             std::string ma = j.value("artistAuthor", "");
+            if (ma.empty()) ma = j.value("author", "");
+            if (ma.empty()) ma = j.value("artist", "");
             if (!mt.empty()) outTitle  = mt;
             if (!ma.empty()) outAuthor = ma;
         } catch (...) {}
@@ -2856,6 +2889,24 @@ void SlintApp::ReadSongMeta(const std::string& songPath, std::string& outTitle, 
                     while (!t.empty() && t.front() == ' ') t.erase(t.begin());
                     if (!t.empty()) outTitle = t;
                 }
+            }
+        }
+    }
+
+    // 3. Fallback: infer author from "Title - Author" or "Title (Author)"
+    if (outAuthor.empty()) {
+        auto dashPos = outTitle.rfind(" - ");
+        if (dashPos != std::string::npos && dashPos > 0 && dashPos + 3 < outTitle.size()) {
+            outAuthor = outTitle.substr(dashPos + 3);
+            outTitle  = outTitle.substr(0, dashPos);
+            while (!outAuthor.empty() && outAuthor.front() == ' ') outAuthor.erase(outAuthor.begin());
+            while (!outTitle.empty() && outTitle.back() == ' ') outTitle.pop_back();
+        } else if (!outTitle.empty() && outTitle.back() == ')') {
+            auto openParen = outTitle.rfind(" (");
+            if (openParen != std::string::npos && openParen > 0 && openParen + 2 < outTitle.size() - 1) {
+                outAuthor = outTitle.substr(openParen + 2, outTitle.size() - openParen - 3);
+                outTitle  = outTitle.substr(0, openParen);
+                while (!outTitle.empty() && outTitle.back() == ' ') outTitle.pop_back();
             }
         }
     }
@@ -3839,7 +3890,8 @@ void SlintApp::ScanSongs() {
             MediaEntry m;
             m.title    = title;
             m.author   = author;
-            m.subtitle = author.empty() ? entry.path().parent_path().filename().string() : author;
+            std::string folder = entry.path().parent_path().filename().string();
+            m.subtitle = !author.empty() ? author : (folder != "songs" ? folder : "Sin autor");
             m.path     = entry.path().string();
             m_AllEntries.push_back(std::move(m));
         }
@@ -3927,24 +3979,82 @@ void SlintApp::LoadSelectedBible(int versionIdx) {
     }
 }
 
-void SlintApp::RefreshBibleBooks() {
+static void ParseBibleCitation(const std::string& qLower, std::string& outBookPart, int& outChap, int& outVerse) {
+    outBookPart.clear();
+    outChap = -1;
+    outVerse = -1;
+
+    std::string tmp = qLower;
+    for (char& ch : tmp) {
+        if (ch == ':' || ch == ',' || ch == '.') ch = ' ';
+    }
+    std::istringstream iss(tmp);
+    std::vector<std::string> tokens;
+    std::string tok;
+    while (iss >> tok) tokens.push_back(tok);
+
+    std::vector<int> nums;
+    while (!tokens.empty() && std::all_of(tokens.back().begin(), tokens.back().end(),
+                                          [](unsigned char c) { return std::isdigit(c); })) {
+        try { nums.insert(nums.begin(), std::stoi(tokens.back())); } catch (...) {}
+        tokens.pop_back();
+        if (nums.size() == 2) break;
+    }
+    if (!tokens.empty() && !nums.empty()) {
+        for (size_t i = 0; i < tokens.size(); ++i) {
+            if (i > 0) outBookPart += " ";
+            outBookPart += tokens[i];
+        }
+        outChap  = nums[0];
+        outVerse = (nums.size() >= 2) ? nums[1] : -1;
+    }
+}
+
+void SlintApp::RefreshBibleBooks(const std::string& bookFilter) {
     m_BibleBooksModel->clear();
     m_BibleFilteredBookIndices.clear();
     int filter = m_Main->get_bible_testament_filter(); // 0=Todos, 1=AT, 2=NT
 
+    std::string q = ToLowerUtf8(bookFilter);
+    while (!q.empty() && q.front() == ' ') q.erase(q.begin());
+    while (!q.empty() && q.back() == ' ')  q.pop_back();
+    std::string bookPart;
+    int cNum = -1, vNum = -1;
+    ParseBibleCitation(q, bookPart, cNum, vNum);
+    const std::string queryBook = (!bookPart.empty() && cNum >= 1) ? bookPart : q;
+
+    std::vector<int> prefixMatches;
+    std::vector<int> containsMatches;
     for (int i = 0; i < static_cast<int>(m_Bible.books.size()); ++i) {
         const auto& b = m_Bible.books[i];
         bool isNT = (b.canonicalNumber >= 40) || (b.canonicalNumber == 0 && i >= 39);
         if (filter == 1 && isNT)  continue;
         if (filter == 2 && !isNT) continue;
 
+        if (queryBook.empty()) {
+            prefixMatches.push_back(i);
+            continue;
+        }
+        std::string bLow = ToLowerUtf8(b.name);
+        if (bLow.find(queryBook) == 0) {
+            prefixMatches.push_back(i);
+        } else if (bLow.find(queryBook) != std::string::npos) {
+            containsMatches.push_back(i);
+        }
+    }
+
+    auto appendBook = [&](int i) {
+        const auto& b = m_Bible.books[i];
+        bool isNT = (b.canonicalNumber >= 40) || (b.canonicalNumber == 0 && i >= 39);
         m_BibleFilteredBookIndices.push_back(i);
         BibleBookItem item;
         item.name     = slint::SharedString(b.name);
         item.chapters = static_cast<int>(b.chapters.size());
         item.is_nt    = isNT;
         m_BibleBooksModel->push_back(item);
-    }
+    };
+    for (int idx : prefixMatches)   appendBook(idx);
+    for (int idx : containsMatches) appendBook(idx);
 }
 
 void SlintApp::SelectBibleBook(int filteredBookIdx) {
@@ -3965,6 +4075,51 @@ void SlintApp::SelectBibleBook(int filteredBookIdx) {
     LoadBibleChapter(realBookIdx, 1);
 }
 
+void SlintApp::OnBibleSearchEdited(const std::string& rawQuery) {
+    if (m_Bible.books.empty()) return;
+    std::string q = ToLowerUtf8(rawQuery);
+    while (!q.empty() && q.front() == ' ') q.erase(q.begin());
+    while (!q.empty() && q.back() == ' ')  q.pop_back();
+
+    m_Main->set_bible_submode(0);
+    if (q.empty()) {
+        RefreshBibleBooks();
+        if (!m_BibleFilteredBookIndices.empty()) {
+            m_Main->set_selected_bible_book_idx(0);
+            SelectBibleBook(0);
+        }
+        return;
+    }
+
+    std::string bookPart;
+    int chapNum = -1, verseNum = -1;
+    ParseBibleCitation(q, bookPart, chapNum, verseNum);
+
+    if (!bookPart.empty() && chapNum >= 1) {
+        m_Main->set_bible_testament_filter(0);
+        RefreshBibleBooks(bookPart);
+        if (!m_BibleFilteredBookIndices.empty()) {
+            m_Main->set_selected_bible_book_idx(0);
+            SelectBibleBook(0);
+            int realBookIdx = m_BibleFilteredBookIndices[0];
+            int clampedChap = std::clamp(chapNum, 1, static_cast<int>(m_Bible.books[realBookIdx].chapters.size()));
+            m_Main->set_selected_chapter(clampedChap);
+            LoadBibleChapter(realBookIdx, clampedChap);
+            if (verseNum >= 1) {
+                int vIdx = std::clamp(verseNum - 1, 0, std::max(0, static_cast<int>(m_SlidesModel->row_count()) - 1));
+                m_Main->set_active_slide_index(vIdx);
+            }
+        }
+        return;
+    }
+
+    RefreshBibleBooks(q);
+    if (!m_BibleFilteredBookIndices.empty()) {
+        m_Main->set_selected_bible_book_idx(0);
+        SelectBibleBook(0);
+    }
+}
+
 void SlintApp::SearchBible(const std::string& rawQuery) {
     std::string q = ToLowerUtf8(rawQuery);
     while (!q.empty() && q.front() == ' ') q.erase(q.begin());
@@ -3974,54 +4129,25 @@ void SlintApp::SearchBible(const std::string& rawQuery) {
     // 1. Try citation parse: e.g. "juan 3:16", "gn 1 1", "sal 23", "1 cor 13:4"
     std::string bookPart;
     int chapNum = -1, verseNum = -1;
-    {
-        // Split trailing numbers (chapter and optional verse)
-        size_t pos = q.size();
-        std::vector<int> nums;
-        std::string tmp = q;
-        for (char& ch : tmp) {
-            if (ch == ':' || ch == ',' || ch == '.') ch = ' ';
-        }
-        std::istringstream iss(tmp);
-        std::vector<std::string> tokens;
-        std::string tok;
-        while (iss >> tok) tokens.push_back(tok);
-
-        while (!tokens.empty() && std::all_of(tokens.back().begin(), tokens.back().end(),
-                                              [](unsigned char c) { return std::isdigit(c); })) {
-            try { nums.insert(nums.begin(), std::stoi(tokens.back())); } catch (...) {}
-            tokens.pop_back();
-            if (nums.size() == 2) break;
-        }
-        if (!tokens.empty() && !nums.empty()) {
-            for (size_t i = 0; i < tokens.size(); ++i) {
-                if (i > 0) bookPart += " ";
-                bookPart += tokens[i];
-            }
-            chapNum  = nums[0];
-            verseNum = (nums.size() >= 2) ? nums[1] : -1;
-        }
-    }
+    ParseBibleCitation(q, bookPart, chapNum, verseNum);
 
     if (!bookPart.empty() && chapNum >= 1) {
-        for (int bi = 0; bi < static_cast<int>(m_Bible.books.size()); ++bi) {
-            std::string bLow = ToLowerUtf8(m_Bible.books[bi].name);
-            if (bLow.find(bookPart) == 0 || bLow.find(bookPart) != std::string::npos) {
-                m_Main->set_bible_submode(0);
-                m_Main->set_bible_testament_filter(0);
-                RefreshBibleBooks();
-                m_Main->set_selected_bible_book_idx(bi);
-                SelectBibleBook(bi);
-                int clampedChap = std::clamp(chapNum, 1, static_cast<int>(m_Bible.books[bi].chapters.size()));
-                m_Main->set_selected_chapter(clampedChap);
-                LoadBibleChapter(bi, clampedChap);
-                if (verseNum >= 1) {
-                    int vIdx = std::clamp(verseNum - 1, 0, std::max(0, static_cast<int>(m_SlidesModel->row_count()) - 1));
-                    m_Main->set_active_slide_index(vIdx);
-                    ProjectSlide(vIdx);
-                }
-                return;
+        m_Main->set_bible_testament_filter(0);
+        RefreshBibleBooks(bookPart);
+        if (!m_BibleFilteredBookIndices.empty()) {
+            m_Main->set_bible_submode(0);
+            m_Main->set_selected_bible_book_idx(0);
+            SelectBibleBook(0);
+            int realBookIdx = m_BibleFilteredBookIndices[0];
+            int clampedChap = std::clamp(chapNum, 1, static_cast<int>(m_Bible.books[realBookIdx].chapters.size()));
+            m_Main->set_selected_chapter(clampedChap);
+            LoadBibleChapter(realBookIdx, clampedChap);
+            if (verseNum >= 1) {
+                int vIdx = std::clamp(verseNum - 1, 0, std::max(0, static_cast<int>(m_SlidesModel->row_count()) - 1));
+                m_Main->set_active_slide_index(vIdx);
+                ProjectSlide(vIdx);
             }
+            return;
         }
     }
 

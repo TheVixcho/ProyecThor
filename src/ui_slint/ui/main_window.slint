@@ -560,6 +560,10 @@ export component MainWindow inherits Window {
 
     // Tab 11: Ayuda y Novedades (Changelog)
     in-out property <int> help-subtab: 0; // 0=Guía y Atajos, 1=Novedades / Changelog
+    in-out property <int> help-qr-idx: 1; // 0=Web, 1=Discord, 2=Instagram, 3=WhatsApp
+    in-out property <image> help-qr-image;
+    in-out property <string> help-qr-label: "Discord (Soporte y Comunidad)";
+    in-out property <string> help-qr-url: "https://discord.gg/FKqgPDZpBF";
     in property <string> changelog-text: "";
 
     // Tab 12: Consola Debug
@@ -643,6 +647,7 @@ export component MainWindow inherits Window {
     callback bible-version-selected(int);
     callback import-bible-clicked();
     callback bible-search-submitted(string);
+    callback bible-search-edited(string);
     callback bible-filter-changed(int);
     callback bible-book-selected(int);
     callback bible-chapter-changed(int);
@@ -817,6 +822,9 @@ export component MainWindow inherits Window {
     callback open-kofi-donations();
     callback open-website();
     callback open-discord();
+    callback open-instagram();
+    callback open-whatsapp();
+    callback select-help-qr(int);
 
     // Unified Library File Management (Play/Screen, Queue, Rename, Delete)
     callback item-action-play(int, string);
@@ -2078,8 +2086,9 @@ export component MainWindow inherits Window {
                                         colorize: Theme.text-muted;
                                     }
                                     LineEdit {
-                                        placeholder-text: "Ir a cita (ej. Juan 3:16, sal 23) o buscar palabra y Enter...";
+                                        placeholder-text: "Ir a cita (ej. Ester 4:14, Juan 3:16) o buscar palabra...";
                                         text <=> root.bible-search-query;
+                                        edited(txt) => { root.bible-search-edited(txt); }
                                         accepted(txt) => { root.bible-search-submitted(txt); }
                                     }
                                 }
@@ -5399,37 +5408,92 @@ export component MainWindow inherits Window {
                                     background: Theme.bg-surface-1;
                                     border-width: 1px;
                                     border-color: Theme.border-subtle;
-                                    VerticalLayout {
+                                    HorizontalLayout {
                                         padding: 15px;
-                                        spacing: 10px;
-                                        Text { text: "Soporte Oficial y Comunidad"; color: Theme.accent-strong; font-size: 13.5px; font-weight: 700; }
-                                        Text {
-                                            text: "¿Necesitas ayuda, quieres reportar un error o compartir ideas? Visita nuestro sitio web oficial o únete a la comunidad en Discord.";
-                                            color: Theme.text-secondary;
-                                            font-size: 12px;
-                                            wrap: word-wrap;
+                                        spacing: 16px;
+                                        VerticalLayout {
+                                            horizontal-stretch: 1;
+                                            spacing: 10px;
+                                            Text { text: "Soporte Oficial y Comunidad"; color: Theme.accent-strong; font-size: 13.5px; font-weight: 700; }
+                                            Text {
+                                                text: "¿Necesitas ayuda, quieres reportar un error o compartir ideas? Visita nuestro sitio web oficial o únete a nuestra comunidad en Discord, Instagram y WhatsApp.";
+                                                color: Theme.text-secondary;
+                                                font-size: 12px;
+                                                wrap: word-wrap;
+                                            }
+                                            HorizontalLayout {
+                                                spacing: 8px;
+                                                GlassButton {
+                                                    label: "Sitio Web Oficial";
+                                                    primary: true;
+                                                    clicked => { root.open-website(); }
+                                                }
+                                                GlassButton {
+                                                    label: "Discord (Soporte)";
+                                                    clicked => { root.open-discord(); }
+                                                }
+                                                GlassButton {
+                                                    label: "Instagram";
+                                                    clicked => { root.open-instagram(); }
+                                                }
+                                                GlassButton {
+                                                    label: "WhatsApp";
+                                                    clicked => { root.open-whatsapp(); }
+                                                }
+                                                GlassButton {
+                                                    label: "Ko-fi";
+                                                    clicked => { root.open-kofi-donations(); }
+                                                }
+                                            }
+                                            HorizontalLayout {
+                                                spacing: 6px;
+                                                alignment: start;
+                                                Text {
+                                                    text: "Ver QR:";
+                                                    color: Theme.text-muted;
+                                                    font-size: 11.5px;
+                                                    vertical-alignment: center;
+                                                }
+                                                GlassButton { label: "Web"; compact: true; primary: root.help-qr-idx == 0; clicked => { root.help-qr-idx = 0; root.select-help-qr(0); } }
+                                                GlassButton { label: "Discord"; compact: true; primary: root.help-qr-idx == 1; clicked => { root.help-qr-idx = 1; root.select-help-qr(1); } }
+                                                GlassButton { label: "Instagram"; compact: true; primary: root.help-qr-idx == 2; clicked => { root.help-qr-idx = 2; root.select-help-qr(2); } }
+                                                GlassButton { label: "WhatsApp"; compact: true; primary: root.help-qr-idx == 3; clicked => { root.help-qr-idx = 3; root.select-help-qr(3); } }
+                                            }
+                                            Text {
+                                                text: root.help-qr-url;
+                                                color: Theme.text-muted;
+                                                font-size: 11px;
+                                                wrap: word-wrap;
+                                            }
                                         }
-                                        HorizontalLayout {
-                                            spacing: 8px;
-                                            GlassButton {
-                                                label: "Sitio Web Oficial";
-                                                primary: true;
-                                                clicked => { root.open-website(); }
+                                        VerticalLayout {
+                                            spacing: 6px;
+                                            alignment: center;
+                                            Rectangle {
+                                                width: 132px;
+                                                height: 132px;
+                                                border-radius: Theme.radius-md;
+                                                background: #ffffff;
+                                                border-width: 1px;
+                                                border-color: Theme.border-subtle;
+                                                Image {
+                                                    width: 120px;
+                                                    height: 120px;
+                                                    x: 6px;
+                                                    y: 6px;
+                                                    source: root.help-qr-image;
+                                                    image-fit: contain;
+                                                }
                                             }
-                                            GlassButton {
-                                                label: "Discord (Soporte y Comunidad)";
-                                                clicked => { root.open-discord(); }
+                                            Text {
+                                                text: root.help-qr-label;
+                                                color: Theme.text-secondary;
+                                                font-size: 10.5px;
+                                                font-weight: 600;
+                                                horizontal-alignment: center;
+                                                width: 132px;
+                                                wrap: word-wrap;
                                             }
-                                            GlassButton {
-                                                label: "Apoyar en Ko-fi";
-                                                clicked => { root.open-kofi-donations(); }
-                                            }
-                                        }
-                                        Text {
-                                            text: "Web: https://thevixcho.github.io/ProyecThor/   •   Discord: https://discord.gg/FKqgPDZpBF";
-                                            color: Theme.text-muted;
-                                            font-size: 11px;
-                                            wrap: word-wrap;
                                         }
                                     }
                                 }
