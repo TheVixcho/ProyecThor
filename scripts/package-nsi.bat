@@ -39,7 +39,7 @@ if not exist "build-win\ProyecThorSlint.exe" (
 
 if not exist "packaging\windows\dist" mkdir "packaging\windows\dist"
 
-set "VERSION=1.1.5"
+set "VERSION=1.2.0"
 "%MAKENSIS%" -DVERSION="%VERSION%" "-DBUILD_DIR=%CD%\build-win" "-DOUT_DIR=%CD%\packaging\windows\dist" "packaging\windows\ProyecThor.nsi"
 
 if errorlevel 1 (

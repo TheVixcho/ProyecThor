@@ -25,6 +25,9 @@ namespace ProyecThor {
         if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, SHGFP_TYPE_CURRENT, appDataBuf)))
             return std::string(appDataBuf) + "\\ProyecThor\\datadir.txt";
         return "";
+#elif defined(__APPLE__)
+        const char* home = std::getenv("HOME");
+        return home ? std::string(home) + "/Library/Application Support/ProyecThor/datadir.txt" : "";
 #else
         const char* home = std::getenv("HOME");
         return home ? std::string(home) + "/.local/share/ProyecThor/datadir.txt" : "";
@@ -60,6 +63,16 @@ namespace ProyecThor {
         char appDataBuf[MAX_PATH] = {};
         if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, SHGFP_TYPE_CURRENT, appDataBuf))) {
             s_AssetsPath = std::string(appDataBuf) + "\\ProyecThor\\assets";
+        } else {
+            s_AssetsPath = "assets";
+        }
+#elif defined(__APPLE__)
+        const char* home = std::getenv("HOME");
+        if (home) {
+            std::string dir = std::string(home) + "/Library/Application Support/ProyecThor/assets";
+            std::error_code ec;
+            std::filesystem::create_directories(dir, ec);
+            s_AssetsPath = dir;
         } else {
             s_AssetsPath = "assets";
         }
@@ -123,6 +136,9 @@ namespace ProyecThor {
         if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, SHGFP_TYPE_CURRENT, appDataBuf)))
             return std::string(appDataBuf) + "\\ProyecThor";
         return "assets";
+#elif defined(__APPLE__)
+        const char* home = std::getenv("HOME");
+        return home ? std::string(home) + "/Library/Application Support/ProyecThor" : "assets";
 #else
         const char* home = std::getenv("HOME");
         return home ? std::string(home) + "/.local/share/ProyecThor" : "assets";

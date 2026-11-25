@@ -28,6 +28,11 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <psapi.h>
+#elif defined(__APPLE__)
+#include <mach/mach.h>
+#include <sys/resource.h>
+#include <sys/sysctl.h>
+#include <unistd.h>
 #else
 #include <unistd.h>
 #endif
@@ -1172,6 +1177,10 @@ void SlintApp::BindCallbacks() {
         std::thread([url]() {
 #ifdef _WIN32
             ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+#elif defined(__APPLE__)
+            std::string cmd = "open '" + url + "' >/dev/null 2>&1 &";
+            int rc = std::system(cmd.c_str());
+            (void)rc;
 #else
             std::string cmd = "xdg-open '" + url + "' >/dev/null 2>&1 &";
             int rc = std::system(cmd.c_str());
@@ -1215,6 +1224,11 @@ void SlintApp::BindCallbacks() {
     updateHelpQr(1);
     m_Main->on_select_help_qr([updateHelpQr](int idx) {
         updateHelpQr(idx);
+    });
+    m_Main->on_tutorial_preference_changed([this](bool showOnStart) {
+        m_Main->set_show_tutorial_on_start(showOnStart);
+        m_Main->set_tutorial_dont_show_again(!showOnStart);
+        SavePersistedState();
     });
     m_Main->on_item_action_play([this](int kind, slint::SharedString path) {
         HandleItemPlay(kind, std::string(path));
@@ -1277,6 +1291,7 @@ void SlintApp::LoadTabData(int tab) {
 void SlintApp::RefreshLibraryModel() {
     m_LibraryModel->clear();
     m_FilteredIndices.clear();
+    m_SearchMatchedStanzas.clear();
 
     const std::vector<std::string>* activePlPaths = nullptr;
     if (m_ActiveTab == 0 && m_PlaylistFilterActive &&
@@ -1293,16 +1308,36 @@ void SlintApp::RefreshLibraryModel() {
                 continue;
             }
         }
+        int matchedStanza = -1;
         if (!needle.empty()) {
-            if (ToLowerUtf8(e.title).find(needle) == std::string::npos &&
-                ToLowerUtf8(e.subtitle).find(needle) == std::string::npos) {
+            bool metaMatch = (ToLowerUtf8(e.title).find(needle) != std::string::npos ||
+                              ToLowerUtf8(e.subtitle).find(needle) != std::string::npos);
+            if (m_ActiveTab == 0) {
+                auto stanzas = ParseSongStanzas(e.path);
+                for (size_t si = 0; si < stanzas.size(); ++si) {
+                    if (ToLowerUtf8(stanzas[si]).find(needle) != std::string::npos) {
+                        matchedStanza = static_cast<int>(si);
+                        break;
+                    }
+                }
+                if (matchedStanza >= 0) {
+                    m_SearchMatchedStanzas[e.path] = matchedStanza;
+                }
+            }
+            if (!metaMatch && matchedStanza < 0) {
                 continue;
             }
         }
         m_FilteredIndices.push_back(i);
         LibraryItem item;
         item.title    = slint::SharedString(e.title);
-        item.subtitle = slint::SharedString(e.subtitle);
+        std::string sub = e.subtitle;
+        if (matchedStanza >= 0) {
+            sub = sub.empty()
+                ? ("★ Estrofa " + std::to_string(matchedStanza + 1))
+                : (sub + " • ★ Estrofa " + std::to_string(matchedStanza + 1));
+        }
+        item.subtitle = slint::SharedString(sub);
         item.path     = slint::SharedString(e.path);
         item.has_thumbnail = false;
         if ((m_ActiveTab == 2 || m_ActiveTab == 3) && (e.isVideo || e.isImage || e.isOverlay)) {
@@ -1327,15 +1362,32 @@ void SlintApp::SelectLibraryItem(int filteredIdx) {
         m_Main->set_selected_item_title(slint::SharedString(entry.title));
         m_Main->set_selected_song_author(slint::SharedString(entry.author));
         auto stanzas = ParseSongStanzas(entry.path);
+        int matchedStanza = -1;
+        if (auto it = m_SearchMatchedStanzas.find(entry.path); it != m_SearchMatchedStanzas.end()) {
+            matchedStanza = it->second;
+        } else if (!m_SearchQuery.empty()) {
+            std::string needle = ToLowerUtf8(m_SearchQuery);
+            for (size_t si = 0; si < stanzas.size(); ++si) {
+                if (ToLowerUtf8(stanzas[si]).find(needle) != std::string::npos) {
+                    matchedStanza = static_cast<int>(si);
+                    break;
+                }
+            }
+        }
         m_SlidesModel->clear();
-        m_Main->set_active_slide_index(-1);
         for (size_t i = 0; i < stanzas.size(); ++i) {
             SlideItem s;
-            s.badge    = slint::SharedString("Estrofa " + std::to_string(i + 1));
+            std::string badge = "Estrofa " + std::to_string(i + 1);
+            if (static_cast<int>(i) == matchedStanza) {
+                badge += " • ★ Coincide";
+            }
+            s.badge    = slint::SharedString(badge);
             s.body     = slint::SharedString(stanzas[i]);
             s.ref_text = slint::SharedString(entry.title);
             m_SlidesModel->push_back(s);
         }
+        m_Main->set_active_slide_index(
+            (matchedStanza >= 0 && matchedStanza < static_cast<int>(stanzas.size())) ? matchedStanza : -1);
         RebuildSlideGridRows();
     } else if (m_ActiveTab == 10) {
         OpenDocumentAsync(entry.path);
@@ -1511,6 +1563,40 @@ void SlintApp::ScanSystemFonts() {
         "Montserrat", "Open Sans", "Roboto", "Segoe UI", "Tahoma",
         "Times New Roman", "Trebuchet MS", "Verdana"
     };
+#elif defined(__APPLE__)
+    m_DefaultSansFont  = "Helvetica Neue";
+    m_DefaultSerifFont = "Georgia";
+    m_DefaultMonoFont  = "Menlo";
+    m_AllSystemFonts = {
+        "Arial", "Avenir", "Avenir Next", "Courier New", "Futura", "Georgia",
+        "Gill Sans", "Helvetica", "Helvetica Neue", "Impact", "Menlo",
+        "Monaco", "Optima", "Palatino", "SF Pro", "Times New Roman",
+        "Trebuchet MS", "Verdana"
+    };
+    const char* homeEnv = std::getenv("HOME");
+    std::vector<fs::path> macFontDirs = {
+        "/System/Library/Fonts",
+        "/System/Library/Fonts/Supplemental",
+        "/Library/Fonts"
+    };
+    if (homeEnv) macFontDirs.push_back(fs::path(homeEnv) / "Library/Fonts");
+    for (const auto& dir : macFontDirs) {
+        std::error_code ec;
+        if (!fs::exists(dir, ec) || !fs::is_directory(dir, ec)) continue;
+        for (const auto& entry : fs::directory_iterator(dir, ec)) {
+            if (!entry.is_regular_file(ec)) continue;
+            if (!HasExtension(entry.path(), { ".ttf", ".otf" })) continue;
+            std::string stem = entry.path().stem().string();
+            if (stem.empty() || stem[0] == '.') continue;
+            if (m_SystemFontFiles.find(stem) == m_SystemFontFiles.end()) {
+                m_SystemFontFiles[stem] = entry.path().string();
+            }
+            if (std::find(m_AllSystemFonts.begin(), m_AllSystemFonts.end(), stem) == m_AllSystemFonts.end()) {
+                m_AllSystemFonts.push_back(stem);
+            }
+        }
+    }
+    std::sort(m_AllSystemFonts.begin(), m_AllSystemFonts.end());
 #else
     auto trimLine = [](std::string s) {
         while (!s.empty() && (s.back() == '\n' || s.back() == '\r' || s.back() == ' ')) s.pop_back();
@@ -2625,12 +2711,24 @@ void SlintApp::ApplyGpuAndUpscalerConfig() {
     static const char* kHwLabels[] = { "Auto GPU", "NVIDIA NVDEC/CUDA", "Direct3D 11", "VAAPI/Vulkan", "Solo CPU" };
     static const char* kUpLabels[] = { "Bilineal Rápido", "AMD FSR 1.0", "FidelityFX CAS+", "NVIDIA NIS", "LanczosHQ 4K" };
 
+#ifdef __APPLE__
+    const std::string decodeLabel = (m_GpuHwdecMode == 4) ? "Solo CPU" : "VideoToolbox GPU";
+    std::string status = "GPU: " + m_DetectedGpuName +
+                         " • Render: Metal (Skia) • Decode: " + decodeLabel +
+                         " • Reescalado: " + std::string(kUpLabels[m_UpscalerMode]);
+#elif defined(_WIN32) && (defined(_M_ARM64) || defined(__aarch64__))
+    const std::string decodeLabel = (m_GpuHwdecMode == 4) ? "Solo CPU" : "Direct3D 11 (ARM64)";
+    std::string status = "GPU: " + m_DetectedGpuName +
+                         " • Render: Direct3D/Skia • Decode: " + decodeLabel +
+                         " • Reescalado: " + std::string(kUpLabels[m_UpscalerMode]);
+#else
     std::string status = "GPU: " + m_DetectedGpuName +
                          " • Decode: " + std::string(kHwLabels[m_GpuHwdecMode]) +
                          " • Reescalado: " + std::string(kUpLabels[m_UpscalerMode]);
     if (m_NvencEnabled) {
         status += m_NvencAvailable ? " • NVENC: ACTIVO" : " • NVENC: Fallback seguro (GPU sin NVENC)";
     }
+#endif
     m_Main->set_gpu_status_label(slint::SharedString(status));
 }
 
@@ -2729,6 +2827,12 @@ void SlintApp::DetectGpuCapabilitiesAsync() {
             gpuName = RunCommandCapture("powershell -NoProfile -Command \"(Get-CimInstance Win32_VideoController | Select-Object -First 1 -ExpandProperty Name)\" 2>nul");
         }
         std::string encs = RunCommandCapture("ffmpeg -hide_banner -encoders 2>nul");
+#elif defined(__APPLE__)
+        gpuName = RunCommandCapture("system_profiler SPDisplaysDataType 2>/dev/null | grep -iE 'Chipset Model|Modelo de chipset' | head -n 1 | sed 's/^.*: //'");
+        if (gpuName.empty()) {
+            gpuName = RunCommandCapture("sysctl -n machdep.cpu.brand_string 2>/dev/null");
+        }
+        std::string encs = RunCommandCapture("ffmpeg -hide_banner -encoders 2>/dev/null");
 #else
         gpuName = RunCommandCapture("nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null");
         if (gpuName.empty()) {
@@ -3577,6 +3681,10 @@ void SlintApp::LoadPersistedState() {
         m_Main->set_enable_glass_translucency(m_EnableGlassTranslucency);
         m_Main->set_enable_glass_sheen(m_EnableGlassSheen);
         m_Main->set_enable_ambient_bg(m_EnableAmbientBg);
+        bool showTut = j.value("showTutorialOnStart", true);
+        m_Main->set_show_tutorial_on_start(showTut);
+        m_Main->set_tutorial_dont_show_again(!showTut);
+        m_Main->set_tutorial_modal_open(showTut);
         m_MusicScanFolders.clear();
         if (j.contains("musicScanFolders") && j["musicScanFolders"].is_array()) {
             for (const auto& dirVal : j["musicScanFolders"]) {
@@ -3690,7 +3798,8 @@ void SlintApp::SavePersistedState() {
     j["musicEq230"]       = m_Main->get_music_eq_230();
     j["musicEq910"]       = m_Main->get_music_eq_910();
     j["musicEq3600"]      = m_Main->get_music_eq_3600();
-    j["musicEq12000"]     = m_Main->get_music_eq_12000();
+    j["musicEq12000"]        = m_Main->get_music_eq_12000();
+    j["showTutorialOnStart"] = m_Main->get_show_tutorial_on_start();
     j["mobilePin"]       = m_MobileServer.GetPairingPin();
 
     nlohmann::json padsArr = nlohmann::json::array();
@@ -4812,6 +4921,9 @@ void SlintApp::ImportFileAsync(bool forceBackgroundFolder, bool forceOverlayFold
                      "$f.Filter = 'Todos los soportados|*.txt;*.song;*.xml;*.pdf;*.mp4;*.mkv;*.mov;*.webm;*.avi;*.png;*.jpg;*.jpeg;*.webp;*.mp3;*.wav;*.flac;*.ogg;*.m4a|Todos|*.*'; "
                      "if($f.ShowDialog() -eq 'OK'){ Write-Output $f.FileName }\"";
         selectedPath = RunCommandCapture(cmd);
+#elif defined(__APPLE__)
+        selectedPath = RunCommandCapture(
+            "osascript -e 'POSIX path of (choose file with prompt \"Importar archivo a ProyecThor\")' 2>/dev/null");
 #else
         // Try zenity first, fallback to kdialog
         selectedPath = RunCommandCapture(
@@ -5268,6 +5380,40 @@ void SlintApp::RefreshCaptureDevices() {
         d.uri  = "av://dshow:video=" + line;
         m_CaptureDevices.push_back(d);
     }
+#elif defined(__APPLE__)
+    // macOS AVFoundation video capture devices via ffmpeg listing
+    std::string out = RunCommandCapture("ffmpeg -f avfoundation -list_devices true -i \"\" 2>&1");
+    std::istringstream iss(out);
+    std::string line;
+    bool inVideoSection = false;
+    while (std::getline(iss, line)) {
+        if (line.find("AVFoundation video devices:") != std::string::npos) {
+            inVideoSection = true;
+            continue;
+        }
+        if (line.find("AVFoundation audio devices:") != std::string::npos) {
+            break;
+        }
+        if (!inVideoSection) continue;
+        auto lb = line.rfind('[');
+        auto rb = (lb != std::string::npos) ? line.find(']', lb) : std::string::npos;
+        if (lb != std::string::npos && rb != std::string::npos && rb > lb + 1) {
+            std::string idxStr = line.substr(lb + 1, rb - lb - 1);
+            bool allDigits = !idxStr.empty() && std::all_of(idxStr.begin(), idxStr.end(),
+                                                            [](unsigned char c) { return std::isdigit(c); });
+            if (allDigits) {
+                std::string name = line.substr(rb + 1);
+                while (!name.empty() && (name.front() == ' ' || name.front() == '\t')) name.erase(name.begin());
+                while (!name.empty() && (name.back() == '\r' || name.back() == '\n')) name.pop_back();
+                if (!name.empty()) {
+                    CaptureDev d;
+                    d.name = name + " (AVFoundation #" + idxStr + ")";
+                    d.uri  = "av://avfoundation:" + idxStr;
+                    m_CaptureDevices.push_back(d);
+                }
+            }
+        }
+    }
 #else
     // Linux V4L2 devices (/sys/class/video4linux/video*)
     std::error_code ec;
@@ -5343,6 +5489,9 @@ void SlintApp::CopyToClipboard(const std::string& text) {
 #ifdef _WIN32
     FILE* p = _popen("clip", "w");
     if (p) { std::fwrite(text.data(), 1, text.size(), p); _pclose(p); }
+#elif defined(__APPLE__)
+    FILE* p = popen("pbcopy", "w");
+    if (p) { std::fwrite(text.data(), 1, text.size(), p); pclose(p); }
 #else
     // Try Wayland wl-copy first, then X11 xclip / xsel
     FILE* p = popen("wl-copy 2>/dev/null || xclip -selection clipboard 2>/dev/null || xsel --clipboard --input 2>/dev/null", "w");
@@ -6384,6 +6533,9 @@ void SlintApp::BrowseMusicFolderAsync() {
                      "$d.Description = 'Selecciona una carpeta de música para ProyecThor'; "
                      "if($d.ShowDialog() -eq 'OK'){ Write-Output $d.SelectedPath }\"";
         selectedDir = RunCommandCapture(cmd);
+#elif defined(__APPLE__)
+        selectedDir = RunCommandCapture(
+            "osascript -e 'POSIX path of (choose folder with prompt \"Selecciona una carpeta de música para ProyecThor\")' 2>/dev/null");
 #else
         selectedDir = RunCommandCapture(
             "zenity --file-selection --directory --title=\"Seleccionar carpeta de música\" 2>/dev/null");
@@ -7024,12 +7176,12 @@ void SlintApp::RefreshAllLibraryViewsAfterMutation(int kind, const std::string& 
 // ── Changelog, Debug & Wi-Fi Firewall Diagnostics ────────────────────────────
 void SlintApp::LoadChangelogText() {
     std::ostringstream oss;
-    oss << "=== VERSIÓN " << PROYECTHOR_VERSION_STRING << " BETA (SLINT UI + LIBMPV) ===\n"
-        << "• Nueva interfaz moderna Slint 1.19 + Dark Carbon + 14 temas completos.\n"
-        << "• Panel Capas permanente a la derecha (Fondos con hover-preview, Overlays PNG y Notas).\n"
-        << "• Botón Freeze (Congelar salida secundaria) y Escalado / Nitidez FSR.\n"
-        << "• Música independiente (sin cortar video), Documentos PDF, Ayuda y Consola Debug.\n"
-        << "• Centro de Redes unificado con Video LAN (8080), Smart TV DLNA, Chat LAN (8082) y Celular (8090) independientes.\n\n";
+    oss << "=== VERSIÓN " << PROYECTHOR_VERSION_STRING << " (MOTOR SLINT + MULTIPLATAFORMA NATIVA) ===\n"
+        << "• Nuevo motor nativo Slint 1.19 + C++20 + Async libmpv.\n"
+        << "• Soporte nativo completo: Windows x64, Windows ARM64, macOS Apple Silicon (Metal + VideoToolbox), macOS Intel y Linux.\n"
+        << "• Búsqueda progresiva en Biblia (Libro → Capítulo → Verso) y búsqueda por verso con resaltado y autor en Canciones.\n"
+        << "• Tutorial interactivo de bienvenida y Centro de Soporte y Comunidad con códigos QR (Web, Discord, Instagram, WhatsApp).\n"
+        << "• Matriz Multi-Pantalla, Capas Activas, Botón Freeze, Escalado FSR y Redes LAN/Smart TV/Celular independientes.\n\n";
 
     const auto& reg = ProyecThor::UI::GetPatchNotesRegistry();
     for (size_t i = 0; i < std::min<size_t>(5, reg.size()); ++i) {
@@ -7064,7 +7216,24 @@ void SlintApp::SampleAppTelemetry() {
     auto now = std::chrono::steady_clock::now();
     if (m_PerfLastSampleTime.time_since_epoch().count() == 0) {
         m_PerfLastSampleTime = now;
-#ifndef _WIN32
+#ifdef _WIN32
+        FILETIME ftC, ftE, ftK, ftU;
+        if (GetProcessTimes(GetCurrentProcess(), &ftC, &ftE, &ftK, &ftU)) {
+            ULARGE_INTEGER k, u;
+            k.LowPart = ftK.dwLowDateTime; k.HighPart = ftK.dwHighDateTime;
+            u.LowPart = ftU.dwLowDateTime; u.HighPart = ftU.dwHighDateTime;
+            m_PerfLastCpuNs = (k.QuadPart + u.QuadPart) * 100ULL;
+        }
+#elif defined(__APPLE__)
+        rusage ru{};
+        if (getrusage(RUSAGE_SELF, &ru) == 0) {
+            uint64_t userNs = static_cast<uint64_t>(ru.ru_utime.tv_sec) * 1000000000ULL +
+                              static_cast<uint64_t>(ru.ru_utime.tv_usec) * 1000ULL;
+            uint64_t sysNs  = static_cast<uint64_t>(ru.ru_stime.tv_sec) * 1000000000ULL +
+                              static_cast<uint64_t>(ru.ru_stime.tv_usec) * 1000ULL;
+            m_PerfLastCpuNs = userNs + sysNs;
+        }
+#else
         std::ifstream statF("/proc/self/stat");
         std::string line;
         if (std::getline(statF, line)) {
@@ -7083,14 +7252,6 @@ void SlintApp::SampleAppTelemetry() {
                 }
             }
         }
-#else
-        FILETIME ftC, ftE, ftK, ftU;
-        if (GetProcessTimes(GetCurrentProcess(), &ftC, &ftE, &ftK, &ftU)) {
-            ULARGE_INTEGER k, u;
-            k.LowPart = ftK.dwLowDateTime; k.HighPart = ftK.dwHighDateTime;
-            u.LowPart = ftU.dwLowDateTime; u.HighPart = ftU.dwHighDateTime;
-            m_PerfLastCpuNs = (k.QuadPart + u.QuadPart) * 100ULL;
-        }
 #endif
         return;
     }
@@ -7106,7 +7267,46 @@ void SlintApp::SampleAppTelemetry() {
 
     unsigned int cores = std::max(1u, std::thread::hardware_concurrency());
 
-#ifndef _WIN32
+#ifdef _WIN32
+    FILETIME ftC, ftE, ftK, ftU;
+    if (GetProcessTimes(GetCurrentProcess(), &ftC, &ftE, &ftK, &ftU)) {
+        ULARGE_INTEGER k, u;
+        k.LowPart = ftK.dwLowDateTime; k.HighPart = ftK.dwHighDateTime;
+        u.LowPart = ftU.dwLowDateTime; u.HighPart = ftU.dwHighDateTime;
+        uint64_t curNs = (k.QuadPart + u.QuadPart) * 100ULL;
+        if (curNs >= m_PerfLastCpuNs) {
+            double cpuSec = static_cast<double>(curNs - m_PerfLastCpuNs) / 1e9;
+            m_PerfCpuPercent = std::clamp((cpuSec / (elapsed * cores)) * 100.0, 0.0, 100.0);
+        }
+        m_PerfLastCpuNs = curNs;
+    }
+    PROCESS_MEMORY_COUNTERS pmc{};
+    if (K32GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
+        m_PerfRamMb     = static_cast<double>(pmc.WorkingSetSize) / (1024.0 * 1024.0);
+        m_PerfPeakRamMb = static_cast<double>(pmc.PeakWorkingSetSize) / (1024.0 * 1024.0);
+    }
+#elif defined(__APPLE__)
+    rusage ru{};
+    if (getrusage(RUSAGE_SELF, &ru) == 0) {
+        uint64_t userNs = static_cast<uint64_t>(ru.ru_utime.tv_sec) * 1000000000ULL +
+                          static_cast<uint64_t>(ru.ru_utime.tv_usec) * 1000ULL;
+        uint64_t sysNs  = static_cast<uint64_t>(ru.ru_stime.tv_sec) * 1000000000ULL +
+                          static_cast<uint64_t>(ru.ru_stime.tv_usec) * 1000ULL;
+        uint64_t curNs  = userNs + sysNs;
+        if (curNs >= m_PerfLastCpuNs) {
+            double cpuSec = static_cast<double>(curNs - m_PerfLastCpuNs) / 1e9;
+            m_PerfCpuPercent = std::clamp((cpuSec / (elapsed * cores)) * 100.0, 0.0, 100.0);
+        }
+        m_PerfLastCpuNs = curNs;
+    }
+    mach_task_basic_info_data_t info{};
+    mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
+    if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO,
+                  reinterpret_cast<task_info_t>(&info), &count) == KERN_SUCCESS) {
+        m_PerfRamMb     = static_cast<double>(info.resident_size) / (1024.0 * 1024.0);
+        m_PerfPeakRamMb = static_cast<double>(info.resident_size_max) / (1024.0 * 1024.0);
+    }
+#else
     // CPU time from /proc/self/stat
     {
         std::ifstream statF("/proc/self/stat");
@@ -7149,24 +7349,6 @@ void SlintApp::SampleAppTelemetry() {
             }
         }
     }
-#else
-    FILETIME ftC, ftE, ftK, ftU;
-    if (GetProcessTimes(GetCurrentProcess(), &ftC, &ftE, &ftK, &ftU)) {
-        ULARGE_INTEGER k, u;
-        k.LowPart = ftK.dwLowDateTime; k.HighPart = ftK.dwHighDateTime;
-        u.LowPart = ftU.dwLowDateTime; u.HighPart = ftU.dwHighDateTime;
-        uint64_t curNs = (k.QuadPart + u.QuadPart) * 100ULL;
-        if (curNs >= m_PerfLastCpuNs) {
-            double cpuSec = static_cast<double>(curNs - m_PerfLastCpuNs) / 1e9;
-            m_PerfCpuPercent = std::clamp((cpuSec / (elapsed * cores)) * 100.0, 0.0, 100.0);
-        }
-        m_PerfLastCpuNs = curNs;
-    }
-    PROCESS_MEMORY_COUNTERS pmc{};
-    if (K32GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
-        m_PerfRamMb     = static_cast<double>(pmc.WorkingSetSize) / (1024.0 * 1024.0);
-        m_PerfPeakRamMb = static_cast<double>(pmc.PeakWorkingSetSize) / (1024.0 * 1024.0);
-    }
 #endif
 
     if (m_ActiveTab == 12 || m_ActiveTab == 7) {
@@ -7208,8 +7390,22 @@ void SlintApp::RefreshDebugInfo() {
         m_PerfThreads > 0 ? ("Pico " + peakStr.str() + " • " + std::to_string(m_PerfThreads) + " hilos")
                           : ("Pico " + peakStr.str())));
 
+    const char* platTag =
+#if defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__))
+        "macOS Apple Silicon (arm64 • Metal)";
+#elif defined(__APPLE__)
+        "macOS Intel (x86_64 • Metal)";
+#elif defined(_WIN32) && (defined(_M_ARM64) || defined(__aarch64__))
+        "Windows ARM64 (Direct3D)";
+#elif defined(_WIN32)
+        "Windows x64";
+#elif defined(__aarch64__)
+        "Linux ARM64";
+#else
+        "Linux x86_64";
+#endif
     std::ostringstream st;
-    st << "Versión: v" << PROYECTHOR_VERSION_STRING << " (Slint 1.19 + Async libmpv)  |  "
+    st << "Versión: v" << PROYECTHOR_VERSION_STRING << " (" << platTag << " • Slint 1.19 + Async libmpv)  |  "
        << "FPS: " << fpsStr.str() << " (" << vidSubStr.str() << ")  |  CPU: " << cpuStr.str()
        << "  |  RAM: " << ramStr.str() << " (Pico " << peakStr.str() << ")\n"
        << "GPU: " << m_DetectedGpuName << "  |  HWDec Activo: " << activeHw
@@ -7243,6 +7439,9 @@ void SlintApp::CheckFirewallStatusAsync() {
 #ifdef _WIN32
         msg = "Windows: Si otros dispositivos en Wi-Fi no pueden abrir la URL LAN, pulsa 'Abrir Puertos' para crear la regla en Windows Defender Firewall.";
         warn = false;
+#elif defined(__APPLE__)
+        msg = "macOS: Si activaste el Firewall de macOS, permite conexiones entrantes para ProyecThor en Configuración del Sistema → Red → Firewall.";
+        warn = false;
 #else
         std::string ufwState = RunCommandCapture("systemctl is-active ufw 2>/dev/null");
         while (!ufwState.empty() && (ufwState.back() == '\n' || ufwState.back() == '\r')) ufwState.pop_back();
@@ -7267,6 +7466,8 @@ void SlintApp::OpenFirewallPortsAsync() {
         std::system("netsh advfirewall firewall add rule name=\"ProyecThor LAN\" dir=in action=allow protocol=TCP localport=8080,8082,8090");
         std::system("netsh advfirewall firewall add rule name=\"ProyecThor UDP\" dir=in action=allow protocol=UDP localport=47990");
         int rc = 0;
+#elif defined(__APPLE__)
+        int rc = std::system("open 'x-apple.systempreferences:com.apple.Network-Settings.extension' >/dev/null 2>&1");
 #else
         int rc = std::system("pkexec sh -c \"ufw allow 8080/tcp && ufw allow 8082/tcp && ufw allow 8090/tcp && ufw allow 47990/udp\"");
 #endif

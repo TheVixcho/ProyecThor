@@ -1,11 +1,32 @@
-cmake_minimum_required(VERSION 3.11)
+cmake_minimum_required(VERSION 3.21)
 
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 project(ProyecThor
-    VERSION 1.1.5
+    VERSION 1.2.0
     LANGUAGES C CXX
 )
+
+# ── Detección de arquitectura y opciones de targets ───────────────────────────
+set(PROYECTHOR_IS_WIN_ARM64 FALSE)
+if(WIN32)
+    string(TOLOWER "${CMAKE_GENERATOR_PLATFORM};${CMAKE_VS_PLATFORM_NAME};${CMAKE_SYSTEM_PROCESSOR}" _pt_win_arch)
+    if(_pt_win_arch MATCHES "arm64|aarch64")
+        set(PROYECTHOR_IS_WIN_ARM64 TRUE)
+        message(STATUS "Arquitectura detectada: Windows ARM64")
+    endif()
+endif()
+
+if(APPLE OR PROYECTHOR_IS_WIN_ARM64)
+    set(_pt_default_legacy OFF)
+else()
+    set(_pt_default_legacy ON)
+endif()
+option(PROYECTHOR_BUILD_LEGACY "Compilar la interfaz clásica ImGui (ProyecThor)" ${_pt_default_legacy})
+option(PROYECTHOR_BUILD_SLINT "Compilar la nueva interfaz moderna con Slint" ON)
+option(PROYECTHOR_FETCH_SLINT "Compilar Slint C++ desde fuente (FetchContent) si no hay SDK precompilado" OFF)
+set(SLINT_SDK_DIR "" CACHE PATH "Ruta explícita al Slint C++ SDK (opcional)")
+set(MPV_SDK_DIR "" CACHE PATH "Ruta explícita al libmpv SDK en Windows (opcional)")
 
 # ── Acelerador de compilación con caché (ccache) para desarrollo y debug ───
 # En MSVC (especialmente runners Windows con Strawberry Perl ccache) se omite por
@@ -87,6 +108,69 @@ if(NOT nlohmann_json_FOUND)
     FetchContent_MakeAvailable(json)
 endif()
 
+add_compile_definitions(IMGUI_USE_WCHAR32 IMGUI_DEFINE_MATH_OPERATORS)
+
+set(IMGUI_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/src/external/imgui-docking")
+set(GLFW_SDK   "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/glfw")
+set(GLEW_DIR   "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/glew")
+if(MPV_SDK_DIR)
+    set(MPV_SDK "${MPV_SDK_DIR}")
+elseif(PROYECTHOR_IS_WIN_ARM64 AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/mpv-arm64")
+    set(MPV_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/mpv-arm64")
+else()
+    set(MPV_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/mpv")
+endif()
+set(PDFIUM_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/pdfium")
+set(PDFIUM_SDK_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/pdfium-linux")
+set(WEBVIEW2_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/webview2")
+set(HTTPLIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk")
+
+if(WIN32)
+    set(RESOURCE_FILE "src/resources.rc")
+    if(MINGW)
+        set(CMAKE_RC_FLAGS "-O coff --use-temp-file")
+    endif()
+else()
+    set(RESOURCE_FILE "")
+endif()
+
+# ── Detección compartida de libmpv (usada por ProyecThorSlint y ProyecThor) ──
+if(WIN32)
+    if(MSVC)
+        set(MPV_WIN_LIB "${MPV_SDK}/lib/mpv.lib")
+    else()
+        set(MPV_WIN_LIB "${MPV_SDK}/lib/libmpv.dll.a")
+    endif()
+    if(NOT EXISTS "${MPV_WIN_LIB}")
+        message(FATAL_ERROR
+            "No se encontro libmpv en ${MPV_WIN_LIB}\n"
+            "Verifica que el SDK de libmpv este en: ${MPV_SDK}"
+        )
+    endif()
+    message(STATUS "libmpv encontrado (Windows): ${MPV_WIN_LIB}")
+else()
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(MPV mpv)
+    endif()
+    if(MPV_FOUND)
+        if(MPV_LINK_LIBRARIES)
+            set(MPV_LINK_TARGET ${MPV_LINK_LIBRARIES})
+        else()
+            set(MPV_LINK_TARGET ${MPV_LIBRARIES})
+        endif()
+        message(STATUS "libmpv encontrado via pkg-config (${MPV_VERSION}): ${MPV_LINK_TARGET}")
+    else()
+        find_library(MPV_LIB_UNIX NAMES mpv libmpv PATHS /opt/homebrew/lib /usr/local/lib REQUIRED)
+        find_path(MPV_INC_UNIX NAMES mpv/client.h PATHS /opt/homebrew/include /usr/local/include REQUIRED)
+        message(STATUS "libmpv encontrado (Unix/macOS): ${MPV_LIB_UNIX}")
+        set(MPV_INCLUDE_DIRS "${MPV_INC_UNIX}")
+        set(MPV_LINK_TARGET "${MPV_LIB_UNIX}")
+    endif()
+endif()
+
+if(PROYECTHOR_BUILD_LEGACY)
+
 find_package(glm QUIET)
 if(NOT glm_FOUND)
     include(FetchContent)
@@ -97,17 +181,6 @@ if(NOT glm_FOUND)
     )
     FetchContent_MakeAvailable(glm)
 endif()
-
-add_compile_definitions(IMGUI_USE_WCHAR32 IMGUI_DEFINE_MATH_OPERATORS)
-
-set(IMGUI_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/src/external/imgui-docking")
-set(GLFW_SDK   "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/glfw")
-set(GLEW_DIR   "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/glew")
-set(MPV_SDK    "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/mpv")
-set(PDFIUM_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/pdfium")
-set(PDFIUM_SDK_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/pdfium-linux")
-set(WEBVIEW2_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/webview2")
-set(HTTPLIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk")
 
 file(GLOB CORE_SOURCES              CONFIGURE_DEPENDS "src/core/*.cpp")
 file(GLOB CORE_PLUGINS_SOURCES      CONFIGURE_DEPENDS "src/core/plugins/*.cpp")
@@ -156,15 +229,6 @@ set(IMGUI_SOURCES
     "${IMGUI_DIR}/backends/imgui_impl_glfw.cpp"
     "${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp"
 )
-
-if(WIN32)
-    set(RESOURCE_FILE "src/resources.rc")
-    if(MINGW)
-        set(CMAKE_RC_FLAGS "-O coff --use-temp-file")
-    endif()
-else()
-    set(RESOURCE_FILE "")
-endif()
 
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/shaders"
      DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
@@ -373,19 +437,9 @@ if(WIN32)
 
     if(MSVC)
         set(GLFW_WIN_LIB "${GLFW_SDK}/lib-vc2022/glfw3.lib")
-        set(MPV_WIN_LIB  "${MPV_SDK}/lib/mpv.lib")
     else()
         set(GLFW_WIN_LIB "${GLFW_SDK}/lib-mingw-w64/libglfw3.a")
-        set(MPV_WIN_LIB  "${MPV_SDK}/lib/libmpv.dll.a")
     endif()
-
-    if(NOT EXISTS "${MPV_WIN_LIB}")
-        message(FATAL_ERROR
-            "No se encontro libmpv en ${MPV_WIN_LIB}\n"
-            "Verifica que el SDK de libmpv este en: ${MPV_SDK}"
-        )
-    endif()
-    message(STATUS "libmpv encontrado (Windows): ${MPV_WIN_LIB}")
 
     target_link_libraries(ProyecThor PRIVATE
         "${GLFW_WIN_LIB}"
@@ -465,20 +519,8 @@ else()
         message(STATUS "OpenCV NO encontrado: Captura seguira usando la camara simulada de prueba")
     endif()
 
-    find_package(PkgConfig QUIET)
-    if(PkgConfig_FOUND)
-        pkg_check_modules(MPV mpv)
-    endif()
-    if(MPV_FOUND)
-        message(STATUS "libmpv encontrado via pkg-config (${MPV_VERSION}): ${MPV_LIBRARIES}")
+    if(MPV_INCLUDE_DIRS)
         target_include_directories(ProyecThor PRIVATE ${MPV_INCLUDE_DIRS})
-        set(MPV_LINK_TARGET ${MPV_LIBRARIES})
-    else()
-        find_library(MPV_LIB_LINUX NAMES mpv libmpv REQUIRED)
-        find_path(MPV_INC_LINUX NAMES mpv/client.h REQUIRED)
-        message(STATUS "libmpv encontrado (Linux): ${MPV_LIB_LINUX}")
-        target_include_directories(ProyecThor PRIVATE "${MPV_INC_LINUX}")
-        set(MPV_LINK_TARGET "${MPV_LIB_LINUX}")
     endif()
 
     set(PDFIUM_LIB_LINUX "${PDFIUM_SDK_LINUX}/lib/libpdfium.so")
@@ -704,17 +746,57 @@ endif()
         )
     endif()
 endif()
+endif() # PROYECTHOR_BUILD_LEGACY
+
+if(UNIX AND NOT APPLE AND NOT DEFINED PROYECTHOR_INSTALL_DIR)
+    include(GNUInstallDirs)
+    set(PROYECTHOR_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/proyecthor")
+endif()
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  ProyecThorSlint — Nueva Interfaz Moderna (Slint + libmpv, Dark Glass)
-#  Migración incremental en rama beta manteniendo compatibilidad Linux + Windows
+#  Soporte nativo: Linux x86_64, Windows x64 / ARM64, macOS Apple Silicon & Intel
 # ══════════════════════════════════════════════════════════════════════════════
-option(PROYECTHOR_BUILD_SLINT "Compilar la nueva interfaz moderna con Slint" ON)
 if(PROYECTHOR_BUILD_SLINT)
     set(SLINT_SDK_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/slint-linux")
-    set(SLINT_SDK_WIN   "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/slint-win")
+    set(SLINT_SDK_MACOS "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/slint-macos")
+    if(PROYECTHOR_IS_WIN_ARM64 AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/slint-win-arm64")
+        set(SLINT_SDK_WIN "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/slint-win-arm64")
+    else()
+        set(SLINT_SDK_WIN "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/slint-win")
+    endif()
 
-    find_package(Slint QUIET PATHS "${SLINT_SDK_LINUX}" "${SLINT_SDK_WIN}")
+    set(_pt_slint_search_paths "")
+    if(SLINT_SDK_DIR)
+        list(APPEND _pt_slint_search_paths "${SLINT_SDK_DIR}")
+    endif()
+    if(APPLE)
+        list(APPEND _pt_slint_search_paths "${SLINT_SDK_MACOS}")
+    elseif(WIN32)
+        list(APPEND _pt_slint_search_paths "${SLINT_SDK_WIN}")
+    else()
+        list(APPEND _pt_slint_search_paths "${SLINT_SDK_LINUX}")
+    endif()
+
+    find_package(Slint QUIET PATHS ${_pt_slint_search_paths})
+    if(NOT Slint_FOUND AND PROYECTHOR_FETCH_SLINT)
+        message(STATUS "Slint C++ SDK precompilado no encontrado — compilando Slint v1.19.0 desde fuente (FetchContent)...")
+        if(APPLE OR PROYECTHOR_IS_WIN_ARM64)
+            # Habilitar Skia garantiza Metal (CAMetalLayer) nativo en macOS y Direct3D en Windows ARM64
+            set(SLINT_FEATURE_RENDERER_SKIA ON CACHE BOOL "Enable Skia renderer (Metal on macOS / D3D on Windows)" FORCE)
+        endif()
+        include(FetchContent)
+        FetchContent_Declare(
+            Slint
+            GIT_REPOSITORY https://github.com/slint-ui/slint.git
+            GIT_TAG        v1.19.0
+            GIT_SHALLOW    TRUE
+            SOURCE_SUBDIR  api/cpp
+        )
+        FetchContent_MakeAvailable(Slint)
+        set(Slint_FOUND TRUE)
+    endif()
+
     if(Slint_FOUND)
         message(STATUS "Slint C++ SDK encontrado (${Slint_VERSION}): habilitando target ProyecThorSlint")
 
@@ -722,7 +804,7 @@ if(PROYECTHOR_BUILD_SLINT)
         # - Divide main_window.slint (~228k líneas / 22 MB) en 12 unidades paralelas (evita cuelgues de 15+ min en MSVC).
         # - Embebe los recursos SVG (@image-url) dentro del ejecutable para que funcionen en cualquier PC.
         # - Usa /Od /Ob0 /bigobj en MSVC y -O1 en GCC/Clang solo para el pegamento generado por Slint
-        #   (el motor gráfico/layout ya corre en Release dentro de slint_cpp.dll / libslint_cpp.so).
+        #   (el motor gráfico/layout ya corre en Release dentro de slint_cpp.dll / libslint_cpp.so / libslint_cpp.dylib).
         add_library(ProyecThorSlintUI STATIC)
         set_target_properties(ProyecThorSlintUI PROPERTIES
             CXX_STANDARD 20
@@ -802,16 +884,20 @@ if(PROYECTHOR_BUILD_SLINT)
                 WIN32_LEAN_AND_MEAN
             )
             target_include_directories(ProyecThorSlint PRIVATE "${MPV_SDK}/include")
-            target_link_libraries(ProyecThorSlint PRIVATE "${MPV_WIN_LIB}" ws2_32 iphlpapi)
+            target_link_libraries(ProyecThorSlint PRIVATE "${MPV_WIN_LIB}" shell32 ws2_32 iphlpapi)
             if(MSVC)
                 target_link_options(ProyecThorSlint PRIVATE "/ENTRY:mainCRTStartup")
             endif()
             set(SLINT_WIN_DLL "")
-            if(EXISTS "${SLINT_SDK_WIN}/bin/slint_cpp.dll")
-                set(SLINT_WIN_DLL "${SLINT_SDK_WIN}/bin/slint_cpp.dll")
-            elseif(EXISTS "${SLINT_SDK_WIN}/lib/slint_cpp.dll")
-                set(SLINT_WIN_DLL "${SLINT_SDK_WIN}/lib/slint_cpp.dll")
-            endif()
+            foreach(_d "${SLINT_SDK_DIR}" "${SLINT_SDK_WIN}")
+                if(_d AND NOT SLINT_WIN_DLL)
+                    if(EXISTS "${_d}/bin/slint_cpp.dll")
+                        set(SLINT_WIN_DLL "${_d}/bin/slint_cpp.dll")
+                    elseif(EXISTS "${_d}/lib/slint_cpp.dll")
+                        set(SLINT_WIN_DLL "${_d}/lib/slint_cpp.dll")
+                    endif()
+                endif()
+            endforeach()
             if(SLINT_WIN_DLL)
                 add_custom_command(TARGET ProyecThorSlint POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -828,11 +914,46 @@ if(PROYECTHOR_BUILD_SLINT)
                     COMMENT "Copiando libmpv-2.dll al directorio de salida"
                 )
             endif()
-        else()
-            if(MPV_FOUND)
+            if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
+                add_custom_command(TARGET ProyecThorSlint POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_directory
+                        "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild"
+                        "$<TARGET_FILE_DIR:ProyecThorSlint>"
+                    COMMENT "Copiando extrabuild/ al directorio de salida de ProyecThorSlint"
+                )
+            endif()
+        elseif(APPLE)
+            if(MPV_INCLUDE_DIRS)
                 target_include_directories(ProyecThorSlint PRIVATE ${MPV_INCLUDE_DIRS})
-            elseif(MPV_INC_LINUX)
-                target_include_directories(ProyecThorSlint PRIVATE "${MPV_INC_LINUX}")
+            endif()
+            target_link_libraries(ProyecThorSlint PRIVATE
+                ${MPV_LINK_TARGET}
+                pthread
+                dl
+            )
+            set_target_properties(ProyecThorSlint PROPERTIES
+                INSTALL_RPATH "@executable_path;@executable_path/../Frameworks"
+                BUILD_RPATH "@executable_path;@executable_path/../Frameworks"
+                BUILD_WITH_INSTALL_RPATH TRUE
+                SKIP_BUILD_RPATH FALSE
+            )
+            set(SLINT_MACOS_DYLIB "")
+            foreach(_d "${SLINT_SDK_DIR}" "${SLINT_SDK_MACOS}")
+                if(_d AND NOT SLINT_MACOS_DYLIB AND EXISTS "${_d}/lib/libslint_cpp.dylib")
+                    set(SLINT_MACOS_DYLIB "${_d}/lib/libslint_cpp.dylib")
+                endif()
+            endforeach()
+            if(SLINT_MACOS_DYLIB)
+                add_custom_command(TARGET ProyecThorSlint POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${SLINT_MACOS_DYLIB}"
+                        "$<TARGET_FILE_DIR:ProyecThorSlint>"
+                    COMMENT "Copiando libslint_cpp.dylib al directorio de salida"
+                )
+            endif()
+        else()
+            if(MPV_INCLUDE_DIRS)
+                target_include_directories(ProyecThorSlint PRIVATE ${MPV_INCLUDE_DIRS})
             endif()
             target_link_libraries(ProyecThorSlint PRIVATE
                 ${MPV_LINK_TARGET}
@@ -869,6 +990,6 @@ if(PROYECTHOR_BUILD_SLINT)
             )
         endif()
     else()
-        message(STATUS "Slint C++ SDK no encontrado en src/vendor/sdk/slint-{linux,win} — omitiendo target ProyecThorSlint")
+        message(STATUS "Slint C++ SDK no encontrado — omitiendo target ProyecThorSlint (usa -DPROYECTHOR_FETCH_SLINT=ON para compilar desde fuente)")
     endif()
 endif()

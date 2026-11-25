@@ -1037,3 +1037,107 @@ export component ItemMoreBtn inherits Rectangle {
         clicked => { root.clicked(); }
     }
 }
+
+
+export component SupportLinkCard inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle;
+    in property <image> icon;
+    in property <color> accent: #3b82f6;
+    in property <string> action-label: "Abrir";
+    callback clicked();
+
+    height: 58px;
+    border-radius: Theme.radius-md;
+    background: ta.pressed
+        ? root.accent.transparentize(0.82)
+        : (ta.has-hover ? root.accent.transparentize(0.88) : Theme.bg-surface-2);
+    border-width: 1px;
+    border-color: ta.has-hover ? root.accent.transparentize(0.35) : Theme.border-subtle;
+    drop-shadow-blur: ta.has-hover ? 10px : 0px;
+    drop-shadow-color: root.accent.transparentize(0.75);
+    drop-shadow-offset-y: 2px;
+
+    animate background { duration: 130ms; easing: ease-out; }
+    animate border-color { duration: 130ms; easing: ease-out; }
+    animate drop-shadow-blur { duration: 150ms; easing: ease-out; }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 12px;
+
+        Rectangle {
+            width: 38px;
+            height: 38px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 10px;
+            background: root.accent.transparentize(0.80);
+            border-width: 1px;
+            border-color: root.accent.transparentize(0.45);
+            Image {
+                source: root.icon;
+                width: 20px;
+                height: 20px;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                colorize: root.accent;
+            }
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.title;
+                color: Theme.text-primary;
+                font-size: 12.5px;
+                font-weight: 700;
+                overflow: elide;
+            }
+            Text {
+                text: root.subtitle;
+                color: Theme.text-muted;
+                font-size: 10.5px;
+                overflow: elide;
+            }
+        }
+
+        Rectangle {
+            width: 72px;
+            height: 28px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 14px;
+            background: ta.has-hover ? root.accent : Theme.bg-surface-1;
+            border-width: 1px;
+            border-color: ta.has-hover ? root.accent : Theme.border-subtle;
+            animate background { duration: 130ms; easing: ease-out; }
+            animate border-color { duration: 130ms; easing: ease-out; }
+
+            HorizontalLayout {
+                alignment: center;
+                spacing: 4px;
+                Text {
+                    text: root.action-label;
+                    color: ta.has-hover ? #ffffff : Theme.text-secondary;
+                    font-size: 11px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+                Image {
+                    source: @image-url("icons/external_link.svg");
+                    width: 11px;
+                    height: 11px;
+                    y: (parent.height - self.height) / 2;
+                    colorize: ta.has-hover ? #ffffff : Theme.text-secondary;
+                }
+            }
+        }
+    }
+}

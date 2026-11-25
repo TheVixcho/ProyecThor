@@ -1,4 +1,4 @@
-name: Release Windows (.exe) & Linux (.AppImage)
+name: Release Multiplataforma (Windows x64/ARM64, macOS Apple Silicon/Intel & Linux)
 
 on:
   push:
@@ -59,7 +59,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          CMAKE_VER=$(grep -A 2 'project(ProyecThor' CMakeLists.txt | grep -oP 'VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || echo "1.1.5")
+          CMAKE_VER=$(grep -A 2 'project(ProyecThor' CMakeLists.txt | grep -oP 'VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || echo "1.2.0")
           COMMIT_MSG=$(git log -1 --pretty=%B || true)
           EVENT_NAME="${{ github.event_name }}"
           REF_TYPE="${{ github.ref_type }}"
@@ -381,6 +381,418 @@ jobs:
           path: packaging/windows/dist/*.exe
           if-no-files-found: error
 
+  build-windows-arm64:
+    name: Windows ARM64 MSVC + Instalador (.exe / .zip)
+    needs: resolve-meta
+    runs-on: windows-11-arm
+    timeout-minutes: 30
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar MSVC ARM64 (Visual Studio)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: arm64
+
+      - name: Cachear SDKs externos de Windows ARM64 (Slint, libmpv, ffmpeg, NSIS)
+        id: cache-win-arm64-sdks
+        uses: actions/cache@v4
+        with:
+          path: |
+            src/vendor/sdk/slint-win-arm64
+            src/vendor/sdk/mpv-arm64
+            extrabuild/ffmpeg.exe
+            .ci-tools/nsis
+          key: win-arm64-sdks-slint${{ env.SLINT_VERSION }}-v1
+
+      - name: Descargar y extraer Slint C++ SDK ${{ env.SLINT_VERSION }} (MSVC ARM64)
+        if: steps.cache-win-arm64-sdks.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $sevenZip = (Get-Command 7z -ErrorAction SilentlyContinue)?.Source
+          if (-not $sevenZip -and (Test-Path "C:\Program Files\7-Zip\7z.exe")) { $sevenZip = "C:\Program Files\7-Zip\7z.exe" }
+          if (-not $sevenZip) { throw "7z no encontrado en runner windows-11-arm" }
+
+          $slintDir = Join-Path $PWD "src\vendor\sdk\slint-win-arm64"
+          if (-not (Test-Path "$slintDir\lib\cmake\Slint\SlintConfig.cmake")) {
+            $url = "https://github.com/slint-ui/slint/releases/download/v${{ env.SLINT_VERSION }}/Slint-cpp-${{ env.SLINT_VERSION }}-win64-MSVC-ARM64.exe"
+            $installer = "$env:TEMP\Slint-cpp-win-arm64.exe"
+            Write-Host "Descargando $url..."
+            & curl.exe -fSL --retry 3 -o $installer $url
+            if ($LASTEXITCODE -ne 0) { throw "curl.exe fallo descargando Slint ARM64 SDK ($LASTEXITCODE)" }
+
+            $extractDir = "$env:TEMP\slint-arm64-extract"
+            Remove-Item -Recurse -Force $extractDir -ErrorAction SilentlyContinue
+            & $sevenZip x $installer "-o$extractDir" -y | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "7z fallo extrayendo Slint ARM64 SDK ($LASTEXITCODE)" }
+
+            $cfg = Get-ChildItem -Path $extractDir -Recurse -Filter "SlintConfig.cmake" | Select-Object -First 1
+            if (-not $cfg) { throw "No se encontro SlintConfig.cmake dentro de $extractDir" }
+            $sdkRoot = Split-Path (Split-Path (Split-Path $cfg.DirectoryName -Parent) -Parent) -Parent
+            Remove-Item -Recurse -Force $slintDir -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Force -Path $slintDir | Out-Null
+            Copy-Item -Recurse -Force "$sdkRoot\*" $slintDir
+            Remove-Item -Recurse -Force $extractDir, $installer -ErrorAction SilentlyContinue
+          }
+          if (-not (Test-Path "$slintDir\lib\cmake\Slint\SlintConfig.cmake")) {
+            throw "No se encontro SlintConfig.cmake en $slintDir"
+          }
+          Write-Host "[OK] Slint C++ SDK ARM64 listo en $slintDir"
+
+      - name: Descargar libmpv-2.dll y headers para Windows ARM64
+        if: steps.cache-win-arm64-sdks.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $sevenZip = (Get-Command 7z -ErrorAction SilentlyContinue)?.Source
+          if (-not $sevenZip -and (Test-Path "C:\Program Files\7-Zip\7z.exe")) { $sevenZip = "C:\Program Files\7-Zip\7z.exe" }
+
+          $mpvDir = Join-Path $PWD "src\vendor\sdk\mpv-arm64"
+          New-Item -ItemType Directory -Force -Path "$mpvDir\lib", "$mpvDir\include" | Out-Null
+          if (-not (Test-Path "$mpvDir\libmpv-2.dll")) {
+            $headers = @{ "User-Agent" = "ProyecThor-CI"; "Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}" }
+            $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest" -Headers $headers
+            $asset = $rel.assets | Where-Object { $_.name -match '^mpv-dev-aarch64-\d+.*\.7z$' } | Select-Object -First 1
+            if (-not $asset) {
+              $asset = $rel.assets | Where-Object { $_.name -match '^mpv-dev-aarch64.*\.7z$' } | Select-Object -First 1
+            }
+            if (-not $asset) { throw "No se encontro mpv-dev-aarch64 en shinchiro/mpv-winbuild-cmake" }
+
+            $archive = "$env:TEMP\mpv-dev-arm64.7z"
+            Write-Host "Descargando $($asset.browser_download_url) ..."
+            & curl.exe -fSL --retry 3 -o $archive $asset.browser_download_url
+            if ($LASTEXITCODE -ne 0) { throw "curl.exe fallo descargando mpv ARM64 ($LASTEXITCODE)" }
+
+            $tmpDir = "$env:TEMP\mpv-arm64-extract"
+            Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
+            & $sevenZip x $archive "-o$tmpDir" -y | Out-Null
+
+            $dll = Get-ChildItem -Path $tmpDir -Recurse -Filter "libmpv-2.dll" | Select-Object -First 1
+            if (-not $dll) { throw "No se encontro libmpv-2.dll dentro del paquete ARM64" }
+            Copy-Item -Force $dll.FullName "$mpvDir\libmpv-2.dll"
+
+            $def = Get-ChildItem -Path $tmpDir -Recurse -Filter "mpv.def" | Select-Object -First 1
+            if ($def) {
+              Copy-Item -Force $def.FullName "$mpvDir\lib\mpv.def"
+            } elseif (Test-Path "src\vendor\sdk\mpv\lib\mpv.def") {
+              Copy-Item -Force "src\vendor\sdk\mpv\lib\mpv.def" "$mpvDir\lib\mpv.def"
+            }
+
+            $incMpv = Get-ChildItem -Path $tmpDir -Recurse -Directory -Filter "mpv" | Where-Object { Test-Path (Join-Path $_.FullName "client.h") } | Select-Object -First 1
+            if ($incMpv) {
+              Copy-Item -Recurse -Force $incMpv.FullName "$mpvDir\include\mpv"
+            } elseif (Test-Path "src\vendor\sdk\mpv\include\mpv") {
+              Copy-Item -Recurse -Force "src\vendor\sdk\mpv\include\mpv" "$mpvDir\include\mpv"
+            }
+            Remove-Item -Recurse -Force $tmpDir, $archive -ErrorAction SilentlyContinue
+          }
+
+      - name: Descargar ffmpeg.exe nativo para Windows ARM64
+        if: steps.cache-win-arm64-sdks.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          New-Item -ItemType Directory -Force -Path "extrabuild" | Out-Null
+          $dst = "extrabuild\ffmpeg.exe"
+          if (-not (Test-Path $dst)) {
+            $zip = "$env:TEMP\ffmpeg-winarm64.zip"
+            & curl.exe -fSL --retry 3 -o $zip "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-winarm64-gpl.zip"
+            if ($LASTEXITCODE -ne 0) { throw "curl.exe fallo descargando ffmpeg winarm64 ($LASTEXITCODE)" }
+            $tmpDir = "$env:TEMP\ffmpeg-arm64-extract"
+            Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
+            Expand-Archive -Path $zip -DestinationPath $tmpDir -Force
+            $ff = Get-ChildItem -Path $tmpDir -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
+            if (-not $ff) { throw "No se encontro ffmpeg.exe en ffmpeg-master-latest-winarm64-gpl.zip" }
+            Copy-Item -Force $ff.FullName $dst
+            Remove-Item -Recurse -Force $tmpDir, $zip -ErrorAction SilentlyContinue
+          }
+
+      - name: Generar import library MSVC ARM64 para libmpv-2.dll
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $defPath = "src\vendor\sdk\mpv-arm64\lib\mpv.def"
+          if (-not (Test-Path $defPath)) { $defPath = "src\vendor\sdk\mpv\lib\mpv.def" }
+          & lib.exe /nologo "/def:$defPath" /name:libmpv-2.dll /out:src\vendor\sdk\mpv-arm64\lib\mpv.lib /machine:arm64
+          if ($LASTEXITCODE -ne 0) { throw "lib.exe fallo generando mpv.lib ARM64 ($LASTEXITCODE)" }
+          Write-Host "[OK] mpv.lib nativo MSVC ARM64 generado correctamente."
+
+      - name: Configurar y Compilar ProyecThorSlint (Windows ARM64 Release)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $hasNinja = [bool](Get-Command ninja -ErrorAction SilentlyContinue)
+          if ($hasNinja) {
+            cmake -B build-win-arm64 -G Ninja `
+              -DCMAKE_BUILD_TYPE=Release `
+              -DPROYECTHOR_BUILD_LEGACY=OFF `
+              -DPROYECTHOR_BUILD_SLINT=ON `
+              -DPROYECTHOR_USE_CCACHE=OFF `
+              -DPROYECTHOR_ENABLE_OPENSSL=OFF `
+              -DSLINT_SDK_DIR="$PWD/src/vendor/sdk/slint-win-arm64" `
+              -DMPV_SDK_DIR="$PWD/src/vendor/sdk/mpv-arm64" `
+              -DPROYECTHOR_VERSION_OVERRIDE="${{ needs.resolve-meta.outputs.version }}" `
+              -DPROYECTHOR_VERSION_SUFFIX="${{ needs.resolve-meta.outputs.suffix }}" `
+              -DPROYECTHOR_BUILD_NUMBER=${{ github.run_number }}
+            if ($LASTEXITCODE -ne 0) { throw "CMake configure ARM64 fallo ($LASTEXITCODE)" }
+            cmake --build build-win-arm64 --target ProyecThorSlint --parallel
+            if ($LASTEXITCODE -ne 0) { throw "CMake build ARM64 fallo ($LASTEXITCODE)" }
+          } else {
+            cmake -B build-win-arm64 -G "Visual Studio 17 2022" -A ARM64 `
+              -DPROYECTHOR_BUILD_LEGACY=OFF `
+              -DPROYECTHOR_BUILD_SLINT=ON `
+              -DPROYECTHOR_USE_CCACHE=OFF `
+              -DPROYECTHOR_ENABLE_OPENSSL=OFF `
+              -DSLINT_SDK_DIR="$PWD/src/vendor/sdk/slint-win-arm64" `
+              -DMPV_SDK_DIR="$PWD/src/vendor/sdk/mpv-arm64" `
+              -DPROYECTHOR_VERSION_OVERRIDE="${{ needs.resolve-meta.outputs.version }}" `
+              -DPROYECTHOR_VERSION_SUFFIX="${{ needs.resolve-meta.outputs.suffix }}" `
+              -DPROYECTHOR_BUILD_NUMBER=${{ github.run_number }}
+            if ($LASTEXITCODE -ne 0) { throw "CMake configure ARM64 fallo ($LASTEXITCODE)" }
+            cmake --build build-win-arm64 --config Release --target ProyecThorSlint --parallel
+            if ($LASTEXITCODE -ne 0) { throw "CMake build ARM64 fallo ($LASTEXITCODE)" }
+            Copy-Item -Recurse -Force "build-win-arm64\Release\*" "build-win-arm64\"
+          }
+
+      - name: Verificar arquitectura nativa ARM64 y arranque (Smoke Test)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $required = @(
+            "build-win-arm64\ProyecThorSlint.exe",
+            "build-win-arm64\slint_cpp.dll",
+            "build-win-arm64\libmpv-2.dll",
+            "build-win-arm64\ffmpeg.exe"
+          )
+          foreach ($f in $required) {
+            if (-not (Test-Path $f)) { throw "Falta archivo requerido en build-win-arm64: $f" }
+            Write-Host "[OK] $f ($([Math]::Round((Get-Item $f).Length / 1MB, 2)) MB)"
+          }
+          foreach ($pe in @("build-win-arm64\ProyecThorSlint.exe", "build-win-arm64\slint_cpp.dll", "build-win-arm64\libmpv-2.dll")) {
+            $hdr = & dumpbin.exe /headers $pe | Select-String -Pattern "AA64 machine \(ARM64\)"
+            if (-not $hdr) { throw "ERROR: $pe NO es un binario nativo ARM64 (AA64)" }
+            Write-Host "[OK] $pe verificado como ARM64 nativo (AA64)"
+          }
+          $env:PROYECTHOR_SOFTWARE_RENDERER = "1"
+          $p = Start-Process -FilePath "$PWD\build-win-arm64\ProyecThorSlint.exe" -ArgumentList "--software-renderer" -WorkingDirectory "$PWD\build-win-arm64" -PassThru
+          Start-Sleep -Seconds 3
+          if ($p.HasExited -and $p.ExitCode -ne 0) {
+            throw "ERROR: ProyecThorSlint ARM64 fallo al iniciar (ExitCode=$($p.ExitCode))"
+          }
+          if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+          Remove-Item Env:\PROYECTHOR_SOFTWARE_RENDERER -ErrorAction SilentlyContinue
+          Write-Host "[OK] Smoke Test de arranque ARM64 superado."
+
+      - name: Generar Instalador (.exe) y Portable (.zip) para Windows ARM64
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $sevenZip = (Get-Command 7z -ErrorAction SilentlyContinue)?.Source
+          if (-not $sevenZip -and (Test-Path "C:\Program Files\7-Zip\7z.exe")) { $sevenZip = "C:\Program Files\7-Zip\7z.exe" }
+
+          $nsisDir = Join-Path $PWD ".ci-tools\nsis"
+          $makensis = $null
+          if (Test-Path "$nsisDir\makensis.exe") { $makensis = "$nsisDir\makensis.exe" }
+          if (-not $makensis) { $makensis = (Get-Command makensis -ErrorAction SilentlyContinue)?.Source }
+          if (-not $makensis -and (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe")) { $makensis = "C:\Program Files (x86)\NSIS\makensis.exe" }
+          if (-not $makensis) {
+            $nsisZip = "$env:TEMP\nsis-3.10.zip"
+            $nsisTmp = "$env:TEMP\nsis-extract"
+            Remove-Item -Recurse -Force $nsisTmp, $nsisZip -ErrorAction SilentlyContinue
+            & curl.exe -fSL --retry 4 --retry-delay 3 -o $nsisZip "https://downloads.sourceforge.net/project/nsis/NSIS%203/3.10/nsis-3.10.zip"
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $nsisZip)) {
+              & $sevenZip x $nsisZip "-o$nsisTmp" -y | Out-Null
+              $exe = Get-ChildItem -Path $nsisTmp -Recurse -Filter "makensis.exe" | Select-Object -First 1
+              if ($exe) {
+                Remove-Item -Recurse -Force $nsisDir -ErrorAction SilentlyContinue
+                New-Item -ItemType Directory -Force -Path $nsisDir | Out-Null
+                Copy-Item -Recurse -Force "$($exe.DirectoryName)\*" $nsisDir
+                $makensis = "$nsisDir\makensis.exe"
+              }
+              Remove-Item -Recurse -Force $nsisTmp, $nsisZip -ErrorAction SilentlyContinue
+            }
+          }
+          if (-not $makensis -or -not (Test-Path $makensis)) {
+            throw "No se pudo obtener makensis.exe en windows-11-arm"
+          }
+
+          New-Item -ItemType Directory -Force -Path "packaging\windows\dist-arm64" | Out-Null
+          Remove-Item -Force "packaging\windows\dist-arm64\*" -ErrorAction SilentlyContinue
+          $ver = "${{ needs.resolve-meta.outputs.version }}"
+          $suffix = "${{ needs.resolve-meta.outputs.suffix }}"
+          $fullVer = "$ver$suffix"
+
+          & $makensis `
+            "-DVERSION=$ver" `
+            "-DBUILD_DIR=$PWD\build-win-arm64" `
+            "-DOUT_DIR=$PWD\packaging\windows\dist-arm64" `
+            "-DOUT_FILE=ProyecThor_Setup_arm64.exe" `
+            "packaging\windows\ProyecThor.nsi"
+          if ($LASTEXITCODE -ne 0) { throw "makensis ARM64 fallo con codigo $LASTEXITCODE" }
+          Copy-Item -Force "packaging\windows\dist-arm64\ProyecThor_Setup_arm64.exe" "packaging\windows\dist-arm64\ProyecThor_Setup_${fullVer}_arm64.exe"
+          Get-ChildItem "packaging\windows\dist-arm64\*"
+
+      - name: Subir artefacto Windows ARM64 (.exe)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ProyecThor-Windows-ARM64-Setup
+          path: packaging/windows/dist-arm64/*.exe
+          if-no-files-found: error
+
+  build-macos-arm64:
+    name: macOS Apple Silicon (arm64) + DMG (.dmg)
+    needs: resolve-meta
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Instalar dependencias en macOS Apple Silicon (Homebrew)
+        run: |
+          set -euo pipefail
+          brew update
+          brew install cmake ninja pkg-config mpv ffmpeg dylibbundler
+
+      - name: Cachear Slint C++ SDK ${{ env.SLINT_VERSION }} (Darwin arm64)
+        id: cache-macos-arm64-sdk
+        uses: actions/cache@v4
+        with:
+          path: src/vendor/sdk/slint-macos
+          key: macos-arm64-slint${{ env.SLINT_VERSION }}-v1
+
+      - name: Descargar Slint C++ SDK ${{ env.SLINT_VERSION }} (Darwin arm64)
+        if: steps.cache-macos-arm64-sdk.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p src/vendor/sdk/slint-macos
+          if [ ! -f src/vendor/sdk/slint-macos/lib/cmake/Slint/SlintConfig.cmake ]; then
+            curl -fSL --retry 3 -o /tmp/slint-macos-arm64.tar.gz \
+              "https://github.com/slint-ui/slint/releases/download/v${SLINT_VERSION}/Slint-cpp-${SLINT_VERSION}-Darwin-arm64.tar.gz"
+            tar -xzf /tmp/slint-macos-arm64.tar.gz --strip-components=1 -C src/vendor/sdk/slint-macos
+            rm -f /tmp/slint-macos-arm64.tar.gz
+          fi
+
+      - name: Configurar y Compilar ProyecThorSlint (macOS arm64 Release)
+        run: |
+          set -euo pipefail
+          export PKG_CONFIG_PATH="/opt/homebrew/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+          cmake -B build-macos-arm64 -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DPROYECTHOR_BUILD_LEGACY=OFF \
+            -DPROYECTHOR_BUILD_SLINT=ON \
+            -DPROYECTHOR_ENABLE_OPENSSL=OFF \
+            -DSLINT_SDK_DIR="$(pwd)/src/vendor/sdk/slint-macos" \
+            -DPROYECTHOR_VERSION_OVERRIDE="${{ needs.resolve-meta.outputs.version }}" \
+            -DPROYECTHOR_VERSION_SUFFIX="${{ needs.resolve-meta.outputs.suffix }}" \
+            -DPROYECTHOR_BUILD_NUMBER=${{ github.run_number }}
+          cmake --build build-macos-arm64 --target ProyecThorSlint --parallel
+
+      - name: Empaquetar ProyecThor.app, verificar Metal y ejecutar Smoke Test (Apple Silicon)
+        run: |
+          set -euo pipefail
+          chmod +x scripts/package-macos.sh
+          FULL_VER="${{ needs.resolve-meta.outputs.version }}${{ needs.resolve-meta.outputs.suffix }}"
+          ./scripts/package-macos.sh build-macos-arm64 arm64 "$FULL_VER" dist-macos-arm64 "$(pwd)/src/vendor/sdk/slint-macos/lib"
+          file build-macos-arm64/ProyecThorSlint | grep -q "arm64"
+          # Smoke test headless de inicialización en Apple Silicon
+          (cd build-macos-arm64 && DYLD_LIBRARY_PATH="$(pwd):${DYLD_LIBRARY_PATH:-}" ./ProyecThorSlint --software-renderer) &
+          APP_PID=$!
+          sleep 3
+          if ! kill -0 "$APP_PID" 2>/dev/null; then
+            wait "$APP_PID"
+          else
+            kill "$APP_PID" 2>/dev/null || true
+          fi
+          echo "[OK] Smoke Test de macOS Apple Silicon (arm64 + Metal) superado."
+
+      - name: Subir artefacto macOS Apple Silicon (.dmg)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ProyecThor-macOS-AppleSilicon-DMG
+          path: dist-macos-arm64/*.dmg
+          if-no-files-found: error
+
+  build-macos-intel:
+    name: macOS Apple Intel (x86_64) + DMG (.dmg)
+    needs: resolve-meta
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Instalar dependencias en macOS Intel (Homebrew + Rust)
+        run: |
+          set -euo pipefail
+          brew update
+          brew install cmake ninja pkg-config mpv ffmpeg dylibbundler
+          if ! command -v cargo >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Cachear Cargo y compilación de Slint C++ (macOS Intel x86_64)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            build-macos-x86_64/_deps
+            build-macos-x86_64/cargo
+          key: macos-x86_64-slint${{ env.SLINT_VERSION }}-v1
+          restore-keys: |
+            macos-x86_64-slint${{ env.SLINT_VERSION }}-
+
+      - name: Configurar y Compilar ProyecThorSlint (macOS Intel x86_64 Release)
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.cargo/bin:$PATH"
+          export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+          cmake -B build-macos-x86_64 -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=x86_64 \
+            -DPROYECTHOR_BUILD_LEGACY=OFF \
+            -DPROYECTHOR_BUILD_SLINT=ON \
+            -DPROYECTHOR_FETCH_SLINT=ON \
+            -DSLINT_FEATURE_RENDERER_SKIA=ON \
+            -DPROYECTHOR_ENABLE_OPENSSL=OFF \
+            -DPROYECTHOR_VERSION_OVERRIDE="${{ needs.resolve-meta.outputs.version }}" \
+            -DPROYECTHOR_VERSION_SUFFIX="${{ needs.resolve-meta.outputs.suffix }}" \
+            -DPROYECTHOR_BUILD_NUMBER=${{ github.run_number }}
+          cmake --build build-macos-x86_64 --target ProyecThorSlint --parallel
+
+      - name: Empaquetar ProyecThor.app, verificar Metal y ejecutar Smoke Test (Apple Intel)
+        run: |
+          set -euo pipefail
+          chmod +x scripts/package-macos.sh
+          FULL_VER="${{ needs.resolve-meta.outputs.version }}${{ needs.resolve-meta.outputs.suffix }}"
+          ./scripts/package-macos.sh build-macos-x86_64 x86_64 "$FULL_VER" dist-macos-x86_64
+          file build-macos-x86_64/ProyecThorSlint | grep -q "x86_64"
+          (cd build-macos-x86_64 && ./ProyecThorSlint --software-renderer) &
+          APP_PID=$!
+          sleep 3
+          if ! kill -0 "$APP_PID" 2>/dev/null; then
+            wait "$APP_PID"
+          else
+            kill "$APP_PID" 2>/dev/null || true
+          fi
+          echo "[OK] Smoke Test de macOS Intel (x86_64 + Metal) superado."
+
+      - name: Subir artefacto macOS Intel (.dmg)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ProyecThor-macOS-Intel-DMG
+          path: dist-macos-x86_64/*.dmg
+          if-no-files-found: error
+
   build-linux-appimage:
     name: Linux Ubuntu 22.04 + AppImage (.AppImage)
     needs: resolve-meta
@@ -568,7 +980,7 @@ jobs:
 
   publish-release:
     name: Publicar ${{ needs.resolve-meta.outputs.channel_label }} en GitHub
-    needs: [resolve-meta, build-windows, build-linux-appimage]
+    needs: [resolve-meta, build-windows, build-windows-arm64, build-macos-arm64, build-macos-intel, build-linux-appimage]
     if: needs.resolve-meta.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -577,10 +989,28 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Descargar artefacto Windows
+      - name: Descargar artefacto Windows x64
         uses: actions/download-artifact@v4
         with:
           name: ProyecThor-Windows-Setup
+          path: release-assets
+
+      - name: Descargar artefacto Windows ARM64
+        uses: actions/download-artifact@v4
+        with:
+          name: ProyecThor-Windows-ARM64-Setup
+          path: release-assets
+
+      - name: Descargar artefacto macOS Apple Silicon
+        uses: actions/download-artifact@v4
+        with:
+          name: ProyecThor-macOS-AppleSilicon-DMG
+          path: release-assets
+
+      - name: Descargar artefacto macOS Intel
+        uses: actions/download-artifact@v4
+        with:
+          name: ProyecThor-macOS-Intel-DMG
           path: release-assets
 
       - name: Descargar artefacto Linux AppImage
@@ -611,8 +1041,11 @@ jobs:
           ## ProyecThor ${TAG} — ${CHANNEL}
 
           ### Descargas
-          - **Windows (Instalador .exe):** \`ProyecThor_Setup_${FULL_VER}.exe\` (también disponible como \`ProyecThor_Setup.exe\`)
-          - **Linux (.AppImage portable):** \`ProyecThor-${FULL_VER}-x86_64.AppImage\` (también disponible como \`ProyecThor-x86_64.AppImage\`)
+          - **Windows x64 (Instalador .exe):** \`ProyecThor_Setup_${FULL_VER}.exe\` (también disponible como \`ProyecThor_Setup.exe\`)
+          - **Windows ARM64 (Instalador .exe):** \`ProyecThor_Setup_${FULL_VER}_arm64.exe\` (también disponible como \`ProyecThor_Setup_arm64.exe\`)
+          - **macOS Apple Silicon — M1/M2/M3/M4 (.dmg):** \`ProyecThor-${FULL_VER}-macos-arm64.dmg\` (también disponible como \`ProyecThor-macos-arm64.dmg\`)
+          - **macOS Apple Intel — x86_64 (.dmg):** \`ProyecThor-${FULL_VER}-macos-x86_64.dmg\` (también disponible como \`ProyecThor-macos-x86_64.dmg\`)
+          - **Linux x86_64 (.AppImage portable):** \`ProyecThor-${FULL_VER}-x86_64.AppImage\` (también disponible como \`ProyecThor-x86_64.AppImage\`)
 
           ### Cambios incluidos desde el lanzamiento anterior
           EOF
@@ -637,6 +1070,7 @@ jobs:
           generate_release_notes: true
           files: |
             release-assets/*.exe
+            release-assets/*.dmg
             release-assets/*.AppImage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -353,7 +353,7 @@ namespace ProyecThor::Settings {
 
     // ── Actualizaciones ──────────────────────────────────────────────────
     struct UpdatesSettings {
-        std::string currentVersion = "1.1.5";
+        std::string currentVersion = "1.2.0";
         std::string lastChecked    = "";
         std::string updateChannel  = "beta";
         bool        checkOnStartup = true;

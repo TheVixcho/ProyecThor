@@ -18,7 +18,7 @@ SetCompressor /SOLID lzma
 !define PRODUCT_WEB_SITE "https://github.com/TheVixcho/ProyecThor"
 
 !ifndef VERSION
-  !define VERSION "1.1.5"
+  !define VERSION "1.2.0"
 !endif
 
 !ifndef BUILD_DIR
@@ -29,8 +29,12 @@ SetCompressor /SOLID lzma
   !define OUT_DIR "dist"
 !endif
 
+!ifndef OUT_FILE
+  !define OUT_FILE "ProyecThor_Setup.exe"
+!endif
+
 Name "${PRODUCT_NAME} ${VERSION}"
-OutFile "${OUT_DIR}/ProyecThor_Setup.exe"
+OutFile "${OUT_DIR}/${OUT_FILE}"
 
 ; Metadatos del ejecutable del instalador
 VIProductVersion "${VERSION}.0"

@@ -1,6 +1,6 @@
 import { ScrollView, LineEdit, TextEdit, Slider } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { GlassCard, GlassButton, IconButton, IslandIconButton, ItemRowActionBtn, ItemMoreBtn, SlideTile, SwitchRow, PadTile, ThemeSwatchButton, StyleGalleryCard, StyleScreenTarget, ScrubBar } from "components.slint";
+import { GlassCard, GlassButton, IconButton, IslandIconButton, ItemRowActionBtn, ItemMoreBtn, SlideTile, SwitchRow, PadTile, ThemeSwatchButton, StyleGalleryCard, StyleScreenTarget, ScrubBar, SupportLinkCard } from "components.slint";
 import { TopBar } from "topbar.slint";
 import { StyledTextBlock } from "projector_window.slint";
 import { AppleSettingsView } from "settings_view.slint";
@@ -191,7 +191,7 @@ export component MainWindow inherits Window {
     in-out property <bool> island-prefer-music: false;
     in-out property <bool> island-expanded: false;
     in-out property <bool> island-hidden: false;
-    in property <string> app-version: "1.1.5";
+    in property <string> app-version: "1.2.0";
     in property <image> logo-image;
     in property <bool> has-logo: false;
     in-out property <string> search-query: "";
@@ -560,6 +560,9 @@ export component MainWindow inherits Window {
 
     // Tab 11: Ayuda y Novedades (Changelog)
     in-out property <int> help-subtab: 0; // 0=Guía y Atajos, 1=Novedades / Changelog
+    in-out property <bool> tutorial-modal-open: true;
+    in-out property <bool> show-tutorial-on-start: true;
+    in-out property <bool> tutorial-dont-show-again: false;
     in-out property <int> help-qr-idx: 1; // 0=Web, 1=Discord, 2=Instagram, 3=WhatsApp
     in-out property <image> help-qr-image;
     in-out property <string> help-qr-label: "Discord (Soporte y Comunidad)";
@@ -825,6 +828,7 @@ export component MainWindow inherits Window {
     callback open-instagram();
     callback open-whatsapp();
     callback select-help-qr(int);
+    callback tutorial-preference-changed(bool);
 
     // Unified Library File Management (Play/Screen, Queue, Rename, Delete)
     callback item-action-play(int, string);
@@ -4585,6 +4589,7 @@ export component MainWindow inherits Window {
                         enable-glass-translucency <=> root.enable-glass-translucency;
                         enable-glass-sheen <=> root.enable-glass-sheen;
                         enable-ambient-bg <=> root.enable-ambient-bg;
+                        show-tutorial-on-start <=> root.show-tutorial-on-start;
 
                         music-scan-folders: root.music-scan-folders;
                         music-folder-input <=> root.music-folder-input;
@@ -4607,6 +4612,7 @@ export component MainWindow inherits Window {
                         performance-mode-changed(v) => { root.performance-mode-changed(v); }
                         fullscreen-changed(v) => { root.fullscreen-changed(v); }
                         visual-effects-changed => { root.visual-effects-changed(); }
+                        tutorial-preference-changed(v) => { root.tutorial-preference-changed(v); }
                         browse-music-folder => { root.browse-music-folder(); }
                         add-music-folder(p) => { root.add-music-folder(p); }
                         remove-music-folder(i) => { root.remove-music-folder(i); }
@@ -5408,61 +5414,88 @@ export component MainWindow inherits Window {
                                     background: Theme.bg-surface-1;
                                     border-width: 1px;
                                     border-color: Theme.border-subtle;
+                                    VerticalLayout {
+                                        padding: 15px;
+                                        spacing: 10px;
+                                        Text { text: "Soporte Oficial y Comunidad"; color: Theme.accent-strong; font-size: 14px; font-weight: 700; }
+                                        Text {
+                                            text: "¿Tienes alguna duda o necesitas ayuda? Toca cualquiera de estos botones para abrir nuestra página oficial o hablar con la comunidad:";
+                                            color: Theme.text-secondary;
+                                            font-size: 12px;
+                                            wrap: word-wrap;
+                                        }
+
+                                        SupportLinkCard {
+                                            title: "Sitio Web Oficial";
+                                            subtitle: "Descargas, novedades y guía completa";
+                                            icon: @image-url("icons/globe.svg");
+                                            accent: #3b82f6;
+                                            clicked => { root.open-website(); }
+                                        }
+                                        SupportLinkCard {
+                                            title: "Discord — Soporte y Ayuda";
+                                            subtitle: "Resuelve dudas en vivo con nosotros y otros usuarios";
+                                            icon: @image-url("icons/discord.svg");
+                                            accent: #5865f2;
+                                            clicked => { root.open-discord(); }
+                                        }
+                                        SupportLinkCard {
+                                            title: "Instagram — @theproyecthor";
+                                            subtitle: "Novedades, capturas y tutoriales rápidos";
+                                            icon: @image-url("icons/instagram.svg");
+                                            accent: #e1306c;
+                                            clicked => { root.open-instagram(); }
+                                        }
+                                        SupportLinkCard {
+                                            title: "WhatsApp — Canal Oficial";
+                                            subtitle: "Avisos de nuevas versiones directo a tu celular";
+                                            icon: @image-url("icons/whatsapp.svg");
+                                            accent: #25d366;
+                                            clicked => { root.open-whatsapp(); }
+                                        }
+                                        SupportLinkCard {
+                                            title: "Apoyar el Proyecto (Ko-fi)";
+                                            subtitle: "Ayuda a mantener ProyecThor 100% gratis para todos";
+                                            icon: @image-url("icons/coffee.svg");
+                                            accent: #ff5e5b;
+                                            action-label: "Apoyar";
+                                            clicked => { root.open-kofi-donations(); }
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
                                     HorizontalLayout {
                                         padding: 15px;
-                                        spacing: 16px;
+                                        spacing: 14px;
                                         VerticalLayout {
                                             horizontal-stretch: 1;
-                                            spacing: 10px;
-                                            Text { text: "Soporte Oficial y Comunidad"; color: Theme.accent-strong; font-size: 13.5px; font-weight: 700; }
+                                            spacing: 8px;
+                                            Text { text: "Abrir desde tu Celular (Código QR)"; color: Theme.accent-strong; font-size: 13.5px; font-weight: 700; }
                                             Text {
-                                                text: "¿Necesitas ayuda, quieres reportar un error o compartir ideas? Visita nuestro sitio web oficial o únete a nuestra comunidad en Discord, Instagram y WhatsApp.";
+                                                text: "Elige una opción y apunta con la cámara de tu teléfono al código blanco de la derecha:";
                                                 color: Theme.text-secondary;
-                                                font-size: 12px;
+                                                font-size: 11.5px;
                                                 wrap: word-wrap;
                                             }
                                             HorizontalLayout {
-                                                spacing: 8px;
-                                                GlassButton {
-                                                    label: "Sitio Web Oficial";
-                                                    primary: true;
-                                                    clicked => { root.open-website(); }
-                                                }
-                                                GlassButton {
-                                                    label: "Discord (Soporte)";
-                                                    clicked => { root.open-discord(); }
-                                                }
-                                                GlassButton {
-                                                    label: "Instagram";
-                                                    clicked => { root.open-instagram(); }
-                                                }
-                                                GlassButton {
-                                                    label: "WhatsApp";
-                                                    clicked => { root.open-whatsapp(); }
-                                                }
-                                                GlassButton {
-                                                    label: "Ko-fi";
-                                                    clicked => { root.open-kofi-donations(); }
-                                                }
+                                                spacing: 6px;
+                                                GlassButton { label: "Sitio Web"; horizontal-stretch: 1; primary: root.help-qr-idx == 0; clicked => { root.help-qr-idx = 0; root.select-help-qr(0); } }
+                                                GlassButton { label: "Discord";   horizontal-stretch: 1; primary: root.help-qr-idx == 1; clicked => { root.help-qr-idx = 1; root.select-help-qr(1); } }
                                             }
                                             HorizontalLayout {
                                                 spacing: 6px;
-                                                alignment: start;
-                                                Text {
-                                                    text: "Ver QR:";
-                                                    color: Theme.text-muted;
-                                                    font-size: 11.5px;
-                                                    vertical-alignment: center;
-                                                }
-                                                GlassButton { label: "Web"; compact: true; primary: root.help-qr-idx == 0; clicked => { root.help-qr-idx = 0; root.select-help-qr(0); } }
-                                                GlassButton { label: "Discord"; compact: true; primary: root.help-qr-idx == 1; clicked => { root.help-qr-idx = 1; root.select-help-qr(1); } }
-                                                GlassButton { label: "Instagram"; compact: true; primary: root.help-qr-idx == 2; clicked => { root.help-qr-idx = 2; root.select-help-qr(2); } }
-                                                GlassButton { label: "WhatsApp"; compact: true; primary: root.help-qr-idx == 3; clicked => { root.help-qr-idx = 3; root.select-help-qr(3); } }
+                                                GlassButton { label: "Instagram"; horizontal-stretch: 1; primary: root.help-qr-idx == 2; clicked => { root.help-qr-idx = 2; root.select-help-qr(2); } }
+                                                GlassButton { label: "WhatsApp";  horizontal-stretch: 1; primary: root.help-qr-idx == 3; clicked => { root.help-qr-idx = 3; root.select-help-qr(3); } }
                                             }
                                             Text {
                                                 text: root.help-qr-url;
                                                 color: Theme.text-muted;
-                                                font-size: 11px;
+                                                font-size: 10.5px;
                                                 wrap: word-wrap;
                                             }
                                         }
@@ -5470,15 +5503,15 @@ export component MainWindow inherits Window {
                                             spacing: 6px;
                                             alignment: center;
                                             Rectangle {
-                                                width: 132px;
-                                                height: 132px;
+                                                width: 124px;
+                                                height: 124px;
                                                 border-radius: Theme.radius-md;
                                                 background: #ffffff;
                                                 border-width: 1px;
                                                 border-color: Theme.border-subtle;
                                                 Image {
-                                                    width: 120px;
-                                                    height: 120px;
+                                                    width: 112px;
+                                                    height: 112px;
                                                     x: 6px;
                                                     y: 6px;
                                                     source: root.help-qr-image;
@@ -5491,7 +5524,7 @@ export component MainWindow inherits Window {
                                                 font-size: 10.5px;
                                                 font-weight: 600;
                                                 horizontal-alignment: center;
-                                                width: 132px;
+                                                width: 124px;
                                                 wrap: word-wrap;
                                             }
                                         }
@@ -8836,6 +8869,232 @@ export component MainWindow inherits Window {
                             clicked => {
                                 root.item-action-delete(root.item-modal-kind, root.item-modal-path);
                                 root.item-modal-open = false;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  MODAL DE BIENVENIDA Y TUTORIAL RÁPIDO AL INICIO
+    // ═════════════════════════════════════════════════════════════════════════
+    if root.tutorial-modal-open : Rectangle {
+        x: 0; y: 0; width: 100%; height: 100%;
+        background: #000000b8;
+        z: 120;
+
+        TouchArea { }
+
+        Rectangle {
+            width: min(580px, parent.width - 40px);
+            height: min(600px, parent.height - 40px);
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: Theme.radius-lg;
+            background: Theme.bg-surface-0;
+            border-width: 1.5px;
+            border-color: Theme.accent.transparentize(0.45);
+            drop-shadow-blur: 32px;
+            drop-shadow-color: #000000bb;
+            drop-shadow-offset-y: 8px;
+
+            VerticalLayout {
+                padding: 20px;
+                spacing: 14px;
+
+                HorizontalLayout {
+                    alignment: space-between;
+                    HorizontalLayout {
+                        spacing: 12px;
+                        Rectangle {
+                            width: 40px;
+                            height: 40px;
+                            border-radius: 10px;
+                            clip: true;
+                            background: root.has-logo ? transparent : @linear-gradient(145deg, #2563eb 0%, #0d9488 100%);
+                            if root.has-logo : Image {
+                                source: root.logo-image;
+                                width: 40px;
+                                height: 40px;
+                                image-fit: cover;
+                            }
+                            if !root.has-logo : Image {
+                                source: @image-url("icons/zap.svg");
+                                width: 22px;
+                                height: 22px;
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                colorize: #ffffff;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            spacing: 2px;
+                            Text {
+                                text: "¡Bienvenido a ProyecThor!";
+                                color: Theme.text-primary;
+                                font-size: 16px;
+                                font-weight: 800;
+                            }
+                            Text {
+                                text: "Guía rápida para empezar a proyectar en segundos";
+                                color: Theme.text-muted;
+                                font-size: 11.5px;
+                            }
+                        }
+                    }
+                    GlassButton {
+                        label: "✕";
+                        compact: true;
+                        clicked => {
+                            root.show-tutorial-on-start = !root.tutorial-dont-show-again;
+                            root.tutorial-modal-open = false;
+                            root.tutorial-preference-changed(root.show-tutorial-on-start);
+                        }
+                    }
+                }
+
+                Rectangle { height: 1px; background: Theme.border-subtle; }
+
+                ScrollView {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        spacing: 10px;
+                        padding-right: 6px;
+
+                        for item in [
+                            {
+                                title: "1. Barra Superior de Módulos",
+                                desc: "Cambia fácilmente entre Inicio, Canciones, Biblia, Videos, Música independiente, Documentos PDF, Cámara, Estilos, Pantallas, Redes, Ajustes y Ayuda.",
+                                icon: @image-url("icons/layers.svg"),
+                                accent: #3b82f6
+                            },
+                            {
+                                title: "2. Canciones y Biblia en Tiempo Real",
+                                desc: "Escribe cualquier palabra o verso de una canción para encontrarla al instante (el verso coincidente quedará marcado). En Biblia, escribe la primera letra del libro (ej. E → Ester 4:14) para filtrar al momento.",
+                                icon: @image-url("icons/music.svg"),
+                                accent: #10b981
+                            },
+                            {
+                                title: "3. Monitor en Vivo (Público / LAN / Stage)",
+                                desc: "A la derecha ves siempre lo que sale al proyector. Puedes alternar la vista entre Público, transmisión LAN y Stage, y controlar las Capas Activas.",
+                                icon: @image-url("icons/monitor.svg"),
+                                accent: #f59e0b
+                            },
+                            {
+                                title: "4. Contenido: Fondos, Overlays y Estilos",
+                                desc: "Agrega videos en bucle, imágenes, capas PNG transparentes o estilos de texto personalizados sin interrumpir la proyección actual.",
+                                icon: @image-url("icons/palette.svg"),
+                                accent: #8b5cf6
+                            },
+                            {
+                                title: "5. Redes: LAN, Chat, Celular, Reloj y Luces OSC",
+                                desc: "Envía video limpio por red local (OBS o Smart TV), controla la app desde tu celular escaneando el QR, usa el reloj de escenario o sincroniza luces OSC.",
+                                icon: @image-url("icons/wifi.svg"),
+                                accent: #06b6d4
+                            }
+                        ] : Rectangle {
+                            border-radius: Theme.radius-md;
+                            background: Theme.bg-surface-1;
+                            border-width: 1px;
+                            border-color: Theme.border-subtle;
+                            HorizontalLayout {
+                                padding: 12px;
+                                spacing: 12px;
+                                Rectangle {
+                                    width: 36px;
+                                    height: 36px;
+                                    y: 2px;
+                                    border-radius: 9px;
+                                    background: item.accent.transparentize(0.82);
+                                    border-width: 1px;
+                                    border-color: item.accent.transparentize(0.45);
+                                    Image {
+                                        source: item.icon;
+                                        width: 18px;
+                                        height: 18px;
+                                        x: (parent.width - self.width) / 2;
+                                        y: (parent.height - self.height) / 2;
+                                        colorize: item.accent;
+                                    }
+                                }
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    spacing: 3px;
+                                    Text {
+                                        text: item.title;
+                                        color: Theme.text-primary;
+                                        font-size: 12.5px;
+                                        font-weight: 700;
+                                    }
+                                    Text {
+                                        text: item.desc;
+                                        color: Theme.text-secondary;
+                                        font-size: 11.5px;
+                                        wrap: word-wrap;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle { height: 1px; background: Theme.border-subtle; }
+
+                HorizontalLayout {
+                    alignment: space-between;
+                    spacing: 12px;
+
+                    Rectangle {
+                        height: 32px;
+                        border-radius: Theme.radius-sm;
+                        background: tut-chk-ta.has-hover ? Theme.bg-surface-2 : transparent;
+                        tut-chk-ta := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.tutorial-dont-show-again = !root.tutorial-dont-show-again; }
+                        }
+                        HorizontalLayout {
+                            padding-left: 6px;
+                            padding-right: 10px;
+                            spacing: 8px;
+                            Rectangle {
+                                width: 18px;
+                                height: 18px;
+                                y: (parent.height - self.height) / 2;
+                                border-radius: 4px;
+                                background: root.tutorial-dont-show-again ? Theme.accent : Theme.bg-input;
+                                border-width: 1.5px;
+                                border-color: root.tutorial-dont-show-again ? Theme.accent : Theme.border-medium;
+                                if root.tutorial-dont-show-again : Text {
+                                    text: "✓";
+                                    color: Theme.accent-fg;
+                                    font-size: 11px;
+                                    font-weight: 800;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            Text {
+                                text: "No volver a mostrar";
+                                color: Theme.text-secondary;
+                                font-size: 12px;
+                                font-weight: 600;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 8px;
+                        GlassButton {
+                            label: "Cerrar";
+                            primary: true;
+                            clicked => {
+                                root.show-tutorial-on-start = !root.tutorial-dont-show-again;
+                                root.tutorial-modal-open = false;
+                                root.tutorial-preference-changed(root.show-tutorial-on-start);
                             }
                         }
                     }

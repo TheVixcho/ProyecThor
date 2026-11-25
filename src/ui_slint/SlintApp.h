@@ -15,6 +15,7 @@
 #include "SmartTvCaster.h"
 #include "ChatMessageStore.h"
 #include "BibleTypes.h"
+#include <map>
 
 namespace ProyecThor::SlintUI {
 
@@ -527,6 +528,7 @@ private:
     int         m_ActiveTab = 13; // Opens in Biblioteca Hub
     int         m_BgSubtab  = 0;
     std::string m_SearchQuery;
+    std::map<std::string, int>     m_SearchMatchedStanzas;
     std::string m_EditingSongPath;
 
     std::vector<MediaEntry>        m_AllEntries;

@@ -17,6 +17,17 @@ struct UpdateVersionInfo {
 inline const std::vector<UpdateVersionInfo>& GetPatchNotesRegistry() {
     static const std::vector<UpdateVersionInfo> s_Registry = {
         {
+            29, "1.2.0",
+            "VERSIÓN 1.2.0 - MOTOR NATIVO SLINT Y SOPORTE MULTIPLATAFORMA COMPLETO (WINDOWS x64/ARM64, MACOS SILICON/INTEL Y LINUX)", "LANZAMIENTO OFICIAL",
+            "splash_bg7.jpg",
+            "### Motor Nativo Slint 1.19 + C++20 y Soporte Multiplataforma Completo\n"
+            "• [NUEVO] Motor Gráfico Slint 1.19 + Async libmpv: Migración oficial al nuevo motor nativo compilado en C++20 con baja latencia, consumo reducido de RAM/CPU y 14 temas visuales.\n"
+            "• [NUEVO] Soporte Nativo Multiplataforma: Compilaciones nativas para Windows x64, Windows ARM64 (Direct3D + D3D11VA), macOS Apple Silicon M1–M4 (Metal + VideoToolbox), macOS Apple Intel (Metal + VideoToolbox) y Linux x86_64 (.AppImage).\n"
+            "• [NUEVO] Búsqueda en Vivo en Biblia y Canciones: Filtrado instantáneo letra por letra en Biblia (Libro → Capítulo → Verso), búsqueda de canciones por estrofa con marcado automático del verso coincidente y autor visible en la lista.\n"
+            "• [NUEVO] Tutorial de Bienvenida y Centro de Comunidad con QR: Guía rápida al iniciar con opción 'No volver a mostrar' reactivable en Ajustes, y tarjetas decoradas hacia Sitio Web, Discord, Instagram, WhatsApp y Ko-fi con códigos QR.",
+            false
+        },
+        {
             28, "1.1.5",
             "VERSIÓN 1.1.5 - NUEVA INTERFAZ SLINT, MATRIZ MULTI-PANTALLA E ISLA DINÁMICA", "LANZAMIENTO OFICIAL",
             "splash_bg7.jpg",

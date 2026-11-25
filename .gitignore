@@ -82,8 +82,15 @@ packaging/windows/Output/
 
 # ── Binarios pesados de SDKs (superan el límite de 100 MB de GitHub) ─────────
 src/vendor/sdk/mpv/libmpv-2.dll
+src/vendor/sdk/mpv-arm64/
 src/vendor/sdk/slint-linux/
 src/vendor/sdk/slint-win/
+src/vendor/sdk/slint-win-arm64/
+src/vendor/sdk/slint-macos/
+dist-macos/
+dist-linux/
+build-macos*/
+build-win-arm64/
 *.dwo
 
 # Web vive en la rama 'web'

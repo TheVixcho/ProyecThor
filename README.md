@@ -51,8 +51,9 @@ ProyecThor was created as a free, open-source alternative to expensive closed-so
 | Platform | Status | Notes |
 | :--- | :--- | :--- |
 | **Linux (Arch Linux / CachyOS)** | Fully supported | Optimized memory, CPU, and GPU footprint; Wayland (PipeWire/D-Bus) & X11 support. |
-| **Linux (Debian / Ubuntu-based)** | Supported | Build dependencies available via `apt`. |
-| **Windows 10 / 11 (64-bit)** | Fully supported | Native MSVC build with hardware-accelerated `libmpv` and NVENC/OpenGL support. |
+| **Linux (Debian / Ubuntu-based)** | Supported | Build dependencies available via `apt` and portable `.AppImage`. |
+| **Windows 10 / 11 (x64 & ARM64)** | Fully supported | Native MSVC x64 & ARM64 builds with hardware-accelerated `libmpv` and D3D11VA/NVENC support. |
+| **macOS (Apple Silicon & Intel)** | Supported | Native `arm64` (M1/M2/M3/M4) and `x86_64` `.dmg` bundles with Apple VideoToolbox acceleration. |
 
 ---
 

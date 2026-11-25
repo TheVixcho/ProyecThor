@@ -23,10 +23,33 @@ int64_t NowSteadyUs() {
 }
 
 const char* HwdecStringForMode(int mode) {
+#ifdef __APPLE__
+    switch (mode) {
+        case 4: // Software CPU Only
+            return "no";
+        case 0:
+        case 1:
+        case 2:
+        case 3:
+        default: // macOS Apple Silicon & Intel: native VideoToolbox hardware decoding
+            return "videotoolbox-copy,auto-copy";
+    }
+#elif defined(_WIN32) && (defined(_M_ARM64) || defined(__aarch64__))
+    switch (mode) {
+        case 4: // Software CPU Only
+            return "no";
+        case 0:
+        case 1:
+        case 2:
+        case 3:
+        default: // Windows ARM64 (Qualcomm Adreno / Surface): Direct3D 11 Video Acceleration
+            return "d3d11va-copy,dxva2-copy,auto-copy";
+    }
+#else
     switch (mode) {
         case 1: // NVIDIA Dedicated (NVDEC / CUDA / VDPAU / D3D11VA fallback)
             return "nvdec-copy,cuda-copy,vdpau-copy,d3d11va-copy,dxva2-copy,auto-copy";
-        case 2: // Windows Direct3D 11 / DXVA2 (great for GT 710 & Intel UHD on Windows)
+        case 2: // Windows Direct3D 11 / DXVA2 (great for GT 710, Intel UHD & Windows ARM64)
             return "d3d11va-copy,dxva2-copy,nvdec-copy,auto-copy";
         case 3: // Linux VAAPI / Vulkan (Intel UHD / AMD / Mesa)
             return "vaapi-copy,vulkan-copy,nvdec-copy,auto-copy";
@@ -36,6 +59,7 @@ const char* HwdecStringForMode(int mode) {
         default: // Smart Auto
             return "auto-copy";
     }
+#endif
 }
 } // namespace
 
@@ -145,7 +169,7 @@ void SlintVideoPlayer::InitMpv() {
         m_LastHwdecApplied = hw;
         mpv_set_option_string(m_Mpv, "hwdec", hw.c_str());
         mpv_set_option_string(m_Mpv, "hwdec-codecs", "all");
-        mpv_set_option_string(m_Mpv, "vd-lavc-dr", "yes");
+        mpv_set_option_string(m_Mpv, "vd-lavc-dr", "auto");
         mpv_set_option_string(m_Mpv, "vd-lavc-fast", "yes");
         mpv_set_option_string(m_Mpv, "vd-lavc-framedrop", "nonref");
         mpv_set_option_string(m_Mpv, "vd-lavc-threads", hwCores <= 2 ? "2" : "4");

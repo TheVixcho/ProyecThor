@@ -853,6 +853,7 @@ export component AppleSettingsView inherits Rectangle {
     in-out property <bool>  enable-glass-translucency: true;
     in-out property <bool>  enable-glass-sheen: true;
     in-out property <bool>  enable-ambient-bg: true;
+    in-out property <bool>  show-tutorial-on-start: true;
 
     in property     <[string]> music-scan-folders: [];
     in-out property <string>   music-folder-input: "";
@@ -881,6 +882,7 @@ export component AppleSettingsView inherits Rectangle {
     callback performance-mode-changed(bool);
     callback fullscreen-changed(bool);
     callback visual-effects-changed();
+    callback tutorial-preference-changed(bool);
     callback browse-music-folder();
     callback add-music-folder(string);
     callback remove-music-folder(int);
@@ -2204,6 +2206,14 @@ export component AppleSettingsView inherits Rectangle {
                             badge-color: #8b5cf6;
                             trailing-label: "Abrir";
                             clicked => { root.navigate-to-tab(11); }
+                        }
+                        AppleDivider {}
+                        AppleSwitchRow {
+                            title: "Mostrar tutorial de bienvenida al abrir";
+                            subtitle: "Muestra el recuadro guía con las funciones principales al iniciar ProyecThor";
+                            active-color: #3b82f6;
+                            checked <=> root.show-tutorial-on-start;
+                            toggled(v) => { root.tutorial-preference-changed(v); }
                         }
                     }
 
