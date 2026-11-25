@@ -191,6 +191,79 @@ export component StyledTextBlock inherits Rectangle {
     }
 }
 
+export component CustomOverlayView inherits Rectangle {
+    in property <bool> show-clock: true;
+    in property <string> clock-text: "";
+    in property <string> title-text: "";
+    in property <string> sub-text: "";
+    in property <color> text-color: #ffffff;
+    in property <color> bg-color: #09090b;
+    in property <float> bg-opacity: 0.82;
+    in property <bool> show-border: true;
+    in property <color> accent-border-color: #38bdf8;
+    in property <float> font-size: 42.0;
+    in property <float> radius-px: 12.0;
+    in property <float> box-padding: 16.0;
+    in property <float> min-box-width: 0.0;
+    in property <int> pos-preset: 3; // 0=Centro, 1=Sup-Izq, 2=Sup-Cen, 3=Sup-Der, 4=Inf-Izq, 5=Inf-Cen, 6=Inf-Der, 7=Custom
+    in property <float> norm-x: 0.85;
+    in property <float> norm-y: 0.10;
+    in property <float> ui-scale: 1.0;
+    in property <length> container-w: 1920px;
+    in property <length> container-h: 1080px;
+
+    property <length> pad-x: Math.max(4px, root.box-padding * root.ui-scale * 1px);
+    property <length> pad-y: Math.max(2px, root.box-padding * 0.65 * root.ui-scale * 1px);
+
+    x: root.pos-preset == 1 || root.pos-preset == 4 ? root.container-w * 0.03
+     : root.pos-preset == 3 || root.pos-preset == 6 ? root.container-w - self.width - root.container-w * 0.03
+     : root.pos-preset == 0 || root.pos-preset == 2 || root.pos-preset == 5 ? (root.container-w - self.width) / 2
+     : Math.clamp(root.norm-x * root.container-w - self.width / 2, 0px, Math.max(0px, root.container-w - self.width));
+
+    y: root.pos-preset == 1 || root.pos-preset == 2 || root.pos-preset == 3 ? root.container-h * 0.04
+     : root.pos-preset == 4 || root.pos-preset == 5 || root.pos-preset == 6 ? root.container-h - self.height - root.container-h * 0.05
+     : root.pos-preset == 0 ? (root.container-h - self.height) / 2
+     : Math.clamp(root.norm-y * root.container-h - self.height / 2, 0px, Math.max(0px, root.container-h - self.height));
+
+    width: Math.min(root.container-w * 0.96, Math.max(root.min-box-width * root.ui-scale * 1px, inner-col.preferred-width + root.pad-x * 2));
+    height: inner-col.preferred-height + root.pad-y * 2;
+    border-radius: root.radius-px * root.ui-scale * 1px;
+    background: root.bg-color.transparentize(1.0 - Math.clamp(root.bg-opacity, 0.0, 1.0));
+    border-width: root.show-border && root.bg-opacity > 0.02 ? Math.max(1px, 1.5px * root.ui-scale) : 0px;
+    border-color: root.accent-border-color.transparentize(0.25);
+
+    inner-col := VerticalLayout {
+        padding-left: root.pad-x;
+        padding-right: root.pad-x;
+        padding-top: root.pad-y;
+        padding-bottom: root.pad-y;
+        spacing: Math.max(1px, 3px * root.ui-scale);
+        alignment: center;
+
+        if root.title-text != "" : Text {
+            text: root.title-text;
+            color: root.text-color.transparentize(0.08);
+            font-size: Math.max(6px, root.font-size * 0.44 * root.ui-scale * 1px);
+            font-weight: 800;
+            horizontal-alignment: center;
+        }
+        if root.show-clock && root.clock-text != "" : Text {
+            text: root.clock-text;
+            color: root.text-color;
+            font-size: Math.max(8px, root.font-size * root.ui-scale * 1px);
+            font-weight: 800;
+            horizontal-alignment: center;
+        }
+        if root.sub-text != "" : Text {
+            text: root.sub-text;
+            color: root.text-color.transparentize(0.25);
+            font-size: Math.max(5.5px, root.font-size * 0.34 * root.ui-scale * 1px);
+            font-weight: 600;
+            horizontal-alignment: center;
+        }
+    }
+}
+
 export component ProjectorWindow inherits Window {
     title: "ProyecThor — Salida Público";
     preferred-width: 1280px;
@@ -235,17 +308,29 @@ export component ProjectorWindow inherits Window {
     in property <float> alert-ticker-pos: 0.0; // 0.0..1.0 driven at 30fps for smooth marquee
     in property <float> alert-pulse-alpha: 1.0;
     in property <bool> alert-visible: true;
-    in property <string> clock-overlay-text: "";
-    in property <bool> show-clock-overlay: false;
+    in property <bool> show-custom-overlay: false;
+    in property <bool> ov-show-clock: false;
+    in property <string> ov-clock-text: "";
+    in property <string> ov-title: "";
+    in property <string> ov-sub: "";
+    in property <color> ov-text-color: #ffffff;
+    in property <color> ov-bg-color: #09090b;
+    in property <float> ov-bg-opacity: 0.82;
+    in property <bool> ov-show-border: true;
+    in property <color> ov-border-color: #38bdf8;
+    in property <float> ov-font-size: 42.0;
+    in property <float> ov-radius: 12.0;
+    in property <float> ov-box-padding: 16.0;
+    in property <float> ov-min-width: 0.0;
+    in property <int> ov-pos-preset: 3;
+    in property <float> ov-pos-x: 0.85;
+    in property <float> ov-pos-y: 0.10;
 
     in property <image> bg-image;
     in property <bool> has-bg-image: false;
     in property <color> bg-solid-color: #000000;
     in property <image> overlay-image;
     in property <bool> has-overlay-image: false;
-    in property <string> live-overlay-title: "";
-    in property <string> live-overlay-sub: "";
-    in property <bool> show-custom-overlay: false;
 
     // Typography & Text Effects
     in property <float> text-size: 60.0;
@@ -501,51 +586,28 @@ export component ProjectorWindow inherits Window {
         }
     }
 
-    // Layer 3: Clock / Countdown Overlay
-    if root.show-clock-overlay && root.clock-overlay-text != "" : Rectangle {
-        x: root.live-text == "" ? (parent.width - self.width) / 2 : parent.width - self.width - 36px;
-        y: root.live-text == "" ? (parent.height - self.height) / 2 : 28px;
-        width: root.live-text == "" ? 420px : 190px;
-        height: root.live-text == "" ? 130px : 56px;
-        border-radius: 14px;
-        background: #09090bcc;
-        border-width: 1px;
-        border-color: Theme.border-medium;
-
-        Text {
-            text: root.clock-overlay-text;
-            color: #ffffff;
-            font-size: root.live-text == "" ? 76px : 30px;
-            font-weight: 800;
-            horizontal-alignment: center;
-            vertical-alignment: center;
+        // Layer 3: Dynamic Custom Overlay (Clock / Countdown / Count-up / Lower-Third Pleca)
+        if root.show-custom-overlay && ((root.ov-show-clock && root.ov-clock-text != "") || root.ov-title != "" || root.ov-sub != "") : CustomOverlayView {
+            container-w: parent.width;
+            container-h: parent.height;
+            ui-scale: parent.width / 1920px;
+            show-clock: root.ov-show-clock;
+            clock-text: root.ov-clock-text;
+            title-text: root.ov-title;
+            sub-text: root.ov-sub;
+            text-color: root.ov-text-color;
+            bg-color: root.ov-bg-color;
+            bg-opacity: root.ov-bg-opacity;
+            show-border: root.ov-show-border;
+            accent-border-color: root.ov-border-color;
+            font-size: root.ov-font-size;
+            radius-px: root.ov-radius;
+            box-padding: root.ov-box-padding;
+            min-box-width: root.ov-min-width;
+            pos-preset: root.ov-pos-preset;
+            norm-x: root.ov-pos-x;
+            norm-y: root.ov-pos-y;
         }
-    }
-
-    // Layer 3.5: Live Lower-Third Custom Overlay
-    if root.show-custom-overlay && (root.live-overlay-title != "" || root.live-overlay-sub != "") : Rectangle {
-        x: 52px;
-        y: parent.height - 148px;
-        width: Math.min(720px, parent.width - 104px);
-        height: 86px;
-        border-radius: 14px;
-        background: #0d0d10e6;
-        border-width: 1px;
-        border-color: Theme.border-accent;
-
-        HorizontalLayout {
-            padding-left: 0px;
-            padding-right: 20px;
-            spacing: 16px;
-            Rectangle { width: 6px; background: Theme.accent-strong; border-radius: 3px; }
-            VerticalLayout {
-                alignment: center;
-                spacing: 3px;
-                Text { text: root.live-overlay-title; color: #ffffff; font-size: 26px; font-weight: 800; overflow: elide; }
-                if root.live-overlay-sub != "" : Text { text: root.live-overlay-sub; color: Theme.text-secondary; font-size: 17px; font-weight: 500; overflow: elide; }
-            }
-        }
-    }
 
     // Layer 4: Animated Public Alert Banner (Estático | Letrero Marquee | Deslizar | Pulso)
     if root.alert-text != "" : Rectangle {

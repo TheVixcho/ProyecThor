@@ -11,6 +11,27 @@
 
 namespace ProyecThor::Core {
 
+// ── OverlaySnapshot ───────────────────────────────────────────────────────────
+struct OverlaySnapshot {
+    bool        active       = false;
+    bool        showClock    = false;
+    std::string clockText;
+    std::string titleText;
+    std::string subText;
+    float       textColor[3]   = { 1.0f, 1.0f, 1.0f };
+    float       bgColor[3]     = { 0.035f, 0.035f, 0.043f };
+    float       bgOpacity      = 0.82f;
+    bool        showBorder     = true;
+    float       borderColor[3] = { 0.22f, 0.74f, 0.97f };
+    float       fontSize       = 42.0f;
+    float       borderRadius   = 12.0f;
+    float       boxPadding     = 16.0f;
+    float       minBoxWidth    = 0.0f;
+    int         posPreset      = 3;
+    float       posX           = 0.85f;
+    float       posY           = 0.10f;
+};
+
 // ── StreamSnapshot ────────────────────────────────────────────────────────────
 struct StreamSnapshot {
     bool        isProjecting   = false;
@@ -36,8 +57,12 @@ struct StreamSnapshot {
     bool        hasFrame       = false;   // true cuando hay frame JPEG disponible
     int         refW           = 1920;    // resolución real del proyector destino
     int         refH           = 1080;
-uint64_t    version        = 0;
+    uint64_t    version        = 0;
     uint64_t    fontVersion    = 0;       // cambia solo cuando cambia la fuente (evita recargar /font en cada poll)
+
+    bool            showPngOverlay = false;
+    uint64_t        overlayVersion = 0;
+    OverlaySnapshot overlay;
 
     uint64_t    transitionTrigger  = 0;
     int         transitionType     = 0;
@@ -108,6 +133,9 @@ public:
     using FontPathProvider = std::function<std::string()>;
     void SetFontPathProvider(FontPathProvider provider);
 
+    using OverlayPathProvider = std::function<std::string()>;
+    void SetOverlayPathProvider(OverlayPathProvider provider);
+
     // Feed de mensajes para las rutas /chat*. nullptr (default) = esas rutas
     // devuelven 404, como si no existieran. El puntero es propiedad de quien
     // lo pasa (PresentationCore) — este server solo lo referencia mientras
@@ -143,6 +171,7 @@ double m_LastCaptureTime = 0.0;
     SnapshotProvider    m_SnapshotProvider;
     FrameProvider       m_FrameProvider;
     FontPathProvider    m_FontPathProvider;
+    OverlayPathProvider m_OverlayPathProvider;
     ChatMessageStore*   m_ChatStore { nullptr };
 
     std::atomic<uint64_t> m_ConfigVersion { 1 };

@@ -2,7 +2,7 @@ import { ScrollView, LineEdit, TextEdit, Slider } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { GlassCard, GlassButton, IconButton, IslandIconButton, ItemRowActionBtn, ItemMoreBtn, SlideTile, SwitchRow, PadTile, ThemeSwatchButton, StyleGalleryCard, StyleScreenTarget, ScrubBar, SupportLinkCard } from "components.slint";
 import { TopBar } from "topbar.slint";
-import { StyledTextBlock } from "projector_window.slint";
+import { StyledTextBlock, CustomOverlayView } from "projector_window.slint";
 import { AppleSettingsView } from "settings_view.slint";
 export { Theme } from "theme.slint";
 export { ProjectorWindow, StageWindow } from "projector_window.slint";
@@ -149,8 +149,21 @@ export struct ScreenMatrixItem {
     show-clock: bool,
     clock-text: string,
     alert-text: string,
-    show-pleca: bool,
-    pleca-title: string,
+    ov-show-clock: bool,
+    ov-title: string,
+    ov-sub: string,
+    ov-text-color: color,
+    ov-bg-color: color,
+    ov-bg-opacity: float,
+    ov-show-border: bool,
+    ov-border-color: color,
+    ov-font-size: float,
+    ov-radius: float,
+    ov-box-padding: float,
+    ov-min-width: float,
+    ov-pos-preset: int,
+    ov-pos-x: float,
+    ov-pos-y: float,
     queue-summary: string,
     use-own-style: bool,
     assigned-style-idx: int,
@@ -290,11 +303,37 @@ export component MainWindow inherits Window {
     in-out property <bool> bg-new-folder-open: false;
     in-out property <string> bg-new-folder-name: "";
     in property <[LibraryItem]> overlay-layer-items: [];
-    in-out property <int> bg-dock-tab: 0; // Contenido panel: 0=Fondos, 1=Overlays PNG, 2=Estilos rápidos
+    in-out property <int> bg-dock-tab: 0; // Contenido panel: 0=Fondos, 1=Overlays, 2=Estilos rápidos
     in-out property <bool> bg-dock-expanded: true;
-    in-out property <string> custom-overlay-title: "";
-    in-out property <string> custom-overlay-sub: "";
-    in-out property <bool> custom-overlay-active: false;
+
+    // Custom Overlay & Time Editor (Center Panel)
+    in-out property <bool> overlay-editor-open: false;
+    in-out property <string> ov-ed-name: "Nuevo Overlay";
+    in-out property <bool> ov-ed-show-clock: true;
+    in-out property <int> ov-ed-clock-mode: 0; // 0=Hora en Vivo, 1=En Retroceso, 2=Hacia Arriba
+    in-out property <int> ov-ed-time-format: 0; // 0=HH:MM:SS, 1=HH:MM, 2=hh:mm AM/PM, 3=hh:mm:ss AM/PM, 4=MM:SS
+    in-out property <int> ov-ed-initial-min: 5;
+    in-out property <string> ov-ed-manual-min: "5";
+    in-out property <string> ov-ed-manual-sec: "00";
+    in-out property <bool> ov-ed-timer-running: false;
+    in property <string> ov-ed-clock-preview: "00:00:00";
+    in-out property <string> ov-ed-title: "";
+    in-out property <string> ov-ed-sub: "";
+    in-out property <color> ov-ed-text-color: #ffffff;
+    in-out property <float> ov-ed-text-r: 255.0;
+    in-out property <float> ov-ed-text-g: 255.0;
+    in-out property <float> ov-ed-text-b: 255.0;
+    in-out property <color> ov-ed-bg-color: #09090b;
+    in-out property <float> ov-ed-bg-opacity: 0.82;
+    in-out property <bool> ov-ed-show-border: true;
+    in-out property <color> ov-ed-border-color: #38bdf8;
+    in-out property <float> ov-ed-font-size: 42.0;
+    in-out property <float> ov-ed-radius: 12.0;
+    in-out property <float> ov-ed-box-padding: 16.0;
+    in-out property <float> ov-ed-min-width: 0.0;
+    in-out property <int> ov-ed-pos-preset: 3;
+    in-out property <float> ov-ed-pos-x: 0.85;
+    in-out property <float> ov-ed-pos-y: 0.10;
     in property <image> live-preview-image;
     in property <bool> has-live-preview-image: false;
     in property <image> live-overlay-image;
@@ -414,13 +453,6 @@ export component MainWindow inherits Window {
     in property <float> alert-ticker-pos: 0.0;
     in property <float> alert-pulse-alpha: 1.0;
 
-    // Clock & Countdown Timer
-    in property <string> clock-now-text: "00:00:00";
-    in property <string> timer-display-text: "05:00";
-    in-out property <bool> timer-running: false;
-    in-out property <bool> show-clock-on-public: false;
-    in-out property <bool> timer-mode-countdown: true;
-
     // Photoshop-Style Real Active Layers & Multi-Screen / Multi-Room Output Matrix
     in property <[ActiveLayerItem]> active-layers: [];
     in property <[ScreenMatrixItem]> screen-matrix-items: [];
@@ -428,11 +460,27 @@ export component MainWindow inherits Window {
     in-out property <int> inspected-screen-idx: 0; // 0=Público, 1=LAN, 2=Stage, >=3=Sala Extra
     in property <string> inspected-screen-name: "Público";
     in property <bool> preview-has-video-bg: false;
+
+    // Preview Custom Overlay & Clock properties
     in property <bool> preview-show-clock: false;
     in property <string> preview-clock-text: "";
-    in property <bool> preview-show-pleca: false;
-    in property <string> preview-pleca-title: "";
-    in property <string> preview-pleca-sub: "";
+    in property <bool> preview-ov-active: false;
+    in property <bool> preview-ov-show-clock: false;
+    in property <string> preview-ov-clock-text: "";
+    in property <string> preview-ov-title: "";
+    in property <string> preview-ov-sub: "";
+    in property <color> preview-ov-text-color: #ffffff;
+    in property <color> preview-ov-bg-color: #09090b;
+    in property <float> preview-ov-bg-opacity: 0.82;
+    in property <bool> preview-ov-show-border: true;
+    in property <color> preview-ov-border-color: #38bdf8;
+    in property <float> preview-ov-font-size: 42.0;
+    in property <float> preview-ov-radius: 12.0;
+    in property <float> preview-ov-box-padding: 16.0;
+    in property <float> preview-ov-min-width: 0.0;
+    in property <int> preview-ov-pos-preset: 3;
+    in property <float> preview-ov-pos-x: 0.85;
+    in property <float> preview-ov-pos-y: 0.10;
     in property <string> preview-style-name: "Predeterminado";
     in property <bool> preview-own-style: false;
     in property <float> preview-text-size: 60.0;
@@ -477,8 +525,8 @@ export component MainWindow inherits Window {
     in property <[CaptureDeviceItem]> capture-devices: [];
     in-out property <int> selected-capture-idx: -1;
 
-    // Network Hub (Tab 5): Servicios 100% independientes (Video LAN, Smart TV Cast, Chat LAN, Celular, Reloj, OSC)
-    in-out property <int> net-subtab: 0; // 0=Transmisión LAN, 1=Chat LAN, 2=Celular, 3=Reloj, 4=Luces OSC
+    // Network Hub (Tab 5): Servicios 100% independientes (Video LAN, Smart TV Cast, Chat LAN, Celular, OSC)
+    in-out property <int> net-subtab: 0; // 0=Transmisión LAN, 1=Chat LAN, 2=Celular, 3=Luces OSC
     in-out property <bool> lan-running: false;
     in property <string> lan-url: "Inactivo — pulsa Iniciar para transmitir video/letras en tu red local";
     in-out property <string> lan-host-ip: "";
@@ -763,11 +811,21 @@ export component MainWindow inherits Window {
     callback alert-config-changed();
     callback clear-alerts();
 
-    // Clock & Timer
-    callback timer-set-minutes(int);
-    callback timer-toggle();
-    callback timer-reset();
-    callback clock-overlay-toggled(bool);
+    // Custom Overlay & Time Editor Callbacks
+    callback open-new-overlay-editor(bool);
+    callback open-edit-overlay-editor(int);
+    callback open-edit-active-overlay();
+    callback save-overlay-editor(bool);
+    callback apply-overlay-editor(int);
+    callback cancel-overlay-editor();
+    callback ov-editor-set-minutes(int);
+    callback ov-editor-set-manual-time(string, string);
+    callback ov-editor-timer-toggle();
+    callback ov-editor-timer-reset();
+    callback ov-editor-select-text-color(int, int, int);
+    callback ov-editor-select-bg-color(int, int, int);
+    callback ov-editor-select-border-color(int, int, int);
+    callback ov-editor-props-changed();
 
     // Real Active Layer Stack (Photoshop-style) & Multi-Screen / Multi-Room Routing
     callback remove-active-layer(string);
@@ -812,7 +870,6 @@ export component MainWindow inherits Window {
     callback overlay-layer-selected(int);
     callback overlay-layer-add-to-queue(int);
     callback dock-solid-color-selected(int);
-    callback custom-overlay-toggled(string, string, bool);
     callback open-legacy-imgui();
     callback fsr-changed(bool);
     callback gpu-config-changed();
@@ -1349,9 +1406,15 @@ export component MainWindow inherits Window {
                                 }
                             }
                             HorizontalLayout {
-                                spacing: 5px;
+                                spacing: 4px;
+                                if root.bg-dock-tab == 1 : GlassButton {
+                                    label: "+ Crear";
+                                    compact: true;
+                                    primary: true;
+                                    clicked => { root.open-new-overlay-editor(true); }
+                                }
                                 if root.bg-dock-tab == 0 || root.bg-dock-tab == 1 : GlassButton {
-                                    label: root.bg-dock-tab == 0 ? "Importar Fondo" : "Importar Overlay";
+                                    label: root.bg-dock-tab == 0 ? "Importar Fondo" : "Importar";
                                     icon: @image-url("icons/upload.svg");
                                     has-icon: true;
                                     compact: true;
@@ -1653,97 +1716,134 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // Capas Tab 1: Overlays PNG Transparentes
-                        if root.bg-dock-tab == 1 : ScrollView {
+                        // Capas Tab 1: Overlays Personalizados (Tiempo/Texto) + PNG Transparentes
+                        if root.bg-dock-tab == 1 : VerticalLayout {
                             vertical-stretch: 1;
-                            VerticalLayout {
-                                spacing: 6px;
-                                padding-right: 4px;
+                            spacing: 6px;
 
-                                if root.overlay-layer-items.length == 0 : Text {
-                                    text: "Sin overlays PNG en assets/overlays — pulsa 'Importar Overlay' para agregar gráficos transparentes.";
+                            // Routing rápido: elige a qué pantalla se envían los overlays
+                            HorizontalLayout {
+                                spacing: 3px;
+                                Text {
+                                    text: "A:";
                                     color: Theme.text-muted;
-                                    font-size: 11.5px;
-                                    wrap: word-wrap;
+                                    font-size: 9.5px;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
                                 }
+                                GlassButton {
+                                    label: "Todas";
+                                    compact: true;
+                                    primary: root.output-target-mode == 0;
+                                    clicked => { root.select-output-target(0); }
+                                }
+                                for scr in root.screen-matrix-items : GlassButton {
+                                    label: scr.id == 0 ? "Púb" : (scr.id == 1 ? "LAN" : (scr.id == 2 ? "Stg" : scr.name));
+                                    compact: true;
+                                    primary: root.output-target-mode == (scr.id + 1);
+                                    clicked => { root.select-output-target(scr.id + 1); }
+                                }
+                            }
 
-                                for ov[oidx] in root.overlay-layer-items : Rectangle {
-                                    height: 54px;
-                                    border-radius: Theme.radius-sm;
-                                    background: ov.subtitle == "● ACTIVO"
-                                        ? Theme.live-green.transparentize(0.84)
-                                        : (ov-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1);
-                                    border-width: 1px;
-                                    border-color: ov.subtitle == "● ACTIVO" ? Theme.live-green : (ov-ta.has-hover ? Theme.border-medium : Theme.border-subtle);
-                                    animate background { duration: 110ms; }
+                            ScrollView {
+                                vertical-stretch: 1;
+                                VerticalLayout {
+                                    spacing: 6px;
+                                    padding-right: 4px;
 
-                                    ov-ta := TouchArea {
-                                        mouse-cursor: pointer;
-                                        clicked => { root.overlay-layer-selected(oidx); }
-                                        pointer-event(ev) => {
-                                            if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
-                                                root.open-item-modal(0, 5, ov.title, ov.subtitle, ov.path);
-                                            }
-                                        }
+                                    if root.overlay-layer-items.length == 0 : Text {
+                                        text: "Sin overlays aún — pulsa '+ Crear' para diseñar un reloj/temporizador/texto o 'Importar' para un PNG.";
+                                        color: Theme.text-muted;
+                                        font-size: 11.5px;
+                                        wrap: word-wrap;
                                     }
 
-                                    HorizontalLayout {
-                                        padding: 5px;
-                                        padding-right: 6px;
-                                        spacing: 6px;
+                                    for ov[oidx] in root.overlay-layer-items : Rectangle {
+                                        height: 54px;
+                                        border-radius: Theme.radius-sm;
+                                        background: ov.subtitle == "● ACTIVO"
+                                            ? Theme.live-green.transparentize(0.84)
+                                            : (ov-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1);
+                                        border-width: 1px;
+                                        border-color: ov.subtitle == "● ACTIVO" ? Theme.live-green : (ov-ta.has-hover ? Theme.border-medium : Theme.border-subtle);
+                                        animate background { duration: 110ms; }
 
-                                        Rectangle {
-                                            width: 60px;
-                                            height: 42px;
-                                            y: (parent.height - self.height) / 2;
-                                            border-radius: 5px;
-                                            background: #141418;
-                                            border-width: 1px;
-                                            border-color: Theme.border-subtle;
-                                            clip: true;
-
-                                            if ov.has-thumbnail : Image {
-                                                source: ov.thumbnail;
-                                                image-fit: contain;
-                                            }
-                                        }
-
-                                        VerticalLayout {
-                                            horizontal-stretch: 1;
-                                            alignment: center;
-                                            spacing: 2px;
-                                            Text {
-                                                text: ov.title;
-                                                color: Theme.text-primary;
-                                                font-size: 11.5px;
-                                                font-weight: 600;
-                                                overflow: elide;
-                                            }
-                                            Text {
-                                                text: ov.subtitle;
-                                                color: ov.subtitle == "● ACTIVO" ? Theme.live-green : Theme.text-muted;
-                                                font-size: 9.5px;
-                                                font-weight: 700;
+                                        ov-ta := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => { root.overlay-layer-selected(oidx); }
+                                            pointer-event(ev) => {
+                                                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
+                                                    root.open-item-modal(0, 5, ov.title, ov.subtitle, ov.path);
+                                                }
                                             }
                                         }
 
                                         HorizontalLayout {
-                                            spacing: 2px;
-                                            ItemRowActionBtn {
-                                                icon: @image-url("icons/plus.svg");
-                                                accent: true;
+                                            padding: 5px;
+                                            padding-right: 6px;
+                                            spacing: 6px;
+
+                                            Rectangle {
+                                                width: 52px;
+                                                height: 42px;
                                                 y: (parent.height - self.height) / 2;
-                                                clicked => { root.overlay-layer-add-to-queue(oidx); }
+                                                border-radius: 5px;
+                                                background: ov.has-thumbnail ? #141418 : #0c1726;
+                                                border-width: 1px;
+                                                border-color: ov.has-thumbnail ? Theme.border-subtle : #38bdf866;
+                                                clip: true;
+
+                                                if ov.has-thumbnail : Image {
+                                                    source: ov.thumbnail;
+                                                    image-fit: contain;
+                                                }
+                                                if !ov.has-thumbnail : Image {
+                                                    source: @image-url("icons/clock.svg");
+                                                    width: 18px;
+                                                    height: 18px;
+                                                    colorize: #38bdf8;
+                                                }
                                             }
-                                            ItemMoreBtn {
-                                                y: (parent.height - self.height) / 2;
-                                                clicked => { root.open-item-modal(0, 5, ov.title, ov.subtitle, ov.path); }
+
+                                            VerticalLayout {
+                                                horizontal-stretch: 1;
+                                                alignment: center;
+                                                spacing: 2px;
+                                                Text {
+                                                    text: ov.title;
+                                                    color: Theme.text-primary;
+                                                    font-size: 11.5px;
+                                                    font-weight: 600;
+                                                    overflow: elide;
+                                                }
+                                                Text {
+                                                    text: ov.subtitle;
+                                                    color: ov.subtitle == "● ACTIVO" ? Theme.live-green : (ov.has-thumbnail ? Theme.text-muted : #38bdf8);
+                                                    font-size: 9.5px;
+                                                    font-weight: 700;
+                                                    overflow: elide;
+                                                }
                                             }
-                                            ItemRowActionBtn {
-                                                icon: @image-url("icons/trash.svg");
-                                                danger: true;
-                                                y: (parent.height - self.height) / 2;
-                                                clicked => { root.open-item-modal(2, 5, ov.title, ov.subtitle, ov.path); }
+
+                                            HorizontalLayout {
+                                                spacing: 2px;
+                                                if !ov.has-thumbnail : ItemRowActionBtn {
+                                                    icon: @image-url("icons/edit.svg");
+                                                    y: (parent.height - self.height) / 2;
+                                                    clicked => { root.open-edit-overlay-editor(oidx); }
+                                                }
+                                                ItemRowActionBtn {
+                                                    icon: @image-url("icons/plus.svg");
+                                                    accent: true;
+                                                    y: (parent.height - self.height) / 2;
+                                                    clicked => { root.overlay-layer-add-to-queue(oidx); }
+                                                }
+                                                ItemRowActionBtn {
+                                                    icon: @image-url("icons/trash.svg");
+                                                    danger: true;
+                                                    y: (parent.height - self.height) / 2;
+                                                    clicked => { root.open-item-modal(2, 5, ov.title, ov.subtitle, ov.path); }
+                                                }
                                             }
                                         }
                                     }
@@ -2002,7 +2102,449 @@ export component MainWindow inherits Window {
                 GlassCard {
                     vertical-stretch: 1;
 
-                    VerticalLayout {
+                    // ── CENTRAL OVERLAY & TIME/CLOCK EDITOR ──
+                    if root.overlay-editor-open : VerticalLayout {
+                        padding: 14px;
+                        spacing: 10px;
+
+                        // Editor Header
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Text {
+                                text: "Editor de Overlay:";
+                                color: Theme.text-primary;
+                                font-size: 14px;
+                                font-weight: 800;
+                                vertical-alignment: center;
+                            }
+                            LineEdit {
+                                horizontal-stretch: 1;
+                                placeholder-text: "Nombre del overlay (ej. Reloj LAN, Cuenta 5m)...";
+                                text <=> root.ov-ed-name;
+                            }
+                            GlassButton {
+                                label: "Cancelar";
+                                compact: true;
+                                clicked => { root.cancel-overlay-editor(); }
+                            }
+                            GlassButton {
+                                label: "Guardar";
+                                icon: @image-url("icons/save.svg");
+                                has-icon: true;
+                                compact: true;
+                                clicked => { root.save-overlay-editor(false); }
+                            }
+                            GlassButton {
+                                label: "Guardar y Enviar";
+                                icon: @image-url("icons/monitor.svg");
+                                has-icon: true;
+                                compact: true;
+                                primary: true;
+                                clicked => { root.save-overlay-editor(true); }
+                            }
+                        }
+
+                        // Multi-Screen Target Quick Send Bar
+                        Rectangle {
+                            border-radius: Theme.radius-sm;
+                            background: Theme.bg-surface-1;
+                            border-width: 1px;
+                            border-color: Theme.border-subtle;
+
+                            HorizontalLayout {
+                                padding: 7px;
+                                spacing: 5px;
+                                Text {
+                                    text: "Enviar solo a:";
+                                    color: Theme.text-secondary;
+                                    font-size: 11px;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+                                GlassButton {
+                                    label: "Todas";
+                                    compact: true;
+                                    primary: root.output-target-mode == 0;
+                                    clicked => { root.apply-overlay-editor(0); }
+                                }
+                                for scr in root.screen-matrix-items : GlassButton {
+                                    label: scr.id == 0 ? "Público" : (scr.id == 1 ? "LAN" : (scr.id == 2 ? "Stage" : scr.name));
+                                    compact: true;
+                                    primary: root.output-target-mode == (scr.id + 1);
+                                    clicked => { root.apply-overlay-editor(scr.id + 1); }
+                                }
+                            }
+                        }
+
+                        // Live 16:9 WYSIWYG Preview Canvas
+                        Rectangle {
+                            height: 186px;
+                            border-radius: Theme.radius-md;
+                            background: #060609;
+                            border-width: 1px;
+                            border-color: Theme.border-medium;
+                            clip: true;
+
+                            // Subtle aspect-ratio inner 16:9 stage
+                            ov-pv-stage := Rectangle {
+                                height: parent.height - 12px;
+                                width: Math.min(parent.width - 16px, self.height * 16 / 9);
+                                x: (parent.width - self.width) / 2;
+                                y: 6px;
+                                border-radius: 4px;
+                                background: #0b0b10;
+                                border-width: 1px;
+                                border-color: #ffffff18;
+                                clip: true;
+
+                                Text {
+                                    text: "VISTA PREVIA 16:9";
+                                    color: #ffffff1c;
+                                    font-size: 11px;
+                                    font-weight: 800;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+
+                                if (root.ov-ed-show-clock && root.ov-ed-clock-preview != "") || root.ov-ed-title != "" || root.ov-ed-sub != "" : CustomOverlayView {
+                                    container-w: ov-pv-stage.width;
+                                    container-h: ov-pv-stage.height;
+                                    ui-scale: ov-pv-stage.width / 1920px;
+                                    show-clock: root.ov-ed-show-clock;
+                                    clock-text: root.ov-ed-clock-preview;
+                                    title-text: root.ov-ed-title;
+                                    sub-text: root.ov-ed-sub;
+                                    text-color: root.ov-ed-text-color;
+                                    bg-color: root.ov-ed-bg-color;
+                                    bg-opacity: root.ov-ed-bg-opacity;
+                                    show-border: root.ov-ed-show-border;
+                                    accent-border-color: root.ov-ed-border-color;
+                                    font-size: root.ov-ed-font-size;
+                                    radius-px: root.ov-ed-radius;
+                                    box-padding: root.ov-ed-box-padding;
+                                    min-box-width: root.ov-ed-min-width;
+                                    pos-preset: root.ov-ed-pos-preset;
+                                    norm-x: root.ov-ed-pos-x;
+                                    norm-y: root.ov-ed-pos-y;
+                                }
+                            }
+                        }
+
+                        // Scrollable Inspector Controls
+                        ScrollView {
+                            vertical-stretch: 1;
+                            VerticalLayout {
+                                spacing: 10px;
+                                padding-right: 6px;
+
+                                // 1. Reloj / Temporizador Config
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
+                                    VerticalLayout {
+                                        padding: 11px;
+                                        spacing: 8px;
+
+                                        SwitchRow {
+                                            title: "Incluir Tiempo / Reloj";
+                                            checked <=> root.ov-ed-show-clock;
+                                            toggled(v) => { root.ov-editor-props-changed(); }
+                                        }
+
+                                        if root.ov-ed-show-clock : VerticalLayout {
+                                            spacing: 8px;
+                                            HorizontalLayout {
+                                                spacing: 5px;
+                                                Text { text: "Modo:"; color: Theme.text-secondary; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                                                GlassButton { label: "Hora en Vivo"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-clock-mode == 0; clicked => { root.ov-ed-clock-mode = 0; root.ov-editor-props-changed(); } }
+                                                GlassButton { label: "Retroceso ↓";  compact: true; horizontal-stretch: 1; primary: root.ov-ed-clock-mode == 1; clicked => { root.ov-ed-clock-mode = 1; root.ov-editor-props-changed(); } }
+                                                GlassButton { label: "Hacia Arriba ↑"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-clock-mode == 2; clicked => { root.ov-ed-clock-mode = 2; root.ov-editor-props-changed(); } }
+                                            }
+
+                                            HorizontalLayout {
+                                                spacing: 4px;
+                                                Text { text: "Formato:"; color: Theme.text-secondary; font-size: 11px; font-weight: 700; vertical-alignment: center; }
+                                                if root.ov-ed-clock-mode == 0 : HorizontalLayout {
+                                                    horizontal-stretch: 1;
+                                                    spacing: 4px;
+                                                    GlassButton { label: "24h HH:MM:SS"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-time-format == 0; clicked => { root.ov-ed-time-format = 0; root.ov-editor-props-changed(); } }
+                                                    GlassButton { label: "24h HH:MM";    compact: true; horizontal-stretch: 1; primary: root.ov-ed-time-format == 1; clicked => { root.ov-ed-time-format = 1; root.ov-editor-props-changed(); } }
+                                                    GlassButton { label: "12h AM/PM";    compact: true; horizontal-stretch: 1; primary: root.ov-ed-time-format == 2; clicked => { root.ov-ed-time-format = 2; root.ov-editor-props-changed(); } }
+                                                    GlassButton { label: "12h +Seg";     compact: true; horizontal-stretch: 1; primary: root.ov-ed-time-format == 3; clicked => { root.ov-ed-time-format = 3; root.ov-editor-props-changed(); } }
+                                                }
+                                                if root.ov-ed-clock-mode != 0 : HorizontalLayout {
+                                                    horizontal-stretch: 1;
+                                                    spacing: 4px;
+                                                    GlassButton { label: "MM:SS";    compact: true; horizontal-stretch: 1; primary: root.ov-ed-time-format == 4 || root.ov-ed-time-format == 1 || root.ov-ed-time-format == 2; clicked => { root.ov-ed-time-format = 4; root.ov-editor-props-changed(); } }
+                                                    GlassButton { label: "HH:MM:SS"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-time-format == 0 || root.ov-ed-time-format == 3; clicked => { root.ov-ed-time-format = 0; root.ov-editor-props-changed(); } }
+                                                }
+                                            }
+
+                                            if root.ov-ed-clock-mode != 0 : VerticalLayout {
+                                                spacing: 6px;
+                                                HorizontalLayout {
+                                                    spacing: 6px;
+                                                    Rectangle {
+                                                        width: 112px;
+                                                        height: 30px;
+                                                        border-radius: 6px;
+                                                        background: Theme.bg-surface-0;
+                                                        border-width: 1px;
+                                                        border-color: root.ov-ed-timer-running ? Theme.live-green : Theme.border-subtle;
+                                                        Text {
+                                                            text: root.ov-ed-clock-preview;
+                                                            color: root.ov-ed-timer-running ? Theme.live-green : Theme.text-primary;
+                                                            font-size: 14px;
+                                                            font-weight: 800;
+                                                            horizontal-alignment: center;
+                                                            vertical-alignment: center;
+                                                        }
+                                                    }
+                                                    GlassButton {
+                                                        label: root.ov-ed-timer-running ? "Pausar" : "Iniciar";
+                                                        icon: root.ov-ed-timer-running ? @image-url("icons/pause.svg") : @image-url("icons/play.svg");
+                                                        has-icon: true;
+                                                        compact: true;
+                                                        primary: true;
+                                                        horizontal-stretch: 1;
+                                                        clicked => { root.ov-editor-timer-toggle(); }
+                                                    }
+                                                    GlassButton {
+                                                        label: "Reiniciar";
+                                                        icon: @image-url("icons/refresh.svg");
+                                                        has-icon: true;
+                                                        compact: true;
+                                                        clicked => { root.ov-editor-timer-reset(); }
+                                                    }
+                                                }
+
+                                                if root.ov-ed-clock-mode == 1 : VerticalLayout {
+                                                    spacing: 6px;
+                                                    HorizontalLayout {
+                                                        spacing: 4px;
+                                                        GlassButton { label: "-1m"; compact: true; clicked => { root.ov-editor-set-minutes(Math.max(1, root.ov-ed-initial-min - 1)); } }
+                                                        GlassButton { label: "1m";  compact: true; horizontal-stretch: 1; primary: root.ov-ed-initial-min == 1;  clicked => { root.ov-editor-set-minutes(1); } }
+                                                        GlassButton { label: "3m";  compact: true; horizontal-stretch: 1; primary: root.ov-ed-initial-min == 3;  clicked => { root.ov-editor-set-minutes(3); } }
+                                                        GlassButton { label: "5m";  compact: true; horizontal-stretch: 1; primary: root.ov-ed-initial-min == 5;  clicked => { root.ov-editor-set-minutes(5); } }
+                                                        GlassButton { label: "10m"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-initial-min == 10; clicked => { root.ov-editor-set-minutes(10); } }
+                                                        GlassButton { label: "15m"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-initial-min == 15; clicked => { root.ov-editor-set-minutes(15); } }
+                                                        GlassButton { label: "30m"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-initial-min == 30; clicked => { root.ov-editor-set-minutes(30); } }
+                                                        GlassButton { label: "+1m"; compact: true; clicked => { root.ov-editor-set-minutes(root.ov-ed-initial-min + 1); } }
+                                                    }
+
+                                                    HorizontalLayout {
+                                                        spacing: 6px;
+                                                        Text {
+                                                            text: "Tiempo Manual (Min : Seg):";
+                                                            color: Theme.text-secondary;
+                                                            font-size: 11px;
+                                                            font-weight: 700;
+                                                            vertical-alignment: center;
+                                                        }
+                                                        LineEdit {
+                                                            width: 56px;
+                                                            placeholder-text: "Min";
+                                                            text <=> root.ov-ed-manual-min;
+                                                            accepted => { root.ov-editor-set-manual-time(root.ov-ed-manual-min, root.ov-ed-manual-sec); }
+                                                        }
+                                                        Text {
+                                                            text: ":";
+                                                            color: Theme.text-primary;
+                                                            font-size: 14px;
+                                                            font-weight: 800;
+                                                            vertical-alignment: center;
+                                                        }
+                                                        LineEdit {
+                                                            width: 56px;
+                                                            placeholder-text: "Seg";
+                                                            text <=> root.ov-ed-manual-sec;
+                                                            accepted => { root.ov-editor-set-manual-time(root.ov-ed-manual-min, root.ov-ed-manual-sec); }
+                                                        }
+                                                        GlassButton {
+                                                            label: "Fijar Tiempo";
+                                                            compact: true;
+                                                            primary: true;
+                                                            clicked => { root.ov-editor-set-manual-time(root.ov-ed-manual-min, root.ov-ed-manual-sec); }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // 2. Texto / Etiqueta Opcional
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
+                                    VerticalLayout {
+                                        padding: 11px;
+                                        spacing: 7px;
+                                        Text { text: "Texto / Etiqueta Opcional"; color: Theme.text-primary; font-size: 12px; font-weight: 700; }
+                                        HorizontalLayout {
+                                            spacing: 8px;
+                                            LineEdit {
+                                                horizontal-stretch: 1;
+                                                placeholder-text: "Título / Etiqueta (ej. INICIAMOS EN, EN VIVO)...";
+                                                text <=> root.ov-ed-title;
+                                                edited => { root.ov-editor-props-changed(); }
+                                            }
+                                            LineEdit {
+                                                horizontal-stretch: 1;
+                                                placeholder-text: "Subtítulo opcional...";
+                                                text <=> root.ov-ed-sub;
+                                                edited => { root.ov-editor-props-changed(); }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // 3. Posición en Pantalla
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
+                                    VerticalLayout {
+                                        padding: 11px;
+                                        spacing: 7px;
+                                        Text { text: "Posición en Pantalla"; color: Theme.text-primary; font-size: 12px; font-weight: 700; }
+                                        HorizontalLayout {
+                                            spacing: 4px;
+                                            GlassButton { label: "Sup-Izq"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 1; clicked => { root.ov-ed-pos-preset = 1; root.ov-editor-props-changed(); } }
+                                            GlassButton { label: "Sup-Cen"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 2; clicked => { root.ov-ed-pos-preset = 2; root.ov-editor-props-changed(); } }
+                                            GlassButton { label: "Sup-Der"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 3; clicked => { root.ov-ed-pos-preset = 3; root.ov-editor-props-changed(); } }
+                                            GlassButton { label: "Centro";  compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 0; clicked => { root.ov-ed-pos-preset = 0; root.ov-editor-props-changed(); } }
+                                        }
+                                        HorizontalLayout {
+                                            spacing: 4px;
+                                            GlassButton { label: "Inf-Izq"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 4; clicked => { root.ov-ed-pos-preset = 4; root.ov-editor-props-changed(); } }
+                                            GlassButton { label: "Inf-Cen"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 5; clicked => { root.ov-ed-pos-preset = 5; root.ov-editor-props-changed(); } }
+                                            GlassButton { label: "Inf-Der"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 6; clicked => { root.ov-ed-pos-preset = 6; root.ov-editor-props-changed(); } }
+                                            GlassButton { label: "Manual X/Y"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 7; clicked => { root.ov-ed-pos-preset = 7; root.ov-editor-props-changed(); } }
+                                        }
+                                        if root.ov-ed-pos-preset == 7 : HorizontalLayout {
+                                            spacing: 10px;
+                                            HorizontalLayout {
+                                                horizontal-stretch: 1;
+                                                spacing: 6px;
+                                                Text { text: "X: " + Math.round(root.ov-ed-pos-x * 100) + "%"; color: Theme.text-secondary; font-size: 11px; vertical-alignment: center; }
+                                                Slider { horizontal-stretch: 1; minimum: 0.05; maximum: 0.95; value <=> root.ov-ed-pos-x; changed => { root.ov-editor-props-changed(); } }
+                                            }
+                                            HorizontalLayout {
+                                                horizontal-stretch: 1;
+                                                spacing: 6px;
+                                                Text { text: "Y: " + Math.round(root.ov-ed-pos-y * 100) + "%"; color: Theme.text-secondary; font-size: 11px; vertical-alignment: center; }
+                                                Slider { horizontal-stretch: 1; minimum: 0.05; maximum: 0.95; value <=> root.ov-ed-pos-y; changed => { root.ov-editor-props-changed(); } }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // 4. Colores, Fondo y Tipografía
+                                Rectangle {
+                                    border-radius: Theme.radius-md;
+                                    background: Theme.bg-surface-1;
+                                    border-width: 1px;
+                                    border-color: Theme.border-subtle;
+                                    VerticalLayout {
+                                        padding: 11px;
+                                        spacing: 8px;
+                                        Text { text: "Colores, Fondo y Tamaño"; color: Theme.text-primary; font-size: 12px; font-weight: 700; }
+
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            Text { text: "Color Texto:"; color: Theme.text-secondary; font-size: 11px; vertical-alignment: center; width: 76px; }
+                                            Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #ffffff; border-width: 1px; border-color: #ffffff66; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-text-color(255, 255, 255); } } }
+                                            Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #fbbf24; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-text-color(251, 191, 36); } } }
+                                            Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #38bdf8; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-text-color(56, 189, 248); } } }
+                                            Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #4ade80; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-text-color(74, 222, 128); } } }
+                                            Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #f87171; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-text-color(248, 113, 113); } } }
+                                            Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #c084fc; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-text-color(192, 132, 252); } } }
+                                            Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #09090b; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-text-color(9, 9, 11); } } }
+                                            Rectangle { horizontal-stretch: 1; height: 22px; border-radius: 5px; background: root.ov-ed-text-color; border-width: 1px; border-color: Theme.border-medium; }
+                                        }
+
+                                        HorizontalLayout {
+                                            spacing: 8px;
+                                            Text { text: "RGB:"; color: Theme.text-muted; font-size: 10.5px; vertical-alignment: center; width: 32px; }
+                                            Slider { horizontal-stretch: 1; minimum: 0.0; maximum: 255.0; value <=> root.ov-ed-text-r; changed => { root.ov-editor-props-changed(); } }
+                                            Slider { horizontal-stretch: 1; minimum: 0.0; maximum: 255.0; value <=> root.ov-ed-text-g; changed => { root.ov-editor-props-changed(); } }
+                                            Slider { horizontal-stretch: 1; minimum: 0.0; maximum: 255.0; value <=> root.ov-ed-text-b; changed => { root.ov-editor-props-changed(); } }
+                                        }
+
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            Text { text: "Color Fondo:"; color: Theme.text-secondary; font-size: 11px; vertical-alignment: center; width: 76px; }
+                                            Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #09090b; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-bg-color(9, 9, 11); } } }
+                                            Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #0c4a6e; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-bg-color(12, 74, 110); } } }
+                                            Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #7f1d1d; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-bg-color(127, 29, 29); } } }
+                                            Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #064e3b; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-bg-color(6, 78, 59); } } }
+                                            Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #4c1d95; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-bg-color(76, 29, 149); } } }
+                                            Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #ffffff; border-width: 1px; border-color: #ffffff66; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-bg-color(255, 255, 255); } } }
+                                            Text { text: "Opacidad: " + Math.round(root.ov-ed-bg-opacity * 100) + "%"; color: Theme.text-secondary; font-size: 10.5px; vertical-alignment: center; }
+                                            Slider { horizontal-stretch: 1; minimum: 0.0; maximum: 1.0; value <=> root.ov-ed-bg-opacity; changed => { root.ov-editor-props-changed(); } }
+                                        }
+
+                                        HorizontalLayout {
+                                            spacing: 10px;
+                                            HorizontalLayout {
+                                                horizontal-stretch: 1;
+                                                spacing: 6px;
+                                                Text { text: "Texto: " + Math.round(root.ov-ed-font-size) + "px"; color: Theme.text-secondary; font-size: 11px; vertical-alignment: center; width: 82px; }
+                                                Slider { horizontal-stretch: 1; minimum: 16.0; maximum: 260.0; value <=> root.ov-ed-font-size; changed => { root.ov-editor-props-changed(); } }
+                                            }
+                                            HorizontalLayout {
+                                                horizontal-stretch: 1;
+                                                spacing: 6px;
+                                                Text { text: "Bordes: " + Math.round(root.ov-ed-radius) + "px"; color: Theme.text-secondary; font-size: 11px; vertical-alignment: center; width: 78px; }
+                                                Slider { horizontal-stretch: 1; minimum: 0.0; maximum: 48.0; value <=> root.ov-ed-radius; changed => { root.ov-editor-props-changed(); } }
+                                            }
+                                        }
+
+                                        HorizontalLayout {
+                                            spacing: 10px;
+                                            HorizontalLayout {
+                                                horizontal-stretch: 1;
+                                                spacing: 6px;
+                                                Text { text: "Relleno: " + Math.round(root.ov-ed-box-padding) + "px"; color: Theme.text-secondary; font-size: 11px; vertical-alignment: center; width: 82px; }
+                                                Slider { horizontal-stretch: 1; minimum: 6.0; maximum: 100.0; value <=> root.ov-ed-box-padding; changed => { root.ov-editor-props-changed(); } }
+                                            }
+                                            HorizontalLayout {
+                                                horizontal-stretch: 1;
+                                                spacing: 6px;
+                                                Text { text: root.ov-ed-min-width < 1.0 ? "Ancho: Auto" : ("Ancho: " + Math.round(root.ov-ed-min-width) + "px"); color: Theme.text-secondary; font-size: 11px; vertical-alignment: center; width: 88px; }
+                                                Slider { horizontal-stretch: 1; minimum: 0.0; maximum: 1600.0; value <=> root.ov-ed-min-width; changed => { root.ov-editor-props-changed(); } }
+                                            }
+                                        }
+
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            GlassButton {
+                                                label: root.ov-ed-show-border ? "Borde: ON" : "Borde: OFF";
+                                                compact: true;
+                                                primary: root.ov-ed-show-border;
+                                                clicked => { root.ov-ed-show-border = !root.ov-ed-show-border; root.ov-editor-props-changed(); }
+                                            }
+                                            Text { text: "Color Borde:"; color: Theme.text-secondary; font-size: 11px; vertical-alignment: center; }
+                                            Rectangle { width: 20px; height: 20px; border-radius: 5px; background: #38bdf8; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-border-color(56, 189, 248); } } }
+                                            Rectangle { width: 20px; height: 20px; border-radius: 5px; background: #f59e0b; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-border-color(245, 158, 11); } } }
+                                            Rectangle { width: 20px; height: 20px; border-radius: 5px; background: #22c55e; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-border-color(34, 197, 94); } } }
+                                            Rectangle { width: 20px; height: 20px; border-radius: 5px; background: #ef4444; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-border-color(239, 68, 68); } } }
+                                            Rectangle { width: 20px; height: 20px; border-radius: 5px; background: #a855f7; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-border-color(168, 85, 247); } } }
+                                            Rectangle { width: 20px; height: 20px; border-radius: 5px; background: #ffffff; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-border-color(255, 255, 255); } } }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if !root.overlay-editor-open : VerticalLayout {
                     padding: root.active-tab == 7 ? 0px : 15px;
                     spacing: root.active-tab == 7 ? 0px : 12px;
 
@@ -3698,8 +4240,7 @@ export component MainWindow inherits Window {
                             GlassButton { label: root.lan-running ? "● LAN" : "LAN";          compact: true; icon: @image-url("icons/radio.svg");      has-icon: true; primary: root.net-subtab == 0; clicked => { root.net-subtab = 0; } }
                             GlassButton { label: root.chat-running ? "● Chat" : "Chat";       compact: true; icon: @image-url("icons/chat.svg");       has-icon: true; primary: root.net-subtab == 1; clicked => { root.net-subtab = 1; } }
                             GlassButton { label: root.mobile-running ? "● Celular" : "Celular"; compact: true; icon: @image-url("icons/smartphone.svg"); has-icon: true; primary: root.net-subtab == 2; clicked => { root.net-subtab = 2; } }
-                            GlassButton { label: "Reloj";                                     compact: true; icon: @image-url("icons/clock.svg");      has-icon: true; primary: root.net-subtab == 3; clicked => { root.net-subtab = 3; } }
-                            GlassButton { label: "Luces OSC";                                 compact: true; icon: @image-url("icons/zap.svg");        has-icon: true; primary: root.net-subtab == 4; clicked => { root.net-subtab = 4; } }
+                            GlassButton { label: "Luces OSC";                                 compact: true; icon: @image-url("icons/zap.svg");        has-icon: true; primary: root.net-subtab == 3; clicked => { root.net-subtab = 3; } }
                         }
 
                         // Subtab 0: Transmisión LAN (Video / Letras / OBS — Puerto 8080, SIN Chat)
@@ -4402,86 +4943,8 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // Subtab 3: Reloj y Temporizador
+                        // Subtab 3: Luces OSC (Yggdrasil)
                         if root.net-subtab == 3 : ScrollView {
-                            vertical-stretch: 1;
-                            VerticalLayout {
-                                spacing: 12px;
-                                padding-right: 8px;
-
-                                HorizontalLayout {
-                                    spacing: 10px;
-                                    Rectangle {
-                                        horizontal-stretch: 1;
-                                        height: 98px;
-                                        border-radius: Theme.radius-md;
-                                        background: Theme.bg-surface-1;
-                                        border-width: 1px;
-                                        border-color: Theme.border-subtle;
-                                        VerticalLayout {
-                                            padding: 12px;
-                                            alignment: center;
-                                            Text { text: "HORA ACTUAL"; color: Theme.text-muted; font-size: 10.5px; font-weight: 700; horizontal-alignment: center; }
-                                            Text { text: root.clock-now-text; color: Theme.text-primary; font-size: 32px; font-weight: 800; horizontal-alignment: center; }
-                                        }
-                                    }
-                                    Rectangle {
-                                        horizontal-stretch: 1;
-                                        height: 98px;
-                                        border-radius: Theme.radius-md;
-                                        background: Theme.bg-surface-1;
-                                        border-width: 1px;
-                                        border-color: root.timer-running ? Theme.stage-amber : Theme.border-subtle;
-                                        VerticalLayout {
-                                            padding: 12px;
-                                            alignment: center;
-                                            Text { text: "CUENTA REGRESIVA"; color: Theme.stage-amber; font-size: 10.5px; font-weight: 700; horizontal-alignment: center; }
-                                            Text { text: root.timer-display-text; color: Theme.text-primary; font-size: 32px; font-weight: 800; horizontal-alignment: center; }
-                                        }
-                                    }
-                                }
-
-                                Rectangle {
-                                    border-radius: Theme.radius-md;
-                                    background: Theme.bg-surface-1;
-                                    border-width: 1px;
-                                    border-color: Theme.border-subtle;
-                                    VerticalLayout {
-                                        padding: 14px;
-                                        spacing: 10px;
-                                        HorizontalLayout {
-                                            spacing: 6px;
-                                            GlassButton { label: "1m";  compact: true; horizontal-stretch: 1; clicked => { root.timer-set-minutes(1); } }
-                                            GlassButton { label: "3m";  compact: true; horizontal-stretch: 1; clicked => { root.timer-set-minutes(3); } }
-                                            GlassButton { label: "5m";  compact: true; horizontal-stretch: 1; clicked => { root.timer-set-minutes(5); } }
-                                            GlassButton { label: "10m"; compact: true; horizontal-stretch: 1; clicked => { root.timer-set-minutes(10); } }
-                                            GlassButton { label: "15m"; compact: true; horizontal-stretch: 1; clicked => { root.timer-set-minutes(15); } }
-                                            GlassButton {
-                                                label: root.timer-running ? "Pausar" : "Iniciar";
-                                                icon: root.timer-running ? @image-url("icons/pause.svg") : @image-url("icons/play.svg");
-                                                has-icon: true;
-                                                primary: true;
-                                                clicked => { root.timer-toggle(); }
-                                            }
-                                            IconButton { icon: @image-url("icons/refresh.svg"); clicked => { root.timer-reset(); } }
-                                        }
-                                        SwitchRow {
-                                            title: "Proyectar Reloj / Cuenta Regresiva en Salida Público";
-                                            checked <=> root.show-clock-on-public;
-                                            toggled(v) => { root.clock-overlay-toggled(v); }
-                                        }
-                                        SwitchRow {
-                                            title: "Mostrar Cuenta Regresiva (desactivado = Hora Actual)";
-                                            checked <=> root.timer-mode-countdown;
-                                            toggled(v) => { root.clock-overlay-toggled(root.show-clock-on-public); }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Subtab 4: Luces OSC (Yggdrasil)
-                        if root.net-subtab == 4 : ScrollView {
                             vertical-stretch: 1;
                             VerticalLayout {
                                 spacing: 12px;
@@ -5945,46 +6408,26 @@ export component MainWindow inherits Window {
                                                     vertical-alignment: center;
                                                 }
 
-                                                if scr.show-clock && scr.clock-text != "" : Rectangle {
-                                                    x: parent.width - self.width - 8px;
-                                                    y: 7px;
-                                                    width: Math.max(58px, scr-clk.preferred-width + 14px);
-                                                    height: 22px;
-                                                    border-radius: 4px;
-                                                    background: #09090be6;
-                                                    border-width: 1px;
-                                                    border-color: #38bdf866;
-                                                    scr-clk := Text {
-                                                        text: scr.clock-text;
-                                                        color: #ffffff;
-                                                        font-size: 10.5px;
-                                                        font-weight: 800;
-                                                        horizontal-alignment: center;
-                                                        vertical-alignment: center;
-                                                    }
-                                                }
-
-                                                if scr.show-pleca && scr.pleca-title != "" : Rectangle {
-                                                    x: 8px;
-                                                    y: parent.height - 32px;
-                                                    width: Math.min(parent.width - 16px, 180px);
-                                                    height: 24px;
-                                                    border-radius: 3px;
-                                                    background: #09090be6;
-                                                    border-width: 1px;
-                                                    border-color: #a855f788;
-                                                    HorizontalLayout {
-                                                        padding-left: 7px;
-                                                        padding-right: 7px;
-                                                        Text {
-                                                            text: scr.pleca-title;
-                                                            color: #ffffff;
-                                                            font-size: 9.5px;
-                                                            font-weight: 700;
-                                                            vertical-alignment: center;
-                                                            overflow: elide;
-                                                        }
-                                                    }
+                                                if scr.show-clock && ((scr.ov-show-clock && scr.clock-text != "") || scr.ov-title != "" || scr.ov-sub != "") : CustomOverlayView {
+                                                    container-w: parent.width;
+                                                    container-h: parent.height;
+                                                    ui-scale: parent.width / 1920px;
+                                                    show-clock: scr.ov-show-clock;
+                                                    clock-text: scr.clock-text;
+                                                    title-text: scr.ov-title;
+                                                    sub-text: scr.ov-sub;
+                                                    text-color: scr.ov-text-color;
+                                                    bg-color: scr.ov-bg-color;
+                                                    bg-opacity: scr.ov-bg-opacity;
+                                                    show-border: scr.ov-show-border;
+                                                    accent-border-color: scr.ov-border-color;
+                                                    font-size: scr.ov-font-size;
+                                                    radius-px: scr.ov-radius;
+                                                    box-padding: scr.ov-box-padding;
+                                                    min-box-width: scr.ov-min-width;
+                                                    pos-preset: scr.ov-pos-preset;
+                                                    norm-x: scr.ov-pos-x;
+                                                    norm-y: scr.ov-pos-y;
                                                 }
 
                                                 if scr.alert-text != "" : Rectangle {
@@ -6476,43 +6919,27 @@ export component MainWindow inherits Window {
                                 box-padding: 3px;
                             }
 
-                            // Clock / Countdown Timer Overlay rendered live inside Vista en Vivo
-                            if root.preview-show-clock && root.preview-clock-text != "" : Rectangle {
-                                x: parent.width - self.width - 8px;
-                                y: 8px;
-                                width: Math.max(60px, pv-clk-txt.preferred-width + 16px);
-                                height: 22px;
-                                border-radius: 4px;
-                                background: #09090be0;
-                                border-width: 1px;
-                                border-color: #38bdf866;
-                                pv-clk-txt := Text {
-                                    text: root.preview-clock-text;
-                                    color: #ffffff;
-                                    font-size: 11px;
-                                    font-weight: 800;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                }
-                            }
-
-                            // Lower-Third / Pleca Overlay rendered live inside Vista en Vivo
-                            if root.preview-show-pleca && root.preview-pleca-title != "" : Rectangle {
-                                x: 10px;
-                                y: parent.height - 38px;
-                                width: Math.min(parent.width - 20px, 230px);
-                                height: 30px;
-                                border-radius: 4px;
-                                background: #09090be8;
-                                border-width: 1px;
-                                border-color: #a855f788;
-                                VerticalLayout {
-                                    padding-left: 8px;
-                                    padding-right: 8px;
-                                    alignment: center;
-                                    Text { text: root.preview-pleca-title; color: #ffffff; font-size: 10px; font-weight: 800; overflow: elide; }
-                                    if root.preview-pleca-sub != "" : Text { text: root.preview-pleca-sub; color: #a1a1aa; font-size: 8.5px; overflow: elide; }
-                                }
+                            // Dynamic Custom Overlay (Clock / Countdown / Count-up / Lower-Third) rendered live inside Vista en Vivo
+                            if root.preview-ov-active && ((root.preview-ov-show-clock && root.preview-ov-clock-text != "") || root.preview-ov-title != "" || root.preview-ov-sub != "") : CustomOverlayView {
+                                container-w: parent.width;
+                                container-h: parent.height;
+                                ui-scale: parent.width / 1920px;
+                                show-clock: root.preview-ov-show-clock;
+                                clock-text: root.preview-ov-clock-text;
+                                title-text: root.preview-ov-title;
+                                sub-text: root.preview-ov-sub;
+                                text-color: root.preview-ov-text-color;
+                                bg-color: root.preview-ov-bg-color;
+                                bg-opacity: root.preview-ov-bg-opacity;
+                                show-border: root.preview-ov-show-border;
+                                accent-border-color: root.preview-ov-border-color;
+                                font-size: root.preview-ov-font-size;
+                                radius-px: root.preview-ov-radius;
+                                box-padding: root.preview-ov-box-padding;
+                                min-box-width: root.preview-ov-min-width;
+                                pos-preset: root.preview-ov-pos-preset;
+                                norm-x: root.preview-ov-pos-x;
+                                norm-y: root.preview-ov-pos-y;
                             }
 
                             if root.active-public-alert != "" : Rectangle {
@@ -6789,6 +7216,37 @@ export component MainWindow inherits Window {
                                             }
                                         }
 
+                                        Rectangle {
+                                            height: 22px;
+                                            border-radius: 5px;
+                                            background: ov-ed-chip-ta.has-hover ? Theme.accent-soft : Theme.bg-surface-1;
+                                            border-width: 1px;
+                                            border-color: ov-ed-chip-ta.has-hover ? Theme.border-accent : Theme.border-subtle;
+                                            HorizontalLayout {
+                                                padding-left: 6px;
+                                                padding-right: 6px;
+                                                spacing: 3px;
+                                                Image {
+                                                    source: @image-url("icons/edit.svg");
+                                                    width: 10px;
+                                                    height: 10px;
+                                                    y: (parent.height - self.height) / 2;
+                                                    colorize: Theme.accent-strong;
+                                                }
+                                                Text {
+                                                    text: "Overlay";
+                                                    color: Theme.text-secondary;
+                                                    font-size: 9.5px;
+                                                    font-weight: 700;
+                                                    vertical-alignment: center;
+                                                }
+                                            }
+                                            ov-ed-chip-ta := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => { root.open-edit-active-overlay(); }
+                                            }
+                                        }
+
                                         if root.active-layers.length > 0 : Rectangle {
                                             height: 20px;
                                             border-radius: 4px;
@@ -6909,18 +7367,21 @@ export component MainWindow inherits Window {
                                                         }
                                                     }
 
-                                                    // Real miniature preview on pure black background for Clock / Timer layer
-                                                    if !lyr.has-thumbnail && lyr.id == "clock" : Rectangle {
+                                                    // Real miniature preview on pure black background for Clock / Custom Overlay layer
+                                                    if !lyr.has-thumbnail && (lyr.id == "clock" || lyr.id == "pleca") : Rectangle {
                                                         width: 100%;
                                                         height: 100%;
                                                         background: #000000;
                                                         Text {
-                                                            text: root.preview-clock-text != "" ? root.preview-clock-text : "00:00";
-                                                            color: #38bdf8;
-                                                            font-size: 7.5px;
+                                                            text: root.preview-ov-show-clock && root.preview-ov-clock-text != ""
+                                                                ? root.preview-ov-clock-text
+                                                                : (root.preview-ov-title != "" ? root.preview-ov-title : "OV");
+                                                            color: root.preview-ov-text-color;
+                                                            font-size: 7px;
                                                             font-weight: 800;
                                                             horizontal-alignment: center;
                                                             vertical-alignment: center;
+                                                            overflow: elide;
                                                         }
                                                     }
 
@@ -6941,33 +7402,6 @@ export component MainWindow inherits Window {
                                                                 x: 2px;
                                                                 width: parent.width - 4px;
                                                                 text: lyr.title;
-                                                                color: #ffffff;
-                                                                font-size: 4.5px;
-                                                                font-weight: 700;
-                                                                vertical-alignment: center;
-                                                                overflow: elide;
-                                                            }
-                                                        }
-                                                    }
-
-                                                    // Real miniature preview on pure black background for Pleca / Lower-Third
-                                                    if !lyr.has-thumbnail && lyr.id == "pleca" : Rectangle {
-                                                        width: 100%;
-                                                        height: 100%;
-                                                        background: #000000;
-                                                        Rectangle {
-                                                            x: 3px;
-                                                            y: parent.height - 10px;
-                                                            width: parent.width - 6px;
-                                                            height: 8px;
-                                                            border-radius: 1.5px;
-                                                            background: #18181b;
-                                                            border-width: 1px;
-                                                            border-color: #a855f7aa;
-                                                            Text {
-                                                                x: 2px;
-                                                                width: parent.width - 4px;
-                                                                text: root.preview-pleca-title;
                                                                 color: #ffffff;
                                                                 font-size: 4.5px;
                                                                 font-weight: 700;
@@ -8344,18 +8778,11 @@ export component MainWindow inherits Window {
                     clicked => { root.active-tab = 5; root.net-subtab = 2; root.net-menu-open = false; }
                 }
                 GlassButton {
-                    label: "Reloj y Temporizador";
-                    icon: @image-url("icons/clock.svg");
-                    has-icon: true;
-                    primary: root.active-tab == 5 && root.net-subtab == 3;
-                    clicked => { root.active-tab = 5; root.net-subtab = 3; root.net-menu-open = false; }
-                }
-                GlassButton {
                     label: "Luces OSC";
                     icon: @image-url("icons/zap.svg");
                     has-icon: true;
-                    primary: root.active-tab == 5 && root.net-subtab == 4;
-                    clicked => { root.active-tab = 5; root.net-subtab = 4; root.net-menu-open = false; }
+                    primary: root.active-tab == 5 && root.net-subtab == 3;
+                    clicked => { root.active-tab = 5; root.net-subtab = 3; root.net-menu-open = false; }
                 }
             }
         }

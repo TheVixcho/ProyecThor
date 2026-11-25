@@ -242,6 +242,7 @@ SlintApp::SlintApp()
     RefreshSavedStylesModel();
     RefreshMusicScanFoldersModel();
     RefreshBgDock();
+    LoadCustomOverlaysFromDisk();
     RefreshOverlayLayers();
     LoadChangelogText();
     CheckFirewallStatusAsync();
@@ -463,6 +464,8 @@ void SlintApp::BindCallbacks() {
         m_SearchQuery.clear();
         m_Main->set_search_query("");
         m_Main->set_song_editor_open(false);
+        m_OverlayEditorOpen = false;
+        m_Main->set_overlay_editor_open(false);
         if (tab == 13) {
             RefreshLibraryHub();
         } else if (tab == 0 || tab == 1 || tab == 2 || tab == 10) {
@@ -992,38 +995,49 @@ void SlintApp::BindCallbacks() {
         SyncScreenOutputs();
     });
 
-    // Clock & Timer (FIXED: immediate SyncClockOverlay + per-screen routing support!)
-    m_Main->on_timer_set_minutes([this](int mins) {
-        m_TimerInitialSec   = std::max(1, mins) * 60;
-        m_TimerRemainingSec = m_TimerInitialSec;
-        m_Main->set_timer_display_text(slint::SharedString(FormatCountdownSec(m_TimerRemainingSec)));
-        SyncClockOverlay();
-        RefreshActiveLayersModel();
-        RefreshScreenMatrixModel();
+    // Custom Overlay & Time/Clock Editor (per-screen & multi-screen routing)
+    m_Main->on_open_new_overlay_editor([this](bool withClock) {
+        OpenNewOverlayEditor(withClock);
     });
-    m_Main->on_timer_toggle([this]() {
-        m_TimerRunning = !m_TimerRunning;
-        m_Main->set_timer_running(m_TimerRunning);
-        SyncClockOverlay();
-        RefreshActiveLayersModel();
-        RefreshScreenMatrixModel();
+    m_Main->on_open_edit_overlay_editor([this](int idx) {
+        OpenEditOverlayEditor(idx);
     });
-    m_Main->on_timer_reset([this]() {
-        m_TimerRunning = false;
-        m_TimerRemainingSec = m_TimerInitialSec;
-        m_Main->set_timer_running(false);
-        m_Main->set_timer_display_text(slint::SharedString(FormatCountdownSec(m_TimerRemainingSec)));
-        SyncClockOverlay();
-        RefreshActiveLayersModel();
-        RefreshScreenMatrixModel();
+    m_Main->on_open_edit_active_overlay([this]() {
+        OpenEditActiveScreenOverlay();
     });
-    m_Main->on_clock_overlay_toggled([this](bool show) {
-        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
-            if (!IsScreenTargeted(i)) continue;
-            m_Screens[i].showClock = show;
-        }
-        SyncClockOverlay();
-        SyncScreenOutputs();
+    m_Main->on_save_overlay_editor([this](bool alsoApply) {
+        SaveOverlayEditor(alsoApply);
+    });
+    m_Main->on_apply_overlay_editor([this](int explicitTarget) {
+        SyncOverlayEditorStateFromUi();
+        ApplyOverlayConfigToTargets(m_EditingOverlay, explicitTarget);
+    });
+    m_Main->on_cancel_overlay_editor([this]() {
+        CancelOverlayEditor();
+    });
+    m_Main->on_ov_editor_set_minutes([this](int mins) {
+        OverlayEditorSetMinutes(mins);
+    });
+    m_Main->on_ov_editor_set_manual_time([this](slint::SharedString mStr, slint::SharedString sStr) {
+        OverlayEditorSetManualTime(std::string(mStr), std::string(sStr));
+    });
+    m_Main->on_ov_editor_timer_toggle([this]() {
+        OverlayEditorTimerToggle();
+    });
+    m_Main->on_ov_editor_timer_reset([this]() {
+        OverlayEditorTimerReset();
+    });
+    m_Main->on_ov_editor_select_text_color([this](int r, int g, int b) {
+        SetOverlayEditorTextColorRGB(static_cast<uint8_t>(r), static_cast<uint8_t>(g), static_cast<uint8_t>(b));
+    });
+    m_Main->on_ov_editor_select_bg_color([this](int r, int g, int b) {
+        SetOverlayEditorBgColorRGB(static_cast<uint8_t>(r), static_cast<uint8_t>(g), static_cast<uint8_t>(b));
+    });
+    m_Main->on_ov_editor_select_border_color([this](int r, int g, int b) {
+        SetOverlayEditorBorderColorRGB(static_cast<uint8_t>(r), static_cast<uint8_t>(g), static_cast<uint8_t>(b));
+    });
+    m_Main->on_ov_editor_props_changed([this]() {
+        SyncOverlayEditorStateFromUi();
     });
 
     // Photoshop-Style Real Active Layers & Multi-Screen / Multi-Room Matrix
@@ -1125,15 +1139,6 @@ void SlintApp::BindCallbacks() {
     m_Main->on_overlay_layer_selected([this](int idx) { SelectOverlayLayer(idx); });
     m_Main->on_overlay_layer_add_to_queue([this](int idx) { AddOverlayLayerToQueue(idx); });
     m_Main->on_dock_solid_color_selected([this](int idx) { SelectSolidBgColor(idx); });
-    m_Main->on_custom_overlay_toggled([this](slint::SharedString t, slint::SharedString s, bool show) {
-        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
-            if (!IsScreenTargeted(i)) continue;
-            m_Screens[i].showPleca  = show;
-            m_Screens[i].plecaTitle = std::string(t);
-            m_Screens[i].plecaSub   = std::string(s);
-        }
-        SyncScreenOutputs();
-    });
     m_Main->on_open_legacy_imgui([this]() { LaunchLegacyImGui(); });
     m_Main->on_fsr_changed([this](bool enabled) {
         m_UpscalerMode = enabled ? (m_UpscalerMode > 0 ? m_UpscalerMode : 2) : 0;
@@ -1531,18 +1536,19 @@ void SlintApp::ClearOverlay() {
         m_Screens[i].overlayPath.clear();
         m_Screens[i].hasOverlayImage = false;
         m_Screens[i].hasOverlayThumb = false;
+        m_Screens[i].hasCustomOverlay = false;
     }
     RefreshOverlayQueueModel();
     RefreshOverlayLayers();
+    SyncClockOverlay();
     SyncScreenOutputs();
 }
 
 void SlintApp::ClearAll() {
     for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
         if (!IsScreenTargeted(i)) continue;
-        m_Screens[i].showClock = false;
+        m_Screens[i].hasCustomOverlay = false;
         m_Screens[i].alertText.clear();
-        m_Screens[i].showPleca = false;
     }
     ClearText();
     ClearBackground();
@@ -1983,6 +1989,8 @@ void SlintApp::OpenNewStyleEditor() {
     m_Main->set_editing_style_name("Mi Estilo " + slint::SharedString(std::to_string(m_SavedStyles.size() + 1)));
     m_Main->set_style_editor_box(0);
     m_Main->set_style_editor_open(true);
+    m_OverlayEditorOpen = false;
+    m_Main->set_overlay_editor_open(false);
 }
 
 void SlintApp::OpenEditStyleEditor(int idx) {
@@ -1993,6 +2001,8 @@ void SlintApp::OpenEditStyleEditor(int idx) {
     m_Main->set_editing_style_name(slint::SharedString(m_SavedStyles[idx].name));
     m_Main->set_style_editor_box(0);
     m_Main->set_style_editor_open(true);
+    m_OverlayEditorOpen = false;
+    m_Main->set_overlay_editor_open(false);
 }
 
 void SlintApp::SaveStyleEditor(const std::string& rawName) {
@@ -3326,10 +3336,25 @@ void SlintApp::AddSelectedOverlayToQueue() {
 
 void SlintApp::ToggleOverlayQueueItem(int index) {
     if (index < 0 || index >= static_cast<int>(m_OverlayQueue.size())) return;
-    const auto& o = m_OverlayQueue[index];
+    const auto o = m_OverlayQueue[index];
+    if (o.isCustom) {
+        for (const auto& cov : m_CustomOverlays) {
+            if (cov.path == o.path) {
+                ApplyOverlayConfigToTargets(cov);
+                return;
+            }
+        }
+        return;
+    }
     int refScr = (m_InspectedScreenIdx >= 0 && m_InspectedScreenIdx < static_cast<int>(m_Screens.size())) ? m_InspectedScreenIdx : 0;
     if (m_Screens[refScr].overlayPath == o.path && m_Screens[refScr].hasOverlayImage) {
-        ClearOverlay();
+        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+            if (!IsScreenTargeted(i)) continue;
+            RemoveLayerOnScreen(i, "overlay");
+        }
+        RefreshOverlayQueueModel();
+        RefreshOverlayLayers();
+        SyncScreenOutputs();
         return;
     }
     m_ActiveOverlayPath = o.path;
@@ -3352,11 +3377,17 @@ void SlintApp::ToggleOverlayQueueItem(int index) {
 
 void SlintApp::RefreshOverlayQueueModel() {
     m_OverlayQueueModel->clear();
-    bool live = m_Main->get_has_live_overlay_image();
+    int refScr = (m_InspectedScreenIdx >= 0 && m_InspectedScreenIdx < static_cast<int>(m_Screens.size())) ? m_InspectedScreenIdx : 0;
+    const bool hasImgLive = !m_Screens.empty() && m_Screens[refScr].hasOverlayImage;
+    const std::string activeImgPath = !m_Screens.empty() ? m_Screens[refScr].overlayPath : m_ActiveOverlayPath;
+    const bool hasCovLive = !m_Screens.empty() && m_Screens[refScr].hasCustomOverlay;
+    const std::string activeCovPath = hasCovLive ? m_Screens[refScr].customOverlay.path : "";
     for (const auto& o : m_OverlayQueue) {
         QueueItem item;
         item.title = slint::SharedString(o.title);
-        item.kind  = slint::SharedString((live && m_ActiveOverlayPath == o.path) ? "● ON" : "PNG");
+        bool isOn = o.isCustom ? (hasCovLive && activeCovPath == o.path)
+                               : (hasImgLive && activeImgPath == o.path);
+        item.kind  = slint::SharedString(isOn ? "● ON" : (o.isCustom ? "TIEMPO" : "PNG"));
         m_OverlayQueueModel->push_back(item);
     }
 }
@@ -3945,21 +3976,30 @@ void SlintApp::OnTick() {
         }
     }
 
-    // 3. Clock & Countdown (update every ~1 second = m_TargetFps ticks)
+    // 3. Clock & Custom Overlay Timers (update every ~1 second = m_TargetFps ticks)
     const int oneSecTicks = std::max(1, m_TargetFps);
     if (++m_TickCounter >= oneSecTicks) {
         m_TickCounter = 0;
 
-        if (m_TimerRunning && m_TimerRemainingSec > 0) {
-            --m_TimerRemainingSec;
-            if (m_TimerRemainingSec == 0) {
-                m_TimerRunning = false;
-                m_Main->set_timer_running(false);
+        auto tickConfig = [](CustomOverlayConfig& ov) {
+            if (!ov.showClock || !ov.timerRunning) return;
+            if (ov.clockMode == 1) {
+                if (ov.currentSec > 0) --ov.currentSec;
+                if (ov.currentSec == 0) ov.timerRunning = false;
+            } else if (ov.clockMode == 2) {
+                ++ov.currentSec;
             }
+        };
+
+        for (auto& cov : m_CustomOverlays) tickConfig(cov);
+        if (m_OverlayEditorOpen) tickConfig(m_EditingOverlay);
+        for (auto& sc : m_Screens) {
+            if (sc.hasCustomOverlay) tickConfig(sc.customOverlay);
         }
+
         SyncClockOverlay();
         if (m_InspectedScreenIdx >= 0 && m_InspectedScreenIdx < static_cast<int>(m_Screens.size()) &&
-            m_Screens[m_InspectedScreenIdx].showClock) {
+            m_Screens[m_InspectedScreenIdx].hasCustomOverlay) {
             RefreshActiveLayersModel();
         }
         if (m_ActiveTab == 14) {
@@ -5230,16 +5270,558 @@ void SlintApp::SelectDockBackground(int index) {
     SyncScreenOutputs();
 }
 
+std::string SlintApp::FormatOverlayClockText(const CustomOverlayConfig& cfg) const {
+    if (!cfg.showClock) return "";
+    if (cfg.clockMode == 0) {
+        auto now = std::chrono::system_clock::now();
+        std::time_t tt = std::chrono::system_clock::to_time_t(now);
+        std::tm localTm{};
+#ifdef _WIN32
+        localtime_s(&localTm, &tt);
+#else
+        localtime_r(&tt, &localTm);
+#endif
+        char buf[32];
+        switch (cfg.timeFormat) {
+            case 1: std::strftime(buf, sizeof(buf), "%H:%M", &localTm); break;
+            case 2: std::strftime(buf, sizeof(buf), "%I:%M %p", &localTm); break;
+            case 3: std::strftime(buf, sizeof(buf), "%I:%M:%S %p", &localTm); break;
+            default: std::strftime(buf, sizeof(buf), "%H:%M:%S", &localTm); break;
+        }
+        return std::string(buf);
+    }
+
+    int sec = std::max(0, cfg.currentSec);
+    int h   = sec / 3600;
+    int m   = (sec % 3600) / 60;
+    int s   = sec % 60;
+    char buf[32];
+    if (h > 0 || cfg.timeFormat == 0 || cfg.timeFormat == 3) {
+        std::snprintf(buf, sizeof(buf), "%02d:%02d:%02d", h, m, s);
+    } else if (cfg.timeFormat == 1) {
+        std::snprintf(buf, sizeof(buf), "%02d:%02d", sec / 60, s);
+    } else {
+        std::snprintf(buf, sizeof(buf), "%02d:%02d", sec / 60, s);
+    }
+    return std::string(buf);
+}
+
+void SlintApp::LoadCustomOverlaysFromDisk() {
+    m_CustomOverlays.clear();
+    fs::path dir(ProyecThor::OverlaysPath());
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+
+    auto writeCfgJson = [](const fs::path& fp, const CustomOverlayConfig& ov) -> bool {
+        nlohmann::json j;
+        j["id"]           = ov.id;
+        j["name"]         = ov.name;
+        j["showClock"]    = ov.showClock;
+        j["clockMode"]    = ov.clockMode;
+        j["timeFormat"]   = ov.timeFormat;
+        j["initialSec"]   = ov.initialSec;
+        j["titleText"]    = ov.titleText;
+        j["subText"]      = ov.subText;
+        j["textR"]        = ov.textR;
+        j["textG"]        = ov.textG;
+        j["textB"]        = ov.textB;
+        j["bgR"]          = ov.bgR;
+        j["bgG"]          = ov.bgG;
+        j["bgB"]          = ov.bgB;
+        j["bgOpacity"]    = ov.bgOpacity;
+        j["showBorder"]   = ov.showBorder;
+        j["borderR"]      = ov.borderR;
+        j["borderG"]      = ov.borderG;
+        j["borderB"]      = ov.borderB;
+        j["fontSize"]     = ov.fontSize;
+        j["borderRadius"] = ov.borderRadius;
+        j["boxPadding"]   = ov.boxPadding;
+        j["minBoxWidth"]  = ov.minBoxWidth;
+        j["posPreset"]    = ov.posPreset;
+        j["posX"]         = ov.posX;
+        j["posY"]         = ov.posY;
+        std::ofstream out(fp, std::ios::binary);
+        if (!out.is_open()) return false;
+        out << j.dump(2);
+        return out.good();
+    };
+
+    std::vector<fs::path> found;
+    if (fs::exists(dir, ec) && fs::is_directory(dir, ec)) {
+        for (const auto& entry : fs::directory_iterator(dir, ec)) {
+            if (!entry.is_regular_file(ec)) continue;
+            if (HasExtension(entry.path(), { ".ptoverlay" })) {
+                found.push_back(entry.path());
+            }
+        }
+    }
+    std::sort(found.begin(), found.end());
+
+    // Seed 2 starter overlays only when directory has zero custom overlays yet
+    if (found.empty()) {
+        CustomOverlayConfig liveClk;
+        liveClk.id         = "reloj_en_vivo";
+        liveClk.name       = "Reloj en Vivo";
+        liveClk.showClock  = true;
+        liveClk.clockMode  = 0;
+        liveClk.timeFormat = 0;
+        liveClk.posPreset  = 3;
+        liveClk.fontSize   = 44.0f;
+        fs::path p1 = dir / "Reloj_en_Vivo.ptoverlay";
+        if (writeCfgJson(p1, liveClk)) found.push_back(p1);
+
+        CustomOverlayConfig cd5;
+        cd5.id         = "cuenta_regresiva_5m";
+        cd5.name       = "Cuenta Regresiva 5m";
+        cd5.showClock  = true;
+        cd5.clockMode  = 1;
+        cd5.timeFormat = 4;
+        cd5.initialSec = 300;
+        cd5.currentSec = 300;
+        cd5.titleText  = "INICIAMOS EN";
+        cd5.posPreset  = 0;
+        cd5.fontSize   = 68.0f;
+        cd5.borderR = 245; cd5.borderG = 158; cd5.borderB = 11;
+        fs::path p2 = dir / "Cuenta_Regresiva_5m.ptoverlay";
+        if (writeCfgJson(p2, cd5)) found.push_back(p2);
+    }
+
+    for (const auto& fp : found) {
+        try {
+            std::ifstream in(fp, std::ios::binary);
+            if (!in.is_open()) continue;
+            nlohmann::json j = nlohmann::json::parse(in, nullptr, false);
+            if (j.is_discarded() || !j.is_object()) continue;
+
+            CustomOverlayConfig ov;
+            ov.path         = fp.string();
+            ov.id           = j.value("id", fp.stem().string());
+            ov.name         = j.value("name", fp.stem().string());
+            ov.showClock    = j.value("showClock", true);
+            ov.clockMode    = std::clamp(j.value("clockMode", 0), 0, 2);
+            ov.timeFormat   = std::clamp(j.value("timeFormat", 0), 0, 4);
+            ov.initialSec   = std::max(1, j.value("initialSec", 300));
+            ov.currentSec   = (ov.clockMode == 1) ? ov.initialSec : 0;
+            ov.timerRunning = false;
+            ov.titleText    = j.value("titleText", "");
+            ov.subText      = j.value("subText", "");
+            ov.textR        = static_cast<uint8_t>(std::clamp(j.value("textR", 255), 0, 255));
+            ov.textG        = static_cast<uint8_t>(std::clamp(j.value("textG", 255), 0, 255));
+            ov.textB        = static_cast<uint8_t>(std::clamp(j.value("textB", 255), 0, 255));
+            ov.bgR          = static_cast<uint8_t>(std::clamp(j.value("bgR", 9), 0, 255));
+            ov.bgG          = static_cast<uint8_t>(std::clamp(j.value("bgG", 9), 0, 255));
+            ov.bgB          = static_cast<uint8_t>(std::clamp(j.value("bgB", 11), 0, 255));
+            ov.bgOpacity    = std::clamp(j.value("bgOpacity", 0.82f), 0.0f, 1.0f);
+            ov.showBorder   = j.value("showBorder", true);
+            ov.borderR      = static_cast<uint8_t>(std::clamp(j.value("borderR", 56), 0, 255));
+            ov.borderG      = static_cast<uint8_t>(std::clamp(j.value("borderG", 189), 0, 255));
+            ov.borderB      = static_cast<uint8_t>(std::clamp(j.value("borderB", 248), 0, 255));
+            ov.fontSize     = std::clamp(j.value("fontSize", 42.0f), 16.0f, 280.0f);
+            ov.borderRadius = std::clamp(j.value("borderRadius", 12.0f), 0.0f, 48.0f);
+            ov.boxPadding   = std::clamp(j.value("boxPadding", 16.0f), 6.0f, 100.0f);
+            ov.minBoxWidth  = std::clamp(j.value("minBoxWidth", 0.0f), 0.0f, 1800.0f);
+            ov.posPreset    = std::clamp(j.value("posPreset", 3), 0, 7);
+            ov.posX         = std::clamp(j.value("posX", 0.85f), 0.05f, 0.95f);
+            ov.posY         = std::clamp(j.value("posY", 0.10f), 0.05f, 0.95f);
+            m_CustomOverlays.push_back(std::move(ov));
+        } catch (...) {}
+    }
+}
+
+bool SlintApp::SaveCustomOverlayToDisk(CustomOverlayConfig& cfg) {
+    fs::path dir(ProyecThor::OverlaysPath());
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+
+    std::string cleanName = cfg.name;
+    while (!cleanName.empty() && cleanName.front() == ' ') cleanName.erase(cleanName.begin());
+    while (!cleanName.empty() && cleanName.back() == ' ')  cleanName.pop_back();
+    if (cleanName.empty()) cleanName = "Overlay Sin Título";
+    cfg.name = cleanName;
+
+    if (cfg.path.empty()) {
+        std::string stem = SanitizeFilename(cleanName);
+        fs::path target = dir / (stem + ".ptoverlay");
+        if (fs::exists(target, ec)) {
+            for (int n = 1; n < 1000; ++n) {
+                fs::path cand = dir / (stem + "_" + std::to_string(n) + ".ptoverlay");
+                if (!fs::exists(cand, ec)) { target = cand; break; }
+            }
+        }
+        cfg.path = target.string();
+        cfg.id   = target.stem().string();
+    }
+
+    nlohmann::json j;
+    j["id"]           = cfg.id;
+    j["name"]         = cfg.name;
+    j["showClock"]    = cfg.showClock;
+    j["clockMode"]    = cfg.clockMode;
+    j["timeFormat"]   = cfg.timeFormat;
+    j["initialSec"]   = cfg.initialSec;
+    j["titleText"]    = cfg.titleText;
+    j["subText"]      = cfg.subText;
+    j["textR"]        = cfg.textR;
+    j["textG"]        = cfg.textG;
+    j["textB"]        = cfg.textB;
+    j["bgR"]          = cfg.bgR;
+    j["bgG"]          = cfg.bgG;
+    j["bgB"]          = cfg.bgB;
+    j["bgOpacity"]    = cfg.bgOpacity;
+    j["showBorder"]   = cfg.showBorder;
+    j["borderR"]      = cfg.borderR;
+    j["borderG"]      = cfg.borderG;
+    j["borderB"]      = cfg.borderB;
+    j["fontSize"]     = cfg.fontSize;
+    j["borderRadius"] = cfg.borderRadius;
+    j["boxPadding"]   = cfg.boxPadding;
+    j["minBoxWidth"]  = cfg.minBoxWidth;
+    j["posPreset"]    = cfg.posPreset;
+    j["posX"]         = cfg.posX;
+    j["posY"]         = cfg.posY;
+
+    std::ofstream out(cfg.path, std::ios::binary);
+    if (!out.is_open()) return false;
+    out << j.dump(2);
+    return out.good();
+}
+
+void SlintApp::SyncOverlayEditorUiFromState() {
+    char secBuf[8];
+    std::snprintf(secBuf, sizeof(secBuf), "%02d", std::max(0, m_EditingOverlay.initialSec % 60));
+    m_Main->set_ov_ed_name(slint::SharedString(m_EditingOverlay.name));
+    m_Main->set_ov_ed_show_clock(m_EditingOverlay.showClock);
+    m_Main->set_ov_ed_clock_mode(m_EditingOverlay.clockMode);
+    m_Main->set_ov_ed_time_format(m_EditingOverlay.timeFormat);
+    m_Main->set_ov_ed_initial_min(std::max(0, m_EditingOverlay.initialSec / 60));
+    m_Main->set_ov_ed_manual_min(slint::SharedString(std::to_string(std::max(0, m_EditingOverlay.initialSec / 60))));
+    m_Main->set_ov_ed_manual_sec(slint::SharedString(secBuf));
+    m_Main->set_ov_ed_timer_running(m_EditingOverlay.timerRunning);
+    m_Main->set_ov_ed_clock_preview(slint::SharedString(FormatOverlayClockText(m_EditingOverlay)));
+    m_Main->set_ov_ed_title(slint::SharedString(m_EditingOverlay.titleText));
+    m_Main->set_ov_ed_sub(slint::SharedString(m_EditingOverlay.subText));
+    m_Main->set_ov_ed_text_color(slint::Color::from_rgb_uint8(m_EditingOverlay.textR, m_EditingOverlay.textG, m_EditingOverlay.textB));
+    m_Main->set_ov_ed_text_r(static_cast<float>(m_EditingOverlay.textR));
+    m_Main->set_ov_ed_text_g(static_cast<float>(m_EditingOverlay.textG));
+    m_Main->set_ov_ed_text_b(static_cast<float>(m_EditingOverlay.textB));
+    m_Main->set_ov_ed_bg_color(slint::Color::from_rgb_uint8(m_EditingOverlay.bgR, m_EditingOverlay.bgG, m_EditingOverlay.bgB));
+    m_Main->set_ov_ed_bg_opacity(m_EditingOverlay.bgOpacity);
+    m_Main->set_ov_ed_show_border(m_EditingOverlay.showBorder);
+    m_Main->set_ov_ed_border_color(slint::Color::from_rgb_uint8(m_EditingOverlay.borderR, m_EditingOverlay.borderG, m_EditingOverlay.borderB));
+    m_Main->set_ov_ed_font_size(m_EditingOverlay.fontSize);
+    m_Main->set_ov_ed_radius(m_EditingOverlay.borderRadius);
+    m_Main->set_ov_ed_box_padding(m_EditingOverlay.boxPadding);
+    m_Main->set_ov_ed_min_width(m_EditingOverlay.minBoxWidth);
+    m_Main->set_ov_ed_pos_preset(m_EditingOverlay.posPreset);
+    m_Main->set_ov_ed_pos_x(m_EditingOverlay.posX);
+    m_Main->set_ov_ed_pos_y(m_EditingOverlay.posY);
+}
+
+void SlintApp::SyncOverlayEditorStateFromUi() {
+    m_EditingOverlay.name         = std::string(m_Main->get_ov_ed_name());
+    m_EditingOverlay.showClock    = m_Main->get_ov_ed_show_clock();
+    int oldMode                   = m_EditingOverlay.clockMode;
+    m_EditingOverlay.clockMode    = std::clamp(m_Main->get_ov_ed_clock_mode(), 0, 2);
+    if (oldMode != m_EditingOverlay.clockMode) {
+        m_EditingOverlay.timerRunning = false;
+        m_EditingOverlay.currentSec   = (m_EditingOverlay.clockMode == 1) ? m_EditingOverlay.initialSec : 0;
+        m_Main->set_ov_ed_timer_running(false);
+    }
+    m_EditingOverlay.timeFormat   = std::clamp(m_Main->get_ov_ed_time_format(), 0, 4);
+    m_EditingOverlay.titleText    = std::string(m_Main->get_ov_ed_title());
+    m_EditingOverlay.subText      = std::string(m_Main->get_ov_ed_sub());
+    m_EditingOverlay.textR        = static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(m_Main->get_ov_ed_text_r())), 0, 255));
+    m_EditingOverlay.textG        = static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(m_Main->get_ov_ed_text_g())), 0, 255));
+    m_EditingOverlay.textB        = static_cast<uint8_t>(std::clamp(static_cast<int>(std::round(m_Main->get_ov_ed_text_b())), 0, 255));
+    m_EditingOverlay.bgOpacity    = std::clamp(m_Main->get_ov_ed_bg_opacity(), 0.0f, 1.0f);
+    m_EditingOverlay.showBorder   = m_Main->get_ov_ed_show_border();
+    m_EditingOverlay.fontSize     = std::clamp(m_Main->get_ov_ed_font_size(), 16.0f, 280.0f);
+    m_EditingOverlay.borderRadius = std::clamp(m_Main->get_ov_ed_radius(), 0.0f, 48.0f);
+    m_EditingOverlay.boxPadding   = std::clamp(m_Main->get_ov_ed_box_padding(), 6.0f, 100.0f);
+    m_EditingOverlay.minBoxWidth  = std::clamp(m_Main->get_ov_ed_min_width(), 0.0f, 1800.0f);
+    m_EditingOverlay.posPreset    = std::clamp(m_Main->get_ov_ed_pos_preset(), 0, 7);
+    m_EditingOverlay.posX         = std::clamp(m_Main->get_ov_ed_pos_x(), 0.05f, 0.95f);
+    m_EditingOverlay.posY         = std::clamp(m_Main->get_ov_ed_pos_y(), 0.05f, 0.95f);
+
+    m_Main->set_ov_ed_text_color(slint::Color::from_rgb_uint8(m_EditingOverlay.textR, m_EditingOverlay.textG, m_EditingOverlay.textB));
+    m_Main->set_ov_ed_clock_preview(slint::SharedString(FormatOverlayClockText(m_EditingOverlay)));
+}
+
+void SlintApp::OpenNewOverlayEditor(bool withClock) {
+    m_EditingOverlayIdx = -1;
+    m_EditingOverlay = CustomOverlayConfig{};
+    m_EditingOverlay.name      = withClock ? ("Overlay Tiempo " + std::to_string(m_CustomOverlays.size() + 1))
+                                           : ("Overlay Texto " + std::to_string(m_CustomOverlays.size() + 1));
+    m_EditingOverlay.showClock = withClock;
+    if (!withClock) {
+        m_EditingOverlay.titleText = "Iglesia Central";
+        m_EditingOverlay.subText   = "Bienvenidos al Servicio";
+        m_EditingOverlay.posPreset = 4;
+        m_EditingOverlay.fontSize  = 34.0f;
+    }
+    m_OverlayEditorOpen = true;
+    m_Main->set_overlay_editor_open(true);
+    m_Main->set_song_editor_open(false);
+    SyncOverlayEditorUiFromState();
+}
+
+void SlintApp::OpenEditOverlayEditor(int layerIndex) {
+    if (layerIndex < 0 || layerIndex >= static_cast<int>(m_OverlayLayerEntries.size())) return;
+    const auto& entry = m_OverlayLayerEntries[layerIndex];
+    if (!entry.isCustomOverlay || entry.customOverlayIdx < 0 ||
+        entry.customOverlayIdx >= static_cast<int>(m_CustomOverlays.size())) return;
+    m_EditingOverlayIdx = entry.customOverlayIdx;
+    m_EditingOverlay    = m_CustomOverlays[m_EditingOverlayIdx];
+    m_OverlayEditorOpen = true;
+    m_Main->set_overlay_editor_open(true);
+    m_Main->set_song_editor_open(false);
+    SyncOverlayEditorUiFromState();
+}
+
+void SlintApp::OpenEditActiveScreenOverlay() {
+    int idx = std::clamp(m_InspectedScreenIdx, 0, static_cast<int>(m_Screens.size()) - 1);
+    const auto& sc = m_Screens[idx];
+    if (sc.hasCustomOverlay) {
+        m_EditingOverlayIdx = -1;
+        for (int i = 0; i < static_cast<int>(m_CustomOverlays.size()); ++i) {
+            if (!sc.customOverlay.path.empty() && m_CustomOverlays[i].path == sc.customOverlay.path) {
+                m_EditingOverlayIdx = i;
+                break;
+            }
+        }
+        m_EditingOverlay = sc.customOverlay;
+        m_OverlayEditorOpen = true;
+        m_Main->set_overlay_editor_open(true);
+        m_Main->set_song_editor_open(false);
+        SyncOverlayEditorUiFromState();
+    } else {
+        OpenNewOverlayEditor(true);
+    }
+}
+
+void SlintApp::SyncOverlayTimerToAll(const CustomOverlayConfig& src) {
+    if (src.path.empty()) return;
+    for (auto& cov : m_CustomOverlays) {
+        if (cov.path == src.path) {
+            cov.initialSec   = src.initialSec;
+            cov.currentSec   = src.currentSec;
+            cov.timerRunning = src.timerRunning;
+            cov.clockMode    = src.clockMode;
+            cov.timeFormat   = src.timeFormat;
+        }
+    }
+    for (auto& sc : m_Screens) {
+        if (sc.hasCustomOverlay && sc.customOverlay.path == src.path) {
+            sc.customOverlay.initialSec   = src.initialSec;
+            sc.customOverlay.currentSec   = src.currentSec;
+            sc.customOverlay.timerRunning = src.timerRunning;
+            sc.customOverlay.clockMode    = src.clockMode;
+            sc.customOverlay.timeFormat   = src.timeFormat;
+        }
+    }
+}
+
+void SlintApp::ApplyOverlayConfigToTargets(const CustomOverlayConfig& cfg, int explicitTargetMode) {
+    int prevTarget = m_OutputTargetMode;
+    if (explicitTargetMode >= 0) {
+        m_OutputTargetMode = explicitTargetMode;
+        m_Main->set_output_target_mode(m_OutputTargetMode);
+        if (m_OutputTargetMode >= 1 && (m_OutputTargetMode - 1) < static_cast<int>(m_Screens.size())) {
+            m_InspectedScreenIdx = m_OutputTargetMode - 1;
+            m_Main->set_inspected_screen_idx(m_InspectedScreenIdx);
+        }
+    }
+    for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+        if (!IsScreenTargeted(i)) continue;
+        m_Screens[i].customOverlay    = cfg;
+        m_Screens[i].hasCustomOverlay = true;
+    }
+    if (explicitTargetMode >= 0) {
+        // Keep user's selected explicit target visible in monitor
+    } else {
+        m_OutputTargetMode = prevTarget;
+    }
+    RefreshOverlayQueueModel();
+    RefreshOverlayLayers();
+    SyncClockOverlay();
+    SyncScreenOutputs();
+}
+
+void SlintApp::SaveOverlayEditor(bool alsoApply) {
+    SyncOverlayEditorStateFromUi();
+    SaveCustomOverlayToDisk(m_EditingOverlay);
+
+    if (m_EditingOverlayIdx >= 0 && m_EditingOverlayIdx < static_cast<int>(m_CustomOverlays.size())) {
+        m_CustomOverlays[m_EditingOverlayIdx] = m_EditingOverlay;
+    } else {
+        m_CustomOverlays.push_back(m_EditingOverlay);
+        m_EditingOverlayIdx = static_cast<int>(m_CustomOverlays.size()) - 1;
+    }
+
+    // Update any screen or queue entry referencing this overlay path
+    for (auto& oq : m_OverlayQueue) {
+        if (oq.isCustom && oq.path == m_EditingOverlay.path) {
+            oq.title = m_EditingOverlay.name;
+        }
+    }
+    for (auto& sc : m_Screens) {
+        if (sc.hasCustomOverlay && sc.customOverlay.path == m_EditingOverlay.path) {
+            sc.customOverlay = m_EditingOverlay;
+        }
+    }
+
+    if (alsoApply) {
+        ApplyOverlayConfigToTargets(m_EditingOverlay);
+    } else {
+        RefreshOverlayQueueModel();
+        RefreshOverlayLayers();
+        SyncClockOverlay();
+        SyncScreenOutputs();
+    }
+    m_OverlayEditorOpen = false;
+    m_Main->set_overlay_editor_open(false);
+    AppendDebugLog("Overlay guardado: " + m_EditingOverlay.name);
+}
+
+void SlintApp::CancelOverlayEditor() {
+    m_OverlayEditorOpen = false;
+    m_Main->set_overlay_editor_open(false);
+}
+
+void SlintApp::OverlayEditorSetMinutes(int mins) {
+    OverlayEditorSetManualTime(std::to_string(std::max(1, mins)), "00");
+}
+
+void SlintApp::OverlayEditorSetManualTime(const std::string& minStr, const std::string& secStr) {
+    auto parseInt = [](const std::string& raw) -> int {
+        int val = 0;
+        bool any = false;
+        for (unsigned char c : raw) {
+            if (std::isdigit(c)) {
+                val = std::min(val * 10 + (c - '0'), 99999);
+                any = true;
+            }
+        }
+        return any ? val : 0;
+    };
+
+    int total = 0;
+    if (minStr.find(':') != std::string::npos) {
+        std::vector<int> parts;
+        std::stringstream ss(minStr);
+        std::string tok;
+        while (std::getline(ss, tok, ':')) parts.push_back(parseInt(tok));
+        if (parts.size() >= 3) {
+            total = parts[0] * 3600 + parts[1] * 60 + parts[2];
+        } else if (parts.size() == 2) {
+            total = parts[0] * 60 + parts[1];
+        } else if (parts.size() == 1) {
+            total = parts[0] * 60;
+        }
+    } else {
+        int mins = std::clamp(parseInt(minStr), 0, 999);
+        int secs = std::clamp(parseInt(secStr), 0, 3599);
+        total = mins * 60 + secs;
+    }
+
+    total = std::clamp(total, 1, 359999);
+    int outMin = total / 60;
+    int outSec = total % 60;
+    char secBuf[8];
+    std::snprintf(secBuf, sizeof(secBuf), "%02d", outSec);
+
+    m_EditingOverlay.initialSec = total;
+    m_EditingOverlay.currentSec = total;
+    m_Main->set_ov_ed_initial_min(outMin);
+    m_Main->set_ov_ed_manual_min(slint::SharedString(std::to_string(outMin)));
+    m_Main->set_ov_ed_manual_sec(slint::SharedString(secBuf));
+    m_Main->set_ov_ed_clock_preview(slint::SharedString(FormatOverlayClockText(m_EditingOverlay)));
+    SyncOverlayTimerToAll(m_EditingOverlay);
+    SyncClockOverlay();
+}
+
+void SlintApp::OverlayEditorTimerToggle() {
+    m_EditingOverlay.timerRunning = !m_EditingOverlay.timerRunning;
+    m_Main->set_ov_ed_timer_running(m_EditingOverlay.timerRunning);
+    SyncOverlayTimerToAll(m_EditingOverlay);
+    SyncClockOverlay();
+}
+
+void SlintApp::OverlayEditorTimerReset() {
+    m_EditingOverlay.timerRunning = false;
+    m_EditingOverlay.currentSec   = (m_EditingOverlay.clockMode == 1) ? m_EditingOverlay.initialSec : 0;
+    m_Main->set_ov_ed_timer_running(false);
+    m_Main->set_ov_ed_clock_preview(slint::SharedString(FormatOverlayClockText(m_EditingOverlay)));
+    SyncOverlayTimerToAll(m_EditingOverlay);
+    SyncClockOverlay();
+}
+
+void SlintApp::SetOverlayEditorTextColorRGB(uint8_t r, uint8_t g, uint8_t b) {
+    m_EditingOverlay.textR = r; m_EditingOverlay.textG = g; m_EditingOverlay.textB = b;
+    m_Main->set_ov_ed_text_r(static_cast<float>(r));
+    m_Main->set_ov_ed_text_g(static_cast<float>(g));
+    m_Main->set_ov_ed_text_b(static_cast<float>(b));
+    m_Main->set_ov_ed_text_color(slint::Color::from_rgb_uint8(r, g, b));
+}
+
+void SlintApp::SetOverlayEditorBgColorRGB(uint8_t r, uint8_t g, uint8_t b) {
+    m_EditingOverlay.bgR = r; m_EditingOverlay.bgG = g; m_EditingOverlay.bgB = b;
+    m_Main->set_ov_ed_bg_color(slint::Color::from_rgb_uint8(r, g, b));
+}
+
+void SlintApp::SetOverlayEditorBorderColorRGB(uint8_t r, uint8_t g, uint8_t b) {
+    m_EditingOverlay.borderR = r; m_EditingOverlay.borderG = g; m_EditingOverlay.borderB = b;
+    m_Main->set_ov_ed_border_color(slint::Color::from_rgb_uint8(r, g, b));
+}
+
 void SlintApp::RefreshOverlayLayers() {
     m_OverlayLayerEntries.clear();
     m_OverlayLayersModel->clear();
+
+    int refScr = (m_InspectedScreenIdx >= 0 && m_InspectedScreenIdx < static_cast<int>(m_Screens.size())) ? m_InspectedScreenIdx : 0;
+    const bool covLive = !m_Screens.empty() && m_Screens[refScr].hasCustomOverlay;
+    const std::string activeCovPath = covLive ? m_Screens[refScr].customOverlay.path : "";
+    const std::string activeCovName = covLive ? m_Screens[refScr].customOverlay.name : "";
+
+    auto modeTag = [](const CustomOverlayConfig& ov) -> std::string {
+        if (!ov.showClock) return "Texto / Pleca";
+        if (ov.clockMode == 1) {
+            int rem = ov.initialSec % 60;
+            if (rem == 0) return "Retroceso (" + std::to_string(std::max(1, ov.initialSec / 60)) + "m)";
+            char buf[16];
+            std::snprintf(buf, sizeof(buf), "%02d:%02d", ov.initialSec / 60, rem);
+            return std::string("Retroceso (") + buf + ")";
+        }
+        if (ov.clockMode == 2) return "Cronómetro (↑)";
+        return "Hora en Vivo";
+    };
+
+    for (int i = 0; i < static_cast<int>(m_CustomOverlays.size()); ++i) {
+        const auto& cov = m_CustomOverlays[i];
+        bool isOn = covLive && ((!cov.path.empty() && activeCovPath == cov.path) || activeCovName == cov.name);
+
+        MediaEntry m;
+        m.title            = cov.name;
+        m.subtitle         = isOn ? "● ACTIVO" : modeTag(cov);
+        m.path             = cov.path;
+        m.isOverlay        = true;
+        m.isCustomOverlay  = true;
+        m.customOverlayIdx = i;
+        m_OverlayLayerEntries.push_back(m);
+
+        LibraryItem item;
+        item.title         = slint::SharedString(m.title);
+        item.subtitle      = slint::SharedString(m.subtitle);
+        item.path          = slint::SharedString(m.path);
+        item.has_thumbnail = false;
+        m_OverlayLayersModel->push_back(item);
+    }
 
     std::vector<fs::path> dirs = {
         fs::path(ProyecThor::OverlaysPath()),
         fs::path("assets/overlays")
     };
 
-    int refScr = (m_InspectedScreenIdx >= 0 && m_InspectedScreenIdx < static_cast<int>(m_Screens.size())) ? m_InspectedScreenIdx : 0;
     bool live = !m_Screens.empty() && m_Screens[refScr].hasOverlayImage;
     std::string activePath = !m_Screens.empty() ? m_Screens[refScr].overlayPath : m_ActiveOverlayPath;
     std::vector<std::string> seen;
@@ -5277,8 +5859,35 @@ void SlintApp::SelectOverlayLayer(int index) {
     if (index < 0 || index >= static_cast<int>(m_OverlayLayerEntries.size())) return;
     const auto& entry = m_OverlayLayerEntries[index];
     int refScr = (m_InspectedScreenIdx >= 0 && m_InspectedScreenIdx < static_cast<int>(m_Screens.size())) ? m_InspectedScreenIdx : 0;
+
+    if (entry.isCustomOverlay) {
+        if (entry.customOverlayIdx < 0 || entry.customOverlayIdx >= static_cast<int>(m_CustomOverlays.size())) return;
+        const auto& cov = m_CustomOverlays[entry.customOverlayIdx];
+        if (!m_Screens.empty() && m_Screens[refScr].hasCustomOverlay &&
+            ((!cov.path.empty() && m_Screens[refScr].customOverlay.path == cov.path) ||
+             m_Screens[refScr].customOverlay.name == cov.name)) {
+            for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+                if (!IsScreenTargeted(i)) continue;
+                m_Screens[i].hasCustomOverlay = false;
+            }
+            RefreshOverlayQueueModel();
+            RefreshOverlayLayers();
+            SyncClockOverlay();
+            SyncScreenOutputs();
+            return;
+        }
+        ApplyOverlayConfigToTargets(cov);
+        return;
+    }
+
     if (!m_Screens.empty() && m_Screens[refScr].overlayPath == entry.path && m_Screens[refScr].hasOverlayImage) {
-        ClearOverlay();
+        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+            if (!IsScreenTargeted(i)) continue;
+            RemoveLayerOnScreen(i, "overlay");
+        }
+        RefreshOverlayQueueModel();
+        RefreshOverlayLayers();
+        SyncScreenOutputs();
         return;
     }
     m_ActiveOverlayPath = entry.path;
@@ -5309,8 +5918,9 @@ void SlintApp::AddOverlayLayerToQueue(int index) {
         }
     }
     OverlayQueueEntry o;
-    o.title = entry.title;
-    o.path  = entry.path;
+    o.title    = entry.title;
+    o.path     = entry.path;
+    o.isCustom = entry.isCustomOverlay;
     m_OverlayQueue.push_back(std::move(o));
     m_Main->set_queue_category(2);
     RefreshOverlayQueueModel();
@@ -5507,7 +6117,6 @@ void SlintApp::WireLanServerProviders(ProyecThor::Core::NetworkStreamServer& srv
         ProyecThor::Core::StreamSnapshot s;
         std::lock_guard<std::mutex> lk(m_LiveSnapMutex);
         bool hasFrame = m_LanHasFrame.load();
-        s.isProjecting       = m_SnapProjecting || !m_SnapText.empty() || hasFrame || m_HasVideoBg || m_HasStaticImage;
         s.currentText        = m_SnapText;
         s.showText           = !m_SnapText.empty();
         s.textSize           = m_SnapTextSize;
@@ -5530,6 +6139,10 @@ void SlintApp::WireLanServerProviders(ProyecThor::Core::NetworkStreamServer& srv
         for (int i = 0; i < 4; ++i) s.margins[i]   = m_SnapMargins[i];
         s.isBgVideo          = m_HasVideoBg;
         s.hasFrame           = hasFrame;
+        s.showPngOverlay     = !m_SnapOverlayPngPath.empty();
+        s.overlayVersion     = m_LanOverlayVersion;
+        s.overlay            = m_SnapOverlay;
+        s.isProjecting       = m_SnapProjecting || !m_SnapText.empty() || hasFrame || s.overlay.active || s.showPngOverlay;
         s.transitionTrigger  = m_SnapTransTrigger;
         s.transitionType     = m_SnapTransType;
         s.transitionDuration = m_SnapTransDur;
@@ -5546,6 +6159,11 @@ void SlintApp::WireLanServerProviders(ProyecThor::Core::NetworkStreamServer& srv
     srv.SetFontPathProvider([this]() -> std::string {
         std::lock_guard<std::mutex> lk(m_LiveSnapMutex);
         return m_LanFontCachePath;
+    });
+
+    srv.SetOverlayPathProvider([this]() -> std::string {
+        std::lock_guard<std::mutex> lk(m_LiveSnapMutex);
+        return m_SnapOverlayPngPath;
     });
 }
 
@@ -6892,8 +7510,9 @@ void SlintApp::HandleItemQueue(int kind, const std::string& path) {
         RefreshQueueModel();
     } else if (kind == 5) {
         OverlayQueueEntry oq;
-        oq.title = fp.stem().string();
-        oq.path  = path;
+        oq.title    = fp.stem().string();
+        oq.path     = path;
+        oq.isCustom = HasExtension(fp, { ".ptoverlay" });
         m_OverlayQueue.push_back(std::move(oq));
         m_Main->set_queue_category(2);
         RefreshOverlayQueueModel();
@@ -6995,6 +7614,25 @@ void SlintApp::HandleItemRename(int kind, const std::string& path, const std::st
     for (auto& sc : m_Screens) {
         if (sc.bgPath == path)      { sc.bgPath = newPath;      sc.bgName = newTitle; }
         if (sc.overlayPath == path) { sc.overlayPath = newPath; sc.overlayName = newTitle; }
+        if (sc.hasCustomOverlay && sc.customOverlay.path == path) {
+            sc.customOverlay.path = newPath;
+            sc.customOverlay.name = displayTitle;
+        }
+    }
+    if (kind == 5 && HasExtension(newFs, { ".ptoverlay" })) {
+        for (auto& cov : m_CustomOverlays) {
+            if (cov.path == path) {
+                cov.path = newPath;
+                cov.name = displayTitle;
+                SaveCustomOverlayToDisk(cov);
+                newTitle = displayTitle;
+            }
+        }
+        if (m_OverlayEditorOpen && m_EditingOverlay.path == path) {
+            m_EditingOverlay.path = newPath;
+            m_EditingOverlay.name = displayTitle;
+            m_Main->set_ov_ed_name(slint::SharedString(displayTitle));
+        }
     }
     if (m_CurrentBgPath == path)     m_CurrentBgPath = newPath;
     if (m_ActiveOverlayPath == path) m_ActiveOverlayPath = newPath;
@@ -7044,6 +7682,9 @@ void SlintApp::HandleItemDelete(int kind, const std::string& path) {
     for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
         if (m_Screens[i].bgPath == path)      RemoveLayerOnScreen(i, "bg");
         if (m_Screens[i].overlayPath == path) RemoveLayerOnScreen(i, "overlay");
+        if (m_Screens[i].hasCustomOverlay && m_Screens[i].customOverlay.path == path) {
+            RemoveLayerOnScreen(i, "clock");
+        }
     }
     if (m_CurrentBgPath == path) {
         m_Player.Stop();
@@ -7132,7 +7773,11 @@ void SlintApp::RefreshAllLibraryViewsAfterMutation(int kind, const std::string& 
     else if (kind == 2) m_CachedTabEntries.erase(10);
 
     if (kind == 4) RefreshBgDock();
-    if (kind == 5) RefreshOverlayLayers();
+    if (kind == 5) {
+        LoadCustomOverlaysFromDisk();
+        RefreshOverlayLayers();
+        RefreshOverlayQueueModel();
+    }
     if (kind == 3) {
         std::string playingPath;
         if (m_CurrentMusicIdx >= 0 && m_CurrentMusicIdx < static_cast<int>(m_MusicEntries.size())) {
@@ -7533,19 +8178,14 @@ bool SlintApp::IsScreenTargeted(int screenIdx) const {
 }
 
 std::string SlintApp::GetActiveClockOverlayString() const {
-    auto now = std::chrono::system_clock::now();
-    std::time_t tt = std::chrono::system_clock::to_time_t(now);
-    std::tm localTm{};
-#ifdef _WIN32
-    localtime_s(&localTm, &tt);
-#else
-    localtime_r(&tt, &localTm);
-#endif
-    char buf[16];
-    std::strftime(buf, sizeof(buf), "%H:%M:%S", &localTm);
-    std::string nowStr(buf);
-    std::string timerStr = FormatCountdownSec(m_TimerRemainingSec);
-    return m_Main->get_timer_mode_countdown() ? timerStr : nowStr;
+    if (!m_Screens.empty()) {
+        int idx = std::clamp(m_InspectedScreenIdx, 0, static_cast<int>(m_Screens.size()) - 1);
+        if (m_Screens[idx].hasCustomOverlay && m_Screens[idx].customOverlay.showClock) {
+            return FormatOverlayClockText(m_Screens[idx].customOverlay);
+        }
+    }
+    CustomOverlayConfig def;
+    return FormatOverlayClockText(def);
 }
 
 void SlintApp::SyncClockOverlay() {
@@ -7560,27 +8200,29 @@ void SlintApp::SyncClockOverlay() {
     char buf[16];
     std::strftime(buf, sizeof(buf), "%H:%M:%S", &localTm);
     std::string nowStr(buf);
-    std::string timerStr = FormatCountdownSec(m_TimerRemainingSec);
-    std::string activeClock = m_Main->get_timer_mode_countdown() ? timerStr : nowStr;
 
-    m_Main->set_clock_now_text(slint::SharedString(nowStr));
-    m_Main->set_timer_display_text(slint::SharedString(timerStr));
-    m_Main->set_preview_clock_text(slint::SharedString(activeClock));
+    if (m_OverlayEditorOpen) {
+        m_Main->set_ov_ed_clock_preview(slint::SharedString(FormatOverlayClockText(m_EditingOverlay)));
+    }
 
-    if (!m_Screens.empty()) {
-        if (!m_AudienceFrozen) {
-            m_Projector->set_show_clock_overlay(m_Screens[0].showClock);
-            m_Projector->set_clock_overlay_text(slint::SharedString(activeClock));
-        }
+    if (!m_Screens.empty() && !m_AudienceFrozen) {
+        const auto& pub = m_Screens[0];
+        m_Projector->set_show_custom_overlay(pub.hasCustomOverlay);
+        m_Projector->set_ov_show_clock(pub.customOverlay.showClock);
+        m_Projector->set_ov_clock_text(slint::SharedString(FormatOverlayClockText(pub.customOverlay)));
     }
     if (m_Screens.size() > 2) {
         m_Stage->set_clock_text(slint::SharedString(nowStr));
-        bool showStgTimer = m_TimerRunning || m_Screens[2].showClock;
-        m_Stage->set_timer_text(showStgTimer ? slint::SharedString(activeClock) : "");
+        const auto& stg = m_Screens[2];
+        bool showStgTimer = stg.hasCustomOverlay && stg.customOverlay.showClock;
+        m_Stage->set_timer_text(showStgTimer ? slint::SharedString(FormatOverlayClockText(stg.customOverlay)) : "");
     }
     if (m_InspectedScreenIdx >= 0 && m_InspectedScreenIdx < static_cast<int>(m_Screens.size())) {
-        m_Main->set_preview_show_clock(m_Screens[m_InspectedScreenIdx].showClock);
-        m_Main->set_show_clock_on_public(m_Screens[m_InspectedScreenIdx].showClock);
+        const auto& insp = m_Screens[m_InspectedScreenIdx];
+        std::string clk = FormatOverlayClockText(insp.customOverlay);
+        m_Main->set_preview_ov_clock_text(slint::SharedString(clk));
+        m_Main->set_preview_clock_text(slint::SharedString(clk));
+        m_Main->set_preview_show_clock(insp.hasCustomOverlay && insp.customOverlay.showClock);
     }
     SyncLanFromScreenState();
 }
@@ -7588,20 +8230,10 @@ void SlintApp::SyncClockOverlay() {
 void SlintApp::SyncLanFromScreenState() {
     if (m_Screens.size() <= 1) return;
     const auto& lan = m_Screens[1];
-    std::string activeClock = GetActiveClockOverlayString();
 
     std::string composedText;
-    if (lan.showClock && !activeClock.empty()) {
-        composedText = "⏱ " + activeClock;
-    }
     if (!lan.displayText.empty()) {
-        if (!composedText.empty()) composedText += "\n";
-        composedText += lan.displayText;
-    }
-    if (lan.showPleca && !lan.plecaTitle.empty()) {
-        if (!composedText.empty()) composedText += "\n";
-        composedText += lan.plecaTitle;
-        if (!lan.plecaSub.empty()) composedText += " — " + lan.plecaSub;
+        composedText = lan.displayText;
     }
     if (!lan.alertText.empty()) {
         if (!composedText.empty()) composedText += "\n";
@@ -7620,6 +8252,35 @@ void SlintApp::SyncLanFromScreenState() {
     float h    = std::clamp(st.lyricsHeight, 0.08f, 1.0f);
     int   wt   = kFontWeights[std::clamp(st.fontWtIdx, 0, 2)];
 
+    ProyecThor::Core::OverlaySnapshot ovSnap;
+    ovSnap.active = lan.hasCustomOverlay;
+    if (lan.hasCustomOverlay) {
+        const auto& cov = lan.customOverlay;
+        ovSnap.showClock      = cov.showClock;
+        ovSnap.clockText      = FormatOverlayClockText(cov);
+        ovSnap.titleText      = cov.titleText;
+        ovSnap.subText        = cov.subText;
+        ovSnap.textColor[0]   = cov.textR / 255.0f;
+        ovSnap.textColor[1]   = cov.textG / 255.0f;
+        ovSnap.textColor[2]   = cov.textB / 255.0f;
+        ovSnap.bgColor[0]     = cov.bgR / 255.0f;
+        ovSnap.bgColor[1]     = cov.bgG / 255.0f;
+        ovSnap.bgColor[2]     = cov.bgB / 255.0f;
+        ovSnap.bgOpacity      = cov.bgOpacity;
+        ovSnap.showBorder     = cov.showBorder;
+        ovSnap.borderColor[0] = cov.borderR / 255.0f;
+        ovSnap.borderColor[1] = cov.borderG / 255.0f;
+        ovSnap.borderColor[2] = cov.borderB / 255.0f;
+        ovSnap.fontSize       = cov.fontSize;
+        ovSnap.borderRadius   = cov.borderRadius;
+        ovSnap.boxPadding     = cov.boxPadding;
+        ovSnap.minBoxWidth    = cov.minBoxWidth;
+        ovSnap.posPreset      = cov.posPreset;
+        ovSnap.posX           = cov.posX;
+        ovSnap.posY           = cov.posY;
+    }
+    std::string nextPngPath = lan.hasOverlayImage ? lan.overlayPath : "";
+
     {
         std::lock_guard<std::mutex> lk(m_LiveSnapMutex);
         if (m_SnapText != composedText || m_SnapRef != lan.displayRef) {
@@ -7630,6 +8291,11 @@ void SlintApp::SyncLanFromScreenState() {
             m_LanFontCachePath = fontPath;
             ++m_LanFontVersion;
         }
+        if (m_SnapOverlayPngPath != nextPngPath) {
+            m_SnapOverlayPngPath = nextPngPath;
+            ++m_LanOverlayVersion;
+        }
+        m_SnapOverlay       = std::move(ovSnap);
         m_SnapText          = composedText;
         m_SnapRef           = lan.displayRef;
         m_SnapTextSize      = st.textSize;
@@ -7657,7 +8323,7 @@ void SlintApp::SyncLanFromScreenState() {
         m_SnapBgColor[0]    = lan.bgSolidRgb[0];
         m_SnapBgColor[1]    = lan.bgSolidRgb[1];
         m_SnapBgColor[2]    = lan.bgSolidRgb[2];
-        m_SnapProjecting    = m_ProjectorVisible || !composedText.empty() || lan.hasBgImage || lan.bgIsVideo;
+        m_SnapProjecting    = !composedText.empty() || lan.hasBgImage || lan.bgIsVideo || lan.hasCustomOverlay || lan.hasOverlayImage;
         ++m_StreamVersion;
     }
 }
@@ -7739,14 +8405,28 @@ void SlintApp::SyncInspectedScreenToPreview() {
         m_Main->set_live_overlay_image(sc.overlayImage);
     }
 
-    m_Main->set_preview_show_clock(sc.showClock);
-    m_Main->set_show_clock_on_public(sc.showClock);
-    m_Main->set_preview_clock_text(slint::SharedString(GetActiveClockOverlayString()));
+    const auto& cov = sc.customOverlay;
+    std::string clk = FormatOverlayClockText(cov);
+    m_Main->set_preview_show_clock(sc.hasCustomOverlay && cov.showClock);
+    m_Main->set_preview_clock_text(slint::SharedString(clk));
 
-    m_Main->set_preview_show_pleca(sc.showPleca);
-    m_Main->set_preview_pleca_title(slint::SharedString(sc.plecaTitle));
-    m_Main->set_preview_pleca_sub(slint::SharedString(sc.plecaSub));
-    m_Main->set_custom_overlay_active(sc.showPleca);
+    m_Main->set_preview_ov_active(sc.hasCustomOverlay);
+    m_Main->set_preview_ov_show_clock(cov.showClock);
+    m_Main->set_preview_ov_clock_text(slint::SharedString(clk));
+    m_Main->set_preview_ov_title(slint::SharedString(cov.titleText));
+    m_Main->set_preview_ov_sub(slint::SharedString(cov.subText));
+    m_Main->set_preview_ov_text_color(slint::Color::from_rgb_uint8(cov.textR, cov.textG, cov.textB));
+    m_Main->set_preview_ov_bg_color(slint::Color::from_rgb_uint8(cov.bgR, cov.bgG, cov.bgB));
+    m_Main->set_preview_ov_bg_opacity(cov.bgOpacity);
+    m_Main->set_preview_ov_show_border(cov.showBorder);
+    m_Main->set_preview_ov_border_color(slint::Color::from_rgb_uint8(cov.borderR, cov.borderG, cov.borderB));
+    m_Main->set_preview_ov_font_size(cov.fontSize);
+    m_Main->set_preview_ov_radius(cov.borderRadius);
+    m_Main->set_preview_ov_box_padding(cov.boxPadding);
+    m_Main->set_preview_ov_min_width(cov.minBoxWidth);
+    m_Main->set_preview_ov_pos_preset(cov.posPreset);
+    m_Main->set_preview_ov_pos_x(cov.posX);
+    m_Main->set_preview_ov_pos_y(cov.posY);
 
     m_Main->set_active_public_alert(slint::SharedString(sc.alertText));
 }
@@ -7771,12 +8451,25 @@ void SlintApp::SyncScreenOutputs() {
         if (pub.hasOverlayImage) {
             m_Projector->set_overlay_image(pub.overlayImage);
         }
-        m_Projector->set_show_clock_overlay(pub.showClock);
-        m_Projector->set_clock_overlay_text(slint::SharedString(GetActiveClockOverlayString()));
+        const auto& cov = pub.customOverlay;
+        m_Projector->set_show_custom_overlay(pub.hasCustomOverlay);
+        m_Projector->set_ov_show_clock(cov.showClock);
+        m_Projector->set_ov_clock_text(slint::SharedString(FormatOverlayClockText(cov)));
+        m_Projector->set_ov_title(slint::SharedString(cov.titleText));
+        m_Projector->set_ov_sub(slint::SharedString(cov.subText));
+        m_Projector->set_ov_text_color(slint::Color::from_rgb_uint8(cov.textR, cov.textG, cov.textB));
+        m_Projector->set_ov_bg_color(slint::Color::from_rgb_uint8(cov.bgR, cov.bgG, cov.bgB));
+        m_Projector->set_ov_bg_opacity(cov.bgOpacity);
+        m_Projector->set_ov_show_border(cov.showBorder);
+        m_Projector->set_ov_border_color(slint::Color::from_rgb_uint8(cov.borderR, cov.borderG, cov.borderB));
+        m_Projector->set_ov_font_size(cov.fontSize);
+        m_Projector->set_ov_radius(cov.borderRadius);
+        m_Projector->set_ov_box_padding(cov.boxPadding);
+        m_Projector->set_ov_min_width(cov.minBoxWidth);
+        m_Projector->set_ov_pos_preset(cov.posPreset);
+        m_Projector->set_ov_pos_x(cov.posX);
+        m_Projector->set_ov_pos_y(cov.posY);
         m_Projector->set_alert_text(slint::SharedString(pub.alertText));
-        m_Projector->set_show_custom_overlay(pub.showPleca);
-        m_Projector->set_live_overlay_title(slint::SharedString(pub.plecaTitle));
-        m_Projector->set_live_overlay_sub(slint::SharedString(pub.plecaSub));
     }
 
     // 2. Screen 1 -> NetworkStreamServer (LAN / Smart TV 8080)
@@ -7795,9 +8488,8 @@ void SlintApp::SyncScreenOutputs() {
         m_Stage->set_text_color(slint::Color::from_rgb_uint8(st.colorR, st.colorG, st.colorB));
         m_Stage->set_font_family_name(slint::SharedString(ResolveStyleFontName(st, false)));
         m_Stage->set_font_weight_val(kFontWeights[std::clamp(st.fontWtIdx, 0, 2)]);
-        std::string activeClock = GetActiveClockOverlayString();
-        bool showStgTimer = m_TimerRunning || stg.showClock;
-        m_Stage->set_timer_text(showStgTimer ? slint::SharedString(activeClock) : "");
+        bool showStgTimer = stg.hasCustomOverlay && stg.customOverlay.showClock;
+        m_Stage->set_timer_text(showStgTimer ? slint::SharedString(FormatOverlayClockText(stg.customOverlay)) : "");
     }
 
     // 4. Inspected Screen -> Vista en Vivo + LAN Style Status + Capas Activas + Matriz Multi-Pantalla
@@ -7827,14 +8519,17 @@ void SlintApp::RefreshActiveLayersModel() {
         return out;
     };
 
-    // Layer 1 (Top): Clock / Countdown Timer
-    if (sc.showClock) {
+    // Layer 1 (Top): Custom Overlay (Clock / Countdown / Count-up / Lower-Third)
+    if (sc.hasCustomOverlay) {
         ActiveLayerItem item;
         item.id       = "clock";
-        item.kind     = "TIEMPO";
-        std::string clk = GetActiveClockOverlayString();
-        item.title    = slint::SharedString((m_Main->get_timer_mode_countdown() ? "Cuenta Regresiva: " : "Hora Actual: ") + clk);
-        item.subtitle = slint::SharedString("Overlay de Tiempo • " + sc.name);
+        item.kind     = sc.customOverlay.showClock ? "TIEMPO" : "PLECA";
+        std::string clk = FormatOverlayClockText(sc.customOverlay);
+        std::string lbl = sc.customOverlay.name.empty() ? "Overlay" : sc.customOverlay.name;
+        if (!clk.empty()) lbl += ": " + clk;
+        else if (!sc.customOverlay.titleText.empty()) lbl += " — " + sc.customOverlay.titleText;
+        item.title    = slint::SharedString(lbl);
+        item.subtitle = slint::SharedString("Overlay Personalizado • " + sc.name);
         item.accent   = slint::Color::from_rgb_uint8(56, 189, 248);
         item.has_thumbnail = false;
         m_ActiveLayersModel->push_back(item);
@@ -7848,18 +8543,6 @@ void SlintApp::RefreshActiveLayersModel() {
         item.title    = slint::SharedString(singleLine(sc.alertText));
         item.subtitle = slint::SharedString("Letrero en Pantalla • " + sc.name);
         item.accent   = slint::Color::from_rgb_uint8(244, 63, 94);
-        item.has_thumbnail = false;
-        m_ActiveLayersModel->push_back(item);
-    }
-
-    // Layer 3: Pleca / Lower-Third
-    if (sc.showPleca && !sc.plecaTitle.empty()) {
-        ActiveLayerItem item;
-        item.id       = "pleca";
-        item.kind     = "PLECA";
-        item.title    = slint::SharedString(sc.plecaTitle);
-        item.subtitle = slint::SharedString(sc.plecaSub.empty() ? ("Lower-Third • " + sc.name) : sc.plecaSub);
-        item.accent   = slint::Color::from_rgb_uint8(168, 85, 247);
         item.has_thumbnail = false;
         m_ActiveLayersModel->push_back(item);
     }
@@ -7919,12 +8602,13 @@ void SlintApp::RefreshActiveLayersModel() {
 
 void SlintApp::RefreshScreenMatrixModel() {
     m_ScreenMatrixModel->clear();
-    std::string clk = GetActiveClockOverlayString();
     static const int kFontWeights[] = { 400, 700, 900 };
 
     for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
         const auto& sc = m_Screens[i];
         const auto& st = sc.textStyle;
+        const auto& cov = sc.customOverlay;
+        std::string clk = FormatOverlayClockText(cov);
         ScreenMatrixItem item;
         item.id             = i;
         item.name           = slint::SharedString(sc.name);
@@ -7932,7 +8616,7 @@ void SlintApp::RefreshScreenMatrixModel() {
         item.is_live        = (i == 0) ? m_ProjectorVisible
                             : (i == 1) ? IsLanRunning()
                             : (i == 2) ? m_StageVisible
-                            : (!sc.displayText.empty() || sc.hasBgImage || sc.showClock || !sc.alertText.empty());
+                            : (!sc.displayText.empty() || sc.hasBgImage || sc.hasCustomOverlay || sc.hasOverlayImage || !sc.alertText.empty());
         item.is_targeted    = IsScreenTargeted(i);
         item.is_inspected   = (i == m_InspectedScreenIdx);
         item.is_custom_room = sc.isCustomRoom;
@@ -7946,11 +8630,24 @@ void SlintApp::RefreshScreenMatrixModel() {
         item.live_text      = slint::SharedString(sc.displayText);
         item.live_ref       = slint::SharedString(sc.displayRef);
         item.live_is_bible  = sc.isBible;
-        item.show_clock     = sc.showClock;
-        item.clock_text     = slint::SharedString(clk);
+        item.show_clock     = sc.hasCustomOverlay;
+        item.clock_text     = slint::SharedString(!clk.empty() ? clk : cov.name);
         item.alert_text     = slint::SharedString(sc.alertText);
-        item.show_pleca     = sc.showPleca;
-        item.pleca_title    = slint::SharedString(sc.plecaTitle);
+        item.ov_show_clock  = cov.showClock;
+        item.ov_title       = slint::SharedString(cov.titleText);
+        item.ov_sub         = slint::SharedString(cov.subText);
+        item.ov_text_color  = slint::Color::from_rgb_uint8(cov.textR, cov.textG, cov.textB);
+        item.ov_bg_color    = slint::Color::from_rgb_uint8(cov.bgR, cov.bgG, cov.bgB);
+        item.ov_bg_opacity  = cov.bgOpacity;
+        item.ov_show_border = cov.showBorder;
+        item.ov_border_color = slint::Color::from_rgb_uint8(cov.borderR, cov.borderG, cov.borderB);
+        item.ov_font_size   = cov.fontSize;
+        item.ov_radius      = cov.borderRadius;
+        item.ov_box_padding = cov.boxPadding;
+        item.ov_min_width   = cov.minBoxWidth;
+        item.ov_pos_preset  = cov.posPreset;
+        item.ov_pos_x       = cov.posX;
+        item.ov_pos_y       = cov.posY;
 
         std::string stName = st.name.empty() ? "Predeterminado" : st.name;
         item.style_name         = slint::SharedString(stName);
@@ -7975,12 +8672,11 @@ void SlintApp::RefreshScreenMatrixModel() {
         item.lyrics_height    = st.lyricsHeight;
 
         int activeCount = 0;
-        if (sc.showClock)          ++activeCount;
+        if (sc.hasCustomOverlay)   ++activeCount;
         if (!sc.displayText.empty()) ++activeCount;
         if (sc.bgName != "Sin fondo") ++activeCount;
         if (sc.hasOverlayImage)    ++activeCount;
         if (!sc.alertText.empty()) ++activeCount;
-        if (sc.showPleca)          ++activeCount;
         item.queue_summary = slint::SharedString(
             std::to_string(activeCount) + " capa(s) • Estilo: " + stName + " (" +
             std::to_string(static_cast<int>(st.textSize)) + "px)");
@@ -8005,16 +8701,16 @@ void SlintApp::RemoveLayerOnScreen(int screenIdx, const std::string& layerId) {
     if (screenIdx < 0 || screenIdx >= static_cast<int>(m_Screens.size())) return;
     auto& sc = m_Screens[screenIdx];
 
-    if (layerId == "clock") {
-        sc.showClock = false;
+    if (layerId == "clock" || layerId == "pleca") {
+        sc.hasCustomOverlay = false;
+        RefreshOverlayLayers();
+        RefreshOverlayQueueModel();
     } else if (layerId == "alert") {
         sc.alertText.clear();
         if (screenIdx == 2) {
             m_Main->set_active_stage_alert("");
             m_Stage->set_stage_alert("");
         }
-    } else if (layerId == "pleca") {
-        sc.showPleca = false;
     } else if (layerId == "overlay") {
         sc.overlayName = "Sin overlay";
         sc.overlayPath.clear();
@@ -8086,7 +8782,14 @@ void SlintApp::ToggleLayerOnScreen(int screenIdx, const std::string& layerId) {
     auto& sc = m_Screens[screenIdx];
 
     if (layerId == "clock") {
-        sc.showClock = !sc.showClock;
+        if (sc.hasCustomOverlay) {
+            sc.hasCustomOverlay = false;
+        } else {
+            sc.customOverlay = !m_CustomOverlays.empty() ? m_CustomOverlays.front() : CustomOverlayConfig{};
+            sc.hasCustomOverlay = true;
+        }
+        RefreshOverlayLayers();
+        RefreshOverlayQueueModel();
     } else if (layerId == "text") {
         if (!sc.displayText.empty()) {
             RemoveLayerOnScreen(screenIdx, "text");
@@ -8172,17 +8875,15 @@ void SlintApp::ClonePublicToScreen(int screenIdx) {
     dst.bgThumb         = pub.bgThumb;
     dst.bgSolidColor    = pub.bgSolidColor;
     for (int c = 0; c < 3; ++c) dst.bgSolidRgb[c] = pub.bgSolidRgb[c];
-    dst.overlayName     = pub.overlayName;
-    dst.overlayPath     = pub.overlayPath;
-    dst.hasOverlayImage = pub.hasOverlayImage;
-    dst.overlayImage    = pub.overlayImage;
-    dst.hasOverlayThumb = pub.hasOverlayThumb;
-    dst.overlayThumb    = pub.overlayThumb;
-    dst.showClock       = pub.showClock;
-    dst.alertText       = pub.alertText;
-    dst.showPleca       = pub.showPleca;
-    dst.plecaTitle      = pub.plecaTitle;
-    dst.plecaSub        = pub.plecaSub;
+    dst.overlayName      = pub.overlayName;
+    dst.overlayPath      = pub.overlayPath;
+    dst.hasOverlayImage  = pub.hasOverlayImage;
+    dst.overlayImage     = pub.overlayImage;
+    dst.hasOverlayThumb  = pub.hasOverlayThumb;
+    dst.overlayThumb     = pub.overlayThumb;
+    dst.hasCustomOverlay = pub.hasCustomOverlay;
+    dst.customOverlay    = pub.customOverlay;
+    dst.alertText        = pub.alertText;
 
     if (screenIdx == 1 && dst.bgIsStatic && dst.hasBgImage && IsLanRunning()) {
         UpdateLanStaticFrame(dst.bgImage);

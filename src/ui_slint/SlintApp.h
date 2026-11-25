@@ -36,6 +36,8 @@ private:
         bool        isAudio    = false;
         bool        isImage    = false;
         bool        isOverlay  = false;
+        bool        isCustomOverlay = false;
+        int         customOverlayIdx = -1;
         bool        isDocument = false;
     };
 
@@ -119,9 +121,38 @@ private:
         std::vector<std::string> songPaths;
     };
 
+    struct CustomOverlayConfig {
+        std::string id;
+        std::string path;
+        std::string name         = "Reloj en Vivo";
+        bool        showClock    = true;
+        int         clockMode    = 0;     // 0=Hora en Vivo, 1=En Retroceso (↓), 2=Hacia Arriba (↑)
+        int         timeFormat   = 0;     // 0=HH:MM:SS, 1=HH:MM, 2=hh:mm AM/PM, 3=hh:mm:ss AM/PM, 4=MM:SS
+        int         initialSec   = 300;   // Duración inicial para retroceso (seg)
+        int         currentSec   = 300;   // Contador activo (seg)
+        bool        timerRunning = false;
+
+        std::string titleText;
+        std::string subText;
+
+        uint8_t     textR = 255, textG = 255, textB = 255;
+        uint8_t     bgR   = 9,   bgG   = 9,   bgB   = 11;
+        float       bgOpacity    = 0.82f;
+        bool        showBorder   = true;
+        uint8_t     borderR = 56, borderG = 189, borderB = 248;
+        float       fontSize     = 42.0f;
+        float       borderRadius = 12.0f;
+        float       boxPadding   = 16.0f;
+        float       minBoxWidth  = 0.0f;
+        int         posPreset    = 3;     // 0=Centro, 1=Sup-Izq, 2=Sup-Cen, 3=Sup-Der, 4=Inf-Izq, 5=Inf-Cen, 6=Inf-Der, 7=Custom
+        float       posX         = 0.85f;
+        float       posY         = 0.10f;
+    };
+
     struct OverlayQueueEntry {
         std::string title;
         std::string path;
+        bool        isCustom = false;
     };
 
     struct ScreenOutputState {
@@ -154,11 +185,9 @@ private:
         slint::Image overlayThumb;
         bool         hasOverlayThumb = false;
 
-        bool        showClock = false;
-        std::string alertText;
-        bool        showPleca = false;
-        std::string plecaTitle;
-        std::string plecaSub;
+        bool                hasCustomOverlay = false;
+        CustomOverlayConfig customOverlay;
+        std::string         alertText;
 
         SavedTextStyle textStyle;
         int            assignedStyleIdx = -1; // -1 = personalizado/predeterminado, >=0 = índice en m_SavedStyles
@@ -358,6 +387,25 @@ private:
     void RefreshOverlayLayers();
     void SelectOverlayLayer(int index);
     void AddOverlayLayerToQueue(int index);
+    void LoadCustomOverlaysFromDisk();
+    bool SaveCustomOverlayToDisk(CustomOverlayConfig& cfg);
+    void OpenNewOverlayEditor(bool withClock = true);
+    void OpenEditOverlayEditor(int layerIndex);
+    void OpenEditActiveScreenOverlay();
+    void SyncOverlayEditorUiFromState();
+    void SyncOverlayEditorStateFromUi();
+    std::string FormatOverlayClockText(const CustomOverlayConfig& cfg) const;
+    void ApplyOverlayConfigToTargets(const CustomOverlayConfig& cfg, int explicitTargetMode = -1);
+    void SyncOverlayTimerToAll(const CustomOverlayConfig& src);
+    void SaveOverlayEditor(bool alsoApply);
+    void CancelOverlayEditor();
+    void OverlayEditorSetMinutes(int mins);
+    void OverlayEditorSetManualTime(const std::string& minStr, const std::string& secStr);
+    void OverlayEditorTimerToggle();
+    void OverlayEditorTimerReset();
+    void SetOverlayEditorTextColorRGB(uint8_t r, uint8_t g, uint8_t b);
+    void SetOverlayEditorBgColorRGB(uint8_t r, uint8_t g, uint8_t b);
+    void SetOverlayEditorBorderColorRGB(uint8_t r, uint8_t g, uint8_t b);
     void SelectSolidBgColor(int colorIdx);
     void LaunchLegacyImGui();
     bool LoadOrCreateThumbnail(const std::string& path, bool isVideo, slint::Image& outImg);
@@ -495,9 +543,13 @@ private:
     std::vector<OverlayQueueEntry> m_OverlayQueue;
     std::string                    m_ActiveOverlayPath;
 
-    std::vector<MediaEntry>      m_BgDockEntries;
-    std::vector<MediaEntry>      m_OverlayLayerEntries;
-    std::vector<SavedTextStyle>  m_SavedStyles;
+    std::vector<MediaEntry>          m_BgDockEntries;
+    std::vector<MediaEntry>          m_OverlayLayerEntries;
+    std::vector<CustomOverlayConfig> m_CustomOverlays;
+    CustomOverlayConfig              m_EditingOverlay;
+    int                              m_EditingOverlayIdx  = -1;
+    bool                             m_OverlayEditorOpen  = false;
+    std::vector<SavedTextStyle>      m_SavedStyles;
     SavedTextStyle               m_StyleBeforeEdit;
     int                          m_EditingStyleIdx = -1; // -1 = new style
 
@@ -604,13 +656,13 @@ private:
     std::vector<uint8_t>                                   m_LanLatestJpeg;
     std::atomic<bool>                                      m_LanHasFrame{false};
     int64_t                                                m_LanLastCaptureMs = 0;
+    ProyecThor::Core::OverlaySnapshot                      m_SnapOverlay;
+    std::string                                            m_SnapOverlayPngPath;
+    uint64_t                                               m_LanOverlayVersion = 1;
     uint64_t                                               m_LastChatMsgId = 0;
     int                                                    m_ActiveThemeIdx = 0;
 
-    // Countdown timer state & performance throttle caches
-    int     m_TimerInitialSec      = 300;
-    int     m_TimerRemainingSec    = 300;
-    bool    m_TimerRunning         = false;
+    // Performance throttle & alert animation state
     int     m_TickCounter          = 0;
     bool    m_HasActivePublicAlert = false;
 

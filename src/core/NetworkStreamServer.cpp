@@ -56,6 +56,12 @@ void NetworkStreamServer::SetFontPathProvider(FontPathProvider p)
     m_FontPathProvider = std::move(p);
 }
 
+void NetworkStreamServer::SetOverlayPathProvider(OverlayPathProvider p)
+{
+    std::lock_guard<std::mutex> lk(m_ProviderMutex);
+    m_OverlayPathProvider = std::move(p);
+}
+
 void NetworkStreamServer::SetChatStore(ChatMessageStore* store)
 {
     std::lock_guard<std::mutex> lk(m_ProviderMutex);
@@ -227,6 +233,38 @@ void NetworkStreamServer::ServerThreadFunc(int port, std::promise<bool> startedP
 
         res.set_header("Access-Control-Allow-Origin", "*");
         res.set_header("Cache-Control", "public, max-age=3600");
+        res.set_content(data, mime.c_str());
+    });
+
+    // ── GET /overlay  (sirve la imagen PNG/WebP overlay asignada a LAN) ──────
+    svr.Get("/overlay", [this](const httplib::Request& /*req*/, httplib::Response& res)
+    {
+        std::string path;
+        {
+            std::lock_guard<std::mutex> lk(m_ProviderMutex);
+            if (m_OverlayPathProvider) path = m_OverlayPathProvider();
+        }
+        if (path.empty()) {
+            res.status = 404;
+            return;
+        }
+        std::ifstream f(path, std::ios::binary);
+        if (!f.is_open()) {
+            res.status = 404;
+            return;
+        }
+        std::ostringstream ss;
+        ss << f.rdbuf();
+        std::string data = ss.str();
+
+        std::string ext;
+        auto dot = path.find_last_of('.');
+        if (dot != std::string::npos) ext = path.substr(dot + 1);
+        for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        std::string mime = (ext == "webp") ? "image/webp" : "image/png";
+
+        res.set_header("Access-Control-Allow-Origin", "*");
+        res.set_header("Cache-Control", "no-cache, no-store, must-revalidate");
         res.set_content(data, mime.c_str());
     });
 
@@ -487,6 +525,28 @@ std::string NetworkStreamServer::SnapshotToJSON(const StreamSnapshot& s) const
       << "\"isBgVideo\":"     << B(s.isBgVideo)                << ","
       << "\"hasFrame\":"      << B(s.hasFrame && effectiveSendBg) << ","
       << "\"sendBackground\":"<< B(cfg.sendBackground)        << ","
+      << "\"sendOverlay\":"   << B(cfg.sendOverlay)           << ","
+      << "\"showPngOverlay\":"<< B(s.showPngOverlay && cfg.sendOverlay) << ","
+      << "\"overlayVersion\":"<< s.overlayVersion             << ","
+      << "\"overlay\":{"
+            << "\"active\":"       << B(s.overlay.active && cfg.sendOverlay) << ","
+            << "\"showClock\":"    << B(s.overlay.showClock)                 << ","
+            << "\"clockText\":\""  << escapeJSON(s.overlay.clockText)        << "\","
+            << "\"titleText\":\""  << escapeJSON(s.overlay.titleText)        << "\","
+            << "\"subText\":\""    << escapeJSON(s.overlay.subText)          << "\","
+            << "\"textColor\":["   << s.overlay.textColor[0] << "," << s.overlay.textColor[1] << "," << s.overlay.textColor[2] << "],"
+            << "\"bgColor\":["     << s.overlay.bgColor[0]   << "," << s.overlay.bgColor[1]   << "," << s.overlay.bgColor[2]   << "],"
+            << "\"bgOpacity\":"    << s.overlay.bgOpacity                    << ","
+            << "\"showBorder\":"   << B(s.overlay.showBorder)                << ","
+            << "\"borderColor\":[" << s.overlay.borderColor[0] << "," << s.overlay.borderColor[1] << "," << s.overlay.borderColor[2] << "],"
+            << "\"fontSize\":"     << s.overlay.fontSize                     << ","
+            << "\"borderRadius\":" << s.overlay.borderRadius                 << ","
+            << "\"boxPadding\":"   << s.overlay.boxPadding                   << ","
+            << "\"minBoxWidth\":"  << s.overlay.minBoxWidth                  << ","
+            << "\"posPreset\":"    << s.overlay.posPreset                    << ","
+            << "\"posX\":"         << s.overlay.posX                         << ","
+            << "\"posY\":"         << s.overlay.posY
+      << "},"
       << "\"transparent\":"   << B(effectiveTransparent)      << ","
       << "\"isPro\":"         << B(true)                      << ","
       << "\"highQuality\":"   << B(hiQ)                        << ","
@@ -655,6 +715,34 @@ std::string NetworkStreamServer::BuildHTMLPage() const
   }
   #bg-frame.visible { opacity: 1; }
 
+  #png-overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    object-fit: contain;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+    z-index: 12;
+  }
+  #png-overlay.visible { opacity: 1; }
+
+  #custom-overlay {
+    position: absolute;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    pointer-events: none;
+    z-index: 15;
+    max-width: 92%;
+    line-height: 1.12;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  #custom-overlay.visible { display: flex; }
+
   /* Texto overlay — posición/tamaño se fijan en px vía JS (no CSS fijo),
      para reproducir exactamente los mismos márgenes y escala que el
      proyector real, en vez de un padding fijo en vw. */
@@ -721,6 +809,16 @@ std::string NetworkStreamServer::BuildHTMLPage() const
       <div id="main-text"></div>
     </div>
 
+    <!-- Overlay PNG transparente -->
+    <img id="png-overlay" src="" alt="" aria-hidden="true">
+
+    <!-- Overlay dinámico (Reloj / Temporizador / Texto) -->
+    <div id="custom-overlay">
+      <div id="ov-title" style="display:none;font-weight:800;"></div>
+      <div id="ov-clock" style="display:none;font-weight:800;"></div>
+      <div id="ov-sub" style="display:none;font-weight:600;"></div>
+    </div>
+
     <!-- Placeholder de "esperando contenido" — ahora independiente,
          no tapa el fondo ni el texto cuando hay algo proyectándose -->
     <div id="idle-overlay"></div>
@@ -737,6 +835,11 @@ std::string NetworkStreamServer::BuildHTMLPage() const
 const screenEl      = document.getElementById('screen');
 const viewportEl    = document.getElementById('viewport');
 const bgFrame       = document.getElementById('bg-frame');
+const pngOverlay    = document.getElementById('png-overlay');
+const customOverlay = document.getElementById('custom-overlay');
+const ovTitleEl     = document.getElementById('ov-title');
+const ovClockEl     = document.getElementById('ov-clock');
+const ovSubEl       = document.getElementById('ov-sub');
 const textContainer = document.getElementById('text-container');
 const mainText      = document.getElementById('main-text');
 const idleOverlay   = document.getElementById('idle-overlay');
@@ -745,6 +848,7 @@ const statusText    = document.getElementById('status-text');
 
 let currentVersion     = 0;
 let currentFontVersion = -1;
+let currentOverlayVer  = -1;
 let customFontReady    = false;
 let retryDelay         = 1000;
 let highQuality        = false;
@@ -888,13 +992,92 @@ function applyState(s) {
     }
   }
 
-  // Idle / activo
+  // Overlay PNG (solo para LAN cuando sendOverlay == true)
+  if (s.showPngOverlay && s.sendOverlay !== false) {
+    if (s.overlayVersion !== currentOverlayVer) {
+      currentOverlayVer = s.overlayVersion;
+      pngOverlay.src = '/overlay?v=' + s.overlayVersion + '&_t=' + Date.now();
+    }
+    pngOverlay.classList.add('visible');
+  } else {
+    pngOverlay.classList.remove('visible');
+  }
+
+  // Overlay dinámico (Reloj / Cuenta Regresiva / Cronómetro / Pleca)
+  const ov = s.overlay;
+  if (ov && ov.active && s.sendOverlay !== false) {
+    const tr = Math.round(ov.textColor[0]*255), tg = Math.round(ov.textColor[1]*255), tb = Math.round(ov.textColor[2]*255);
+    const br = Math.round(ov.bgColor[0]*255),   bg = Math.round(ov.bgColor[1]*255),   bb = Math.round(ov.bgColor[2]*255);
+    const rr = Math.round(ov.borderColor[0]*255), rg = Math.round(ov.borderColor[1]*255), rb = Math.round(ov.borderColor[2]*255);
+    const ba = Math.max(0, Math.min(1, ov.bgOpacity)).toFixed(3);
+    customOverlay.style.backgroundColor = `rgba(${br},${bg},${bb},${ba})`;
+    customOverlay.style.borderRadius = Math.round(ov.borderRadius * scale) + 'px';
+    const padX = Math.max(4, Math.round((ov.boxPadding || 16) * scale));
+    const padY = Math.max(2, Math.round((ov.boxPadding || 16) * 0.65 * scale));
+    customOverlay.style.padding = `${padY}px ${padX}px`;
+    customOverlay.style.minWidth = (ov.minBoxWidth > 1) ? Math.min(drawW * 0.96, Math.round(ov.minBoxWidth * scale)) + 'px' : '0px';
+    customOverlay.style.border = (ov.showBorder && ov.bgOpacity > 0.02)
+      ? `${Math.max(1, Math.round(1.5 * scale))}px solid rgba(${rr},${rg},${rb},0.75)`
+      : 'none';
+
+    if (ov.titleText) {
+      ovTitleEl.style.display = 'block';
+      ovTitleEl.textContent = ov.titleText;
+      ovTitleEl.style.color = `rgba(${tr},${tg},${tb},0.92)`;
+      ovTitleEl.style.fontSize = Math.max(10, ov.fontSize * 0.44 * scale) + 'px';
+    } else {
+      ovTitleEl.style.display = 'none';
+    }
+
+    if (ov.showClock && ov.clockText) {
+      ovClockEl.style.display = 'block';
+      ovClockEl.textContent = ov.clockText;
+      ovClockEl.style.color = `rgb(${tr},${tg},${tb})`;
+      ovClockEl.style.fontSize = Math.max(12, ov.fontSize * scale) + 'px';
+    } else {
+      ovClockEl.style.display = 'none';
+    }
+
+    if (ov.subText) {
+      ovSubEl.style.display = 'block';
+      ovSubEl.textContent = ov.subText;
+      ovSubEl.style.color = `rgba(${tr},${tg},${tb},0.75)`;
+      ovSubEl.style.fontSize = Math.max(9, ov.fontSize * 0.34 * scale) + 'px';
+    } else {
+      ovSubEl.style.display = 'none';
+    }
+
+    customOverlay.classList.add('visible');
+    const ow = customOverlay.offsetWidth || 0;
+    const oh = customOverlay.offsetHeight || 0;
+    const p = ov.posPreset;
+    let ox = (drawW - ow) / 2, oy = (drawH - oh) / 2;
+    if (p === 1 || p === 4) ox = drawW * 0.03;
+    else if (p === 3 || p === 6) ox = drawW - ow - drawW * 0.03;
+    else if (p === 7) ox = Math.max(0, Math.min(drawW - ow, ov.posX * drawW - ow / 2));
+
+    if (p === 1 || p === 2 || p === 3) oy = drawH * 0.04;
+    else if (p === 4 || p === 5 || p === 6) oy = drawH - oh - drawH * 0.05;
+    else if (p === 7) oy = Math.max(0, Math.min(drawH - oh, ov.posY * drawH - oh / 2));
+
+    customOverlay.style.left = Math.round(ox) + 'px';
+    customOverlay.style.top  = Math.round(oy) + 'px';
+  } else {
+    customOverlay.classList.remove('visible');
+  }
+
+  // Idle / activo (no ocultamos overlays si solo hay reloj/overlay sin letras!)
+  const hasVisibleOverlay = (s.showPngOverlay && s.sendOverlay !== false) || (ov && ov.active && s.sendOverlay !== false);
+  if (!s.isProjecting && !hasVisibleOverlay) {
+    idleOverlay.classList.remove('hidden');
+  } else {
+    idleOverlay.classList.add('hidden');
+  }
+
   if (!s.isProjecting || !s.showText || !s.currentText) {
     textContainer.classList.remove('visible');
-    if (!s.isProjecting) idleOverlay.classList.remove('hidden');
     return;
   }
-  idleOverlay.classList.add('hidden');
 
   // ── Márgenes reales del usuario, escalados igual que en ViewPanel ────────
   const marginL = s.margins[0] * scale;
