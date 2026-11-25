@@ -6258,6 +6258,7 @@ export component MainWindow inherits Window {
 
                 // ── Top Card: ProPresenter-Style Broadcast Monitor + Capas Activas ──
                 GlassCard {
+                    vertical-stretch: 0;
                     VerticalLayout {
                         padding: 11px;
                         spacing: 9px;
@@ -6657,6 +6658,7 @@ export component MainWindow inherits Window {
 
                         // Compact libmpv Media Transport (ONLY visible when a video background is playing — zero wasted space!)
                         if root.preview-has-video-bg : Rectangle {
+                            vertical-stretch: 0;
                             border-radius: 3px;
                             background: Theme.bg-surface-1;
                             border-width: 1px;
@@ -6720,6 +6722,7 @@ export component MainWindow inherits Window {
 
                         // ── PHOTOSHOP-STYLE REAL ACTIVE LAYERS STACK (Capas en Vivo con Preview y '✕') ──
                         Rectangle {
+                            vertical-stretch: 0;
                             border-radius: 5px;
                             background: Theme.bg-surface-0;
                             border-width: 1px;
