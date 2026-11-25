@@ -108,11 +108,121 @@
   padding: 10px 15px;
 }
 
+.os-cta-wrap {
+  position: relative;
+  display: inline-flex;
+  justify-content: center;
+}
+
 .os-cta-group {
   display: inline-flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
+}
+
+.os-win-anchor,
+.os-nav-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.os-chevron {
+  font-size: 12px;
+  opacity: 0.85;
+  margin-left: 2px;
+}
+
+.os-download-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 80;
+  min-width: 268px;
+  padding: 6px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+}
+
+.os-download-menu-right {
+  left: auto;
+  right: 0;
+}
+
+.os-download-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  transition: background 0.14s ease, border-color 0.14s ease;
+  border: 1px solid transparent;
+}
+
+.os-download-option:hover {
+  background: var(--blue-soft);
+  border-color: rgba(26, 86, 219, 0.22);
+}
+
+.os-download-option.is-recommended {
+  background: rgba(26, 86, 219, 0.05);
+}
+
+.os-download-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.os-download-copy {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.os-download-copy strong {
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.os-download-copy span {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  line-height: 1.3;
+}
+
+.os-download-arrow {
+  color: var(--blue);
+  flex-shrink: 0;
+}
+
+.os-download-all {
+  margin-top: 2px;
+  padding: 7px 12px 5px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.os-download-all:hover {
+  color: var(--blue);
 }
 
 .btn-os {
@@ -1158,10 +1268,30 @@
     align-items: stretch;
   }
 
+  .os-cta-wrap {
+    width: 100%;
+  }
+
   .os-cta-group {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 8px;
+    width: 100%;
+  }
+
+  .os-win-anchor {
+    width: 100%;
+    position: static;
+  }
+
+  .os-win-anchor .os-download-menu {
+    left: 0;
+    right: 0;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .os-win-anchor .btn-os {
     width: 100%;
   }
 

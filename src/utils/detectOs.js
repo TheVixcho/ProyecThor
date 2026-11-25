@@ -17,3 +17,19 @@ export function detectUserOS() {
   }
   return 'windows'
 }
+
+export async function detectWindowsArm64() {
+  if (typeof navigator === 'undefined') return false
+  try {
+    if (navigator.userAgentData?.getHighEntropyValues) {
+      const info = await navigator.userAgentData.getHighEntropyValues(['architecture'])
+      if (typeof info?.architecture === 'string' && info.architecture.toLowerCase().includes('arm')) {
+        return true
+      }
+    }
+  } catch {
+    // Fallback to UA inspection below
+  }
+  const ua = (navigator.userAgent || '').toLowerCase()
+  return ua.includes('arm64') || ua.includes('aarch64')
+}
