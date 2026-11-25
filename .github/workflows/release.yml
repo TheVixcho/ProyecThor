@@ -1,4 +1,4 @@
-name: Release Multiplataforma (Windows x64/ARM64, macOS Apple Silicon/Intel & Linux)
+name: Release Multiplataforma (Windows x64/ARM64, macOS Apple Silicon & Linux)
 
 on:
   push:
@@ -721,80 +721,6 @@ jobs:
           path: dist-macos-arm64/*.dmg
           if-no-files-found: error
 
-  build-macos-intel:
-    name: macOS Apple Intel (x86_64) + DMG (.dmg)
-    needs: resolve-meta
-    runs-on: macos-15-intel
-    timeout-minutes: 45
-    steps:
-      - name: Checkout del repositorio
-        uses: actions/checkout@v4
-
-      - name: Instalar dependencias en macOS Intel (Homebrew + Rust)
-        run: |
-          set -euo pipefail
-          brew update
-          brew install cmake ninja pkg-config mpv ffmpeg dylibbundler
-          if ! command -v cargo >/dev/null 2>&1; then
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-          fi
-
-      - name: Cachear Cargo y compilación de Slint C++ (macOS Intel x86_64)
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            build-macos-x86_64/_deps
-            build-macos-x86_64/cargo
-          key: macos-x86_64-slint${{ env.SLINT_VERSION }}-v1
-          restore-keys: |
-            macos-x86_64-slint${{ env.SLINT_VERSION }}-
-
-      - name: Configurar y Compilar ProyecThorSlint (macOS Intel x86_64 Release)
-        run: |
-          set -euo pipefail
-          export PATH="$HOME/.cargo/bin:$PATH"
-          export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
-          export CMAKE_PREFIX_PATH="/usr/local:${CMAKE_PREFIX_PATH:-}"
-          cmake -B build-macos-x86_64 -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_OSX_ARCHITECTURES=x86_64 \
-            -DPROYECTHOR_BUILD_LEGACY=OFF \
-            -DPROYECTHOR_BUILD_SLINT=ON \
-            -DPROYECTHOR_FETCH_SLINT=ON \
-            -DSLINT_FEATURE_RENDERER_SKIA=ON \
-            -DPROYECTHOR_ENABLE_OPENSSL=OFF \
-            -DPROYECTHOR_VERSION_OVERRIDE="${{ needs.resolve-meta.outputs.version }}" \
-            -DPROYECTHOR_VERSION_SUFFIX="${{ needs.resolve-meta.outputs.suffix }}" \
-            -DPROYECTHOR_BUILD_NUMBER=${{ github.run_number }}
-          cmake --build build-macos-x86_64 --target ProyecThorSlint --parallel
-
-      - name: Empaquetar ProyecThor.app, verificar Metal y ejecutar Smoke Test (Apple Intel)
-        run: |
-          set -euo pipefail
-          chmod +x scripts/package-macos.sh
-          FULL_VER="${{ needs.resolve-meta.outputs.version }}${{ needs.resolve-meta.outputs.suffix }}"
-          ./scripts/package-macos.sh build-macos-x86_64 x86_64 "$FULL_VER" dist-macos-x86_64
-          file build-macos-x86_64/ProyecThorSlint | grep -q "x86_64"
-          (cd build-macos-x86_64 && ./ProyecThorSlint --software-renderer) &
-          APP_PID=$!
-          sleep 3
-          if ! kill -0 "$APP_PID" 2>/dev/null; then
-            wait "$APP_PID"
-          else
-            kill "$APP_PID" 2>/dev/null || true
-          fi
-          echo "[OK] Smoke Test de macOS Intel (x86_64 + Metal) superado."
-
-      - name: Subir artefacto macOS Intel (.dmg)
-        uses: actions/upload-artifact@v4
-        with:
-          name: ProyecThor-macOS-Intel-DMG
-          path: dist-macos-x86_64/*.dmg
-          if-no-files-found: error
-
   build-linux-appimage:
     name: Linux Ubuntu 22.04 + AppImage (.AppImage)
     needs: resolve-meta
@@ -982,7 +908,7 @@ jobs:
 
   publish-release:
     name: Publicar ${{ needs.resolve-meta.outputs.channel_label }} en GitHub
-    needs: [resolve-meta, build-windows, build-windows-arm64, build-macos-arm64, build-macos-intel, build-linux-appimage]
+    needs: [resolve-meta, build-windows, build-windows-arm64, build-macos-arm64, build-linux-appimage]
     if: needs.resolve-meta.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -1007,12 +933,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ProyecThor-macOS-AppleSilicon-DMG
-          path: release-assets
-
-      - name: Descargar artefacto macOS Intel
-        uses: actions/download-artifact@v4
-        with:
-          name: ProyecThor-macOS-Intel-DMG
           path: release-assets
 
       - name: Descargar artefacto Linux AppImage
@@ -1046,7 +966,6 @@ jobs:
           - **Windows x64 (Instalador .exe):** \`ProyecThor_Setup_${FULL_VER}.exe\` (también disponible como \`ProyecThor_Setup.exe\`)
           - **Windows ARM64 (Instalador .exe):** \`ProyecThor_Setup_${FULL_VER}_arm64.exe\` (también disponible como \`ProyecThor_Setup_arm64.exe\`)
           - **macOS Apple Silicon — M1/M2/M3/M4 (.dmg):** \`ProyecThor-${FULL_VER}-macos-arm64.dmg\` (también disponible como \`ProyecThor-macos-arm64.dmg\`)
-          - **macOS Apple Intel — x86_64 (.dmg):** \`ProyecThor-${FULL_VER}-macos-x86_64.dmg\` (también disponible como \`ProyecThor-macos-x86_64.dmg\`)
           - **Linux x86_64 (.AppImage portable):** \`ProyecThor-${FULL_VER}-x86_64.AppImage\` (también disponible como \`ProyecThor-x86_64.AppImage\`)
 
           ### Cambios incluidos desde el lanzamiento anterior
@@ -1145,7 +1064,6 @@ jobs:
                                   f"• Windows x64: `ProyecThor_Setup_{full_ver}.exe`\n"
                                   f"• Windows ARM64: `ProyecThor_Setup_{full_ver}_arm64.exe`\n"
                                   f"• macOS Apple Silicon: `ProyecThor-{full_ver}-macos-arm64.dmg`\n"
-                                  f"• macOS Intel: `ProyecThor-{full_ver}-macos-x86_64.dmg`\n"
                                   f"• Linux Portable: `ProyecThor-{full_ver}-x86_64.AppImage`"
                               ),
                               "inline": False,
