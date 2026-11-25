@@ -4,7 +4,7 @@
 
 ProyecThor is a high-performance, open-source multimedia playback and projection engine built in **C++** and **Slint**. Engineered for instant response, multi-layer compositing, and rock-solid stability under live production pressure in theaters, conferences, churches, and live events.
 
-[Website](https://thevixcho.github.io/ProyecThor/) &nbsp;•&nbsp; [Download Release](https://github.com/TheVixcho/ProyecThor/releases) &nbsp;•&nbsp; [Discord Community](https://discord.gg/FKqgPDZpBF) &nbsp;•&nbsp; [Report a Bug](https://github.com/TheVixcho/ProyecThor/issues) &nbsp;•&nbsp; [Plugins & SDK](./plugins/README.md)
+[Website](https://thevixcho.github.io/ProyecThor/) &nbsp;•&nbsp; [Download Release](https://github.com/TheVixcho/ProyecThor/releases) &nbsp;•&nbsp; [Discord Community](https://discord.gg/QJ6wGHQjs6) &nbsp;•&nbsp; [Report a Bug](https://github.com/TheVixcho/ProyecThor/issues) &nbsp;•&nbsp; [Plugins & SDK](./plugins/README.md)
 
 ---
 
@@ -99,7 +99,7 @@ ProyecThor is built for native performance, low frame latency, and cross-platfor
 ProyecThor is open source and welcomes community contributions! To keep the codebase clean and reliable for live productions:
 
 1. **Pull Requests in English**: All Pull Request titles, descriptions, commit messages, and code review discussions **must be written in English**.
-2. **Coordinate on Discord**: Before starting large features or architectural changes, discuss your idea on our [Discord server](https://discord.gg/FKqgPDZpBF).
+2. **Coordinate on Discord**: Before starting large features or architectural changes, discuss your idea on our [Discord server](https://discord.gg/QJ6wGHQjs6).
 3. **Human-Led Architecture & Real Testing**: AI tools may assist with linting or boilerplate, but all PRs must be human-architected and tested on real hardware (see [`docs/AI_POLICY.md`](./docs/AI_POLICY.md)).
 4. **Clean Builds**: Verify your changes compile cleanly on Linux (`cmake -B build-linux -G Ninja && ninja -C build-linux`) and/or Windows before opening a PR.
 
@@ -109,7 +109,7 @@ ProyecThor is open source and welcomes community contributions! To keep the code
 
 ## Community and Support
 
-- **Discord**: [Join the ProyecThor Discord](https://discord.gg/FKqgPDZpBF) for development discussions, support, and beta testing.
+- **Discord**: [Join the ProyecThor Discord](https://discord.gg/QJ6wGHQjs6) for development discussions, support, and beta testing.
 - **Instagram**: [Follow @theproyecthor](https://www.instagram.com/theproyecthor/) for updates and showcases.
 - **WhatsApp Channel**: [Join the WhatsApp Channel](https://whatsapp.com/channel/0029Vb7e9tj3WHTdNivIxR19) for release announcements.
 - **GitHub Issues**: [Report bugs or request features](https://github.com/TheVixcho/ProyecThor/issues).

@@ -480,7 +480,7 @@ void HelpPanel::RenderCategoryCommunity() {
         Tr("Únete a nuestro servidor de Discord para chatear con la comunidad, solicitar nuevas funciones, compartir plantillas y obtener soporte directo.",
            "Join our Discord server to chat with the community, request new features, share templates, and get direct support.",
            "Junte-se ao nosso servidor Discord para conversar com a comunidade, pedir recursos e obter suporte."),
-        "https://discord.gg/FKqgPDZpBF",
+        "https://discord.gg/QJ6wGHQjs6",
         IM_COL32(88, 101, 242, 255), // Blurple Discord
         Tr("Unirse a Discord", "Join Discord", "Entrar no Discord")
     );

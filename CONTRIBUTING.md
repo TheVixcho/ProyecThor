@@ -6,7 +6,7 @@ Thank you for your interest in contributing to **ProyecThor**! To maintain live-
 
 ## 1. Before You Start
 
-1. **Discuss First on Discord**: Before implementing a major feature, UI change, or refactor, join our development community on [Discord](https://discord.gg/FKqgPDZpBF) and share your proposal.
+1. **Discuss First on Discord**: Before implementing a major feature, UI change, or refactor, join our development community on [Discord](https://discord.gg/QJ6wGHQjs6) and share your proposal.
 2. **Review the Architecture**: Read [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) to understand the separation between the C++ Core, Media Engine (`libmpv` / OpenGL), and the **Slint** UI (`src/ui_slint`).
 3. **Check Third-Party Licenses**: Review [`THIRD-PARTY-NOTICES.md`](./THIRD-PARTY-NOTICES.md) and [`docs/THIRD_PARTY_LICENSES.md`](./docs/THIRD_PARTY_LICENSES.md) if your changes introduce or modify external dependencies.
 

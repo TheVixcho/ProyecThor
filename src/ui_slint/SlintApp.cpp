@@ -1195,7 +1195,7 @@ void SlintApp::BindCallbacks() {
         openExternalUrl("https://thevixcho.github.io/ProyecThor/");
     });
     m_Main->on_open_discord([openExternalUrl]() {
-        openExternalUrl("https://discord.gg/FKqgPDZpBF");
+        openExternalUrl("https://discord.gg/QJ6wGHQjs6");
     });
     m_Main->on_open_instagram([openExternalUrl]() {
         openExternalUrl("https://www.instagram.com/theproyecthor/");
@@ -1210,7 +1210,7 @@ void SlintApp::BindCallbacks() {
         };
         static constexpr HelpQrEntry kHelpQrEntries[] = {
             {"Sitio Web Oficial", "https://thevixcho.github.io/ProyecThor/"},
-            {"Discord (Soporte y Comunidad)", "https://discord.gg/FKqgPDZpBF"},
+            {"Discord (Soporte y Comunidad)", "https://discord.gg/QJ6wGHQjs6"},
             {"Instagram (@theproyecthor)", "https://www.instagram.com/theproyecthor/"},
             {"Canal de WhatsApp", "https://whatsapp.com/channel/0029Vb7e9tj3WHTdNivIxR19"},
         };
