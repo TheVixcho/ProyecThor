@@ -1039,9 +1039,9 @@ jobs:
               notes_text = f"Se publicó la versión **{full_ver}** ({channel})."
 
           title = (
-              f"🧪 Nueva Beta de ProyecThor: {tag}"
+              f"Nueva Beta de ProyecThor: {tag}"
               if is_pre
-              else f"🚀 Nueva versión de ProyecThor: {tag}"
+              else f"Nueva versión de ProyecThor: {tag}"
           )
           color = 0xF59E0B if is_pre else 0x22C55E
 
