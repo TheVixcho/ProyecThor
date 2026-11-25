@@ -1076,3 +1076,97 @@ jobs:
             release-assets/*.AppImage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notificar nueva actualización en Discord (Webhook)
+        shell: bash
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TAG_NAME: ${{ needs.resolve-meta.outputs.tag_name }}
+          FULL_VER: ${{ needs.resolve-meta.outputs.version }}${{ needs.resolve-meta.outputs.suffix }}
+          CHANNEL: ${{ needs.resolve-meta.outputs.channel_label }}
+          IS_PRE: ${{ needs.resolve-meta.outputs.is_prerelease }}
+          REPO_SLUG: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DISCORD_WEBHOOK_URL:-}" ]; then
+            echo "::notice::Secret DISCORD_WEBHOOK_URL no configurado; omitiendo aviso en Discord."
+            exit 0
+          fi
+
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          tag = os.environ["TAG_NAME"]
+          full_ver = os.environ["FULL_VER"]
+          channel = os.environ["CHANNEL"]
+          is_pre = os.environ.get("IS_PRE", "false") == "true"
+          repo = os.environ["REPO_SLUG"]
+          release_url = f"https://github.com/{repo}/releases/tag/{tag}"
+
+          notes_text = ""
+          notes_path = Path("release_notes.md")
+          if notes_path.exists():
+              raw = notes_path.read_text(encoding="utf-8", errors="replace")
+              marker = "### Cambios incluidos desde el lanzamiento anterior"
+              if marker in raw:
+                  notes_text = raw.split(marker, 1)[1].strip()
+              else:
+                  notes_text = raw.strip()
+          if len(notes_text) > 1500:
+              notes_text = notes_text[:1497] + "..."
+          if not notes_text:
+              notes_text = f"Se publicó la versión **{full_ver}** ({channel})."
+
+          title = (
+              f"🧪 Nueva Beta de ProyecThor: {tag}"
+              if is_pre
+              else f"🚀 Nueva versión de ProyecThor: {tag}"
+          )
+          color = 0xF59E0B if is_pre else 0x22C55E
+
+          payload = {
+              "username": "ProyecThor Releases",
+              "embeds": [
+                  {
+                      "title": title,
+                      "url": release_url,
+                      "color": color,
+                      "description": (
+                          f"**Canal:** {channel}\n"
+                          f"**Descarga directa:** [Abrir Release en GitHub]({release_url})\n\n"
+                          f"**Cambios recientes:**\n{notes_text}"
+                      ),
+                      "fields": [
+                          {
+                              "name": "Plataformas disponibles",
+                              "value": (
+                                  f"• Windows x64: `ProyecThor_Setup_{full_ver}.exe`\n"
+                                  f"• Windows ARM64: `ProyecThor_Setup_{full_ver}_arm64.exe`\n"
+                                  f"• macOS Apple Silicon: `ProyecThor-{full_ver}-macos-arm64.dmg`\n"
+                                  f"• macOS Intel: `ProyecThor-{full_ver}-macos-x86_64.dmg`\n"
+                                  f"• Linux Portable: `ProyecThor-{full_ver}-x86_64.AppImage`"
+                              ),
+                              "inline": False,
+                          }
+                      ],
+                      "footer": {"text": f"{repo} • GitHub Actions"},
+                  }
+              ],
+          }
+          Path("discord_payload.json").write_text(
+              json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+          )
+          PY
+
+          if curl -fsSL --retry 3 --retry-delay 2 \
+              -H "Content-Type: application/json" \
+              -d @discord_payload.json \
+              "$DISCORD_WEBHOOK_URL" >/dev/null; then
+            echo "[OK] Aviso de actualización enviado a Discord."
+          else
+            echo "::warning::La release se publicó correctamente, pero falló el envío del webhook a Discord."
+          fi
+          rm -f discord_payload.json
+
