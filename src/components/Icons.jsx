@@ -62,22 +62,30 @@ export function IconEye(props) {
 
 export function IconWindows(props) {
   return (
-    <svg {...base} {...props}>
-      <path d="M3 6.2 10.4 5.2V11.8H3V6.2Z" />
-      <path d="M11.4 5.1 21 3.8V11.7H11.4V5.1Z" />
-      <path d="M3 12.8H10.4V19.4L3 18.4V12.8Z" />
-      <path d="M11.4 12.8H21V20.2L11.4 18.9V12.8Z" />
+    <svg viewBox="0 0 24 24" width={24} height={24} fill="currentColor" stroke="none" aria-hidden="true" {...props}>
+      <path d="M3 5.4 10.6 4.3V11.5H3V5.4ZM11.6 4.15 21 2.8V11.5H11.6V4.15ZM3 12.5H10.6V19.7L3 18.6V12.5ZM11.6 12.5H21V21.2L11.6 19.85V12.5Z" />
     </svg>
   )
 }
 
 export function IconLinux(props) {
   return (
-    <svg {...base} {...props}>
-      <path d="M12 2.5c-2 0-3 2-3 4.2 0 1.3-.3 2-1 3-1 1.4-2 2.9-2 5 0 3.7 2.7 6.8 6 6.8s6-3.1 6-6.8c0-2.1-1-3.6-2-5-.7-1-1-1.7-1-3 0-2.2-1-4.2-3-4.2Z" />
-      <circle cx="9.7" cy="9" r="0.6" fill="currentColor" stroke="none" />
-      <circle cx="14.3" cy="9" r="0.6" fill="currentColor" stroke="none" />
-      <path d="M9 19.5c1-1 4-1 6 0" />
+    <svg viewBox="0 0 24 24" width={24} height={24} fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M12 2.4c-2.1 0-3.2 1.8-3.2 4.1 0 1.3-.3 2.2-1.1 3.2-1.1 1.4-2 2.9-2 5 0 3.5 2.6 6.2 6.3 6.2s6.3-2.7 6.3-6.2c0-2.1-.9-3.6-2-5-.8-1-1.1-1.9-1.1-3.2 0-2.3-1.1-4.1-3.2-4.1Z" />
+      <circle cx="10.2" cy="7.4" r="0.8" fill="currentColor" stroke="none" />
+      <circle cx="13.8" cy="7.4" r="0.8" fill="currentColor" stroke="none" />
+      <path d="M10.5 9.6c1 .7 2 .7 3 0" />
+      <path d="M8.5 19.4c-1.2.8-2.3 1-3 .7-.5-.2-.4-1 .5-1.5" />
+      <path d="M15.5 19.4c1.2.8 2.3 1 3 .7.5-.2.4-1-.5-1.5" />
+    </svg>
+  )
+}
+
+export function IconMac(props) {
+  return (
+    <svg viewBox="0 0 24 24" width={24} height={24} fill="currentColor" stroke="none" aria-hidden="true" {...props}>
+      <path d="M16.36 12.76c-.02-2.22 1.81-3.3 1.9-3.35-1.04-1.52-2.65-1.73-3.22-1.75-1.35-.14-2.66.81-3.35.81-.7 0-1.77-.8-2.92-.78-1.48.02-2.86.88-3.62 2.21-1.57 2.71-.4 6.72 1.1 8.92.75 1.08 1.63 2.28 2.78 2.24 1.12-.05 1.55-.72 2.9-.72 1.35 0 1.74.72 2.91.7 1.21-.02 1.97-1.08 2.7-2.17.87-1.25 1.22-2.48 1.24-2.54-.03-.01-2.39-.92-2.42-3.57Z" />
+      <path d="M14.15 6.23c.61-.75 1.03-1.77.91-2.81-.88.04-1.98.6-2.62 1.34-.56.65-1.06 1.7-.93 2.71.99.08 2.02-.5 2.64-1.24Z" />
     </svg>
   )
 }

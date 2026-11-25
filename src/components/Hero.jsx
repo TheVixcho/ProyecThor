@@ -1,5 +1,6 @@
 import { LINKS } from '../links'
-import { IconArrowRight, IconDownload } from './Icons'
+import { IconArrowRight } from './Icons'
+import OsDownloadCta from './OsDownloadCta'
 
 export default function Hero({ strings }) {
   const { hero } = strings
@@ -16,10 +17,7 @@ export default function Hero({ strings }) {
           <p className="hero-lead">{hero.lead}</p>
 
           <div className="hero-actions">
-            <a className="btn btn-primary btn-lg" href={LINKS.releases} target="_blank" rel="noreferrer">
-              <IconDownload width={18} height={18} />
-              {hero.download}
-            </a>
+            <OsDownloadCta variant="buttons" />
             <a className="btn btn-outline btn-lg" href={LINKS.repo} target="_blank" rel="noreferrer">
               {hero.github}
               <IconArrowRight width={18} height={18} />

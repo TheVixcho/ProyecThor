@@ -101,6 +101,35 @@
   font-size: 16px;
 }
 
+.btn-os-compact {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 15px;
+}
+
+.os-cta-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.btn-os {
+  gap: 9px;
+  padding: 14px 22px;
+}
+
+.btn-os-featured {
+  box-shadow: 0 8px 22px -6px rgba(26, 86, 219, 0.45);
+}
+
+.btn-os-secondary {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
 /* ── Navbar ───────────────────────────────────────────────────────────── */
 
 .navbar {
@@ -761,11 +790,38 @@
   padding: 30px;
 }
 
+.platform-card.is-detected {
+  border-color: rgba(26, 86, 219, 0.45);
+  box-shadow: 0 12px 30px -14px rgba(26, 86, 219, 0.25);
+}
+
 .platform-head {
   display: flex;
   align-items: center;
   gap: 16px;
   margin-bottom: 14px;
+}
+
+.platform-head-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.platform-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.platform-detected-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--blue);
+  background: var(--blue-soft);
+  border: 1px solid rgba(26, 86, 219, 0.22);
+  border-radius: 999px;
+  padding: 2px 9px;
 }
 
 .platform-icon {
@@ -1100,6 +1156,18 @@
   .hero-actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .os-cta-group {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    width: 100%;
+  }
+
+  .btn-os {
+    padding: 12px 10px;
+    font-size: 14px;
   }
 
   .engine-pills {

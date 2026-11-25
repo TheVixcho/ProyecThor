@@ -117,27 +117,41 @@ export const translations = {
     ],
     platforms: {
       heading: 'Run where you already work',
-      lead: 'ProyecThor provides an optimized resource profile on Linux with lower memory, CPU and GPU usage compared to the equivalent Windows build, without sacrificing performance on comparable hardware.',
+      lead: 'Native builds powered by Slint and Async libmpv for Windows (x64 & ARM64), Linux (AppImage), and macOS Apple Silicon (Metal), with low CPU and RAM usage.',
+      detectedBadge: 'Your OS',
       items: [
         {
-          name: 'Windows 10 / 11',
+          os: 'windows',
+          name: 'Windows 10 / 11 (x64 & ARM64)',
           status: 'Fully supported',
-          note: 'Primary platform for development and testing.',
+          note: 'Native builds for both standard x64 PCs and ARM64 devices (Direct3D + D3D11VA).',
           tiers: [
-            { label: 'Minimum', specs: [['CPU', 'Intel i5 7th gen'], ['RAM', '8 GB'], ['GPU', 'Integrated'], ['Storage', '500 MB free + library']] },
-            { label: 'Recommended', specs: [['CPU', 'Recent Intel i5 or i7'], ['RAM', '16 GB'], ['GPU', 'Dedicated, hardware acceleration'], ['Storage', 'SSD']] },
+            { label: 'Minimum', specs: [['CPU', 'Intel i5 7th gen or ARM64'], ['RAM', '8 GB'], ['GPU', 'Integrated (Direct3D)'], ['Storage', '500 MB free + library']] },
+            { label: 'Recommended', specs: [['CPU', 'Recent Intel i5 / Ryzen / Snapdragon X'], ['RAM', '16 GB'], ['GPU', 'Hardware acceleration'], ['Storage', 'SSD']] },
           ],
         },
         {
-          name: 'Linux (Arch / CachyOS)',
+          os: 'linux',
+          name: 'Linux (x86_64 AppImage)',
           status: 'Fully supported',
-          note: 'Compatibility tested on Arch-based distributions, with extended support for Debian/Ubuntu.',
+          note: 'Tested on Arch/CachyOS, Ubuntu, Debian and Fedora with X11 & Wayland portals.',
           tiers: [
-            { label: 'Minimum', specs: [['CPU', 'Dual-core'], ['RAM', '4 GB'], ['GPU', 'Integrated, OpenGL support'], ['Storage', '500 MB free + library']] },
-            { label: 'Recommended', specs: [['CPU', 'Quad-core or equivalent'], ['RAM', '8 GB'], ['GPU', 'Dedicated (optional)'], ['Storage', 'SSD']] },
+            { label: 'Minimum', specs: [['CPU', 'Dual-core x86_64'], ['RAM', '4 GB'], ['GPU', 'Integrated, OpenGL support'], ['Storage', '500 MB free + library']] },
+            { label: 'Recommended', specs: [['CPU', 'Quad-core or equivalent'], ['RAM', '8 GB'], ['GPU', 'Dedicated or modern iGPU'], ['Storage', 'SSD']] },
           ],
         },
         {
+          os: 'mac',
+          name: 'macOS (Apple Silicon M1–M4)',
+          status: 'Native Metal + VideoToolbox',
+          note: 'Universal Apple Silicon .dmg bundle using native Metal GPU rendering and VideoToolbox decoding.',
+          tiers: [
+            { label: 'Minimum', specs: [['Chip', 'Apple M1'], ['OS', 'macOS 12 Monterey or newer'], ['RAM', '8 GB Unified'], ['Storage', '500 MB free + library']] },
+            { label: 'Recommended', specs: [['Chip', 'Apple M2 / M3 / M4'], ['GPU', 'Metal Hardware Renderer'], ['RAM', '16 GB Unified'], ['Storage', 'SSD']] },
+          ],
+        },
+        {
+          os: 'android',
           name: 'Android (closed beta)',
           status: 'Available on Google Play',
           note: 'The mobile app is in closed beta; join the test program for remote control access.',
@@ -287,27 +301,41 @@ export const translations = {
     ],
     platforms: {
       heading: 'Corre donde ya trabajas',
-      lead: 'ProyecThor ofrece un perfil de recursos optimizado en Linux, con menor uso de memoria, CPU y GPU respecto a la versión equivalente en Windows, sin sacrificar rendimiento en hardware comparable.',
+      lead: 'Compilaciones nativas con Slint y Async libmpv para Windows (x64 y ARM64), Linux (AppImage) y macOS Apple Silicon (Metal), optimizadas para bajo consumo de CPU y RAM.',
+      detectedBadge: 'Tu sistema',
       items: [
         {
-          name: 'Windows 10 / 11',
+          os: 'windows',
+          name: 'Windows 10 / 11 (x64 y ARM64)',
           status: 'Totalmente soportado',
-          note: 'Plataforma principal de desarrollo y pruebas.',
+          note: 'Instaladores nativos tanto para PCs x64 como para dispositivos ARM64 (Direct3D + D3D11VA).',
           tiers: [
-            { label: 'Mínimo', specs: [['CPU', 'Intel i5 de 7ma generación'], ['RAM', '8 GB'], ['GPU', 'Integrada'], ['Almacenamiento', '500 MB libres + biblioteca']] },
-            { label: 'Recomendado', specs: [['CPU', 'Intel i5 reciente o i7'], ['RAM', '16 GB'], ['GPU', 'Dedicada, aceleración por hardware'], ['Almacenamiento', 'SSD']] },
+            { label: 'Mínimo', specs: [['CPU', 'Intel i5 7ma gen o ARM64'], ['RAM', '8 GB'], ['GPU', 'Integrada (Direct3D)'], ['Almacenamiento', '500 MB libres + biblioteca']] },
+            { label: 'Recomendado', specs: [['CPU', 'Intel i5 reciente / Ryzen / Snapdragon X'], ['RAM', '16 GB'], ['GPU', 'Aceleración por hardware'], ['Almacenamiento', 'SSD']] },
           ],
         },
         {
-          name: 'Linux (Arch / CachyOS)',
+          os: 'linux',
+          name: 'Linux (x86_64 AppImage)',
           status: 'Totalmente soportado',
-          note: 'Compatibilidad probada en distribuciones basadas en Arch, con soporte extendido a Debian/Ubuntu.',
+          note: 'Probado en Arch/CachyOS, Ubuntu, Debian y Fedora con soporte nativo para X11 y Wayland.',
           tiers: [
-            { label: 'Mínimo', specs: [['CPU', 'Dual-core'], ['RAM', '4 GB'], ['GPU', 'Integrada, soporte OpenGL'], ['Almacenamiento', '500 MB libres + biblioteca']] },
-            { label: 'Recomendado', specs: [['CPU', 'Quad-core o equivalente'], ['RAM', '8 GB'], ['GPU', 'Dedicada (opcional)'], ['Almacenamiento', 'SSD']] },
+            { label: 'Mínimo', specs: [['CPU', 'Dual-core x86_64'], ['RAM', '4 GB'], ['GPU', 'Integrada, soporte OpenGL'], ['Almacenamiento', '500 MB libres + biblioteca']] },
+            { label: 'Recomendado', specs: [['CPU', 'Quad-core o equivalente'], ['RAM', '8 GB'], ['GPU', 'Dedicada o iGPU moderna'], ['Almacenamiento', 'SSD']] },
           ],
         },
         {
+          os: 'mac',
+          name: 'macOS (Apple Silicon M1–M4)',
+          status: 'Nativo Metal + VideoToolbox',
+          note: 'Paquete .dmg nativo para Apple Silicon con renderizado por GPU Metal y decodificación VideoToolbox.',
+          tiers: [
+            { label: 'Mínimo', specs: [['Chip', 'Apple M1'], ['Sistema', 'macOS 12 Monterey o superior'], ['RAM', '8 GB Unificada'], ['Almacenamiento', '500 MB libres + biblioteca']] },
+            { label: 'Recomendado', specs: [['Chip', 'Apple M2 / M3 / M4'], ['GPU', 'Renderizado nativo Metal'], ['RAM', '16 GB Unificada'], ['Almacenamiento', 'SSD']] },
+          ],
+        },
+        {
+          os: 'android',
           name: 'Android (beta cerrada)',
           status: 'Disponible en Google Play',
           note: 'La app móvil está en beta cerrada; únete al programa de prueba para acceder al control remoto.',
@@ -464,27 +492,41 @@ export const translations = {
     ],
     platforms: {
       heading: 'Rode onde você já trabalha',
-      lead: 'ProyecThor oferece um perfil de recursos otimizado no Linux, com menor uso de memória, CPU e GPU em comparação à versão equivalente no Windows, sem comprometer o desempenho em hardware comparável.',
+      lead: 'Compilações nativas com Slint e Async libmpv para Windows (x64 e ARM64), Linux (AppImage) e macOS Apple Silicon (Metal), com baixo uso de CPU e RAM.',
+      detectedBadge: 'Seu sistema',
       items: [
         {
-          name: 'Windows 10 / 11',
+          os: 'windows',
+          name: 'Windows 10 / 11 (x64 e ARM64)',
           status: 'Totalmente suportado',
-          note: 'Plataforma principal para desenvolvimento e testes.',
+          note: 'Instaladores nativos para PCs x64 e dispositivos ARM64 (Direct3D + D3D11VA).',
           tiers: [
-            { label: 'Mínimo', specs: [['CPU', 'Intel i5 7ª geração'], ['RAM', '8 GB'], ['GPU', 'Integrada'], ['Armazenamento', '500 MB livres + biblioteca']] },
-            { label: 'Recomendado', specs: [['CPU', 'Intel i5 recente ou i7'], ['RAM', '16 GB'], ['GPU', 'Dedicada, aceleração de hardware'], ['Armazenamento', 'SSD']] },
+            { label: 'Mínimo', specs: [['CPU', 'Intel i5 7ª geração ou ARM64'], ['RAM', '8 GB'], ['GPU', 'Integrada (Direct3D)'], ['Armazenamento', '500 MB livres + biblioteca']] },
+            { label: 'Recomendado', specs: [['CPU', 'Intel i5 recente / Ryzen / Snapdragon X'], ['RAM', '16 GB'], ['GPU', 'Aceleração de hardware'], ['Armazenamento', 'SSD']] },
           ],
         },
         {
-          name: 'Linux (Arch / CachyOS)',
+          os: 'linux',
+          name: 'Linux (x86_64 AppImage)',
           status: 'Totalmente suportado',
-          note: 'Compatibilidade testada em distribuições baseadas em Arch, com suporte estendido para Debian/Ubuntu.',
+          note: 'Testado no Arch/CachyOS, Ubuntu, Debian e Fedora com suporte nativo a X11 e Wayland.',
           tiers: [
-            { label: 'Mínimo', specs: [['CPU', 'Dual-core'], ['RAM', '4 GB'], ['GPU', 'Integrada, suporte OpenGL'], ['Armazenamento', '500 MB livres + biblioteca']] },
-            { label: 'Recomendado', specs: [['CPU', 'Quad-core ou equivalente'], ['RAM', '8 GB'], ['GPU', 'Dedicada (opcional)'], ['Armazenamento', 'SSD']] },
+            { label: 'Mínimo', specs: [['CPU', 'Dual-core x86_64'], ['RAM', '4 GB'], ['GPU', 'Integrada, suporte OpenGL'], ['Armazenamento', '500 MB livres + biblioteca']] },
+            { label: 'Recomendado', specs: [['CPU', 'Quad-core ou equivalente'], ['RAM', '8 GB'], ['GPU', 'Dedicada ou iGPU moderna'], ['Armazenamento', 'SSD']] },
           ],
         },
         {
+          os: 'mac',
+          name: 'macOS (Apple Silicon M1–M4)',
+          status: 'Nativo Metal + VideoToolbox',
+          note: 'Pacote .dmg nativo para Apple Silicon com renderização GPU Metal e decodificação VideoToolbox.',
+          tiers: [
+            { label: 'Mínimo', specs: [['Chip', 'Apple M1'], ['Sistema', 'macOS 12 Monterey ou superior'], ['RAM', '8 GB Unificada'], ['Armazenamento', '500 MB livres + biblioteca']] },
+            { label: 'Recomendado', specs: [['Chip', 'Apple M2 / M3 / M4'], ['GPU', 'Renderização nativa Metal'], ['RAM', '16 GB Unificada'], ['Armazenamento', 'SSD']] },
+          ],
+        },
+        {
+          os: 'android',
           name: 'Android (beta fechada)',
           status: 'Disponível no Google Play',
           note: 'O app móvel está em beta fechada; entre no programa de testes para acessar o controle remoto.',

@@ -1,5 +1,4 @@
-import { LINKS } from '../links'
-import { IconDownload } from './Icons'
+import OsDownloadCta from './OsDownloadCta'
 
 export default function DownloadCta({ strings }) {
   const { downloadCta } = strings
@@ -11,10 +10,7 @@ export default function DownloadCta({ strings }) {
           <div className="download-glow" aria-hidden="true" />
           <h2>{downloadCta.heading}</h2>
           <p>{downloadCta.text}</p>
-          <a className="btn btn-primary btn-lg" href={LINKS.releases} target="_blank" rel="noreferrer">
-            <IconDownload width={18} height={18} />
-            {downloadCta.cta}
-          </a>
+          <OsDownloadCta variant="buttons" />
         </div>
       </div>
     </section>

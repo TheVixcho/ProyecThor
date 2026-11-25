@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import logo from '../assets/logo.png'
 import { LINKS } from '../links'
 import { IconMenu, IconClose } from './Icons'
+import OsDownloadCta from './OsDownloadCta'
 
 export default function Navbar({ strings, language, setLanguage, labels }) {
   const [scrolled, setScrolled] = useState(false)
@@ -52,9 +53,7 @@ export default function Navbar({ strings, language, setLanguage, labels }) {
           <a className="btn btn-ghost" href={LINKS.repo} target="_blank" rel="noreferrer">
             {strings.nav.github}
           </a>
-          <a className="btn btn-primary" href={LINKS.releases} target="_blank" rel="noreferrer">
-            {strings.nav.download}
-          </a>
+          <OsDownloadCta variant="compact" label={strings.nav.download} />
         </div>
 
         <button
@@ -77,9 +76,7 @@ export default function Navbar({ strings, language, setLanguage, labels }) {
           <a href={LINKS.repo} target="_blank" rel="noreferrer">
             {strings.nav.github}
           </a>
-          <a className="btn btn-primary" href={LINKS.releases} target="_blank" rel="noreferrer">
-            {strings.nav.download}
-          </a>
+          <OsDownloadCta variant="compact" label={strings.nav.download} />
           <div className="navbar-lang navbar-lang-mobile">
             <select
               value={language}

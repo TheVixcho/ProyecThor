@@ -39,3 +39,6 @@ imgui.ini
 packaging/
 text.txt
 web/
+src/vendor/sdk/
+src/external/
+.github/workflows/release.yml
