@@ -222,6 +222,8 @@ public:
                         void (*defaultRenderFn)(ImGuiViewport*, void*));
 
     void Destroy();
+    void DestroyViewportOnly();
+    void DestroyPreviewOnly();
 
 private:
     void EnsureSized(int w, int h, void* platformHandle);

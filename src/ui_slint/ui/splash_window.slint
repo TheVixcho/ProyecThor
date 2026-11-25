@@ -1,0 +1,207 @@
+import { Theme } from "theme.slint";
+
+export component SplashWindow inherits Window {
+    title: "ProyecThor";
+    width: 660px;
+    height: 380px;
+    no-frame: true;
+    background: transparent;
+
+    in property <string> app-version: "1.2.0";
+    in property <string> status-text: "Inicializando motor libmpv...";
+    in property <string> detail-text: "Preparando sistema de proyección...";
+    in property <string> credit-text: "Arte por TheVixcho";
+    in property <float> progress: 0.15;
+    in property <image> logo-image;
+    in property <bool> has-logo: false;
+    in property <image> bg-image;
+    in property <bool> has-bg: false;
+
+    Rectangle {
+        border-radius: 14px;
+        background: Theme.bg-root;
+        border-width: 1px;
+        border-color: Theme.border-medium;
+        clip: true;
+
+        // Panoramic background artwork
+        if root.has-bg : Image {
+            source: root.bg-image;
+            image-fit: cover;
+        }
+
+        // ImGui-style left-to-right editorial gradient (dark left for crisp logo, clearer right for photo)
+        Rectangle {
+            background: @linear-gradient(90deg, #08080af4 0%, #08080ad8 46%, #08080a82 100%);
+        }
+
+        // Top-left Brand Block: Logo | Vertical Divider | ProyecThor + Subtitle
+        HorizontalLayout {
+            x: 48px;
+            y: 54px;
+            width: parent.width - 96px;
+            height: 92px;
+            spacing: 18px;
+            alignment: start;
+
+            Rectangle {
+                width: 86px;
+                height: 86px;
+                y: 3px;
+                border-radius: 16px;
+                background: #111114aa;
+                border-width: 1px;
+                border-color: #ffffff20;
+                clip: true;
+
+                if root.has-logo : Image {
+                    source: root.logo-image;
+                    width: 76px;
+                    height: 76px;
+                    x: 5px;
+                    y: 5px;
+                    image-fit: contain;
+                }
+                if !root.has-logo : Text {
+                    text: "P";
+                    color: #ffffff;
+                    font-size: 40px;
+                    font-weight: 800;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            // Accent vertical divider line
+            Rectangle {
+                width: 2px;
+                height: 74px;
+                y: 9px;
+                border-radius: 1px;
+                background: Theme.accent.transparentize(0.25);
+            }
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 4px;
+                Text {
+                    text: "ProyecThor";
+                    color: #f4f4f5;
+                    font-size: 34px;
+                    font-weight: 800;
+                }
+                Text {
+                    text: "Professional Presentation Engine  •  Open Source";
+                    color: Theme.accent;
+                    font-size: 13px;
+                    font-weight: 500;
+                }
+            }
+        }
+
+        // Art Credit Badge just above footer (exact ImGui SplashScreen detail)
+        if root.credit-text != "" : Rectangle {
+            x: 42px;
+            y: parent.height - 118px;
+            height: 24px;
+            width: credit-lbl.preferred-width + 20px;
+            border-radius: 6px;
+            background: #08080ac8;
+            border-width: 1px;
+            border-color: #ffffff14;
+
+            credit-lbl := Text {
+                x: 10px;
+                height: parent.height;
+                text: root.credit-text;
+                color: #a1a1aa;
+                font-size: 11px;
+                vertical-alignment: center;
+            }
+        }
+
+        // Bottom Footer Bar (82px height)
+        Rectangle {
+            y: parent.height - 84px;
+            width: 100%;
+            height: 84px;
+            background: #08080adc;
+
+            Rectangle {
+                y: 0;
+                width: 100%;
+                height: 1px;
+                background: #ffffff18;
+            }
+
+            HorizontalLayout {
+                padding-left: 48px;
+                padding-right: 48px;
+                padding-bottom: 6px;
+                alignment: space-between;
+
+                // Left: Percentage + Status + Resource Detail
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 4px;
+                    HorizontalLayout {
+                        spacing: 9px;
+                        Text {
+                            text: Math.round(Math.clamp(root.progress, 0.0, 1.0) * 100) + "%";
+                            color: Theme.accent-strong;
+                            font-size: 13px;
+                            font-weight: 800;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: root.status-text;
+                            color: #f4f4f5;
+                            font-size: 13px;
+                            font-weight: 600;
+                            vertical-alignment: center;
+                        }
+                    }
+                    Text {
+                        text: root.detail-text;
+                        color: #a1a1aa;
+                        font-size: 11px;
+                    }
+                }
+
+                // Right: Version & Copyright
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 4px;
+                    Text {
+                        text: "Version " + root.app-version + "  |  Slint + libmpv";
+                        color: #a1a1aa;
+                        font-size: 11.5px;
+                        horizontal-alignment: right;
+                    }
+                    Text {
+                        text: "© 2026 ProyecThor Team • Open Source";
+                        color: #71717a;
+                        font-size: 10.5px;
+                        horizontal-alignment: right;
+                    }
+                }
+            }
+
+            // Edge-to-edge Bottom Progress Bar with Glowing Tip
+            Rectangle {
+                y: parent.height - 5px;
+                width: 100%;
+                height: 5px;
+                background: #18181b;
+
+                Rectangle {
+                    x: 0;
+                    width: parent.width * Math.clamp(root.progress, 0.0, 1.0);
+                    height: 5px;
+                    background: @linear-gradient(90deg, Theme.accent 0%, Theme.accent-strong 100%);
+                    animate width { duration: 220ms; easing: ease-out; }
+                }
+            }
+        }
+    }
+}

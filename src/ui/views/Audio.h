@@ -2,7 +2,8 @@
 
 #include "IPanel.h"
 #include "audio/AudioAlbumArt.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
+#include "media/player/MusicPlayer.h"
 #include "core/SubtitleImporter.h"
 #include <string>
 #include <vector>
@@ -65,6 +66,7 @@ public:
     bool IsLiveBackground()      const { return m_IsLiveBackground; }
     void SetLiveBackground(bool v);
 
+    bool PlayFile(const std::string& filename, bool live = false);
     bool PlayFileLive(const std::string& filename);
 
     void RenderLiveBackground(float x, float y, float w, float h);
@@ -75,7 +77,17 @@ public:
     bool                      GetIsPlaying() const { return m_IsPlaying && !m_IsPaused; }
     void                      StopIfPathMatches(const std::string& path);
 
-private:
+    std::string GetCurrentTrackFilename() const {
+        if (m_CurrentTrack >= 0 && m_CurrentTrack < static_cast<int>(m_Tracks.size())) {
+            return m_Tracks[m_CurrentTrack].filename;
+        }
+        return "";
+    }
+
+    bool IsPlayingFile(const std::string& filename) const {
+        return GetIsPlaying() && (GetCurrentTrackFilename() == filename);
+    }
+
     void Play(int trackIndex);
     void PlayCurrent();
     void Stop();
@@ -83,6 +95,27 @@ private:
     void TogglePlayPause();
     void Next();
     void Previous();
+
+    // ── API de sincronizacion (ViewPanel / cola / otros paneles) ──────────
+    // Convierten al AudioPanel en la unica fuente de verdad del estado de la
+    // musica: el transporte del ViewPanel lee y controla esto mismo.
+    bool    IsMusicActive()   const { return m_IsPlaying; }
+    bool    IsMusicPaused()   const { return m_IsPlaying && m_IsPaused; }
+    int64_t GetMusicTimeMs()  const { return m_CurrentTimeMs; }
+    int64_t GetMusicLengthMs() const { return m_TotalTimeMs; }
+    void    SeekNormalized(float pos) { SeekTo(pos); }
+    void    SkipBy(int seconds)       { SkipSeconds(seconds); }
+    int     GetMusicVolume()  const { return m_Volume; }
+    void    SetMusicVolume(int v)     { SetVolume(v); }
+    bool    IsMusicMuted()    const { return m_Muted; }
+    void    SetMusicMuted(bool mute);
+    // Detiene SOLO la musica (sin tocar el fondo/estado de PresentationCore).
+    // Lo usa PresentationCore cuando el fondo en vivo deja de ser audio.
+    void    StopMusicOnly();
+
+private:
+    void PlayInternal(int trackIndex);
+    bool UsingPanelQueue() const;
     void SkipSeconds(int seconds);
     void SeekTo(float normalizedPosition);
     void SetVolume(int volume);
@@ -126,7 +159,8 @@ private:
     static void ComputeTrackAccent(AudioTrack& track);
     int  FindTrackIndexByPath(const std::string& path) const;
 
-    Core::VLCBasePlayer m_VlcPlayer;
+    // Reproductor de musica: VLC con salida nativa, asincrono (ver MusicPlayer.h)
+    Core::MusicPlayer m_VlcPlayer;
 
     std::vector<AudioTrack>  m_Tracks;
     std::vector<std::string> m_AudioQueue;
@@ -142,10 +176,10 @@ private:
     int64_t m_TotalTimeMs   = 0;
     bool    m_IsSeeking     = false;
 
-    int   m_Volume           = 80;
+    int   m_Volume           = 100;
     float m_GainDb           = 0.0f;
     bool  m_Muted            = false;
-    int   m_VolumeBeforeMute = 80;
+    int   m_VolumeBeforeMute = 100;
 
     static constexpr int kEqBands = 10;
     float m_EqBands[kEqBands] = { 0.0f };

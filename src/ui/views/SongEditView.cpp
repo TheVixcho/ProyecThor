@@ -3,6 +3,7 @@
 #include "LibrarySongMeta.h"
 #include "LibraryHelpers.h"
 #include "ui/framework/DesignSystem.h"
+#include "ui/framework/LoadingSpinner.h"
 #include "ui/panels/home/HomeIcons.h"
 
 #include <imgui.h>
@@ -20,6 +21,16 @@ namespace DS = ProyecThor::UI::DS;
 namespace ProyecThor::UI {
 
 namespace {
+
+static std::string FormatNumberWithCommas(uint64_t value) {
+    std::string s = std::to_string(value);
+    int n = (int)s.length() - 3;
+    while (n > 0) {
+        s.insert(n, ",");
+        n -= 3;
+    }
+    return s;
+}
 
 struct StdStringCbData { std::string* str; };
 
@@ -348,6 +359,14 @@ void SongEditView::RenderTopBar(bool& outWantsBack)
     if (DS::GlassIconButton("exceptions", "cards_star", "#", "Excepciones", ImVec2(btnW, DS::ButtonHeight)))
         ImGui::OpenPopup("Excepciones##exceptionsModal");
 
+    if (false) {
+        ImGui::SameLine(0.0f, 8.0f);
+        if (DS::GlassIconButton("aiAssistant", "sparkles", "IA", "Asistente IA para Letras", ImVec2(btnW, DS::ButtonHeight))) {
+            m_ShowAIModal = true;
+            m_AIStatusFeedback.clear();
+        }
+    }
+
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(520.0f, 560.0f), ImGuiCond_Appearing);
@@ -576,6 +595,25 @@ void SongEditView::RenderLeftPane(float width)
     ImGui::Separator();
     ImGui::PopStyleColor();
     ImGui::Spacing();
+
+    // Cabecera de Letras con botón Asistente IA
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
+    ImGui::TextUnformatted("Letra");
+    ImGui::PopStyleColor();
+
+    if (false) {
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x - 125.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.40f, 0.65f, 0.85f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.50f, 0.80f, 1.0f));
+        if (ImGui::Button("Asistente IA##btn_ai_lyrics", ImVec2(125.0f, 22.0f))) {
+            m_ShowAIModal = true;
+            m_AIStatusFeedback.clear();
+        }
+        ImGui::PopStyleColor(2);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Corregir ortografía, borrar puntos suspensivos o modificar esta letra con IA");
+        }
+    }
 
     const float lyricsH = std::max(120.0f, ImGui::GetContentRegionAvail().y - 4.0f);
     InputTextMultilineStd("##lyrics", &m_Current.lyrics, ImVec2(-1.0f, lyricsH),
@@ -813,6 +851,8 @@ bool SongEditView::Render()
     ImGui::SameLine();
     RenderRightPane(rightW);
 
+    RenderAIEditModal();
+
     constexpr double kAutosaveDebounceSeconds = 1.2;
     if (m_Dirty && (ImGui::GetTime() - m_LastEditTime) > kAutosaveDebounceSeconds)
         FlushIfDirty();
@@ -824,5 +864,6 @@ bool SongEditView::Render()
     return true;
 }
 
-}
+void SongEditView::RenderAIEditModal() {}
 
+}

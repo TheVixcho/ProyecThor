@@ -1,6 +1,6 @@
 #include "LiveContentRenderer.h"
 #include "core/PresentationCore.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include "core/settings/SettingsManager.h"
 #include "core/settings/StageLayoutTemplates.h"
 #include "ui/panels/capture/CapturePanel.h"
@@ -21,6 +21,13 @@ namespace ProyecThor::UI {
 
 namespace {
     namespace MT = MonitorTheme;
+
+    inline const char* TrLcr(const char* es, const char* en, const char* pt) {
+        auto lang = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language;
+        if (lang == ProyecThor::Settings::Language::English) return en;
+        if (lang == ProyecThor::Settings::Language::Portuguese) return pt;
+        return es;
+    }
 
     inline void DrawScaledImage(ImDrawList* dl, ImTextureID tex, ImVec2 pMin, ImVec2 pMax, float scale, float alpha)
     {
@@ -282,7 +289,7 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
     {
         dl->AddRectFilled(p0, p1, ImGui::GetColorU32(MT::k_Bg3));
 
-        const char* msg     = "Sin proyección activa";
+        const char* msg     = TrLcr("Sin proyección activa", "No active projection", "Sem projeção ativa");
         ImVec2      msgSize = ImGui::CalcTextSize(msg);
         dl->AddText(
             ImVec2(p0.x + (drawW - msgSize.x) * 0.5f,
@@ -327,8 +334,8 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
     // Si está proyectando
     if (state.bgType == Core::PresentationState::BackgroundType::Video)
     {
-        void* texID = core.GetProcessedBackgroundTexture((int)drawW, (int)drawH);
-        if (!texID) texID = core.GetPreviewBackgroundTexture((int)drawW, (int)drawH);
+        void* texID = core.GetPreviewBackgroundTexture((int)drawW, (int)drawH);
+        if (!texID) texID = core.GetBackgroundTexture();
         dl->AddRectFilled(p0, p1, IM_COL32(0, 0, 0, 255));
         if (texID)
         {
@@ -415,14 +422,15 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
     float scale = drawW / 1920.0f;
     bool  isSong = (core.PeekSelection().type == Core::ItemType::Song);
 
-    auto DrawBox = [&](const std::string& text, const Core::TextBoxStyle& box, bool isLyricsBox)
+    auto DrawBoxInRect = [&](const std::string& text, const Core::TextBoxStyle& box, bool isLyricsBox,
+                             ImVec2 r0, ImVec2 r1, float rW, float rH)
     {
         if (text.empty()) return;
 
-        float boxW = std::max(10.0f, box.sizeW * drawW);
-        float boxH = std::max(10.0f, box.sizeH * drawH);
-        float boxX = p0.x + box.posX * drawW - boxW * 0.5f;
-        float boxY = p0.y + box.posY * drawH - boxH * 0.5f;
+        float boxW = std::max(10.0f, box.sizeW * rW);
+        float boxH = std::max(10.0f, box.sizeH * rH);
+        float boxX = r0.x + box.posX * rW - boxW * 0.5f;
+        float boxY = r0.y + box.posY * rH - boxH * 0.5f;
 
         if (box.bgMediaEnabled && !box.bgMediaPath.empty()) {
             unsigned int bgTex = core.GetBoxBgTexture(isLyricsBox, box.bgMediaPath);
@@ -464,7 +472,7 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
         else if (box.vAlign == 2)
             textY += (boxH - textBlock.y);
 
-        dl->PushClipRect(p0, p1, true);
+        dl->PushClipRect(r0, r1, true);
 
         ImU32 textCol = ImGui::ColorConvertFloat4ToU32(
             ImVec4(box.color[0], box.color[1], box.color[2], box.color[3]));
@@ -513,11 +521,87 @@ void DrawPublicContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1, float drawW, float 
         dl->PopClipRect();
     };
 
-    if (!suppressLyrics && state.showText && !state.currentText.empty())
-        DrawBox(state.currentText, state.lyricsBox, true);
+    if (!suppressLyrics && state.showText)
+    {
+        if (state.tiles.enabled)
+        {
+            int slotCount = (state.tiles.layout == Core::TileLayout::QuadGrid) ? 4 : 2;
+            for (int i = 0; i < slotCount; i++)
+            {
+                const auto& slot = state.tiles.slots[i];
+                if (!slot.visible || (slot.text.empty() && slot.ref.empty())) continue;
 
-    if (state.indexEnabled && !state.currentRef.empty())
-        DrawBox(state.currentRef, state.indexBox, false);
+                ImVec2 sub0 = p0, sub1 = p1;
+                float subW = drawW, subH = drawH;
+
+                if (state.tiles.layout == Core::TileLayout::SplitVertical)
+                {
+                    subW = drawW * 0.5f;
+                    sub0 = { p0.x + i * subW, p0.y };
+                    sub1 = { sub0.x + subW, p1.y };
+                }
+                else if (state.tiles.layout == Core::TileLayout::SplitHorizontal)
+                {
+                    subH = drawH * 0.5f;
+                    sub0 = { p0.x, p0.y + i * subH };
+                    sub1 = { p1.x, sub0.y + subH };
+                }
+                else // QuadGrid
+                {
+                    subW = drawW * 0.5f;
+                    subH = drawH * 0.5f;
+                    int col = i % 2;
+                    int row = i / 2;
+                    sub0 = { p0.x + col * subW, p0.y + row * subH };
+                    sub1 = { sub0.x + subW, sub0.y + subH };
+                }
+
+                const auto& lyricsBox = slot.hasCustomStyle ? slot.lyricsBox : state.lyricsBox;
+                const auto& indexBox  = slot.hasCustomStyle ? slot.indexBox  : state.indexBox;
+                bool indEnabled       = slot.hasCustomStyle ? slot.indexEnabled : state.indexEnabled;
+
+                if (!slot.text.empty())
+                    DrawBoxInRect(slot.text, lyricsBox, true, sub0, sub1, subW, subH);
+
+                if (indEnabled && !slot.ref.empty())
+                    DrawBoxInRect(slot.ref, indexBox, false, sub0, sub1, subW, subH);
+            }
+
+            // Divisor sutil visual
+            if (state.tiles.showDividers)
+            {
+                if (state.tiles.layout == Core::TileLayout::SplitVertical)
+                {
+                    float midX = p0.x + drawW * 0.5f;
+                    dl->AddLine({ midX, p0.y + drawH * 0.08f }, { midX, p1.y - drawH * 0.08f },
+                                IM_COL32(255, 255, 255, 30), 1.0f);
+                }
+                else if (state.tiles.layout == Core::TileLayout::SplitHorizontal)
+                {
+                    float midY = p0.y + drawH * 0.5f;
+                    dl->AddLine({ p0.x + drawW * 0.08f, midY }, { p1.x - drawW * 0.08f, midY },
+                                IM_COL32(255, 255, 255, 30), 1.0f);
+                }
+                else
+                {
+                    float midX = p0.x + drawW * 0.5f;
+                    float midY = p0.y + drawH * 0.5f;
+                    dl->AddLine({ midX, p0.y + drawH * 0.05f }, { midX, p1.y - drawH * 0.05f },
+                                IM_COL32(255, 255, 255, 25), 1.0f);
+                    dl->AddLine({ p0.x + drawW * 0.05f, midY }, { p1.x - drawW * 0.05f, midY },
+                                IM_COL32(255, 255, 255, 25), 1.0f);
+                }
+            }
+        }
+        else
+        {
+            if (!state.currentText.empty())
+                DrawBoxInRect(state.currentText, state.lyricsBox, true, p0, p1, drawW, drawH);
+
+            if (state.indexEnabled && !state.currentRef.empty())
+                DrawBoxInRect(state.currentRef, state.indexBox, false, p0, p1, drawW, drawH);
+        }
+    }
 
     // ── Overlay (PNG transparente) ──────────────────────────────────────────
     // Capa APARTE de fondo/texto (ver PresentationCore::SetOverlayMedia) --
@@ -692,13 +776,13 @@ void DrawStageContent(ImDrawList* dl, ImVec2 p0, ImVec2 p1)
     }
 
     // Badge de estado de salida (derecha)
-    const char* statusTxt = "○ EN ESPERA";
+    const char* statusTxt = TrLcr("○ EN ESPERA", "○ STANDBY", "○ EM ESPERA");
     ImU32 statusBgCol    = IM_COL32(45, 48, 58, 255);
     ImU32 statusTxtCol   = IM_COL32(180, 185, 195, 255);
 
     if (state.isProjecting)
     {
-        statusTxt    = "● EN VIVO";
+        statusTxt    = TrLcr("● EN VIVO", "● LIVE", "● EM DIRETO");
         statusBgCol  = IM_COL32(20, 95, 45, 255);
         statusTxtCol = IM_COL32(140, 255, 170, 255);
     }

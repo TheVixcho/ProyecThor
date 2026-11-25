@@ -8,14 +8,15 @@ Build-Depends: debhelper-compat (= 13),
                pkg-config,
                git,
                libglfw3-dev,
-               libgl1-mesa-dev
+               libgl1-mesa-dev,
+               libmpv-dev
 Standards-Version: 4.6.2
-Homepage: https://proyecthor.web.app
+Homepage: https://github.com/TheVixcho/ProyecThor
 
 Package: proyecthor
 Architecture: amd64
-Depends: ${shlibs:Depends}, ${misc:Depends}, libglfw3, libgl1
+Depends: ${shlibs:Depends}, ${misc:Depends}, libglfw3, libgl1, libmpv2 | libmpv1
 Recommends: yt-dlp, zenity
-Description: Reproductor multimedia con VLC + OpenGL + ImGui
- ProyecThor es un reproductor multimedia basado en libVLC para el
+Description: Reproductor multimedia con libmpv + OpenGL + ImGui
+ ProyecThor es un reproductor multimedia basado en libmpv para el
  video/audio, OpenGL para el render y Dear ImGui para la interfaz.

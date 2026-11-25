@@ -1,65 +1,101 @@
-cmake_minimum_required(VERSION 3.11)
+cmake_minimum_required(VERSION 3.21)
 
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 project(ProyecThor
-    VERSION 1.0.1
+    VERSION 1.2.0
     LANGUAGES C CXX
 )
 
-# Sin esto, CMake no aplica ninguna optimizacion por defecto (equivale a
-# -O0): el binario resultante corre notablemente mas lento en PCs de bajos
-# recursos. Quien necesite un build de debug puede seguir pasando
-# -DCMAKE_BUILD_TYPE=Debug explicitamente.
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
+# ── Detección de arquitectura y opciones de targets ───────────────────────────
+set(PROYECTHOR_IS_WIN_ARM64 FALSE)
+if(WIN32)
+    string(TOLOWER "${CMAKE_GENERATOR_PLATFORM};${CMAKE_VS_PLATFORM_NAME};${CMAKE_SYSTEM_PROCESSOR}" _pt_win_arch)
+    if(_pt_win_arch MATCHES "arm64|aarch64")
+        set(PROYECTHOR_IS_WIN_ARM64 TRUE)
+        message(STATUS "Arquitectura detectada: Windows ARM64")
+    endif()
 endif()
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    add_compile_options(-O2)
+
+if(APPLE OR PROYECTHOR_IS_WIN_ARM64)
+    set(_pt_default_legacy OFF)
+else()
+    set(_pt_default_legacy ON)
+endif()
+option(PROYECTHOR_BUILD_LEGACY "Compilar la interfaz clásica ImGui (ProyecThor)" ${_pt_default_legacy})
+option(PROYECTHOR_BUILD_SLINT "Compilar la nueva interfaz moderna con Slint" ON)
+option(PROYECTHOR_FETCH_SLINT "Compilar Slint C++ desde fuente (FetchContent) si no hay SDK precompilado" OFF)
+set(SLINT_SDK_DIR "" CACHE PATH "Ruta explícita al Slint C++ SDK (opcional)")
+set(MPV_SDK_DIR "" CACHE PATH "Ruta explícita al libmpv SDK en Windows (opcional)")
+
+# ── Acelerador de compilación con caché (ccache) para desarrollo y debug ───
+# En MSVC (especialmente runners Windows con Strawberry Perl ccache) se omite por
+# defecto para evitar incompatibilidades con PCH (/Yu) y PDB (/FS).
+option(PROYECTHOR_USE_CCACHE "Usar ccache si esta disponible (no-MSVC)" ON)
+if(PROYECTHOR_USE_CCACHE AND NOT MSVC)
+    find_program(CCACHE_PROGRAM ccache)
+    if(CCACHE_PROGRAM)
+        message(STATUS "ccache detectado: ${CCACHE_PROGRAM} (compilación acelerada con caché habilitada)")
+        set(CMAKE_C_COMPILER_LAUNCHER   "${CCACHE_PROGRAM}")
+        set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+        set(ENV{CCACHE_SLOPPINESS} "pch_defines,time_macros")
+        set(ENV{CCACHE_PCH_EXTERNAL_CHECKSUM} "true")
+    endif()
+endif()
+
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Tipo de compilación: Release o Debug" FORCE)
+endif()
+
+if(MSVC)
+    add_compile_options(/utf-8 /EHsc /MP)
+    add_compile_definitions(ssize_t=ptrdiff_t _CRT_SECURE_NO_WARNINGS _USE_MATH_DEFINES)
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        add_compile_definitions(PT_DEBUG)
+    endif()
+else()
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        add_compile_options(-O2)
+    elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        # -Og: Optimizado para compilación ultra-rápida y depuración interactiva (sin pases pesados de optimización)
+        # -g1: Información de depuración esencial para stack traces y asserts rápidos sin inflar el tamaño de los .o
+        # -pipe: Usa tuberías en memoria entre etapas del compilador evitando I/O de disco
+        add_compile_options(-Og -g1 -pipe)
+        add_compile_definitions(PT_DEBUG)
+    endif()
 endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-# ── CONTADOR DE BUILDS ────────────────────────────────────────────────────────
-# Aumenta SOLO al reconfigurar con CMake (compilar de verdad: "cmake -B" a
-# mano, o un build limpio de CI), nunca al abrir la app -- antes se
-# incrementaba en cada arranque (ver splash screen / GetAndIncrementBuildCount
-# en main.cpp, retirado), lo que en la practica contaba "veces que se probo
-# el build" en vez de "veces que se compilo". CI sigue pudiendo fijar su
-# propio numero pasando -DPROYECTHOR_BUILD_NUMBER=N (ver
-# .github/workflows/build.yml), en cuyo caso este contador local no se toca.
 if(NOT DEFINED PROYECTHOR_BUILD_NUMBER)
     set(_build_count_file "${CMAKE_CURRENT_SOURCE_DIR}/build_count.txt")
-    set(PROYECTHOR_BUILD_NUMBER 0)
+    set(PROYECTHOR_BUILD_NUMBER 1)
     if(EXISTS "${_build_count_file}")
         file(READ "${_build_count_file}" PROYECTHOR_BUILD_NUMBER)
         string(STRIP "${PROYECTHOR_BUILD_NUMBER}" PROYECTHOR_BUILD_NUMBER)
     endif()
-    math(EXPR PROYECTHOR_BUILD_NUMBER "${PROYECTHOR_BUILD_NUMBER} + 1")
-    file(WRITE "${_build_count_file}" "${PROYECTHOR_BUILD_NUMBER}")
 endif()
 
-# ── SUFIJO DE VERSION (pre-release) ──────────────────────────────────────────
-# Vacio = release estable ("1.0.0"). Para una beta/rc que todavia no es la
-# version final, pasar -DPROYECTHOR_VERSION_SUFFIX=-beta.2 al configurar (o
-# cambiar el default de aca a mano). IMPORTANTE: volver a "" ANTES de compilar
-# la 1.0.0 estable de verdad, sino queda marcada como beta para siempre.
-# project(VERSION ...) arriba no puede llevar el sufijo (CMake solo acepta
-# numeros en esa directiva), por eso se maneja aparte y se concatena a mano en
-# Version.h.in. El comparador de versiones del updater (IsNewer, ver
-# CategoryUpdates.cpp) ya entiende sufijos -beta.N / -rc.N.
+if(DEFINED PROYECTHOR_VERSION_OVERRIDE AND NOT "${PROYECTHOR_VERSION_OVERRIDE}" STREQUAL "")
+    string(REPLACE "." ";" _pt_ver_list "${PROYECTHOR_VERSION_OVERRIDE}")
+    list(LENGTH _pt_ver_list _pt_ver_len)
+    if(_pt_ver_len GREATER_EQUAL 3)
+        list(GET _pt_ver_list 0 PROJECT_VERSION_MAJOR)
+        list(GET _pt_ver_list 1 PROJECT_VERSION_MINOR)
+        list(GET _pt_ver_list 2 PROJECT_VERSION_PATCH)
+        set(PROJECT_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}")
+    endif()
+endif()
+
 if(NOT DEFINED PROYECTHOR_VERSION_SUFFIX)
     set(PROYECTHOR_VERSION_SUFFIX "")
 endif()
 
-# ── VERSION GENERADA AUTOMATICAMENTE ─────────────────────────────────────────
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Version.h.in"
     "${CMAKE_BINARY_DIR}/generated/Version.h"
 )
-
-# ── 1. DEPENDENCIAS EXTERNAS (JSON y GLM) ───────────────────────────────────
 
 find_package(nlohmann_json QUIET)
 if(NOT nlohmann_json_FOUND)
@@ -72,6 +108,92 @@ if(NOT nlohmann_json_FOUND)
     FetchContent_MakeAvailable(json)
 endif()
 
+add_compile_definitions(IMGUI_USE_WCHAR32 IMGUI_DEFINE_MATH_OPERATORS)
+
+set(IMGUI_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/src/external/imgui-docking")
+set(GLFW_SDK   "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/glfw")
+set(GLEW_DIR   "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/glew")
+if(MPV_SDK_DIR)
+    set(MPV_SDK "${MPV_SDK_DIR}")
+elseif(PROYECTHOR_IS_WIN_ARM64 AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/mpv-arm64")
+    set(MPV_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/mpv-arm64")
+else()
+    set(MPV_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/mpv")
+endif()
+set(PDFIUM_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/pdfium")
+set(PDFIUM_SDK_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/pdfium-linux")
+set(WEBVIEW2_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/webview2")
+set(HTTPLIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk")
+
+if(WIN32)
+    set(RESOURCE_FILE "src/resources.rc")
+    if(MINGW)
+        set(CMAKE_RC_FLAGS "-O coff --use-temp-file")
+    endif()
+else()
+    set(RESOURCE_FILE "")
+endif()
+
+# ── Detección compartida de libmpv (usada por ProyecThorSlint y ProyecThor) ──
+if(WIN32)
+    if(MSVC)
+        set(MPV_WIN_LIB "${MPV_SDK}/lib/mpv.lib")
+    else()
+        set(MPV_WIN_LIB "${MPV_SDK}/lib/libmpv.dll.a")
+    endif()
+    if(NOT EXISTS "${MPV_WIN_LIB}")
+        message(FATAL_ERROR
+            "No se encontro libmpv en ${MPV_WIN_LIB}\n"
+            "Verifica que el SDK de libmpv este en: ${MPV_SDK}"
+        )
+    endif()
+    message(STATUS "libmpv encontrado (Windows): ${MPV_WIN_LIB}")
+else()
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(MPV mpv)
+    endif()
+    if(MPV_FOUND)
+        if(MPV_LINK_LIBRARIES)
+            set(MPV_LINK_TARGET ${MPV_LINK_LIBRARIES})
+        else()
+            find_library(MPV_LIB_FALLBACK NAMES mpv libmpv PATHS ${MPV_LIBRARY_DIRS} /opt/homebrew/lib /opt/homebrew/opt/mpv/lib /usr/local/lib /usr/local/opt/mpv/lib)
+            if(MPV_LIB_FALLBACK)
+                set(MPV_LINK_TARGET "${MPV_LIB_FALLBACK}")
+            else()
+                set(MPV_LINK_TARGET ${MPV_LIBRARIES})
+            endif()
+        endif()
+        if(NOT MPV_INCLUDE_DIRS)
+            find_path(MPV_INC_FALLBACK
+                NAMES mpv/client.h
+                PATHS ${MPV_INCLUDEDIR} ${MPV_INCLUDE_DIRS} /opt/homebrew/include /opt/homebrew/opt/mpv/include /usr/local/include /usr/local/opt/mpv/include /usr/include
+            )
+            if(MPV_INC_FALLBACK)
+                set(MPV_INCLUDE_DIRS "${MPV_INC_FALLBACK}")
+            endif()
+        endif()
+        message(STATUS "libmpv encontrado via pkg-config (${MPV_VERSION}): inc=${MPV_INCLUDE_DIRS} lib=${MPV_LINK_TARGET}")
+    else()
+        find_library(MPV_LIB_UNIX NAMES mpv libmpv PATHS /opt/homebrew/lib /opt/homebrew/opt/mpv/lib /usr/local/lib /usr/local/opt/mpv/lib REQUIRED)
+        find_path(MPV_INC_UNIX NAMES mpv/client.h PATHS /opt/homebrew/include /opt/homebrew/opt/mpv/include /usr/local/include /usr/local/opt/mpv/include REQUIRED)
+        message(STATUS "libmpv encontrado (Unix/macOS): ${MPV_LIB_UNIX}")
+        set(MPV_INCLUDE_DIRS "${MPV_INC_UNIX}")
+        set(MPV_LINK_TARGET "${MPV_LIB_UNIX}")
+    endif()
+    if(APPLE)
+        find_path(MPV_INC_MAC NAMES mpv/client.h PATHS ${MPV_INCLUDEDIR} ${MPV_INCLUDE_DIRS} /opt/homebrew/include /opt/homebrew/opt/mpv/include /usr/local/include /usr/local/opt/mpv/include REQUIRED)
+        list(APPEND MPV_INCLUDE_DIRS "${MPV_INC_MAC}")
+        list(REMOVE_DUPLICATES MPV_INCLUDE_DIRS)
+        if(NOT EXISTS "${MPV_LINK_TARGET}")
+            find_library(MPV_LIB_MAC NAMES mpv libmpv PATHS ${MPV_LIBRARY_DIRS} /opt/homebrew/lib /opt/homebrew/opt/mpv/lib /usr/local/lib /usr/local/opt/mpv/lib REQUIRED)
+            set(MPV_LINK_TARGET "${MPV_LIB_MAC}")
+        endif()
+    endif()
+endif()
+
+if(PROYECTHOR_BUILD_LEGACY)
+
 find_package(glm QUIET)
 if(NOT glm_FOUND)
     include(FetchContent)
@@ -83,41 +205,18 @@ if(NOT glm_FOUND)
     FetchContent_MakeAvailable(glm)
 endif()
 
-add_compile_definitions(IMGUI_USE_WCHAR32)
-
-# ── 2. RUTAS DE LIBRERIAS ────────────────────────────────────────────────────
-set(IMGUI_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/src/external/imgui-docking")
-set(GLFW_SDK   "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/glfw")
-set(GLEW_DIR   "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/glew")
-set(VLC_SDK    "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/vlc")
-set(VLC_SDK_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/vlc-linux")
-set(PDFIUM_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/pdfium")
-set(PDFIUM_SDK_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/pdfium-linux")
-# WebView2 (Asistente de IA, panel embebido -- ver AIWebViewPanel): headers +
-# import lib (.dll.lib) vendorizados desde el paquete NuGet oficial de
-# Microsoft (Microsoft.Web.WebView2). Solo Windows -- no existe equivalente
-# de WebView2 en Linux, ahi el panel del Asistente cae a abrir el navegador
-# externo del sistema (ver OpenURL.cpp).
-set(WEBVIEW2_SDK "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/webview2")
-set(HTTPLIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk")
-
-# ── 3. ARCHIVOS FUENTE ───────────────────────────────────────────────────────
-
-# -- CORE --
 file(GLOB CORE_SOURCES              CONFIGURE_DEPENDS "src/core/*.cpp")
+file(GLOB CORE_PLUGINS_SOURCES      CONFIGURE_DEPENDS "src/core/plugins/*.cpp")
 file(GLOB CORE_IO_SOURCES           CONFIGURE_DEPENDS "src/core/io/*.cpp")
 file(GLOB CORE_SETTINGS_SOURCES     CONFIGURE_DEPENDS "src/core/settings/*.cpp")
 
-# -- MEDIA --
 file(GLOB MEDIA_PLAYER_SOURCES      CONFIGURE_DEPENDS "src/media/player/*.cpp")
 file(GLOB MEDIA_AUDIO_SOURCES       CONFIGURE_DEPENDS "src/media/audio/*.cpp")
 file(GLOB MEDIA_CAPTURE_SOURCES     CONFIGURE_DEPENDS "src/media/capture/*.cpp")
 
-# -- GRAPHICS --
 file(GLOB GRAPHICS_SHADERS_SOURCES  CONFIGURE_DEPENDS "src/graphics/shaders/*.cpp")
 file(GLOB EXTERNAL_TOOLS            CONFIGURE_DEPENDS "src/external/tools/*.cpp")
 
-# -- UI --
 file(GLOB UI_FRAMEWORK_BIN_SOURCES   CONFIGURE_DEPENDS "src/ui/framework/bin/*.cpp")
 file(GLOB UI_FRAMEWORK_SOURCES       CONFIGURE_DEPENDS "src/ui/framework/*.cpp")
 file(GLOB UI_LANG_SOURCES            CONFIGURE_DEPENDS "src/ui/framework/lenguaje/*.cpp")
@@ -137,16 +236,13 @@ file(GLOB UI_VIEWS_SOURCES           CONFIGURE_DEPENDS "src/ui/views/*.cpp")
 file(GLOB UI_VIEWS_BIBLIA_SOURCES    CONFIGURE_DEPENDS "src/ui/views/biblia/*.cpp")
 file(GLOB UI_VIEWS_AUDIO_SOURCES     CONFIGURE_DEPENDS "src/ui/views/audio/*.cpp")
 
-# -- VENDOR --
 set(VENDOR_SOURCES
     "src/vendor/stb/stb_image_write_impl.cpp"
     "src/vendor/qrcodegen/qrcodegen.cpp"
 )
 
-# -- RAIZ src/ (main.cpp y similares) --
 file(GLOB ROOT_SOURCES              CONFIGURE_DEPENDS "src/*.cpp")
 
-# -- IMGUI --
 set(IMGUI_SOURCES
     "${IMGUI_DIR}/imgui.cpp"
     "${IMGUI_DIR}/imgui_draw.cpp"
@@ -157,30 +253,24 @@ set(IMGUI_SOURCES
     "${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp"
 )
 
-# -- RECURSO WINDOWS (solo aplica en Windows) --
-if(WIN32)
-    set(RESOURCE_FILE "src/resources.rc")
-    set(CMAKE_RC_FLAGS "-O coff --use-temp-file")
-else()
-    set(RESOURCE_FILE "")
-endif()
-
-# --- COPIA DE RECURSOS AL DIRECTORIO BUILD ---
 file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/shaders"
      DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/plugins")
+    file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/plugins"
+         DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
 
 if(WIN32 AND EXISTS "${PDFIUM_SDK}/bin/pdfium.dll")
     file(COPY "${PDFIUM_SDK}/bin/pdfium.dll"
          DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
-# ── 4. CREACION DEL EJECUTABLE ───────────────────────────────────────────────
-# En Windows el ejecutable debe ser WIN32 (subsistema grafico, sin consola).
-# En Linux no existe ese concepto, asi que se crea como ejecutable normal.
 if(WIN32)
     add_executable(ProyecThor WIN32
         ${ROOT_SOURCES}
         ${CORE_SOURCES}
+        ${CORE_PLUGINS_SOURCES}
         ${CORE_SETTINGS_SOURCES}
         ${CORE_IO_SOURCES}
         ${MEDIA_PLAYER_SOURCES}
@@ -215,6 +305,7 @@ else()
     add_executable(ProyecThor
         ${ROOT_SOURCES}
         ${CORE_SOURCES}
+        ${CORE_PLUGINS_SOURCES}
         ${CORE_SETTINGS_SOURCES}
         ${CORE_IO_SOURCES}
         ${MEDIA_PLAYER_SOURCES}
@@ -246,7 +337,6 @@ else()
     )
 endif()
 
-# ── 5. DEFINICIONES Y DIRECTORIOS DE INCLUDE ─────────────────────────────────
 target_compile_definitions(ProyecThor PRIVATE
     GLEW_STATIC
     GLEW_NO_GLU
@@ -254,22 +344,21 @@ target_compile_definitions(ProyecThor PRIVATE
     CPPHTTPLIB_NO_EXCEPTIONS
 )
 
-# OpenSSL para httplib::Client saliente por HTTPS (api.anthropic.com, ver
-# AIAssistant/ClaudeClient) -- todo lo que ya usaba httplib en este proyecto
-# (SyncServer, NetworkStreamServer, single-instance de main.cpp) era HTTP
-# plano contra localhost, asi que nunca hizo falta SSL hasta ahora. En
-# Windows es obligatorio (el toolchain de este proyecto es MSYS2/ucrt64,
-# que ya trae libssl/libcrypto); en Linux es opcional con fallback
-# silencioso (mismo criterio que OpenCV mas abajo) -- sin libssl-dev
-# instalado, el asistente de IA simplemente no puede conectarse (se avisa
-# en tiempo de ejecucion, no en compilacion).
-find_package(OpenSSL QUIET)
-if(OpenSSL_FOUND)
-    message(STATUS "OpenSSL encontrado (${OPENSSL_VERSION}): Asistente de IA (HTTPS saliente) habilitado")
-    target_compile_definitions(ProyecThor PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
-    set(PROYECTHOR_HAS_OPENSSL TRUE)
+# cpp-httplib solo se usa para servidores/clientes HTTP en red local (LAN/Mobile/SingleInstance);
+# HTTPS saliente usa WinHTTP en Windows y curl en Linux. Mantener OpenSSL desactivado por defecto
+# evita dependencias rotas con OpenSSL de MinGW/Strawberry en MSVC y conflictos ABI en AppImage.
+option(PROYECTHOR_ENABLE_OPENSSL "Habilitar soporte OpenSSL (HTTPS) en cpp-httplib" OFF)
+if(PROYECTHOR_ENABLE_OPENSSL)
+    find_package(OpenSSL QUIET)
+    if(OpenSSL_FOUND)
+        message(STATUS "OpenSSL encontrado (${OPENSSL_VERSION}): HTTPS en cpp-httplib habilitado")
+        target_compile_definitions(ProyecThor PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
+        set(PROYECTHOR_HAS_OPENSSL TRUE)
+    else()
+        message(STATUS "OpenSSL NO encontrado: compilando sin CPPHTTPLIB_OPENSSL_SUPPORT")
+        set(PROYECTHOR_HAS_OPENSSL FALSE)
+    endif()
 else()
-    message(STATUS "OpenSSL NO encontrado: el Asistente de IA no podra conectarse")
     set(PROYECTHOR_HAS_OPENSSL FALSE)
 endif()
 
@@ -281,21 +370,16 @@ if(WIN32)
 endif()
 
 target_include_directories(ProyecThor PRIVATE
-    # Version generada
     "${CMAKE_BINARY_DIR}/generated"
 
-    # Raiz src/ para includes absolutos desde src/
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
-    # CORE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/core/settings"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/core/io"
 
-    # GRAPHICS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/graphics/shaders"
 
-    # UI
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/framework"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/framework/bin"
@@ -316,52 +400,53 @@ target_include_directories(ProyecThor PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/views/audio"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/toolbar"
 
-    # MEDIA
     "${CMAKE_CURRENT_SOURCE_DIR}/src/media"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/media/player"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/media/audio"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/media/capture"
 
-    # VENDOR / TERCEROS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/stb"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/nanosvg"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/qrcodegen"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk"
 
-    # EXTERNAS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/external/tools"
     "${IMGUI_DIR}"
     "${IMGUI_DIR}/backends"
     "${GLFW_SDK}/include"
     "${GLEW_DIR}/include"
-    "${VLC_SDK}/include"
 
-    # httplib — está directamente en src/vendor/sdk/httplib.h
     "${HTTPLIB_DIR}"
-    # BIN
     "${CMAKE_CURRENT_SOURCE_DIR}/bin"
 )
 
-# El include de PDFium y VLC cambia segun la plataforma
 if(WIN32)
-    target_include_directories(ProyecThor PRIVATE "${PDFIUM_SDK}/include" "${WEBVIEW2_SDK}/include")
+    target_include_directories(ProyecThor PRIVATE
+        "${PDFIUM_SDK}/include"
+        "${WEBVIEW2_SDK}/include"
+        "${MPV_SDK}/include"
+    )
 else()
     target_include_directories(ProyecThor PRIVATE
         "${PDFIUM_SDK_LINUX}/include"
-        "${VLC_SDK_LINUX}/include"
     )
 endif()
-
-# ── 6. LINKEO DE LIBRERIAS ───────────────────────────────────────────────────
 
 target_link_libraries(ProyecThor PRIVATE
     nlohmann_json::nlohmann_json
     glm::glm
 )
 
+# ── Precompiled Headers (PCH) para acelerar drásticamente la compilación ───────
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/pch.h")
+    target_precompile_headers(ProyecThor PRIVATE
+        "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/pch.h>"
+    )
+    message(STATUS "Precompiled Headers (PCH) habilitados para C++: ${CMAKE_CURRENT_SOURCE_DIR}/src/pch.h")
+endif()
+
 if(WIN32)
-    # ── Rutas y librerias exclusivas de Windows ──────────────────────────────
     set(PDFIUM_LIB "${PDFIUM_SDK}/lib/pdfium.dll.lib")
 
     if(NOT EXISTS "${PDFIUM_LIB}")
@@ -373,15 +458,23 @@ if(WIN32)
 
     message(STATUS "PDFium encontrado (Windows): ${PDFIUM_LIB}")
 
+    if(MSVC)
+        set(GLFW_WIN_LIB "${GLFW_SDK}/lib-vc2022/glfw3.lib")
+    else()
+        set(GLFW_WIN_LIB "${GLFW_SDK}/lib-mingw-w64/libglfw3.a")
+    endif()
+
     target_link_libraries(ProyecThor PRIVATE
-        "${GLFW_SDK}/lib-mingw-w64/libglfw3.a"
-        "${VLC_SDK}/lib/libvlc.lib"
-        "${VLC_SDK}/lib/libvlccore.lib"
+        "${GLFW_WIN_LIB}"
+        "${MPV_WIN_LIB}"
         "${PDFIUM_LIB}"
         "${WEBVIEW2_SDK}/x64/WebView2Loader.dll.lib"
         opengl32
+        user32
+        ole32
         gdi32
         shell32
+        windowsapp
         dwmapi
         comdlg32
         winmm
@@ -390,36 +483,30 @@ if(WIN32)
         winhttp
         d3d11
         dxgi
+        dxguid
     )
     if(PROYECTHOR_HAS_OPENSSL)
         target_link_libraries(ProyecThor PRIVATE
-            ssl
-            crypto
+            OpenSSL::SSL
+            OpenSSL::Crypto
             crypt32
             bcrypt
             ws2_32
         )
     endif()
 
-    target_link_options(ProyecThor PRIVATE
-        "-static"
-    )
+    if(MSVC)
+        target_link_options(ProyecThor PRIVATE
+            "/ENTRY:mainCRTStartup"
+        )
+    elseif(MINGW)
+        target_link_options(ProyecThor PRIVATE
+            "-static"
+        )
+    endif()
 
 else()
-    # ── Rutas y librerias exclusivas de Linux ────────────────────────────────
 
-    # GLFW se compila desde fuente (FetchContent) en vez de usar el paquete
-    # del sistema. Motivo: el backend de ImGui vendorizado (ver
-    # src/external/imgui-docking/backends/imgui_impl_glfw.cpp) llama a
-    # glfwGetPlatform() -- la API que permite elegir/detectar X11 vs Wayland
-    # en tiempo de ejecucion -- que recien existe desde GLFW 3.4. Debian/
-    # Ubuntu todavia empaquetan GLFW 3.3.x ("libglfw3-dev"), asi que linkear
-    # contra esa version tira "undefined reference a glfwGetPlatform" al
-    # linkear (confirmado en CI, ver build-linux). Se compilan ambos
-    # backends (X11 + Wayland) para que el mismo binario funcione en
-    # cualquiera de los dos sin recompilar -- necesita los paquetes de
-    # desarrollo de Wayland instalados ademas de los de X11 (ver
-    # .github/workflows/build.yml).
     find_package(glfw3 3.4 QUIET)
     if(NOT glfw3_FOUND)
         find_package(glfw3 QUIET)
@@ -442,19 +529,9 @@ else()
     if(TARGET glfw3::glfw AND NOT TARGET glfw)
         add_library(glfw ALIAS glfw3::glfw)
     endif()
-    # De aca en mas "glfw" es el target que provee FetchContent -- mismo
-    # nombre que exportaba find_package(glfw3), el resto del archivo
-    # (target_link_libraries mas abajo) no necesita cambios.
 
     find_package(OpenGL REQUIRED)
 
-    # Camaras reales en el panel de Captura: CapturePanel.cpp ya tiene la
-    # enumeracion/lectura real via cv::VideoCapture (V4L2 por debajo) detras
-    # de la macro PT_USE_OPENCV -- pero como nada definia esa macro nunca se
-    # compilaba, y el panel caia siempre en el stub de "Camara 0 (simulada)"
-    # con un patron de prueba animado en vez de listar dispositivos reales.
-    # Opcional, igual que XComposite/PipeWire arriba/abajo: si OpenCV no
-    # esta instalado, el build sigue igual que antes (stub simulado).
     find_package(OpenCV QUIET COMPONENTS core videoio)
     if(OpenCV_FOUND)
         message(STATUS "OpenCV encontrado (${OpenCV_VERSION}): deteccion real de camaras habilitada en Captura")
@@ -465,23 +542,10 @@ else()
         message(STATUS "OpenCV NO encontrado: Captura seguira usando la camara simulada de prueba")
     endif()
 
-    # VLC para Linux: build .so vendorizado, igual que PDFium (no se
-    # compila VLC desde cero, se linkea contra binarios ya generados en
-    # src/backend/sdk/vlc-linux/lib/ y src/backend/sdk/vlc-linux/include/)
-    set(VLC_LIB_LINUX "${VLC_SDK_LINUX}/lib/libvlc.so")
-
-    if(NOT EXISTS "${VLC_LIB_LINUX}")
-        message(FATAL_ERROR
-            "No se encontro libvlc.so en ${VLC_SDK_LINUX}/lib\n"
-            "Coloca ahi los .so de VLC (libvlc.so, libvlccore.so),\n"
-            "la carpeta plugins/ y sus headers en:\n"
-            "${VLC_SDK_LINUX}/include"
-        )
+    if(MPV_INCLUDE_DIRS)
+        target_include_directories(ProyecThor PRIVATE ${MPV_INCLUDE_DIRS})
     endif()
 
-    message(STATUS "libVLC encontrado (Linux): ${VLC_LIB_LINUX}")
-
-    # PDFium para Linux: debe existir un build .so colocado manualmente
     set(PDFIUM_LIB_LINUX "${PDFIUM_SDK_LINUX}/lib/libpdfium.so")
 
     if(NOT EXISTS "${PDFIUM_LIB_LINUX}")
@@ -499,47 +563,47 @@ else()
     target_link_libraries(ProyecThor PRIVATE
         glfw
         OpenGL::GL
-        "${VLC_LIB_LINUX}"
+        ${MPV_LINK_TARGET}
         "${PDFIUM_LIB_LINUX}"
         pthread
         dl
     )
+
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(GIO gio-2.0)
+        if(GIO_FOUND)
+            message(STATUS "GIO (2.0) encontrado: Portal FileChooser nativo habilitado para Flatpak y Linux")
+            target_link_libraries(ProyecThor PRIVATE ${GIO_LIBRARIES})
+            target_include_directories(ProyecThor PRIVATE ${GIO_INCLUDE_DIRS})
+            target_compile_definitions(ProyecThor PRIVATE PT_HAVE_GIO_PORTAL)
+        endif()
+    endif()
 
     if(PROYECTHOR_HAS_OPENSSL)
         target_link_libraries(ProyecThor PRIVATE OpenSSL::SSL OpenSSL::Crypto)
     endif()
 endif()
 
-# ── 7. COPIA DE ARCHIVOS EN RUNTIME (solo Windows) ───────────────────────────
-
 if(WIN32)
-    # Copiar DLLs de VLC
-    if(EXISTS "${VLC_SDK}/libvlc.dll")
+    if(EXISTS "${PDFIUM_SDK}/bin/pdfium.dll")
         add_custom_command(TARGET ProyecThor POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${VLC_SDK}/libvlc.dll"
+                "${PDFIUM_SDK}/bin/pdfium.dll"
                 "$<TARGET_FILE_DIR:ProyecThor>"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${VLC_SDK}/libvlccore.dll"
-                "$<TARGET_FILE_DIR:ProyecThor>"
-            COMMENT "Copiando DLLs de VLC al directorio de salida"
+            COMMENT "Copiando pdfium.dll al directorio de salida"
         )
     endif()
 
-    # Copiar carpeta plugins de VLC (necesaria en runtime)
-    if(EXISTS "${VLC_SDK}/plugins")
+    if(EXISTS "${MPV_SDK}/libmpv-2.dll")
         add_custom_command(TARGET ProyecThor POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${VLC_SDK}/plugins"
-                "$<TARGET_FILE_DIR:ProyecThor>/plugins"
-            COMMENT "Copiando plugins de VLC"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${MPV_SDK}/libmpv-2.dll"
+                "$<TARGET_FILE_DIR:ProyecThor>"
+            COMMENT "Copiando libmpv-2.dll al directorio de salida"
         )
     endif()
 
-    # WebView2Loader.dll: trampolin liviano que en runtime busca el Runtime
-    # de WebView2 real instalado en el sistema (viene con Windows 10/11 via
-    # Edge) -- sin esta DLL al lado del .exe, CreateCoreWebView2EnvironmentWithOptions
-    # falla siempre con HRESULT de "modulo no encontrado".
     if(EXISTS "${WEBVIEW2_SDK}/x64/WebView2Loader.dll")
         add_custom_command(TARGET ProyecThor POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -550,14 +614,6 @@ if(WIN32)
     endif()
 endif()
 
-# ── 7a-bis. COPIA DE assets/ AL DIRECTORIO DE SALIDA (Windows y Linux) ───────
-# A diferencia de extrabuild/ (gitignored, binarios vendorizados pesados:
-# libvlc.dll, plugins/ de VLC, ffmpeg.exe, yt-dlp.exe -- Linux ni los
-# necesita, usa las versiones del sistema), assets/ SI esta en git: son los
-# recursos minimos multiplataforma sin los que la app arranca "pelada" --
-# iconos, fuente, texturas de tarjetas del Hub y fondos de splash/Hub (estos
-# ultimos re-comprimidos a JPG, ver README de la carpeta). Quien clona desde
-# GitHub y compila ya los tiene, sin depender de extrabuild/.
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets")
     add_custom_command(TARGET ProyecThor POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -570,13 +626,6 @@ else()
                      "la app va a arrancar sin iconos/fuente/splash")
 endif()
 
-# ── 7b. COPIA DE extrabuild/ AL DIRECTORIO DE SALIDA (Windows y Linux) ───────
-# Contiene binarios/recursos pesados que se distribuyen aparte, no en git
-# (bin/, lua/, plugins/, libvlc.dll, pdfium.dll, yt-dlp.exe, etc -- ver
-# extrabuild/pasteinbuild.txt). Se copia entero al lado del ejecutable cada
-# vez que se compila, ENCIMA de assets/ (mismo directorio de salida) -- no
-# hay conflicto real porque ya no comparten archivos (fuente/iconos/splash
-# se movieron a assets/, ver arriba).
 if(WIN32 AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
     message(STATUS "extrabuild/ encontrado, se copiara al build")
     add_custom_command(TARGET ProyecThor POST_BUILD
@@ -589,77 +638,38 @@ else()
     message(STATUS "extrabuild/ no aplica o no encontrado en Linux -- se usan las librerias y plugins nativos.")
 endif()
 
-# ── 7c. COPIA DE libpdfium.so Y libvlc.so AL DIRECTORIO DE BUILD (Linux) ─────
-# Sin esto, el ejecutable de build-linux/ no encuentra las librerias hasta
-# que se hace "install" (que si las copia a /usr/lib/proyecthor).
 if(NOT WIN32)
-    file(GLOB VLC_LINUX_SO_FILES "${VLC_SDK_LINUX}/lib/lib*.so*")
     add_custom_command(TARGET ProyecThor POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${PDFIUM_SDK_LINUX}/lib/libpdfium.so"
             "$<TARGET_FILE_DIR:ProyecThor>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${VLC_LINUX_SO_FILES}
-            "$<TARGET_FILE_DIR:ProyecThor>"
-        COMMENT "Copiando libpdfium.so y librerias de VLC al directorio de build"
+        COMMENT "Copiando libpdfium.so al directorio de build"
     )
-
-    if(EXISTS "${VLC_SDK_LINUX}/plugins")
-        add_custom_command(TARGET ProyecThor POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${VLC_SDK_LINUX}/plugins"
-                "$<TARGET_FILE_DIR:ProyecThor>/plugins"
-            COMMENT "Copiando plugins de VLC (Linux) al directorio de build"
-        )
-    endif()
 endif()
-
 
 if(NOT WIN32)
     include(GNUInstallDirs)
 
     set(PROYECTHOR_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/proyecthor")
 
-    # RPATH relativo al propio ejecutable: encuentra libpdfium.so/libvlc.so
-    # en la misma carpeta sin necesidad de LD_LIBRARY_PATH.
     set_target_properties(ProyecThor PROPERTIES
         INSTALL_RPATH "$ORIGIN"
         BUILD_WITH_INSTALL_RPATH TRUE
         SKIP_BUILD_RPATH FALSE
     )
 
-    # Binario real (no directamente en PATH, lo llama el wrapper de abajo)
     install(TARGETS ProyecThor
         RUNTIME DESTINATION ${PROYECTHOR_INSTALL_DIR}
     )
 
-    # libpdfium.so vive al lado del binario
     install(FILES "${PDFIUM_SDK_LINUX}/lib/libpdfium.so"
         DESTINATION ${PROYECTHOR_INSTALL_DIR}
     )
 
-    # libvlc.so y libvlccore.so viven al lado del binario
-    file(GLOB VLC_LINUX_SO_FILES "${VLC_SDK_LINUX}/lib/lib*.so*")
-    install(FILES ${VLC_LINUX_SO_FILES}
-        DESTINATION ${PROYECTHOR_INSTALL_DIR}
-    )
-
-    # Plugins de VLC (necesarios en runtime via VLC_PLUGIN_PATH)
-    if(EXISTS "${VLC_SDK_LINUX}/plugins")
-        install(DIRECTORY "${VLC_SDK_LINUX}/plugins"
-            DESTINATION ${PROYECTHOR_INSTALL_DIR}
-        )
-    endif()
-
-    # Shaders (misma carpeta que ya se copia al lado del binario en build/)
     install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shaders"
         DESTINATION ${PROYECTHOR_INSTALL_DIR}
     )
 
-    # Wrapper ejecutable en /usr/bin: hace cd a la carpeta real, exporta
-    # VLC_PLUGIN_PATH (para que libvlc encuentre sus plugins) y ejecuta el
-    # binario desde ahi, para que las rutas relativas (shaders/, etc) sigan
-    # resolviendo igual que en desarrollo, sin importar el cwd del usuario.
     file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/proyecthor-wrapper.sh"
 "#!/bin/sh
 SCRIPT_DIR=\"\$(dirname \"\$(readlink -f \"\$0\")\")\"
@@ -672,7 +682,9 @@ else
     INSTALL_DIR=\"${CMAKE_INSTALL_PREFIX}/${PROYECTHOR_INSTALL_DIR}\"
 fi
 cd \"\$INSTALL_DIR\" || exit 1
-export VLC_PLUGIN_PATH=\"\$INSTALL_DIR/plugins\"
+if [ -x ./ProyecThorSlint ]; then
+    exec ./ProyecThorSlint \"\$@\"
+fi
 exec ./ProyecThor \"\$@\"
 ")
     install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/proyecthor-wrapper.sh"
@@ -680,13 +692,6 @@ exec ./ProyecThor \"\$@\"
         RENAME proyecthor
     )
 
-    # Icono y entrada de menu (.desktop) — opcionales, solo si existen los
-    # archivos en packaging/. Si todavia no tenes un icono, comenta estas
-    # dos lineas de install() de abajo.
-
-    # assets/ (icono, fuente, splash/Hub, texturas de tarjetas) -- esta en
-    # git, SIEMPRE presente para quien compila el paquete desde el repo
-    # clonado. Es lo minimo para que el paquete no arranque "pelado".
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets")
         install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/"
             DESTINATION ${PROYECTHOR_INSTALL_DIR}
@@ -695,9 +700,6 @@ exec ./ProyecThor \"\$@\"
         message(WARNING "assets/ NO encontrado, el paquete no tendra iconos/fuente/splash")
     endif()
 
-    # Recursos de extrabuild/ (lua/, plugins/ de VLC, etc) -- gitignored,
-    # opcional en Linux: el paquete .deb/.rpm depende de la libvlc/plugins
-    # DEL SISTEMA (ver Depends en packaging/debian/control), no de esto.
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
         message(STATUS "extrabuild/ encontrado, se incluira en el paquete")
         install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild/"
@@ -712,13 +714,6 @@ if(UNIX AND NOT APPLE)
     target_link_libraries(ProyecThor PRIVATE ${X11_LIBRARIES})
     target_include_directories(ProyecThor PRIVATE ${X11_INCLUDE_DIR})
 
-    # XComposite: opcional. Sin ella, la captura de ventanas (CapturePanel)
-    # lee XGetImage directo sobre la ventana, que devuelve contenido
-    # indefinido/basura en las zonas tapadas por otras ventanas. Si esta
-    # disponible, la usamos para leer el pixmap ya compuesto por el
-    # servidor X y capturar bien aunque la ventana este solapada. Si no
-    # esta instalada (dev headers ausentes), el build sigue igual que
-    # antes — no es un requisito duro.
     if(X11_Xcomposite_FOUND)
         message(STATUS "libXcomposite encontrada: captura de ventanas correcta bajo solapamiento")
         target_link_libraries(ProyecThor PRIVATE ${X11_Xcomposite_LIB})
@@ -728,13 +723,6 @@ if(UNIX AND NOT APPLE)
         message(STATUS "libXcomposite NO encontrada: captura de ventanas usara XGetImage directo (puede fallar si hay solapamiento)")
     endif()
 
-    # Captura de pantalla/ventana en sesiones Wayland: XGetImage/XComposite
-    # (arriba) no sirven ahi -- el compositor Wayland no vuelca contenido
-    # real a la "ventana raiz" X11 heredada, es una restriccion de
-    # seguridad del protocolo. El camino nativo es el portal de escritorio
-    # (org.freedesktop.portal.ScreenCast) + PipeWire para consumir el
-    # stream. Opcional: sin estas dos libs, el build sigue igual que hoy y
-    # la captura de pantalla queda limitada a X11 puro.
     find_package(PkgConfig)
     if(PkgConfig_FOUND)
         pkg_check_modules(PIPEWIRE libpipewire-0.3)
@@ -749,14 +737,12 @@ if(UNIX AND NOT APPLE)
         message(STATUS "libpipewire-0.3 y/o dbus-1 NO encontradas: sin captura de pantalla/ventana nativa en Wayland")
     endif()
 endif()
-    # Licencias de terceros y licencia principal
     install(FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/THIRD_PARTY_LICENSES.md"
         DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/io.github.thevixcho.ProyecThor
     )
 
-    # Iconos (tanto proyecthor.png como con App ID io.github.thevixcho.ProyecThor.png)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.png")
         install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/proyecthor.png"
             DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps
@@ -767,7 +753,6 @@ endif()
         )
     endif()
 
-    # Entrada de menu (.desktop) y Metainfo AppStream
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/packaging/io.github.thevixcho.ProyecThor.desktop")
         install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/io.github.thevixcho.ProyecThor.desktop"
             DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
@@ -782,5 +767,252 @@ endif()
         install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/io.github.thevixcho.ProyecThor.metainfo.xml"
             DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo
         )
+    endif()
+endif()
+endif() # PROYECTHOR_BUILD_LEGACY
+
+if(UNIX AND NOT APPLE AND NOT DEFINED PROYECTHOR_INSTALL_DIR)
+    include(GNUInstallDirs)
+    set(PROYECTHOR_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/proyecthor")
+endif()
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  ProyecThorSlint — Nueva Interfaz Moderna (Slint + libmpv, Dark Glass)
+#  Soporte nativo: Linux x86_64, Windows x64 / ARM64, macOS Apple Silicon & Intel
+# ══════════════════════════════════════════════════════════════════════════════
+if(PROYECTHOR_BUILD_SLINT)
+    set(SLINT_SDK_LINUX "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/slint-linux")
+    set(SLINT_SDK_MACOS "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/slint-macos")
+    if(PROYECTHOR_IS_WIN_ARM64 AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/slint-win-arm64")
+        set(SLINT_SDK_WIN "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/slint-win-arm64")
+    else()
+        set(SLINT_SDK_WIN "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/sdk/slint-win")
+    endif()
+
+    set(_pt_slint_search_paths "")
+    if(SLINT_SDK_DIR)
+        list(APPEND _pt_slint_search_paths "${SLINT_SDK_DIR}")
+    endif()
+    if(APPLE)
+        list(APPEND _pt_slint_search_paths "${SLINT_SDK_MACOS}")
+    elseif(WIN32)
+        list(APPEND _pt_slint_search_paths "${SLINT_SDK_WIN}")
+    else()
+        list(APPEND _pt_slint_search_paths "${SLINT_SDK_LINUX}")
+    endif()
+
+    find_package(Slint QUIET PATHS ${_pt_slint_search_paths})
+    if(NOT Slint_FOUND AND PROYECTHOR_FETCH_SLINT)
+        message(STATUS "Slint C++ SDK precompilado no encontrado — compilando Slint v1.19.0 desde fuente (FetchContent)...")
+        if(APPLE OR PROYECTHOR_IS_WIN_ARM64)
+            # Habilitar Skia garantiza Metal (CAMetalLayer) nativo en macOS y Direct3D en Windows ARM64
+            set(SLINT_FEATURE_RENDERER_SKIA ON CACHE BOOL "Enable Skia renderer (Metal on macOS / D3D on Windows)" FORCE)
+        endif()
+        include(FetchContent)
+        FetchContent_Declare(
+            Slint
+            GIT_REPOSITORY https://github.com/slint-ui/slint.git
+            GIT_TAG        v1.19.0
+            GIT_SHALLOW    TRUE
+            SOURCE_SUBDIR  api/cpp
+        )
+        FetchContent_MakeAvailable(Slint)
+        set(Slint_FOUND TRUE)
+    endif()
+
+    if(Slint_FOUND)
+        message(STATUS "Slint C++ SDK encontrado (${Slint_VERSION}): habilitando target ProyecThorSlint")
+
+        # Biblioteca estática dedicada para el código C++ autogenerado por Slint:
+        # - Divide main_window.slint (~228k líneas / 22 MB) en 12 unidades paralelas (evita cuelgues de 15+ min en MSVC).
+        # - Embebe los recursos SVG (@image-url) dentro del ejecutable para que funcionen en cualquier PC.
+        # - Usa /Od /Ob0 /bigobj en MSVC y -O1 en GCC/Clang solo para el pegamento generado por Slint
+        #   (el motor gráfico/layout ya corre en Release dentro de slint_cpp.dll / libslint_cpp.so / libslint_cpp.dylib).
+        add_library(ProyecThorSlintUI STATIC)
+        set_target_properties(ProyecThorSlintUI PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            SLINT_EMBED_RESOURCES "embed-files"
+        )
+        slint_target_sources(ProyecThorSlintUI src/ui_slint/ui/main_window.slint COMPILATION_UNITS 12)
+        target_link_libraries(ProyecThorSlintUI PUBLIC Slint::Slint)
+        if(MSVC)
+            target_compile_options(ProyecThorSlintUI PRIVATE /Od /Ob0 /bigobj /wd4244 /wd4267 /wd4305)
+        else()
+            target_compile_options(ProyecThorSlintUI PRIVATE -O1)
+        endif()
+
+        if(WIN32)
+            add_executable(ProyecThorSlint WIN32
+                src/ui_slint/main_slint.cpp
+                src/ui_slint/SlintApp.cpp
+                src/ui_slint/SlintVideoPlayer.cpp
+                src/ui_slint/SlintMobileServer.cpp
+                src/core/io/BibleXmlIO.cpp
+                src/core/NetworkStreamServer.cpp
+                src/core/FrameEncodeWorker.cpp
+                src/core/ChatMessageStore.cpp
+                src/core/OSCSender.cpp
+                src/core/SmartTvCaster.cpp
+                src/vendor/qrcodegen/qrcodegen.cpp
+                src/vendor/stb/stb_image_write_impl.cpp
+                src/vendor/stb/stb_image_impl.cpp
+                ${RESOURCE_FILE}
+            )
+        else()
+            add_executable(ProyecThorSlint
+                src/ui_slint/main_slint.cpp
+                src/ui_slint/SlintApp.cpp
+                src/ui_slint/SlintVideoPlayer.cpp
+                src/ui_slint/SlintMobileServer.cpp
+                src/core/io/BibleXmlIO.cpp
+                src/core/NetworkStreamServer.cpp
+                src/core/FrameEncodeWorker.cpp
+                src/core/ChatMessageStore.cpp
+                src/core/OSCSender.cpp
+                src/core/SmartTvCaster.cpp
+                src/vendor/qrcodegen/qrcodegen.cpp
+                src/vendor/stb/stb_image_write_impl.cpp
+                src/vendor/stb/stb_image_impl.cpp
+            )
+        endif()
+
+        set_target_properties(ProyecThorSlint PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+        target_compile_definitions(ProyecThorSlint PRIVATE CPPHTTPLIB_NO_EXCEPTIONS)
+        if(MSVC)
+            target_compile_options(ProyecThorSlint PRIVATE /bigobj)
+        endif()
+
+        target_include_directories(ProyecThorSlint PRIVATE
+            "${CMAKE_BINARY_DIR}/generated"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/core/io"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/ui/views/biblia"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/ui_slint"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/qrcodegen"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/stb"
+            "${HTTPLIB_DIR}"
+        )
+
+        target_link_libraries(ProyecThorSlint PRIVATE
+            ProyecThorSlintUI
+            Slint::Slint
+            nlohmann_json::nlohmann_json
+        )
+
+        if(WIN32)
+            target_compile_definitions(ProyecThorSlint PRIVATE
+                NOMINMAX
+                WIN32_LEAN_AND_MEAN
+            )
+            target_include_directories(ProyecThorSlint PRIVATE "${MPV_SDK}/include")
+            target_link_libraries(ProyecThorSlint PRIVATE "${MPV_WIN_LIB}" shell32 ws2_32 iphlpapi)
+            if(MSVC)
+                target_link_options(ProyecThorSlint PRIVATE "/ENTRY:mainCRTStartup")
+            endif()
+            set(SLINT_WIN_DLL "")
+            foreach(_d "${SLINT_SDK_DIR}" "${SLINT_SDK_WIN}")
+                if(_d AND NOT SLINT_WIN_DLL)
+                    if(EXISTS "${_d}/bin/slint_cpp.dll")
+                        set(SLINT_WIN_DLL "${_d}/bin/slint_cpp.dll")
+                    elseif(EXISTS "${_d}/lib/slint_cpp.dll")
+                        set(SLINT_WIN_DLL "${_d}/lib/slint_cpp.dll")
+                    endif()
+                endif()
+            endforeach()
+            if(SLINT_WIN_DLL)
+                add_custom_command(TARGET ProyecThorSlint POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${SLINT_WIN_DLL}"
+                        "$<TARGET_FILE_DIR:ProyecThorSlint>"
+                    COMMENT "Copiando slint_cpp.dll al directorio de salida"
+                )
+            endif()
+            if(EXISTS "${MPV_SDK}/libmpv-2.dll")
+                add_custom_command(TARGET ProyecThorSlint POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${MPV_SDK}/libmpv-2.dll"
+                        "$<TARGET_FILE_DIR:ProyecThorSlint>"
+                    COMMENT "Copiando libmpv-2.dll al directorio de salida"
+                )
+            endif()
+            if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
+                add_custom_command(TARGET ProyecThorSlint POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_directory
+                        "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild"
+                        "$<TARGET_FILE_DIR:ProyecThorSlint>"
+                    COMMENT "Copiando extrabuild/ al directorio de salida de ProyecThorSlint"
+                )
+            endif()
+        elseif(APPLE)
+            if(MPV_INCLUDE_DIRS)
+                target_include_directories(ProyecThorSlint PRIVATE ${MPV_INCLUDE_DIRS})
+            endif()
+            target_link_libraries(ProyecThorSlint PRIVATE
+                ${MPV_LINK_TARGET}
+                pthread
+                dl
+            )
+            set_target_properties(ProyecThorSlint PROPERTIES
+                INSTALL_RPATH "@executable_path;@executable_path/../Frameworks"
+                BUILD_RPATH "@executable_path;@executable_path/../Frameworks"
+                BUILD_WITH_INSTALL_RPATH TRUE
+                SKIP_BUILD_RPATH FALSE
+            )
+            set(SLINT_MACOS_DYLIB "")
+            foreach(_d "${SLINT_SDK_DIR}" "${SLINT_SDK_MACOS}")
+                if(_d AND NOT SLINT_MACOS_DYLIB AND EXISTS "${_d}/lib/libslint_cpp.dylib")
+                    set(SLINT_MACOS_DYLIB "${_d}/lib/libslint_cpp.dylib")
+                endif()
+            endforeach()
+            if(SLINT_MACOS_DYLIB)
+                add_custom_command(TARGET ProyecThorSlint POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${SLINT_MACOS_DYLIB}"
+                        "$<TARGET_FILE_DIR:ProyecThorSlint>"
+                    COMMENT "Copiando libslint_cpp.dylib al directorio de salida"
+                )
+            endif()
+        else()
+            if(MPV_INCLUDE_DIRS)
+                target_include_directories(ProyecThorSlint PRIVATE ${MPV_INCLUDE_DIRS})
+            endif()
+            target_link_libraries(ProyecThorSlint PRIVATE
+                ${MPV_LINK_TARGET}
+                pthread
+                dl
+            )
+            set_target_properties(ProyecThorSlint PROPERTIES
+                INSTALL_RPATH "$ORIGIN"
+                BUILD_WITH_INSTALL_RPATH TRUE
+                SKIP_BUILD_RPATH FALSE
+            )
+            if(EXISTS "${SLINT_SDK_LINUX}/lib/libslint_cpp.so")
+                add_custom_command(TARGET ProyecThorSlint POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${SLINT_SDK_LINUX}/lib/libslint_cpp.so"
+                        "$<TARGET_FILE_DIR:ProyecThorSlint>"
+                    COMMENT "Copiando libslint_cpp.so al directorio de salida"
+                )
+                install(FILES "${SLINT_SDK_LINUX}/lib/libslint_cpp.so"
+                    DESTINATION ${PROYECTHOR_INSTALL_DIR}
+                )
+            endif()
+            install(TARGETS ProyecThorSlint
+                RUNTIME DESTINATION ${PROYECTHOR_INSTALL_DIR}
+            )
+        endif()
+
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets")
+            add_custom_command(TARGET ProyecThorSlint POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+                    "$<TARGET_FILE_DIR:ProyecThorSlint>"
+                COMMENT "Copiando assets/ al directorio de salida de ProyecThorSlint"
+            )
+        endif()
+    else()
+        message(STATUS "Slint C++ SDK no encontrado — omitiendo target ProyecThorSlint (usa -DPROYECTHOR_FETCH_SLINT=ON para compilar desde fuente)")
     endif()
 endif()

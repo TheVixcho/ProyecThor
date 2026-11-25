@@ -1,120 +1,120 @@
 #include "HomePanel.h"
+#include "StylesHubPanel.h"
 #include "UIManager.h"
 #include "DesignSystem.h"
 #include "ui/framework/UIStrings.h"
+#include "ui/panels/LibraryPanel.h"
 #include "core/PresentationCore.h"
-#include "media/player/VLCBasePlayer.h"
+#include "core/MediaCollections.h"
+#include "media/player/MPVBasePlayer.h"
+#include "ui/framework/AppIcons.h"
+#include "ui/panels/layers/LayersTheme.h"
 #include <imgui.h>
 #include <algorithm>
 
 namespace ProyecThor::UI {
 
 HomePanel::HomePanel() {
-    // Ya no se construye ningun VLCBasePlayer propio: el preview de
-    // biblioteca usa el player real de PresentationCore (forceSilent=true,
-    // ver PresentationCoreImpl::preview), que es estructuralmente mudo y
-    // se re-silencia solo cada frame via PresentationCore::Update().
 }
 
 HomePanel::~HomePanel() {
-    // Nada que detener aca: el ciclo de vida del preview real lo maneja
-    // PresentationCore/PresentationCoreImpl.
+}
+
+void HomePanel::RenderFloatingPreview(Core::MPVBasePlayer* player, float w, float h)
+{
+    m_MonitorView.RenderFloatingPreview(player, w, h);
 }
 
 void HomePanel::RenderHomeContent()
 {
     auto selection = Core::PresentationCore::Get().PeekSelection();
-    Core::VLCBasePlayer* previewPlayer = Core::PresentationCore::Get().GetPreviewPlayer();
+    Core::MPVBasePlayer* previewPlayer = Core::PresentationCore::Get().GetPreviewPlayer();
 
-    if (selection.type == Core::ItemType::Audio)
+    LibraryCategory libCat = LibraryCategory::Songs;
+    LibrarySideMode sideMode = LibrarySideMode::Categories;
+    if (m_UIManagerRef && m_UIManagerRef->GetLibraryPanelRef())
     {
-        if (m_AudioPanelRef)
+        libCat   = m_UIManagerRef->GetLibraryPanelRef()->GetCategory();
+        sideMode = m_UIManagerRef->GetLibraryPanelRef()->GetSideMode();
+    }
+
+    if (sideMode == LibrarySideMode::Categories)
+    {
+        if (libCat == LibraryCategory::Videos)
         {
-            m_AudioPanelRef->Update();
-            m_AudioPanelRef->RenderPlayerView();
+            m_MediaGridView.Render(Core::CollectionMediaType::Video, previewPlayer);
+            return;
         }
-        else
+        else if (libCat == LibraryCategory::Images)
         {
-            ImGui::TextDisabled("Reproductor de audio no disponible.");
+            m_MediaGridView.Render(Core::CollectionMediaType::Image, previewPlayer);
+            return;
+        }
+        else if (libCat == LibraryCategory::Audio)
+        {
+            m_MediaGridView.Render(Core::CollectionMediaType::Audio, previewPlayer);
+            return;
+        }
+        else if (libCat == LibraryCategory::Bibles)
+        {
+            m_BibleView.Render();
+            return;
+        }
+        else if (libCat == LibraryCategory::Documents)
+        {
+            m_DocumentView.Render(selection.title, selection.contentData);
+            return;
         }
     }
-    else if (selection.type == Core::ItemType::Bible)
+
+    if (selection.type == Core::ItemType::Bible)
     {
         m_BibleView.Render();
-    }
-    else if (selection.type == Core::ItemType::Song)
-    {
-        m_SongView.Render();
-    }
-    else if (selection.type == Core::ItemType::Image)
-    {
-        m_MediaView.Render(previewPlayer);
-    }
-    else if (selection.type == Core::ItemType::Video)
-    {
-        m_MonitorView.Render(previewPlayer);
-        ImGui::Separator();
-        ImGui::Spacing();
-        m_MediaView.Render(previewPlayer);
     }
     else if (selection.type == Core::ItemType::Documents)
     {
         m_DocumentView.Render(selection.title, selection.contentData);
     }
+    else if (selection.type == Core::ItemType::Audio)
+    {
+        m_MediaGridView.Render(Core::CollectionMediaType::Audio, previewPlayer);
+    }
+    else if (selection.type == Core::ItemType::Image)
+    {
+        m_MediaGridView.Render(Core::CollectionMediaType::Image, previewPlayer);
+    }
+    else if (selection.type == Core::ItemType::Video)
+    {
+        m_MediaGridView.Render(Core::CollectionMediaType::Video, previewPlayer);
+    }
     else
     {
-        // FIX: antes esto era solo un cartel de "Seleccione algo" — la cola
-        // del Monitor (m_MonitorView) SOLO se dibujaba con selection.type
-        // == Video, asi que en cualquier otro momento (nada seleccionado,
-        // o una cancion/biblia/documento activo) la cola literalmente no
-        // estaba en pantalla: ni el boton Reproducir, ni el target de
-        // drag-and-drop para agregar videos, nada. Eso explicaba reportes
-        // de "agrego un video y no pasa nada" / "aprieto reproducir y no
-        // hace nada" — no era que la lógica fallara, es que la UI de la
-        // cola no estaba ahi para interactuar. Ahora se muestra tambien
-        // aca (el estado por defecto de Home, sin nada mas seleccionado),
-        // asi la cola queda accesible de forma confiable sin depender de
-        // tener un video puntual seleccionado.
-        m_MonitorView.Render(previewPlayer);
+        m_SongView.Render();
     }
 }
 
 void HomePanel::Render()
 {
-    // El boton de pantalla completa del Preview (ver MonitorView::
-    // RequestPreviewFullscreen) necesita UIManager para poder tomar todo el
-    // area de contenido -- se re-propaga cada frame (asignacion de puntero,
-    // gratis) en vez de un setter propio porque m_UIManagerRef se fija
-    // directo como campo publico desde main.cpp, sin un punto unico
-    // despues de construir HomePanel donde enganchar esto una sola vez.
-    if (m_UIManagerRef)
+    if (m_UIManagerRef) {
         m_MonitorView.SetUIManager(m_UIManagerRef);
+        m_MediaGridView.SetUIManager(m_UIManagerRef);
+    }
 
-    // Pump incondicional: la cola del Monitor (MonitorView::Update -> avanza
-    // al siguiente clip cuando VLC reporta fin real) tiene que correr
-    // siempre, no solo cuando Home esta dibujando su contenido (aunque en la
-    // practica Home ya no tiene otras pestañas que la tapen — esto se
-    // mantiene por si el panel se llega a colapsar/ocultar).
     m_MonitorView.Update();
 
-    // Alt Gr + 4: si Home esta colapsado (o pasando el punto medio de la
-    // animacion), no dibujar la ventana ni su sidebar/contenido -- el pump
-    // de arriba ya corrio, asi que la cola del Monitor sigue avanzando
-    // igual que si el panel estuviera visible.
     if (m_UIManagerRef && m_UIManagerRef->IsPanelCollapsedForRender(GetName()))
         return;
 
     bool visible = false;
-    const char* homeTitle = "Home###HomePanel";
     if (m_UIManagerRef)
     {
-        visible = DS::BeginGlassPanel(homeTitle, m_UIManagerRef->GetGlassRenderer(),
+        visible = DS::BeginGlassPanel(GetName().c_str(), m_UIManagerRef->GetGlassRenderer(),
                                       nullptr, 0, ImVec2(0.0f, 0.0f));
     }
     else
     {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
-        visible = ImGui::Begin(homeTitle);
+        visible = ImGui::Begin(GetName().c_str());
         ImGui::PopStyleVar();
     }
 
@@ -125,21 +125,171 @@ void HomePanel::Render()
         return;
     }
 
+    auto* stylesHub = m_UIManagerRef ? m_UIManagerRef->GetStylesHubPanelRef() : nullptr;
+
+    // Si se seleccionó un nuevo contenido desde la Biblioteca, volver automáticamente a la vista de Diapositivas
+    auto currentSelection = Core::PresentationCore::Get().PeekSelection();
+    if (!currentSelection.title.empty() && currentSelection.title != m_LastSelectionTitle) {
+        m_LastSelectionTitle = currentSelection.title;
+        if (stylesHub && stylesHub->IsInDesignMode()) {
+            stylesHub->SwitchToPresentation();
+        }
+    }
+
+    // Si el modo diseño estaba en Fondos, lo desactivamos para mostrar Fondos en la sección inferior
+    if (stylesHub && stylesHub->IsInDesignMode() && stylesHub->GetCurrentSection() == StylesSection::Backgrounds) {
+        stylesHub->SwitchToPresentation();
+        m_FondosCollapsed = false;
+    }
+
+    const float totalW = ImGui::GetContentRegionAvail().x;
+    const float totalH = ImGui::GetContentRegionAvail().y;
+
+    const float kHeaderBarH = 28.0f;
+    const float kSplitterH  = 5.0f;
+    const float kMinHomeH   = 80.0f;
+    const float kMinFondosH = 110.0f;
+    const float kMaxFondosH = std::max(kMinFondosH, totalH - kSplitterH - kMinHomeH);
+
+    m_FondosHeight = std::clamp(m_FondosHeight, kMinFondosH, kMaxFondosH);
+
+    const float bottomTotalH = m_FondosCollapsed ? kHeaderBarH : (kSplitterH + m_FondosHeight);
+    const float homeH        = std::max(kMinHomeH, totalH - bottomTotalH);
+
+    // ── Área de contenido principal (Home / Diapositivas) ──
     constexpr float kContentMarginX = 18.0f;
     constexpr float kContentMarginY = 16.0f;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(kContentMarginX, kContentMarginY));
-    ImGui::BeginChild("##homeContent", ImVec2(0.f, 0.f),
+    ImGui::BeginChild("##homeContent", ImVec2(0.0f, homeH),
                       ImGuiChildFlags_AlwaysUseWindowPadding);
     ImGui::PopStyleVar();
 
-    // El editor de estilos (Diseño > Estilos) ya no se "acopla" aca -- ahora
-    // se abre a pantalla completa ocultando TODOS los paneles (ver
-    // UIManager::EnterFullscreenEditor, usado desde LayersStyleTab), asi que
-    // Home vuelve a dibujar siempre su contenido normal.
-    RenderHomeContent();
+    if (stylesHub && stylesHub->IsInDesignMode() && stylesHub->GetCurrentSection() != StylesSection::Backgrounds)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 0.25f));
+        if (ImGui::Button("◀ Volver a Presentación", ImVec2(180.0f, 24.0f))) {
+            stylesHub->SwitchToPresentation();
+        }
+        ImGui::PopStyleColor();
+        ImGui::SameLine();
+        ImGui::TextDisabled("| Modo de edición activo");
+        ImGui::Separator();
+        stylesHub->RenderCurrentSectionContent();
+    }
+    else
+    {
+        RenderHomeContent();
+    }
 
     ImGui::EndChild();
+
+    if (m_FondosCollapsed)
+    {
+        // ── Barra colapsada compacta al pie de Main ──
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, LP::Surface0);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 3.0f));
+        ImGui::BeginChild("##fondosCollapsedBar", ImVec2(totalW, kHeaderBarH), false,
+                          ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+
+        ImDrawList* dlBar = ImGui::GetWindowDrawList();
+        ImVec2 barPos = ImGui::GetCursorScreenPos();
+
+        // Icono de capas
+        float iconSz = 16.0f;
+        ImVec2 iconPos = ImVec2(barPos.x + 4.0f, barPos.y + (kHeaderBarH - iconSz) * 0.5f);
+        AppIcons::DrawIcon_Layers(dlBar, iconPos, iconSz, LPU32(LP::Accent));
+
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + iconSz + 10.0f);
+        ImGui::AlignTextToFramePadding();
+        ImGui::PushStyleColor(ImGuiCol_Text, LP::Text);
+        ImGui::TextUnformatted("Fondos");
+        ImGui::PopStyleColor();
+
+        ImGui::SameLine(0, 8.0f);
+        ImGui::PushStyleColor(ImGuiCol_Text, LP::TextMuted);
+        ImGui::TextUnformatted("(colapsado)");
+        ImGui::PopStyleColor();
+
+        float btnW = 110.0f;
+        float btnH = 22.0f;
+        float rightMargin = 8.0f;
+        float btnX = std::max(ImGui::GetCursorPosX(), totalW - btnW - rightMargin);
+
+        ImGui::SameLine(btnX);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button, LP::Surface2);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, LP::Surface3);
+        ImGui::PushStyleColor(ImGuiCol_Border, LP::Border);
+        ImGui::PushStyleColor(ImGuiCol_Text, LP::Text);
+
+        if (ImGui::Button("\xE2\x96\xB2 Expandir", ImVec2(btnW, btnH)))
+        {
+            m_FondosCollapsed = false;
+        }
+        ImGui::PopStyleColor(4);
+        ImGui::PopStyleVar(2);
+
+        // Permitir clic en cualquier parte vacía de la barra para alternar
+        if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsAnyItemHovered())
+        {
+            m_FondosCollapsed = false;
+        }
+
+        ImGui::EndChild();
+    }
+    else
+    {
+        // ── Splitter interactivo para redimensionar Fondos ──
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, LP::AccentDim);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, LP::Accent);
+        ImGui::Button("##fondosSplitter", ImVec2(totalW, kSplitterH));
+        if (ImGui::IsItemActive())
+        {
+            float deltaY = ImGui::GetIO().MouseDelta.y;
+            m_FondosHeight -= deltaY;
+            m_FondosHeight = std::clamp(m_FondosHeight, kMinFondosH, kMaxFondosH);
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+            if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+            {
+                m_FondosCollapsed = true;
+            }
+        }
+        ImGui::PopStyleColor(3);
+
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImVec2 pMin = ImGui::GetItemRectMin();
+        ImVec2 pMax = ImGui::GetItemRectMax();
+        float midY = (pMin.y + pMax.y) * 0.5f;
+        dl->AddLine(ImVec2(pMin.x, midY), ImVec2(pMax.x, midY), LPU32(LP::Border), 1.0f);
+        float midX = (pMin.x + pMax.x) * 0.5f;
+        dl->AddLine(ImVec2(midX - 18.0f, midY), ImVec2(midX + 18.0f, midY), LPU32(LP::Accent), 2.0f);
+
+        // ── Galería de Fondos ──
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, LP::Base);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f, 8.0f));
+        ImGui::BeginChild("##fondosContentArea", ImVec2(totalW, m_FondosHeight), false,
+                          ImGuiWindowFlags_NoScrollbar);
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+
+        if (stylesHub)
+        {
+            stylesHub->SetBackgroundsOnCollapse([this]() {
+                m_FondosCollapsed = true;
+            });
+            stylesHub->RenderBackgrounds();
+        }
+
+        ImGui::EndChild();
+    }
 
     if (m_UIManagerRef) DS::EndGlassPanel();
     else                ImGui::End();

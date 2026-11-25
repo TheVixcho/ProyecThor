@@ -2,11 +2,16 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <functional>
 #include <imgui.h>
 #include "../BackgroundsPanel.h"
 #include "core/ThumbnailWorker.h"
 
 namespace ProyecThor::UI {
+
+void     BumpBackgroundsListRevision();
+uint64_t GetBackgroundsListRevision();
+void     ClearSharedBgThumbnailCache();
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  LayersBgTab — toda la lógica del tab "Fondos"
@@ -26,8 +31,17 @@ public:
     // Llamar externamente si se necesita forzar recarga
     void ReloadList();
 
+    // Precarga real de miniaturas de imágenes y videos de fondo en el arranque
+    void PreloadThumbnails(const std::function<void(int done, int total, const std::string& name)>& onProgress = nullptr);
+
+    void SetOnCollapseCallback(std::function<void()> cb) { m_OnCollapseCallback = std::move(cb); }
+
 private:
+    char                     m_SearchBuffer[128] = {};
+    std::function<void()>    m_OnCollapseCallback = nullptr;
+
     // ── Datos ─────────────────────────────────────────────────────────────────
+    uint64_t                 m_SeenBgRevision = 0;
     std::vector<BgEntry>     m_AllBackgrounds;
     std::vector<std::string> m_BgFolders;
     std::string              m_CurrentBgFolder; // "" = raiz / "Todos"
@@ -40,12 +54,12 @@ private:
 
     // ── Thumbnails ────────────────────────────────────────────────────────────
     // Las miniaturas de video se generan en 2do plano (ThumbnailWorker, sin
-    // abrir ninguna ventana) y se cachean en disco — solo se regeneran la
-    // primera vez que se ve cada video, nunca en sesiones siguientes.
-    std::unordered_map<std::string, ImTextureID> m_ThumbnailCache;
+    // abrir ninguna ventana), se cachean en disco y se comparten en GPU entre
+    // todas las instancias de LayersBgTab (StylesHubPanel y BackgroundsPanel).
     Core::ThumbnailWorker                        m_ThumbWorker;
     ImTextureID GetThumbnail(const std::string& path, bool isVideo);
     void        DrainThumbnailResults(); // llamar una vez por frame desde Render()
+    uint64_t    m_SeenPurgeEpoch = 0;
 
     // ── Preview al mantener presionado ───────────────────────────────────────
     // Mientras el usuario mantiene el click sobre una tarjeta/fila, se
@@ -58,7 +72,7 @@ private:
 
     // ── Vistas ────────────────────────────────────────────────────────────────
     bool  m_GridMode  = true;
-    float m_ThumbZoom = 1.0f; // 0.6 .. 1.8 — controla el tamano de las tarjetas
+    float m_ThumbZoom = 0.65f; // 0.65 .. 1.8 — controla el tamano de las tarjetas (mínimo por defecto)
 
     // ── Estado de renombrado ──────────────────────────────────────────────────
     bool        m_RenamingBg      = false;
@@ -84,8 +98,8 @@ private:
     void RenderFolderChips();
     void RenderContentArea(float w, float h);      // grid/lista de la seleccion actual
 
-    void RenderBgCard(const BgEntry& e, float cardW, float cardH, int col, int cols);
-    void RenderBgRow(const BgEntry& e, float panelW, float rowH);
+    void RenderBgCard(const BgEntry& e, float cardW, float cardH, int col, int cols, bool isActive = false);
+    void RenderBgRow(const BgEntry& e, float panelW, float rowH, bool isActive = false);
 
     void SelectFolder(const std::string& folderKey);
 

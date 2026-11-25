@@ -1,8 +1,8 @@
 #include "LibraryMultimedia.h"
+#include "LibraryVideos.h"
 #include "LibraryIcons.h"
 #include "LibraryStyles.h"
 #include "LibraryHelpers.h"
-#include "ui/framework/UIStrings.h"
 #include "ui/framework/DesignSystem.h"
 #include "ui/panels/layers/LayersTheme.h"
 #include "ui/views/audio/AudioHelpers.h"
@@ -10,24 +10,29 @@
 #include "core/ThumbnailWorker.h"
 #include "core/PresentationCore.h"
 #include "core/FileDeletionManager.h"
+#include "core/MediaImportManager.h"
 #include "core/settings/SettingsManager.h"
+#include "ui/panels/layers/LayersBgTab.h"
 #include "ui/views/Audio.h"
+#include "ui/framework/FilePicker.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <algorithm>
 #include <cctype>
 #include <cstring>
 #include <system_error>
 #include <cmath>
+#include <thread>
+#include <chrono>
 #include <GL/gl.h>
 #include "stb_image.h"
 
 namespace DS = ProyecThor::UI::DS;
-using ProyecThor::UI::Loc;
 
 namespace ProyecThor::Library {
 
@@ -35,13 +40,34 @@ namespace ProyecThor::Library {
 //  Listas y carpetas
 // =============================================================================
 
-struct MMItem {
-    std::string    filename;
-    Core::ItemType type;
-    std::string    customFullPath = "";
-};
-
 static std::vector<MMItem> s_Videos, s_Audios, s_Images;
+
+const std::vector<MMItem>& GetVideoList() {
+    static bool s_Init = false;
+    if (!s_Init || (s_Videos.empty() && s_Images.empty() && s_Audios.empty())) {
+        RefreshMultimediaLists();
+        s_Init = true;
+    }
+    return s_Videos;
+}
+
+const std::vector<MMItem>& GetImageList() {
+    static bool s_Init = false;
+    if (!s_Init || (s_Videos.empty() && s_Images.empty() && s_Audios.empty())) {
+        RefreshMultimediaLists();
+        s_Init = true;
+    }
+    return s_Images;
+}
+
+const std::vector<MMItem>& GetAudioList() {
+    static bool s_Init = false;
+    if (!s_Init || (s_Videos.empty() && s_Images.empty() && s_Audios.empty())) {
+        RefreshMultimediaLists();
+        s_Init = true;
+    }
+    return s_Audios;
+}
 
 // ── Vista: grilla (miniaturas grandes) o lista (compacta) -- default grilla,
 //    mismo criterio que la galeria de Overlays. s_ThumbZoom solo aplica en
@@ -49,7 +75,7 @@ static std::vector<MMItem> s_Videos, s_Audios, s_Images;
 static bool  s_GridMode  = true;
 static float s_ThumbZoom = 1.0f;
 
-static std::string VideoFolder() { return GetAssetsPath() + "/videos"; }
+static std::string VideoFolder() { return GetVideoLibraryPath(); }
 static std::string ImageFolder() { return GetAssetsPath() + "/images"; }
 static std::string AudioFolder() { return ProyecThor::Audio::GetAudioPath(); }
 
@@ -62,20 +88,64 @@ static std::string ItemFullPath(const MMItem& it) {
     }
 }
 
+std::string GetMMItemFullPath(const MMItem& it) {
+    return ItemFullPath(it);
+}
+
+std::string GetMMItemRootLabel(const MMItem& it) {
+    return it.rootLabel.empty() ? "ProyecThor" : it.rootLabel;
+}
+
+std::vector<std::string> GetAvailableRootLabels(Core::ItemType /*type*/) {
+    std::vector<std::string> roots;
+    roots.push_back("ProyecThor");
+    {
+        const auto& watched = ProyecThor::Settings::SettingsManager::Get().GetSettings().storage.watchedFolders;
+        for (const auto& wf : watched) {
+            if (!wf.enabled || wf.path.empty()) continue;
+            std::error_code ec;
+            fs::path p = U8Path(wf.path);
+            if (fs::exists(p, ec) && fs::is_directory(p, ec)) {
+                std::string label = PathToUtf8(p.filename());
+                if (label.empty()) label = wf.path;
+                if (std::find(roots.begin(), roots.end(), label) == roots.end()) {
+                    roots.push_back(label);
+                }
+            }
+        }
+    }
+    return roots;
+}
+
 static void ScanFolder(const std::string& folder, const std::vector<std::string>& exts,
-                        Core::ItemType type, std::vector<MMItem>& out)
+                        Core::ItemType type, std::vector<MMItem>& out,
+                        const std::string& rootLabel = "ProyecThor", bool recursive = false)
 {
     std::error_code ec;
     fs::path dir = U8Path(folder);
     if (!fs::exists(dir, ec)) return;
-    for (const auto& entry : fs::directory_iterator(dir, ec)) {
-        if (ec) break;
-        if (!entry.is_regular_file()) continue;
+
+    auto processEntry = [&](const fs::directory_entry& entry) {
+        if (!entry.is_regular_file()) return;
         std::string ext = entry.path().extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(),
                        [](unsigned char c) { return (char)std::tolower(c); });
-        if (std::find(exts.begin(), exts.end(), ext) == exts.end()) continue;
-        out.push_back({ PathToUtf8(entry.path().filename()), type, "" });
+        if (std::find(exts.begin(), exts.end(), ext) == exts.end()) return;
+        std::string full = PathToUtf8(entry.path());
+        std::string fn   = PathToUtf8(entry.path().filename());
+        out.push_back({ fn, type, full, rootLabel });
+    };
+
+    if (recursive) {
+        for (const auto& entry : fs::recursive_directory_iterator(dir, fs::directory_options::skip_permission_denied, ec)) {
+            if (ec) break;
+            processEntry(entry);
+        }
+    } else {
+        for (const auto& entry : fs::directory_iterator(dir, ec)) {
+            if (ec) break;
+            processEntry(entry);
+        }
     }
 }
 
@@ -89,66 +159,104 @@ void RefreshMultimediaLists()
     const std::vector<std::string> imgExts = { ".jpg", ".jpeg", ".png", ".bmp", ".webp" };
     const std::vector<std::string> audExts = { ".mp3", ".flac", ".wav", ".ogg", ".aac", ".m4a", ".wma", ".opus", ".aiff" };
 
-    // 1. Escaneo de carpetas internas de la aplicacion
-    ScanFolder(VideoFolder(), vidExts, Core::ItemType::Video, s_Videos);
-    ScanFolder(ImageFolder(), imgExts, Core::ItemType::Image, s_Images);
-    ScanFolder(AudioFolder(), audExts, Core::ItemType::Audio, s_Audios);
+    // 1. Escaneo de carpetas internas de la aplicacion (Carpeta raíz "ProyecThor")
+    ScanFolder(VideoFolder(), vidExts, Core::ItemType::Video, s_Videos, "ProyecThor", false);
+    ScanFolder(ImageFolder(), imgExts, Core::ItemType::Image, s_Images, "ProyecThor", false);
+    ScanFolder(AudioFolder(), audExts, Core::ItemType::Audio, s_Audios, "ProyecThor", false);
 
-    // 2. Escaneo de carpetas vinculadas (Watched Folders de Ajustes > Datos)
-    const auto& watched = ProyecThor::Settings::SettingsManager::Get().GetSettings().storage.watchedFolders;
-    for (const auto& wf : watched) {
-        if (!wf.enabled || wf.path.empty()) continue;
+    // 2. Archivos externos vinculados explicitamente por el usuario
+    const auto& storage = ProyecThor::Settings::SettingsManager::Get().GetSettings().storage;
+    for (const auto& rawPath : storage.externalMultimediaFiles) {
+        if (rawPath.empty()) continue;
         std::error_code ec;
-        fs::path dir = U8Path(wf.path);
-        if (!fs::exists(dir, ec) || !fs::is_directory(dir, ec)) continue;
+        fs::path p = U8Path(rawPath);
+        if (!fs::exists(p, ec) || !fs::is_regular_file(p, ec)) continue;
 
-        for (const auto& entry : fs::directory_iterator(dir, ec)) {
-            if (ec) break;
-            if (!entry.is_regular_file()) continue;
+        std::string ext = p.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(),
+                       [](unsigned char c) { return (char)std::tolower(c); });
 
-            std::string ext = entry.path().extension().string();
-            std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+        bool isVid = (std::find(vidExts.begin(), vidExts.end(), ext) != vidExts.end());
+        bool isImg = (std::find(imgExts.begin(), imgExts.end(), ext) != imgExts.end());
+        bool isAud = (std::find(audExts.begin(), audExts.end(), ext) != audExts.end());
+        if (!isVid && !isImg && !isAud) continue;
 
-            bool isVid = (std::find(vidExts.begin(), vidExts.end(), ext) != vidExts.end());
-            bool isImg = (std::find(imgExts.begin(), imgExts.end(), ext) != imgExts.end());
-            bool isAud = (std::find(audExts.begin(), audExts.end(), ext) != audExts.end());
+        std::string fname = PathToUtf8(p.filename());
+        std::string fpath = PathToUtf8(p);
 
-            if (!isVid && !isImg && !isAud) continue;
-
-            std::string fname = PathToUtf8(entry.path().filename());
-
-            if (wf.copyToDataDir) {
-                // Modo copiar: copiar a la carpeta de la app si no existe
-                std::string targetDir = isVid ? VideoFolder() : (isImg ? ImageFolder() : AudioFolder());
-                fs::path targetPath = fs::path(targetDir) / entry.path().filename();
-                if (!fs::exists(targetPath, ec)) {
-                    fs::copy_file(entry.path(), targetPath, fs::copy_options::overwrite_existing, ec);
-                    if (isVid) s_Videos.push_back({ fname, Core::ItemType::Video, "" });
-                    else if (isImg) s_Images.push_back({ fname, Core::ItemType::Image, "" });
-                    else s_Audios.push_back({ fname, Core::ItemType::Audio, "" });
-                }
-            } else {
-                // Modo cargar sin copiar: indexar directamente la ruta original
-                std::string fpath = PathToUtf8(entry.path());
-                if (isVid) s_Videos.push_back({ fname, Core::ItemType::Video, fpath });
-                else if (isImg) s_Images.push_back({ fname, Core::ItemType::Image, fpath });
-                else s_Audios.push_back({ fname, Core::ItemType::Audio, fpath });
+        std::string rootLabel = "ProyecThor";
+        for (const auto& wf : storage.watchedFolders) {
+            if (fpath.rfind(wf.path, 0) == 0) {
+                fs::path wfp = U8Path(wf.path);
+                rootLabel = PathToUtf8(wfp.filename());
+                if (rootLabel.empty()) rootLabel = wf.path;
+                break;
             }
+        }
+
+        if (isVid)      s_Videos.push_back({ fname, Core::ItemType::Video, fpath, rootLabel });
+        else if (isImg) s_Images.push_back({ fname, Core::ItemType::Image, fpath, rootLabel });
+        else            s_Audios.push_back({ fname, Core::ItemType::Audio, fpath, rootLabel });
+    }
+
+    // 3. Escaneo automático de carpetas externas vinculadas sin duplicar
+    {
+        for (const auto& wf : storage.watchedFolders) {
+            if (!wf.enabled || wf.path.empty()) continue;
+            std::error_code ec;
+            fs::path p = U8Path(wf.path);
+            if (!fs::exists(p, ec) || !fs::is_directory(p, ec)) continue;
+
+            std::string rootLabel = PathToUtf8(p.filename());
+            if (rootLabel.empty()) rootLabel = wf.path;
+
+            ScanFolder(wf.path, vidExts, Core::ItemType::Video, s_Videos, rootLabel, true);
+            ScanFolder(wf.path, imgExts, Core::ItemType::Image, s_Images, rootLabel, true);
+            ScanFolder(wf.path, audExts, Core::ItemType::Audio, s_Audios, rootLabel, true);
         }
     }
 
+    // 4. Deduplicacion por ruta y ordenamiento
     auto SortAndDedupe = [](std::vector<MMItem>& list) {
-        std::sort(list.begin(), list.end(), [](const MMItem& a, const MMItem& b) {
+        std::unordered_set<std::string> seenPaths;
+        std::vector<MMItem> uniqueList;
+        uniqueList.reserve(list.size());
+
+        for (auto& item : list) {
+            std::string pathKey = Core::MediaImportManager::NormalizePathKey(ItemFullPath(item));
+            if (pathKey.empty() || seenPaths.count(pathKey) > 0) continue;
+
+            seenPaths.insert(pathKey);
+            if (item.rootLabel.empty()) item.rootLabel = "ProyecThor";
+            uniqueList.push_back(std::move(item));
+        }
+
+        std::sort(uniqueList.begin(), uniqueList.end(), [](const MMItem& a, const MMItem& b) {
+            if (a.rootLabel != b.rootLabel) {
+                if (a.rootLabel == "ProyecThor") return true;
+                if (b.rootLabel == "ProyecThor") return false;
+                return a.rootLabel < b.rootLabel;
+            }
+            std::string ka = Core::MediaImportManager::NormalizeFilenameKey(a.filename);
+            std::string kb = Core::MediaImportManager::NormalizeFilenameKey(b.filename);
+            if (ka != kb) return ka < kb;
             return a.filename < b.filename;
         });
-        list.erase(std::unique(list.begin(), list.end(), [](const MMItem& a, const MMItem& b) {
-            return a.filename == b.filename && a.customFullPath == b.customFullPath;
-        }), list.end());
+
+        list = std::move(uniqueList);
     };
 
     SortAndDedupe(s_Videos);
     SortAndDedupe(s_Images);
     SortAndDedupe(s_Audios);
+}
+
+void ImportMultimediaFile()
+{
+    // Abre el selector multiple y presenta el menu interactivo (Multimedia vs Background)
+    // permitiendo abrir los archivos directamente desde su carpeta original (ej. Descargas)
+    // sin duplicarlos en disco ni secuestrar defaultMediaFolder.
+    Core::MediaImportManager::Get().OpenFilePickerForImport(Core::MediaImportDest::Multimedia);
 }
 
 // =============================================================================
@@ -157,17 +265,24 @@ void RefreshMultimediaLists()
 // =============================================================================
 
 static ImTextureID LoadThumbFromDisk(const char* path) {
-    int w, h, n;
-    unsigned char* d = stbi_load(path, &w, &h, &n, 4);
-    if (!d) return 0;
-    GLuint tex; glGenTextures(1, &tex);
+    const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+    const unsigned maxW = perf.lowMemoryMode ? 256u : (perf.performanceMode ? 320u : 512u);
+    const unsigned maxH = perf.lowMemoryMode ? 144u : (perf.performanceMode ? 180u : 288u);
+
+    std::vector<uint8_t> pixels;
+    unsigned w = 0, h = 0;
+    if (!ProyecThor::Core::ThumbnailWorker::LoadThumbnailPixelsFromDisk(path ? path : "", pixels, w, h, maxW, maxH))
+        return 0;
+
+    GLuint tex = 0;
+    glGenTextures(1, &tex);
     glBindTexture(GL_TEXTURE_2D, tex);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, d);
-    stbi_image_free(d);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, static_cast<GLsizei>(w), static_cast<GLsizei>(h),
+                 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
     return (ImTextureID)(intptr_t)tex;
 }
 
@@ -180,7 +295,11 @@ static fs::path VideoThumbCacheDir() {
 }
 static std::string VideoThumbCachePathFor(const std::string& absVideoPath) {
     std::error_code ec;
-    auto sz = fs::file_size(absVideoPath, ec);
+    auto sz = fs::file_size(U8Path(absVideoPath), ec);
+    if (ec) {
+        ec.clear();
+        sz = fs::file_size(fs::path(absVideoPath), ec);
+    }
     size_t h = std::hash<std::string>{}(absVideoPath + "|" + std::to_string(ec ? 0 : sz));
     return (VideoThumbCacheDir() / (std::to_string(h) + ".png")).string();
 }
@@ -188,24 +307,44 @@ static std::string VideoThumbCachePathFor(const std::string& absVideoPath) {
 static std::unordered_map<std::string, ImTextureID> s_VideoThumbCache;
 static ProyecThor::Core::ThumbnailWorker            s_VideoThumbWorker;
 
+static std::string ResolveAbsMediaPath(const std::string& path) {
+    std::error_code ec;
+    fs::path p = U8Path(path);
+    if (fs::exists(p, ec))
+        return PathToUtf8(fs::absolute(p, ec));
+    ec.clear();
+    return fs::absolute(fs::path(path), ec).string();
+}
+
 static ImTextureID GetVideoThumbnail(const std::string& path) {
     auto it = s_VideoThumbCache.find(path);
     if (it != s_VideoThumbCache.end()) return it->second;
 
-    std::string abs = fs::absolute(fs::path(path)).string();
+    std::string abs = ResolveAbsMediaPath(path);
     std::string cachePath = VideoThumbCachePathFor(abs);
     std::error_code ec;
-    if (fs::exists(cachePath, ec)) {
+    if (fs::exists(U8Path(cachePath), ec) || fs::exists(fs::path(cachePath), ec)) {
         ImTextureID t = LoadThumbFromDisk(cachePath.c_str());
         if (t) { s_VideoThumbCache[path] = t; return t; }
     }
+    // Compatibilidad con hashes generados anteriormente usando fs::path directo:
+    std::string legacyAbs = fs::absolute(fs::path(path), ec).string();
+    if (legacyAbs != abs) {
+        std::string legacyCache = VideoThumbCachePathFor(legacyAbs);
+        if (fs::exists(fs::path(legacyCache), ec)) {
+            ImTextureID t = LoadThumbFromDisk(legacyCache.c_str());
+            if (t) { s_VideoThumbCache[path] = t; return t; }
+        }
+    }
+
     s_VideoThumbWorker.Request(path, abs, cachePath);
     return 0;
 }
 
-static void DrainVideoThumbnails() {
+static int DrainVideoThumbnails(std::string* outLastKey = nullptr) {
     std::vector<ProyecThor::Core::ThumbnailWorker::Result> results;
     s_VideoThumbWorker.DrainResults(results);
+    int count = 0;
     for (auto& r : results) {
         ImTextureID t = 0;
         if (!r.pixels.empty() && r.width > 0 && r.height > 0) {
@@ -220,7 +359,17 @@ static void DrainVideoThumbnails() {
             t = (ImTextureID)(intptr_t)tex;
         }
         s_VideoThumbCache[r.key] = t;
+        if (outLastKey) *outLastKey = r.key;
+        ++count;
     }
+    return count;
+}
+
+ImTextureID QuerySharedVideoThumbnail(const std::string& path) {
+    auto it = s_VideoThumbCache.find(path);
+    if (it != s_VideoThumbCache.end())
+        return it->second;
+    return 0;
 }
 
 // ── Imagen: la imagen misma, escalada por ImGui al dibujar ──────────────────
@@ -249,6 +398,134 @@ static ImTextureID GetAudioThumbnail(const std::string& path) {
     }
     s_AudioArtCache[path] = t;
     return t;
+}
+
+ImTextureID GetMMVideoThumbnail(const std::string& path) {
+    DrainVideoThumbnails();
+    return GetVideoThumbnail(path);
+}
+
+ImTextureID GetMMImageThumbnail(const std::string& path) {
+    return GetImageThumbnail(path);
+}
+
+ImTextureID GetMMAudioThumbnail(const std::string& path) {
+    return GetAudioThumbnail(path);
+}
+
+void ClearMultimediaThumbnailCaches() {
+    ClearLocalVideoThumbnailCache();
+
+    std::unordered_set<GLuint> uniqueTex;
+    auto collectFrom = [&](const std::unordered_map<std::string, ImTextureID>& cache) {
+        for (const auto& kv : cache) {
+            GLuint tex = static_cast<GLuint>(static_cast<uintptr_t>(kv.second));
+            if (tex != 0) uniqueTex.insert(tex);
+        }
+    };
+    collectFrom(s_VideoThumbCache);
+    collectFrom(s_ImageThumbCache);
+    collectFrom(s_AudioArtCache);
+
+    for (GLuint tex : uniqueTex) {
+        glDeleteTextures(1, &tex);
+    }
+
+    s_VideoThumbCache.clear();
+    s_ImageThumbCache.clear();
+    s_AudioArtCache.clear();
+    s_VideoThumbWorker.ResetSeen();
+}
+
+void PreloadMultimediaThumbnails(const MultimediaPreloadProgressFn& onProgress)
+{
+    if (s_Videos.empty() && s_Images.empty() && s_Audios.empty())
+        RefreshMultimediaLists();
+
+    const int total = static_cast<int>(s_Images.size() + s_Audios.size() + s_Videos.size());
+    if (total == 0) {
+        if (onProgress) onProgress(0, 0, "");
+        return;
+    }
+
+    int done = 0;
+
+    // 1. Primero cargamos miniaturas de video ya cacheadas en disco y encolamos
+    //    las no cacheadas en el worker en segundo plano para que se decodifiquen
+    //    en paralelo mientras el hilo principal carga imágenes y portadas de audio.
+    int pendingWorkerVideos = 0;
+    std::string firstUncachedVideoName;
+    for (const auto& vid : s_Videos) {
+        const std::string fullPath = ItemFullPath(vid);
+        if (s_VideoThumbCache.find(fullPath) != s_VideoThumbCache.end()) {
+            ++done;
+            continue;
+        }
+        (void)GetVideoThumbnail(fullPath);
+        if (s_VideoThumbCache.find(fullPath) != s_VideoThumbCache.end()) {
+            ++done;
+            if (onProgress) onProgress(done, total, vid.filename);
+        } else {
+            ++pendingWorkerVideos;
+            if (firstUncachedVideoName.empty())
+                firstUncachedVideoName = vid.filename;
+        }
+    }
+
+    // 2. Imágenes de proyección
+    for (const auto& img : s_Images) {
+        if (onProgress) onProgress(done, total, img.filename);
+        (void)GetImageThumbnail(ItemFullPath(img));
+        ++done;
+        if (onProgress) onProgress(done, total, img.filename);
+    }
+
+    // 3. Portadas embebidas de pistas de audio
+    for (const auto& aud : s_Audios) {
+        if (onProgress) onProgress(done, total, aud.filename);
+        (void)GetAudioThumbnail(ItemFullPath(aud));
+        ++done;
+        if (onProgress) onProgress(done, total, aud.filename);
+    }
+
+    // 4. Drenar fotogramas de video generados por ThumbnailWorker en tiempo real
+    if (pendingWorkerVideos > 0 || s_VideoThumbWorker.PendingCount() > 0) {
+        std::string currentLabel = firstUncachedVideoName;
+        auto lastAdvance = std::chrono::steady_clock::now();
+
+        while (true) {
+            std::string finishedKey;
+            int newlyDone = DrainVideoThumbnails(&finishedKey);
+            if (newlyDone > 0) {
+                done = std::min(total, done + newlyDone);
+                lastAdvance = std::chrono::steady_clock::now();
+                if (!finishedKey.empty()) {
+                    currentLabel = PathToUtf8(U8Path(finishedKey).filename());
+                }
+            }
+
+            if (onProgress)
+                onProgress(std::min(done, total), total, currentLabel);
+
+            if (s_VideoThumbWorker.PendingCount() == 0) {
+                std::string extraKey;
+                int extra = DrainVideoThumbnails(&extraKey);
+                if (extra > 0) done = std::min(total, done + extra);
+                break;
+            }
+
+            // Salvaguarda por si un archivo corrupto bloquea el decodificador mas alla del timeout
+            auto stalledMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - lastAdvance).count();
+            if (stalledMs > 3000)
+                break;
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+
+    if (onProgress)
+        onProgress(total, total, "");
 }
 
 // ── Miniatura + icono/acento por tipo ────────────────────────────────────
@@ -312,12 +589,20 @@ static void RequestDelete(const MMItem& item) {
 static void RenderRenameModal() {
     if (!s_ShowRenameModal) return;
     ImGui::OpenPopup("Renombrar##mm");
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    if (vp) {
+        ImGui::SetNextWindowViewport(vp->ID);
+        ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    }
     ImGui::SetNextWindowSize(ImVec2(360, 0));
-    if (ImGui::BeginPopupModal("Renombrar##mm", &s_ShowRenameModal, ImGuiWindowFlags_NoResize)) {
+    if (ImGui::BeginPopupModal("Renombrar##mm", &s_ShowRenameModal,
+                               ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings)) {
         ImGui::SetNextItemWidth(-1.0f);
-        ImGui::InputText("##mmRenameBuf", s_RenameBuffer, sizeof(s_RenameBuffer));
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        bool enterPressed = ImGui::InputText("##mmRenameBuf", s_RenameBuffer, sizeof(s_RenameBuffer),
+                                             ImGuiInputTextFlags_EnterReturnsTrue);
 
-        if (ImGui::Button(Loc("Renombrar", "Rename", "Renomear"), ImVec2(160, 0))) {
+        if (ImGui::Button("Renombrar", ImVec2(160, 0)) || enterPressed) {
             std::string ext;
             SplitExtension(s_RenameItem.filename, ext);
             std::string newName = std::string(s_RenameBuffer) + ext;
@@ -332,7 +617,7 @@ static void RenderRenameModal() {
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button(Loc("Cancelar", "Cancel", "Cancelar"), ImVec2(120, 0))) {
+        if (ImGui::Button("Cancelar", ImVec2(120, 0))) {
             s_ShowRenameModal = false;
             ImGui::CloseCurrentPopup();
         }
@@ -343,28 +628,66 @@ static void RenderRenameModal() {
 static void RenderDeleteModal() {
     if (!s_ShowDeleteModal) return;
     ImGui::OpenPopup("Eliminar##mm");
-    ImGui::SetNextWindowSize(ImVec2(360, 0));
-    if (ImGui::BeginPopupModal("Eliminar##mm", &s_ShowDeleteModal, ImGuiWindowFlags_NoResize)) {
-        ImGui::TextWrapped(Loc("Eliminar \"%s\"? Esta acción no se puede deshacer.", "Delete \"%s\"? This action cannot be undone.", "Excluir \"%s\"? Esta ação não pode ser desfeita."),
-                           s_DeleteItem.filename.c_str());
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    if (vp) {
+        ImGui::SetNextWindowViewport(vp->ID);
+        ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    }
+    const bool isExternal = !s_DeleteItem.customFullPath.empty();
+    ImGui::SetNextWindowSize(ImVec2(isExternal ? 440.0f : 360.0f, 0));
+    if (ImGui::BeginPopupModal("Eliminar##mm", &s_ShowDeleteModal,
+                               ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings)) {
+        if (isExternal) {
+            ImGui::TextWrapped("¿Quitar \"%s\" de ProyecThor?\nEl archivo original permanecerá intacto en su carpeta.",
+                               s_DeleteItem.filename.c_str());
+        } else {
+            ImGui::TextWrapped("Eliminar \"%s\"? Esta acción no se puede deshacer.",
+                               s_DeleteItem.filename.c_str());
+        }
         ImGui::Spacing();
 
-        ImGui::PushStyleColor(ImGuiCol_Button,        DS::DangerColorDim);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  DS::DangerColor);
-        if (ImGui::Button(Loc("Eliminar", "Delete", "Excluir"), ImVec2(160, 0))) {
-            std::string fullPath = ItemFullPath(s_DeleteItem);
-            if (s_SelectedFile == s_DeleteItem.filename) {
-                s_SelectedFile.clear();
+        if (isExternal) {
+            if (ImGui::Button("Quitar vínculo", ImVec2(150, 0))) {
+                std::string fullPath = ItemFullPath(s_DeleteItem);
+                if (s_SelectedFile == s_DeleteItem.filename) s_SelectedFile.clear();
+                s_VideoThumbCache.erase(fullPath);
+                Core::MediaImportManager::Get().UnlinkExternalMultimedia(fullPath);
+                RefreshMultimediaLists();
+                s_ShowDeleteModal = false;
+                ImGui::CloseCurrentPopup();
             }
-            s_VideoThumbCache.erase(fullPath);
-            Core::FileDeletionManager::ForceDeleteFile(fullPath);
-            RefreshMultimediaLists();
-            s_ShowDeleteModal = false;
-            ImGui::CloseCurrentPopup();
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Button,        DS::DangerColorDim);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, DS::DangerColor);
+            if (ImGui::Button("Borrar del disco", ImVec2(140, 0))) {
+                std::string fullPath = ItemFullPath(s_DeleteItem);
+                if (s_SelectedFile == s_DeleteItem.filename) s_SelectedFile.clear();
+                s_VideoThumbCache.erase(fullPath);
+                Core::MediaImportManager::Get().UnlinkExternalMultimedia(fullPath);
+                Core::FileDeletionManager::ForceDeleteFile(fullPath);
+                RefreshMultimediaLists();
+                s_ShowDeleteModal = false;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::PopStyleColor(2);
+            ImGui::SameLine();
+        } else {
+            ImGui::PushStyleColor(ImGuiCol_Button,        DS::DangerColorDim);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, DS::DangerColor);
+            if (ImGui::Button("Eliminar", ImVec2(160, 0))) {
+                std::string fullPath = ItemFullPath(s_DeleteItem);
+                if (s_SelectedFile == s_DeleteItem.filename) s_SelectedFile.clear();
+                s_VideoThumbCache.erase(fullPath);
+                Core::FileDeletionManager::ForceDeleteFile(fullPath);
+                RefreshMultimediaLists();
+                s_ShowDeleteModal = false;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::PopStyleColor(2);
+            ImGui::SameLine();
         }
-        ImGui::PopStyleColor(2);
-        ImGui::SameLine();
-        if (ImGui::Button(Loc("Cancelar", "Cancel", "Cancelar"), ImVec2(120, 0))) {
+
+        if (ImGui::Button("Cancelar", ImVec2(110, 0))) {
             s_ShowDeleteModal = false;
             ImGui::CloseCurrentPopup();
         }
@@ -402,38 +725,63 @@ static void RenderMMDragSource(const MMItem& item, const std::string& disp) {
 static void RenderMMContextMenu(const MMItem& item, const char* popupId) {
     if (!ImGui::BeginPopupContextItem(popupId)) return;
     if (item.type == Core::ItemType::Video || item.type == Core::ItemType::Image) {
-        if (ImGui::MenuItem(Loc("Enviar al monitor", "Send to monitor", "Enviar para o monitor"))) {
-            Core::PresentationCore::Get().SetBackgroundMedia(ItemFullPath(item), item.type == Core::ItemType::Video, /*allowAudio=*/item.type == Core::ItemType::Video);
-            Core::PresentationCore::Get().SetProjecting(true);
+        if (ImGui::MenuItem("Enviar al monitor")) {
+            auto& core = Core::PresentationCore::Get();
+            core.SetProjecting(true);
+            core.SetBackgroundMedia(ItemFullPath(item), item.type == Core::ItemType::Video, /*allowAudio=*/item.type == Core::ItemType::Video);
+        }
+        ImGui::Separator();
+    } else if (item.type == Core::ItemType::Audio) {
+        if (ImGui::MenuItem("Enviar en vivo al proyector")) {
+            if (auto* ap = UI::AudioPanel::GetActiveInstance()) {
+                ap->PlayFileLive(ItemFullPath(item));
+            }
         }
         ImGui::Separator();
     }
     if (item.type == Core::ItemType::Video || item.type == Core::ItemType::Image) {
-        if (ImGui::MenuItem(Loc("Mover a Fondos (Backgrounds)", "Move to Backgrounds", "Mover para Fundos"))) {
-            std::error_code ec;
-            std::string srcPath = ItemFullPath(item);
-            fs::path src(srcPath);
-            std::string targetDir = GetAssetsPath() + "/backgrounds";
-            fs::create_directories(targetDir, ec);
-            fs::path dst = fs::path(targetDir) / src.filename();
-            fs::rename(src, dst, ec);
-            RefreshMultimediaLists();
+        if (ImGui::MenuItem("Mover a Fondos (Backgrounds)")) {
+            if (!item.customFullPath.empty()) {
+                Core::MediaImportManager::Get().MoveExternalToBackground(item.customFullPath);
+            } else {
+                std::error_code ec;
+                std::string srcPath = ItemFullPath(item);
+                fs::path src = U8Path(srcPath);
+                if (!Core::MediaImportManager::Get().ExistsInBackgroundByName(item.filename)) {
+                    std::string targetDir = GetAssetsPath() + "/backgrounds";
+                    fs::create_directories(U8Path(targetDir), ec);
+                    fs::path dst = U8Path(targetDir) / src.filename();
+                    fs::rename(src, dst, ec);
+                } else {
+                    Core::FileDeletionManager::ForceDeleteFile(srcPath);
+                }
+                UI::BumpBackgroundsListRevision();
+                RefreshMultimediaLists();
+            }
         }
-        if (ImGui::MenuItem(Loc("Copiar a Fondos (Backgrounds)", "Copy to Backgrounds", "Copiar para Fundos"))) {
-            std::error_code ec;
-            std::string srcPath = ItemFullPath(item);
-            fs::path src(srcPath);
-            std::string targetDir = GetAssetsPath() + "/backgrounds";
-            fs::create_directories(targetDir, ec);
-            fs::path dst = fs::path(targetDir) / src.filename();
-            fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+        if (ImGui::MenuItem("Copiar a Fondos (Backgrounds)")) {
+            if (!Core::MediaImportManager::Get().ExistsInBackgroundByName(item.filename)) {
+                if (!item.customFullPath.empty()) {
+                    Core::MediaImportManager::Get().LinkSingleExternalFileDirect(
+                        item.customFullPath, Core::MediaImportDest::Background);
+                } else {
+                    std::error_code ec;
+                    std::string srcPath = ItemFullPath(item);
+                    fs::path src = U8Path(srcPath);
+                    std::string targetDir = GetAssetsPath() + "/backgrounds";
+                    fs::create_directories(U8Path(targetDir), ec);
+                    fs::path dst = U8Path(targetDir) / src.filename();
+                    fs::copy_file(src, dst, fs::copy_options::skip_existing, ec);
+                    UI::BumpBackgroundsListRevision();
+                }
+            }
         }
         ImGui::Separator();
     }
-    if (ImGui::MenuItem(Loc("Renombrar", "Rename", "Renomear"))) RequestRename(item);
-    ImGui::Separator();
+    if (item.customFullPath.empty() && ImGui::MenuItem("Renombrar")) RequestRename(item);
+    if (item.customFullPath.empty()) ImGui::Separator();
     ImGui::PushStyleColor(ImGuiCol_Text, DS::DangerColor);
-    if (ImGui::MenuItem(Loc("Eliminar", "Delete", "Excluir"))) RequestDelete(item);
+    if (ImGui::MenuItem(item.customFullPath.empty() ? "Eliminar" : "Quitar de ProyecThor")) RequestDelete(item);
     ImGui::PopStyleColor();
     ImGui::EndPopup();
 }
@@ -480,11 +828,11 @@ static void RenderMMRow(const MMItem& item, int rowIdx) {
         SelectMMItem(item);
         if (item.type == Core::ItemType::Audio) {
             if (auto* ap = UI::AudioPanel::GetActiveInstance()) {
-                ap->PlayFileLive(item.filename);
+                ap->PlayFile(ItemFullPath(item), /*live=*/false);
             }
-        } else {
-            Core::PresentationCore::Get().SetBackgroundMedia(ItemFullPath(item), item.type == Core::ItemType::Video, /*allowAudio=*/true);
-            Core::PresentationCore::Get().SetProjecting(true);
+        } else if (item.type == Core::ItemType::Video) {
+            auto& core = Core::PresentationCore::Get();
+            core.RequestPreviewLoad(ItemFullPath(item), /*loop=*/false, /*startMuted=*/false);
         }
     }
 
@@ -563,11 +911,11 @@ static void RenderMMCard(const MMItem& item, int cardIdx, float W, float H, int 
         SelectMMItem(item);
         if (item.type == Core::ItemType::Audio) {
             if (auto* ap = UI::AudioPanel::GetActiveInstance()) {
-                ap->PlayFileLive(item.filename);
+                ap->PlayFile(ItemFullPath(item), /*live=*/false);
             }
-        } else {
-            Core::PresentationCore::Get().SetBackgroundMedia(ItemFullPath(item), item.type == Core::ItemType::Video, /*allowAudio=*/true);
-            Core::PresentationCore::Get().SetProjecting(true);
+        } else if (item.type == Core::ItemType::Video) {
+            auto& core = Core::PresentationCore::Get();
+            core.RequestPreviewLoad(ItemFullPath(item), /*loop=*/false, /*startMuted=*/false);
         }
     }
 
@@ -606,7 +954,7 @@ static void RenderMMSection(const char* label, const std::vector<MMItem>& items,
     if (filtered.empty()) {
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 8.0f);
         ImGui::PushStyleColor(ImGuiCol_Text, DS::TextHint);
-        ImGui::TextUnformatted(Loc("(vacío)", "(empty)", "(vazio)"));
+        ImGui::TextUnformatted("(vacio)");
         ImGui::PopStyleColor();
         ImGui::Dummy(ImVec2(0.0f, 16.0f));
         return;
@@ -643,7 +991,7 @@ static void RenderMMSection(const char* label, const std::vector<MMItem>& items,
 //  RenderMultimediaSection
 // =============================================================================
 
-void RenderMultimediaSection(LibraryContext& ctx, MultimediaFilter& filter)
+void RenderMultimediaSection(char* searchBuffer, int searchBufferSize, MultimediaFilter& filter, std::function<void()> importFile)
 {
     static bool s_Loaded = false;
     if (!s_Loaded) { RefreshMultimediaLists(); s_Loaded = true; }
@@ -655,11 +1003,12 @@ void RenderMultimediaSection(LibraryContext& ctx, MultimediaFilter& filter)
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill));
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  ImGui::ColorConvertU32ToFloat4(DS::AccentColorDim));
     ImGui::PushStyleColor(ImGuiCol_Border,         ImVec4(1.00f, 1.00f, 1.00f, 0.12f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(10.f, 7.f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
     ImGui::SetNextItemWidth(-1.f);
-    ImGui::InputTextWithHint("##mmsearch", "Buscar...", ctx.searchBuffer, ctx.searchBufferSize);
+    if (searchBuffer && searchBufferSize > 0)
+        ImGui::InputTextWithHint("##mmsearch", "Buscar...", searchBuffer, searchBufferSize);
     ImGui::PopStyleVar(3);
     ImGui::PopStyleColor(4);
 
@@ -672,16 +1021,16 @@ void RenderMultimediaSection(LibraryContext& ctx, MultimediaFilter& filter)
 
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 2.0f);
         ImGui::PushID("mmfilters");
-        if (UI::LPCornerIconBtn("##mmall", UI::LPDrawAll, Loc("Todos los medios", "All media", "Todas as mídias"), {btnSz, btnSz}, filter == MultimediaFilter::All))
+        if (UI::LPCornerIconBtn("##mmall", UI::LPDrawAll, "Todos los medios", {btnSz, btnSz}, filter == MultimediaFilter::All))
             filter = MultimediaFilter::All;
         ImGui::SameLine(0, gap);
-        if (UI::LPCornerIconBtn("##mmvid", UI::LPDrawPlay, Loc("Solo videos", "Videos only", "Apenas vídeos"), {btnSz, btnSz}, filter == MultimediaFilter::Video))
+        if (UI::LPCornerIconBtn("##mmvid", UI::LPDrawPlay, "Solo videos", {btnSz, btnSz}, filter == MultimediaFilter::Video))
             filter = MultimediaFilter::Video;
         ImGui::SameLine(0, gap);
-        if (UI::LPCornerIconBtn("##mmaud", UI::LPDrawAudio, Loc("Solo audios", "Audios only", "Apenas áudios"), {btnSz, btnSz}, filter == MultimediaFilter::Audio))
+        if (UI::LPCornerIconBtn("##mmaud", UI::LPDrawAudio, "Solo audios", {btnSz, btnSz}, filter == MultimediaFilter::Audio))
             filter = MultimediaFilter::Audio;
         ImGui::SameLine(0, gap);
-        if (UI::LPCornerIconBtn("##mmimg", UI::LPDrawImage, Loc("Solo imágenes", "Images only", "Apenas imagens"), {btnSz, btnSz}, filter == MultimediaFilter::Image))
+        if (UI::LPCornerIconBtn("##mmimg", UI::LPDrawImage, "Solo imágenes", {btnSz, btnSz}, filter == MultimediaFilter::Image))
             filter = MultimediaFilter::Image;
         ImGui::PopID();
 
@@ -696,12 +1045,14 @@ void RenderMultimediaSection(LibraryContext& ctx, MultimediaFilter& filter)
         }
         ImGui::SameLine(0, gap * 2.0f);
 
-        if (UI::LPCornerIconBtn("##mmrefresh", UI::LPDrawRefresh, Loc("Actualizar lista", "Refresh list", "Atualizar lista"), {btnSz, btnSz}))
+        if (UI::LPCornerIconBtn("##mmrefresh", UI::LPDrawRefresh, "Actualizar lista", {btnSz, btnSz}))
             RefreshMultimediaLists();
 
         ImGui::SameLine(0, gap);
-        if (UI::LPCornerIconBtn("##mmimport", UI::LPDrawPlus, Loc("Importar archivo", "Import file", "Importar arquivo"), {btnSz, btnSz}))
-            ctx.importFile();
+        if (UI::LPCornerIconBtn("##mmimport", UI::LPDrawPlus, "Importar archivo", {btnSz, btnSz})) {
+            if (importFile) importFile();
+            else ImportMultimediaFile();
+        }
     }
 
     ImGui::Dummy(ImVec2(0.0f, 4.0f));
@@ -713,10 +1064,10 @@ void RenderMultimediaSection(LibraryContext& ctx, MultimediaFilter& filter)
 
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 2.0f);
         ImGui::PushID("mmview");
-        if (UI::LPCornerIconBtn("##mmgridm", UI::LPDrawGrid, Loc("Vista en cuadrícula", "Grid view", "Visualização em grade"), {btnSz, btnSz}, s_GridMode))
+        if (UI::LPCornerIconBtn("##mmgridm", UI::LPDrawGrid, "Vista en cuadrícula", {btnSz, btnSz}, s_GridMode))
             s_GridMode = true;
         ImGui::SameLine(0, gap);
-        if (UI::LPCornerIconBtn("##mmlistm", UI::LPDrawList, Loc("Vista en lista", "List view", "Visualização em lista"), {btnSz, btnSz}, !s_GridMode))
+        if (UI::LPCornerIconBtn("##mmlistm", UI::LPDrawList, "Vista en lista", {btnSz, btnSz}, !s_GridMode))
             s_GridMode = false;
         ImGui::PopID();
 
@@ -731,7 +1082,7 @@ void RenderMultimediaSection(LibraryContext& ctx, MultimediaFilter& filter)
 
     ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
-    std::string searchLower(ctx.searchBuffer);
+    std::string searchLower(searchBuffer ? searchBuffer : "");
     std::transform(searchLower.begin(), searchLower.end(), searchLower.begin(),
                    [](unsigned char c) { return (char)std::tolower(c); });
 

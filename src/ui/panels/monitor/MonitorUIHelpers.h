@@ -2,7 +2,7 @@
 #include <imgui.h>
 #include <string>
 #include <cstdint>
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include "graphics/shaders/PostProcessorFSR.h"
 
 namespace ProyecThor::UI::Components {
@@ -40,7 +40,7 @@ namespace ProyecThor::UI::Components {
     // fuente es mas chico que el area de destino (ej. Preview en pantalla
     // completa). nullptr (default) = blit directo, sin cambios de
     // comportamiento en los call sites existentes.
-    void DrawVideoFrame(Core::VLCBasePlayer* player, float w, float h, const char* placeholder,
+    void DrawVideoFrame(Core::MPVBasePlayer* player, float w, float h, const char* placeholder,
                         const char* badgeLabel, ImVec4 badgeAccent, bool pulseBorder = false,
                         bool showBadge = true, ProyecThor::Shaders::PostProcessorFSR* fsr = nullptr);
     int  RenderTransportRow(const TransportConfig& cfg);

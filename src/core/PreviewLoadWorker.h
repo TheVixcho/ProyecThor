@@ -1,6 +1,7 @@
 #pragma once
 #include <atomic>
 #include <condition_variable>
+#include <deque>
 #include <functional>
 #include <mutex>
 #include <optional>
@@ -9,7 +10,7 @@
 
 namespace ProyecThor::Core {
 
-class VLCBasePlayer;
+class MPVBasePlayer;
 
 // ── PreviewLoadWorker ────────────────────────────────────────────────────────
 // Ejecuta acciones arbitrarias, en orden, en un hilo dedicado — pensado para
@@ -57,9 +58,9 @@ public:
     // Conveniencia para el caso simple (Preview: un solo Play()/Stop(),
     // sin nada mas que combinar). player debe seguir siendo valido
     // mientras exista este worker.
-    void RequestLoad(VLCBasePlayer* player, const std::string& path, bool loop, bool startMuted);
-    void RequestStop(VLCBasePlayer* player);
-    void RequestStopSync(VLCBasePlayer* player, int timeoutMs = 1000);
+    void RequestLoad(MPVBasePlayer* player, const std::string& path, bool loop, bool startMuted);
+    void RequestStop(MPVBasePlayer* player);
+    void RequestStopSync(MPVBasePlayer* player, int timeoutMs = 1000);
     void Flush(int timeoutMs = 1000);
 
 private:
@@ -69,7 +70,7 @@ private:
     std::atomic<bool>                    m_Running{ false };
     std::mutex                           m_Mutex;
     std::condition_variable              m_Cv;
-    std::optional<std::function<void()>> m_Pending; // protegido por m_Mutex
+    std::deque<std::function<void()>>    m_Queue; // protegido por m_Mutex
 };
 
 } // namespace ProyecThor::Core

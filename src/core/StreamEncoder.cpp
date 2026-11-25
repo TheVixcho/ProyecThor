@@ -27,7 +27,7 @@ bool StreamEncoder::Start(const std::string& rtmpUrl, int width, int height, int
     }
     std::string ffmpegPath = FfmpegPath();
     if (!FfmpegAvailable(ffmpegPath)) {
-        if (errorOut) *errorOut = "No se encontro ffmpeg (deberia estar empaquetado junto a la app). "
+        if (errorOut) *errorOut = "No se encontro ffmpeg. "
                                    "Si lo borraste, reinstala ProyecThor o instala ffmpeg y agregalo al PATH.";
         return false;
     }

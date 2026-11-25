@@ -1,0 +1,139 @@
+import { MainWindow } from "main_window.slint";
+
+// Vista de desarrollo con datos de ejemplo para recarga en vivo (sin recompilar C++).
+// Uso: ./scripts/preview_ui.sh  (o: slint-viewer --auto-reload src/ui_slint/ui/preview_dev.slint)
+export component PreviewDev inherits MainWindow {
+    title: "ProyecThor — Live UI Preview (Hot Reload)";
+    app-version: "DEV-HOT";
+    active-tab: 0;
+
+    // Biblioteca de ejemplo
+    hub-songs-count: 42;
+    hub-media-count: 18;
+    hub-music-count: 24;
+    hub-docs-count: 6;
+    hub-bibles-count: 3;
+
+    library-items: [
+        { title: "Cuan Grande Es El", subtitle: "Hymn / Tradicional", path: "/dev/cuan_grande.txt", has-thumbnail: false },
+        { title: "Way Maker (Aqui Estas)", subtitle: "Sinach", path: "/dev/way_maker.txt", has-thumbnail: false },
+        { title: "Hermoso Nombre", subtitle: "Hillsong Worship", path: "/dev/hermoso_nombre.txt", has-thumbnail: false },
+        { title: "Sublime Gracia", subtitle: "John Newton", path: "/dev/sublime_gracia.txt", has-thumbnail: false },
+    ];
+    selected-library-index: 0;
+    selected-library-path: "/dev/cuan_grande.txt";
+    selected-item-title: "Cuan Grande Es El";
+    selected-song-author: "Tradicional";
+
+    slides: [
+        { badge: "Estrofa 1", body: "Señor mi Dios, al contemplar los cielos\nEl firmamento y las estrellas mil", ref-text: "Cuan Grande Es El" },
+        { badge: "Coro", body: "Mi corazón entona la canción\n¡Cuán grande es Él! ¡Cuán grande es Él!", ref-text: "Cuan Grande Es El" },
+        { badge: "Estrofa 2", body: "Al recorrer los montes y los valles\nY ver las bellas flores al pasar", ref-text: "Cuan Grande Es El" },
+    ];
+    slide-rows: [
+        {
+            cells: [
+                { index: 0, badge: "Estrofa 1", body: "Señor mi Dios, al contemplar los cielos\nEl firmamento y las estrellas mil", valid: true },
+                { index: 1, badge: "Coro", body: "Mi corazón entona la canción\n¡Cuán grande es Él! ¡Cuán grande es Él!", valid: true },
+                { index: 2, badge: "Estrofa 2", body: "Al recorrer los montes y los valles\nY ver las bellas flores al pasar", valid: true },
+            ]
+        }
+    ];
+    active-slide-index: 1;
+
+    // Vista en Vivo + Capas Activas
+    audience-live: true;
+    inspected-screen-idx: 0;
+    inspected-screen-name: "Público";
+    live-text: "Mi corazón entona la canción\n¡Cuán grande es Él! ¡Cuán grande es Él!";
+    live-ref: "Cuan Grande Es El";
+    preview-style-name: "Moderno Blanco";
+    preview-text-size: 64.0;
+    preview-show-clock: true;
+    preview-clock-text: "14:58:22";
+
+    active-layers: [
+        { id: "clock", kind: "TIEMPO", title: "Hora Actual: 14:58:22", subtitle: "Overlay de Tiempo • Público Principal", accent: #38bdf8, has-thumbnail: false },
+        { id: "text", kind: "LETRAS", title: "Mi corazón entona la canción / ¡Cuán grande es Él!", subtitle: "Cuan Grande Es El • Público Principal", accent: #22c55e, has-thumbnail: false },
+        { id: "bg", kind: "COLOR", title: "Fondo Negro", subtitle: "Fondo Activo • Público Principal", accent: #f59e0b, has-thumbnail: false },
+    ];
+
+    queue-items: [
+        { title: "Cuan Grande Es El", kind: "CANCIÓN" },
+        { title: "Juan 3:16", kind: "BIBLIA" },
+        { title: "Intro Culto.mp4", kind: "MEDIA" },
+    ];
+
+    // Estilos & LAN
+    saved-style-cards: [
+        {
+            name: "Moderno Blanco",
+            summary: "64px • Sans • Sombra",
+            text-color: #ffffff,
+            box-bg: false,
+            font-family-name: "Sans",
+            font-weight-val: 700,
+            active-on-target: true,
+            assigned-screens-label: "Público",
+            screen-targets: [
+                { screen-id: 0, label: "Público", active: true },
+                { screen-id: 1, label: "LAN", active: false },
+                { screen-id: 2, label: "Stage", active: false },
+            ],
+        },
+        {
+            name: "LAN Gigante",
+            summary: "128px • Sans • Contorno",
+            text-color: #fde047,
+            box-bg: false,
+            font-family-name: "Sans",
+            font-weight-val: 900,
+            active-on-target: false,
+            assigned-screens-label: "LAN",
+            screen-targets: [
+                { screen-id: 0, label: "Público", active: false },
+                { screen-id: 1, label: "LAN", active: true },
+                { screen-id: 2, label: "Stage", active: false },
+            ],
+        },
+    ];
+    lan-own-style: true;
+    lan-assigned-style-idx: 1;
+    lan-style-summary: "LAN Gigante · 128px";
+
+    // Telemetría Debug de ejemplo
+    debug-fps-text: "30.0";
+    debug-video-fps-text: "60 vid";
+    debug-cpu-text: "3.4%";
+    debug-ram-text: "184.2 MB";
+    debug-peak-ram-text: "Pico 210.5 MB • 14 hilos";
+    debug-stats: "Versión: DEV-HOT (Slint 1.19)  |  FPS UI: 30.0  |  CPU: 3.4%  |  RAM: 184.2 MB";
+    debug-paths: "Modo Vista Previa en Vivo (sin backend C++) — edita cualquier .slint y guarda para ver cambios al instante.";
+
+    // Callbacks interactivos locales para probar en vivo sin C++
+    slide-clicked(idx) => {
+        root.active-slide-index = idx;
+        if (idx == 0) {
+            root.live-text = "Señor mi Dios, al contemplar los cielos\nEl firmamento y las estrellas mil";
+        } else if (idx == 1) {
+            root.live-text = "Mi corazón entona la canción\n¡Cuán grande es Él! ¡Cuán grande es Él!";
+        } else if (idx == 2) {
+            root.live-text = "Al recorrer los montes y los valles\nY ver las bellas flores al pasar";
+        }
+    }
+    inspect-screen(idx) => {
+        root.inspected-screen-idx = idx;
+        root.inspected-screen-name = idx == 0 ? "Público" : (idx == 1 ? "LAN (8080)" : "Stage");
+    }
+    select-output-target(mode) => {
+        root.output-target-mode = mode;
+    }
+    set-screen-own-style(scr, val) => {
+        if (scr == 1) {
+            root.lan-own-style = val;
+        }
+    }
+    theme-selected(idx) => {
+        root.active-theme-idx = idx;
+    }
+}

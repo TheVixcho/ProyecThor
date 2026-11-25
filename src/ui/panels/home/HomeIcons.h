@@ -162,4 +162,18 @@ inline void DrawIcon_Sync(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
         IcPt(o, sz, 0.20f, 0.86f), IcPt(o, sz, 0.20f, 0.66f), IcPt(o, sz, 0.02f, 0.76f), col);
 }
 
+inline void DrawIcon_Microphone(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = sz * 0.08f;
+    // Cápsula central (micrófono)
+    dl->AddRectFilled(IcPt(o, sz, 0.35f, 0.14f), IcPt(o, sz, 0.65f, 0.58f), col, sz * 0.15f);
+    // Arco en forma de U alrededor
+    dl->PathArcTo(IcPt(o, sz, 0.50f, 0.44f), sz * 0.26f, 0.0f, IM_PI, 12);
+    dl->PathStroke(col, ImDrawFlags_None, thick);
+    // Poste vertical
+    dl->AddLine(IcPt(o, sz, 0.50f, 0.70f), IcPt(o, sz, 0.50f, 0.88f), col, thick);
+    // Base horizontal
+    dl->AddLine(IcPt(o, sz, 0.30f, 0.88f), IcPt(o, sz, 0.70f, 0.88f), col, thick);
+}
+
 } // namespace ProyecThor::UI::HomeIcons

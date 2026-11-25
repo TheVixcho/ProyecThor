@@ -16,6 +16,16 @@ static std::string ReadFileToString(const std::string& path) {
     return ss.str();
 }
 
+static const std::string& CachedFFXAHeader() {
+    static const std::string s_Header = ReadFileToString("shaders/ffx_a.h");
+    return s_Header;
+}
+
+static const std::string& CachedFFXFSR1Header() {
+    static const std::string s_Header = ReadFileToString("shaders/ffx_fsr1.h");
+    return s_Header;
+}
+
 namespace ProyecThor::Shaders {
 
 static const float k_QuadVerts[] = {
@@ -58,8 +68,8 @@ void main() {
 // ---------------------------------------------------------------------------
 std::string PostProcessorFSR::BuildEASUFragSrc(int /*inputW*/, int /*inputH*/,
                                                 int /*outputW*/, int /*outputH*/) const {
-    std::string ffx_a   = ReadFileToString("shaders/ffx_a.h");
-std::string ffx_fsr = ReadFileToString("shaders/ffx_fsr1.h");
+    const std::string& ffx_a   = CachedFFXAHeader();
+    const std::string& ffx_fsr = CachedFFXFSR1Header();
 
     if (ffx_a.empty() || ffx_fsr.empty()) {
         std::cerr << "[FSR] ADVERTENCIA: No se encontraron los headers AMD FSR. "
@@ -117,8 +127,8 @@ void main() {
 //  Fragment shader RCAS — variante 32-bit (FSR_RCAS_F)
 // ---------------------------------------------------------------------------
 std::string PostProcessorFSR::BuildRCASFragSrc() const {
-    std::string ffx_a   = ReadFileToString("shaders/ffx_a.h"); // Ruta corregida
-    std::string ffx_fsr = ReadFileToString("shaders/ffx_fsr1.h");
+    const std::string& ffx_a   = CachedFFXAHeader();
+    const std::string& ffx_fsr = CachedFFXFSR1Header();
 
     std::ostringstream ss;
     ss << "#version 450 core\n"; // Actualizado a 450
@@ -428,9 +438,7 @@ void PostProcessorFSR::Resize(int newOutputW, int newOutputH) {
     m_OutputH = newOutputH;
     if (!m_Initialized) return;
     CreateFramebuffers(m_OutputW, m_OutputH);
-    CompileShaders();
     UpdateEASUConstants(m_LastSrcW, m_LastSrcH, m_OutputW, m_OutputH);
-    std::cout << "[FSR] Resize a " << newOutputW << "x" << newOutputH << "\n";
 }
 
 // ---------------------------------------------------------------------------
@@ -453,7 +461,6 @@ GLuint PostProcessorFSR::Process(GLuint srcTex, int srcW, int srcH) {
     if (srcW != m_LastSrcW || srcH != m_LastSrcH) {
         m_LastSrcW = srcW;
         m_LastSrcH = srcH;
-        CompileShaders();
         UpdateEASUConstants(srcW, srcH, m_OutputW, m_OutputH);
     }
 

@@ -56,6 +56,12 @@ void NetworkStreamServer::SetFontPathProvider(FontPathProvider p)
     m_FontPathProvider = std::move(p);
 }
 
+void NetworkStreamServer::SetOverlayPathProvider(OverlayPathProvider p)
+{
+    std::lock_guard<std::mutex> lk(m_ProviderMutex);
+    m_OverlayPathProvider = std::move(p);
+}
+
 void NetworkStreamServer::SetChatStore(ChatMessageStore* store)
 {
     std::lock_guard<std::mutex> lk(m_ProviderMutex);
@@ -65,8 +71,11 @@ void NetworkStreamServer::SetChatStore(ChatMessageStore* store)
 // ── SetConfig / GetConfig ─────────────────────────────────────────────────────
 void NetworkStreamServer::SetConfig(const StreamConfig& cfg)
 {
-    std::lock_guard<std::mutex> lk(m_ConfigMutex);
-    m_Config = cfg;
+    {
+        std::lock_guard<std::mutex> lk(m_ConfigMutex);
+        m_Config = cfg;
+    }
+    ++m_ConfigVersion;
 }
 
 StreamConfig NetworkStreamServer::GetConfig() const
@@ -76,12 +85,13 @@ StreamConfig NetworkStreamServer::GetConfig() const
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
-bool NetworkStreamServer::Start(int port)
+bool NetworkStreamServer::Start(int port, const std::string& advertisedIp)
 {
     if (m_Running.load()) return true;
 
     m_Port    = port;
-    m_BaseURL = "http://" + DetectLocalIP() + ":" + std::to_string(port);
+    std::string ip = advertisedIp.empty() ? DetectLocalIP() : advertisedIp;
+    m_BaseURL = "http://" + ip + ":" + std::to_string(port);
     std::cout << "[NetworkStream] URL generada: " << m_BaseURL << "\n";
 
     std::promise<bool> startedPromise;
@@ -226,6 +236,38 @@ void NetworkStreamServer::ServerThreadFunc(int port, std::promise<bool> startedP
         res.set_content(data, mime.c_str());
     });
 
+    // ── GET /overlay  (sirve la imagen PNG/WebP overlay asignada a LAN) ──────
+    svr.Get("/overlay", [this](const httplib::Request& /*req*/, httplib::Response& res)
+    {
+        std::string path;
+        {
+            std::lock_guard<std::mutex> lk(m_ProviderMutex);
+            if (m_OverlayPathProvider) path = m_OverlayPathProvider();
+        }
+        if (path.empty()) {
+            res.status = 404;
+            return;
+        }
+        std::ifstream f(path, std::ios::binary);
+        if (!f.is_open()) {
+            res.status = 404;
+            return;
+        }
+        std::ostringstream ss;
+        ss << f.rdbuf();
+        std::string data = ss.str();
+
+        std::string ext;
+        auto dot = path.find_last_of('.');
+        if (dot != std::string::npos) ext = path.substr(dot + 1);
+        for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        std::string mime = (ext == "webp") ? "image/webp" : "image/png";
+
+        res.set_header("Access-Control-Allow-Origin", "*");
+        res.set_header("Cache-Control", "no-cache, no-store, must-revalidate");
+        res.set_content(data, mime.c_str());
+    });
+
     // ── GET /state  (long-poll JSON) ──────────────────────────────────────────
     svr.Get("/state", [this](const httplib::Request& req, httplib::Response& res)
     {
@@ -245,7 +287,8 @@ void NetworkStreamServer::ServerThreadFunc(int port, std::promise<bool> startedP
                 std::lock_guard<std::mutex> lk(m_ProviderMutex);
                 if (m_SnapshotProvider) snap = m_SnapshotProvider();
             }
-            if (snap.version != clientVersion) { changed = true; break; }
+            uint64_t currentVersion = snap.version + (m_ConfigVersion.load() << 32);
+            if (currentVersion != clientVersion) { changed = true; break; }
             if (waited >= maxWaitMs) break;
             std::this_thread::sleep_for(std::chrono::milliseconds(pollIntervalMs));
             waited += pollIntervalMs;
@@ -257,7 +300,7 @@ void NetworkStreamServer::ServerThreadFunc(int port, std::promise<bool> startedP
     });
 
     // ── GET /frame  (JPEG único — modo LowLatency) ────────────────────────────
-    svr.Get("/frame", [this](const httplib::Request& req, httplib::Response& res)
+    auto serveSingleFrame = [this](const httplib::Request& /*req*/, httplib::Response& res)
     {
         std::vector<uint8_t> jpegData;
         {
@@ -299,6 +342,7 @@ void NetworkStreamServer::ServerThreadFunc(int port, std::promise<bool> startedP
             };
             res.set_header("Access-Control-Allow-Origin", "*");
             res.set_header("Cache-Control", "no-cache");
+            res.set_header("transferMode.dlna.org", "Interactive");
             res.set_content(
                 std::string(reinterpret_cast<const char*>(kBlack1x1), sizeof(kBlack1x1)),
                 "image/jpeg");
@@ -307,17 +351,22 @@ void NetworkStreamServer::ServerThreadFunc(int port, std::promise<bool> startedP
 
         res.set_header("Access-Control-Allow-Origin", "*");
         res.set_header("Cache-Control", "no-cache, no-store");
+        res.set_header("transferMode.dlna.org", "Interactive");
         res.set_content(
             std::string(reinterpret_cast<const char*>(jpegData.data()), jpegData.size()),
             "image/jpeg");
-    });
+    };
+    svr.Get("/frame", serveSingleFrame);
+    svr.Get("/live.jpg", serveSingleFrame);
 
-    // ── GET /stream  (MJPEG — modo HighQuality) ───────────────────────────────
-    svr.Get("/stream", [this](const httplib::Request& req, httplib::Response& res)
-{
-    res.set_header("Access-Control-Allow-Origin", "*");
-    res.set_header("Cache-Control", "no-cache");
-    res.set_header("Connection", "keep-alive");
+    // ── GET /stream & /live.mjpg (MJPEG — Smart TV DLNA + HighQuality) ────────
+    auto serveMjpeg = [this](const httplib::Request& /*req*/, httplib::Response& res)
+    {
+        res.set_header("Access-Control-Allow-Origin", "*");
+        res.set_header("Cache-Control", "no-cache");
+        res.set_header("Connection", "keep-alive");
+        res.set_header("transferMode.dlna.org", "Streaming");
+        res.set_header("contentFeatures.dlna.org", "DLNA.ORG_OP=00;DLNA.ORG_CI=0");
 
     const std::string boundary = "PTframe";
 
@@ -382,7 +431,9 @@ void NetworkStreamServer::ServerThreadFunc(int port, std::promise<bool> startedP
             return false;
         }
     );
-});
+    };
+    svr.Get("/stream", serveMjpeg);
+    svr.Get("/live.mjpg", serveMjpeg);
     // ── Error handler ─────────────────────────────────────────────────────────
     svr.set_error_handler([](const httplib::Request& req, httplib::Response& res) {
         res.status = 404;
@@ -439,12 +490,17 @@ std::string NetworkStreamServer::SnapshotToJSON(const StreamSnapshot& s) const
     auto B = [](bool v) -> const char* { return v ? "true" : "false"; };
 
   bool hiQ = (cfg.videoMode != StreamConfig::VideoMode::LowLatency);
+  bool effectiveTransparent = cfg.transparentMode;
+  // Fondo se envía si sendBackground está activo y no hay transparencia
+  bool effectiveSendBg      = cfg.sendBackground && !effectiveTransparent;
+
+  uint64_t totalVersion = s.version + (m_ConfigVersion.load() << 32);
 
     std::ostringstream j;
     j << "{"
       << "\"isProjecting\":"  << B(s.isProjecting)            << ","
       << "\"showText\":"      << B(s.showText && cfg.sendText)<< ","
-      << "\"version\":"       << s.version                    << ","
+      << "\"version\":"       << totalVersion                 << ","
       << "\"fontVersion\":"   << s.fontVersion                << ","
       << "\"transitionTrigger\":"  << s.transitionTrigger  << ","
   << "\"transitionType\":"     << s.transitionType     << ","
@@ -456,10 +512,43 @@ std::string NetworkStreamServer::SnapshotToJSON(const StreamSnapshot& s) const
       << "\"margins\":["      << s.margins[0] << "," << s.margins[1] << ","
                                << s.margins[2] << "," << s.margins[3] << "],"
       << "\"fontFamily\":\""  << escapeJSON(s.fontFamily)     << "\","
+      << "\"fontWeight\":"    << s.fontWeight                 << ","
+      << "\"textShadow\":"    << B(s.textShadow)              << ","
+      << "\"textOutline\":"   << B(s.textOutline)             << ","
+      << "\"textGlow\":"      << B(s.textGlow)                << ","
+      << "\"textNeon\":"      << B(s.textNeon)                << ","
+      << "\"text3d\":"        << B(s.text3d)                  << ","
+      << "\"textUnderline\":" << B(s.textUnderline)           << ","
+      << "\"textBoxBg\":"     << B(s.textBoxBg)               << ","
       << "\"refW\":"          << s.refW                       << ","
       << "\"refH\":"          << s.refH                       << ","
       << "\"isBgVideo\":"     << B(s.isBgVideo)                << ","
-      << "\"hasFrame\":"      << B(s.hasFrame && cfg.sendBackground) << ","
+      << "\"hasFrame\":"      << B(s.hasFrame && effectiveSendBg) << ","
+      << "\"sendBackground\":"<< B(cfg.sendBackground)        << ","
+      << "\"sendOverlay\":"   << B(cfg.sendOverlay)           << ","
+      << "\"showPngOverlay\":"<< B(s.showPngOverlay && cfg.sendOverlay) << ","
+      << "\"overlayVersion\":"<< s.overlayVersion             << ","
+      << "\"overlay\":{"
+            << "\"active\":"       << B(s.overlay.active && cfg.sendOverlay) << ","
+            << "\"showClock\":"    << B(s.overlay.showClock)                 << ","
+            << "\"clockText\":\""  << escapeJSON(s.overlay.clockText)        << "\","
+            << "\"titleText\":\""  << escapeJSON(s.overlay.titleText)        << "\","
+            << "\"subText\":\""    << escapeJSON(s.overlay.subText)          << "\","
+            << "\"textColor\":["   << s.overlay.textColor[0] << "," << s.overlay.textColor[1] << "," << s.overlay.textColor[2] << "],"
+            << "\"bgColor\":["     << s.overlay.bgColor[0]   << "," << s.overlay.bgColor[1]   << "," << s.overlay.bgColor[2]   << "],"
+            << "\"bgOpacity\":"    << s.overlay.bgOpacity                    << ","
+            << "\"showBorder\":"   << B(s.overlay.showBorder)                << ","
+            << "\"borderColor\":[" << s.overlay.borderColor[0] << "," << s.overlay.borderColor[1] << "," << s.overlay.borderColor[2] << "],"
+            << "\"fontSize\":"     << s.overlay.fontSize                     << ","
+            << "\"borderRadius\":" << s.overlay.borderRadius                 << ","
+            << "\"boxPadding\":"   << s.overlay.boxPadding                   << ","
+            << "\"minBoxWidth\":"  << s.overlay.minBoxWidth                  << ","
+            << "\"posPreset\":"    << s.overlay.posPreset                    << ","
+            << "\"posX\":"         << s.overlay.posX                         << ","
+            << "\"posY\":"         << s.overlay.posY
+      << "},"
+      << "\"transparent\":"   << B(effectiveTransparent)      << ","
+      << "\"isPro\":"         << B(true)                      << ","
       << "\"highQuality\":"   << B(hiQ)                        << ","
       << "\"currentText\":\"" << escapeJSON(s.currentText)     << "\","
       << "\"textColor\":["
@@ -541,10 +630,15 @@ std::string NetworkStreamServer::DetectLocalIP()
 }
 
 // ── BuildHTMLPage ─────────────────────────────────────────────────────────────
-std::string NetworkStreamServer::BuildHTMLPage()
+std::string NetworkStreamServer::BuildHTMLPage() const
 {
-    return R"html(<!DOCTYPE html>
-<html lang="es">
+    StreamConfig cfg = GetConfig();
+    bool initTransparent = cfg.transparentMode;
+    std::string rootClass = initTransparent ? " class=\"alpha-mode\"" : "";
+
+    std::ostringstream ss;
+    ss << R"html(<!DOCTYPE html>
+<html lang="es")html" << rootClass << R"html(>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -555,17 +649,48 @@ std::string NetworkStreamServer::BuildHTMLPage()
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
     width: 100%; height: 100%;
-    background: #000;
+    background: transparent !important;
+    background-color: transparent !important;
     overflow: hidden;
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
+
+  /* Modo estándar (sin transparencia activa): fondo negro */
+  html:not(.alpha-mode) #screen,
+  body:not(.alpha-mode) #screen {
+    background: #000;
+  }
+  html:not(.alpha-mode) #viewport,
+  body:not(.alpha-mode) #viewport {
+    background: #000;
+  }
+
+  /* Modo Transparencia / Alpha-mode (PRO: OBS Studio / vMix) */
+  html.alpha-mode,
+  html.alpha-mode body,
+  html.alpha-mode #screen,
+  html.alpha-mode #viewport,
+  body.alpha-mode,
+  body.alpha-mode #screen,
+  body.alpha-mode #viewport {
+    background: transparent !important;
+    background-color: transparent !important;
+  }
+  html.alpha-mode #idle-overlay,
+  body.alpha-mode #idle-overlay {
+    display: none !important;
+  }
+  html.alpha-mode #status-bar,
+  body.alpha-mode #status-bar {
+    display: none !important;
+  }
+
   #screen {
     position: relative;
     width: 100vw; height: 100vh;
     display: flex;
     align-items: center; justify-content: center;
-    background: #000;
     overflow: hidden;
   }
 
@@ -574,7 +699,6 @@ std::string NetworkStreamServer::BuildHTMLPage()
      (idéntico al algoritmo de ViewPanel::RenderContent en el cliente C++). */
   #viewport {
     position: relative;
-    background: #000;
     overflow: hidden;
     transition: background-color 0.4s ease;
   }
@@ -590,6 +714,34 @@ std::string NetworkStreamServer::BuildHTMLPage()
     pointer-events: none;
   }
   #bg-frame.visible { opacity: 1; }
+
+  #png-overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    object-fit: contain;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+    z-index: 12;
+  }
+  #png-overlay.visible { opacity: 1; }
+
+  #custom-overlay {
+    position: absolute;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    pointer-events: none;
+    z-index: 15;
+    max-width: 92%;
+    line-height: 1.12;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  #custom-overlay.visible { display: flex; }
 
   /* Texto overlay — posición/tamaño se fijan en px vía JS (no CSS fijo),
      para reproducir exactamente los mismos márgenes y escala que el
@@ -646,7 +798,7 @@ std::string NetworkStreamServer::BuildHTMLPage()
   #status-bar.error     .dot { background: rgba(220,60,60,0.7);  }
 </style>
 </head>
-<body>
+<body)html" << rootClass << R"html(>
 <div id="screen">
   <div id="viewport">
     <!-- Fondo capturado (JPEG polling o MJPEG) -->
@@ -655,6 +807,16 @@ std::string NetworkStreamServer::BuildHTMLPage()
     <!-- Overlay de texto -->
     <div id="text-container">
       <div id="main-text"></div>
+    </div>
+
+    <!-- Overlay PNG transparente -->
+    <img id="png-overlay" src="" alt="" aria-hidden="true">
+
+    <!-- Overlay dinámico (Reloj / Temporizador / Texto) -->
+    <div id="custom-overlay">
+      <div id="ov-title" style="display:none;font-weight:800;"></div>
+      <div id="ov-clock" style="display:none;font-weight:800;"></div>
+      <div id="ov-sub" style="display:none;font-weight:600;"></div>
     </div>
 
     <!-- Placeholder de "esperando contenido" — ahora independiente,
@@ -673,6 +835,11 @@ std::string NetworkStreamServer::BuildHTMLPage()
 const screenEl      = document.getElementById('screen');
 const viewportEl    = document.getElementById('viewport');
 const bgFrame       = document.getElementById('bg-frame');
+const pngOverlay    = document.getElementById('png-overlay');
+const customOverlay = document.getElementById('custom-overlay');
+const ovTitleEl     = document.getElementById('ov-title');
+const ovClockEl     = document.getElementById('ov-clock');
+const ovSubEl       = document.getElementById('ov-sub');
 const textContainer = document.getElementById('text-container');
 const mainText      = document.getElementById('main-text');
 const idleOverlay   = document.getElementById('idle-overlay');
@@ -681,6 +848,8 @@ const statusText    = document.getElementById('status-text');
 
 let currentVersion     = 0;
 let currentFontVersion = -1;
+let currentOverlayVer  = -1;
+let customFontReady    = false;
 let retryDelay         = 1000;
 let highQuality        = false;
 let mjpegActive        = false;
@@ -690,15 +859,36 @@ let lastRefH             = 1080;
 // ── Carga dinámica de la fuente real del usuario vía FontFace API ───────────
 // Si el servidor no tiene fuente custom activa ("Predeterminada"), /font
 // devuelve 404 y simplemente seguimos con el fallback sans-serif del CSS.
-async function ensureFontLoaded(fontVersion) {
+async function ensureFontLoaded(fontVersion, fontFamily) {
   if (fontVersion === currentFontVersion) return;
   currentFontVersion = fontVersion;
+  customFontReady = false;
+  for (const f of Array.from(document.fonts)) {
+    if (f.family === 'UserFont') document.fonts.delete(f);
+  }
+  if (!fontFamily || fontFamily === 'Predeterminada') {
+    applyTextFontFamily(fontFamily);
+    return;
+  }
   try {
     const face = new FontFace('UserFont', `url(/font?v=${fontVersion})`);
     const loaded = await face.load();
     document.fonts.add(loaded);
+    customFontReady = true;
   } catch (e) {
-    // Sin fuente custom disponible: se mantiene el fallback del sistema.
+    customFontReady = false;
+  }
+  applyTextFontFamily(fontFamily);
+}
+
+function applyTextFontFamily(fontFamily) {
+  const sys = "'Segoe UI', system-ui, -apple-system, sans-serif";
+  if (!fontFamily || fontFamily === 'Predeterminada') {
+    mainText.style.fontFamily = sys;
+  } else if (customFontReady) {
+    mainText.style.fontFamily = `'UserFont', "${fontFamily.replace(/"/g, '')}", ${sys}`;
+  } else {
+    mainText.style.fontFamily = `"${fontFamily.replace(/"/g, '')}", ${sys}`;
   }
 }
 
@@ -762,10 +952,20 @@ function applyState(s) {
   const { drawW, drawH } = layoutViewport(s.refW, s.refH);
   const scale = drawW / s.refW; // ← idéntico a "scale" en ViewPanel::RenderContent
 
-  ensureFontLoaded(s.fontVersion);
+  ensureFontLoaded(s.fontVersion, s.fontFamily);
+  applyTextFontFamily(s.fontFamily);
 
-  // Modo de video
-  if (s.hasFrame) {
+  const isAlpha = (s.transparent === true);
+  if (isAlpha) {
+    document.documentElement.classList.add('alpha-mode');
+    document.body.classList.add('alpha-mode');
+  } else {
+    document.documentElement.classList.remove('alpha-mode');
+    document.body.classList.remove('alpha-mode');
+  }
+
+  // Modo de video / fondo
+  if (s.hasFrame && s.sendBackground !== false && !isAlpha) {
     if (s.highQuality && !highQuality) {
       highQuality = true;
       if (framePollTimer) { clearTimeout(framePollTimer); framePollTimer = null; }
@@ -781,23 +981,103 @@ function applyState(s) {
     bgFrame.classList.add('visible');
     viewportEl.style.backgroundColor = 'transparent';
   } else {
-    // Sin frame: fondo de color sólido
+    // Sin frame, fondo desactivado, o modo transparente activo:
     bgFrame.classList.remove('visible');
-    if (!s.isBgVideo) {
-      const r = Math.round(s.bgColor[0]*255);
-      const g = Math.round(s.bgColor[1]*255);
-      const b = Math.round(s.bgColor[2]*255);
-      viewportEl.style.backgroundColor = `rgb(${r},${g},${b})`;
+    if (!isAlpha) {
+      // Fondo desactivado o sin frame: se pone en negro (como antes)
+      viewportEl.style.backgroundColor = '#000';
+    } else {
+      // Transparencia activada (botón aparte): 100% transparente para OBS
+      viewportEl.style.backgroundColor = 'transparent';
     }
   }
 
-  // Idle / activo
+  // Overlay PNG (solo para LAN cuando sendOverlay == true)
+  if (s.showPngOverlay && s.sendOverlay !== false) {
+    if (s.overlayVersion !== currentOverlayVer) {
+      currentOverlayVer = s.overlayVersion;
+      pngOverlay.src = '/overlay?v=' + s.overlayVersion + '&_t=' + Date.now();
+    }
+    pngOverlay.classList.add('visible');
+  } else {
+    pngOverlay.classList.remove('visible');
+  }
+
+  // Overlay dinámico (Reloj / Cuenta Regresiva / Cronómetro / Pleca)
+  const ov = s.overlay;
+  if (ov && ov.active && s.sendOverlay !== false) {
+    const tr = Math.round(ov.textColor[0]*255), tg = Math.round(ov.textColor[1]*255), tb = Math.round(ov.textColor[2]*255);
+    const br = Math.round(ov.bgColor[0]*255),   bg = Math.round(ov.bgColor[1]*255),   bb = Math.round(ov.bgColor[2]*255);
+    const rr = Math.round(ov.borderColor[0]*255), rg = Math.round(ov.borderColor[1]*255), rb = Math.round(ov.borderColor[2]*255);
+    const ba = Math.max(0, Math.min(1, ov.bgOpacity)).toFixed(3);
+    customOverlay.style.backgroundColor = `rgba(${br},${bg},${bb},${ba})`;
+    customOverlay.style.borderRadius = Math.round(ov.borderRadius * scale) + 'px';
+    const padX = Math.max(4, Math.round((ov.boxPadding || 16) * scale));
+    const padY = Math.max(2, Math.round((ov.boxPadding || 16) * 0.65 * scale));
+    customOverlay.style.padding = `${padY}px ${padX}px`;
+    customOverlay.style.minWidth = (ov.minBoxWidth > 1) ? Math.min(drawW * 0.96, Math.round(ov.minBoxWidth * scale)) + 'px' : '0px';
+    customOverlay.style.border = (ov.showBorder && ov.bgOpacity > 0.02)
+      ? `${Math.max(1, Math.round(1.5 * scale))}px solid rgba(${rr},${rg},${rb},0.75)`
+      : 'none';
+
+    if (ov.titleText) {
+      ovTitleEl.style.display = 'block';
+      ovTitleEl.textContent = ov.titleText;
+      ovTitleEl.style.color = `rgba(${tr},${tg},${tb},0.92)`;
+      ovTitleEl.style.fontSize = Math.max(10, ov.fontSize * 0.44 * scale) + 'px';
+    } else {
+      ovTitleEl.style.display = 'none';
+    }
+
+    if (ov.showClock && ov.clockText) {
+      ovClockEl.style.display = 'block';
+      ovClockEl.textContent = ov.clockText;
+      ovClockEl.style.color = `rgb(${tr},${tg},${tb})`;
+      ovClockEl.style.fontSize = Math.max(12, ov.fontSize * scale) + 'px';
+    } else {
+      ovClockEl.style.display = 'none';
+    }
+
+    if (ov.subText) {
+      ovSubEl.style.display = 'block';
+      ovSubEl.textContent = ov.subText;
+      ovSubEl.style.color = `rgba(${tr},${tg},${tb},0.75)`;
+      ovSubEl.style.fontSize = Math.max(9, ov.fontSize * 0.34 * scale) + 'px';
+    } else {
+      ovSubEl.style.display = 'none';
+    }
+
+    customOverlay.classList.add('visible');
+    const ow = customOverlay.offsetWidth || 0;
+    const oh = customOverlay.offsetHeight || 0;
+    const p = ov.posPreset;
+    let ox = (drawW - ow) / 2, oy = (drawH - oh) / 2;
+    if (p === 1 || p === 4) ox = drawW * 0.03;
+    else if (p === 3 || p === 6) ox = drawW - ow - drawW * 0.03;
+    else if (p === 7) ox = Math.max(0, Math.min(drawW - ow, ov.posX * drawW - ow / 2));
+
+    if (p === 1 || p === 2 || p === 3) oy = drawH * 0.04;
+    else if (p === 4 || p === 5 || p === 6) oy = drawH - oh - drawH * 0.05;
+    else if (p === 7) oy = Math.max(0, Math.min(drawH - oh, ov.posY * drawH - oh / 2));
+
+    customOverlay.style.left = Math.round(ox) + 'px';
+    customOverlay.style.top  = Math.round(oy) + 'px';
+  } else {
+    customOverlay.classList.remove('visible');
+  }
+
+  // Idle / activo (no ocultamos overlays si solo hay reloj/overlay sin letras!)
+  const hasVisibleOverlay = (s.showPngOverlay && s.sendOverlay !== false) || (ov && ov.active && s.sendOverlay !== false);
+  if (!s.isProjecting && !hasVisibleOverlay) {
+    idleOverlay.classList.remove('hidden');
+  } else {
+    idleOverlay.classList.add('hidden');
+  }
+
   if (!s.isProjecting || !s.showText || !s.currentText) {
     textContainer.classList.remove('visible');
-    if (!s.isProjecting) idleOverlay.classList.remove('hidden');
     return;
   }
-  idleOverlay.classList.add('hidden');
 
   // ── Márgenes reales del usuario, escalados igual que en ViewPanel ────────
   const marginL = s.margins[0] * scale;
@@ -810,15 +1090,52 @@ function applyState(s) {
   textContainer.style.width  = Math.max(10, drawW - marginL - marginR) + 'px';
   textContainer.style.height = Math.max(10, drawH - marginT - marginB) + 'px';
 
-  // ── Tamaño de texto real, escalado — sin clamp/vw artificial ─────────────
+  // ── Tamaño de texto real, peso, color y efectos visuales ─────────────────
   mainText.style.fontSize = (s.textSize * scale) + 'px';
+  mainText.style.fontWeight = String(s.fontWeight || 700);
+  mainText.style.textDecoration = s.textUnderline ? 'underline' : 'none';
+
+  if (s.textBoxBg) {
+    textContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.62)';
+    textContainer.style.borderRadius = Math.max(4, Math.round(10 * scale)) + 'px';
+    textContainer.style.padding = Math.max(4, Math.round(16 * scale)) + 'px';
+  } else {
+    textContainer.style.backgroundColor = 'transparent';
+    textContainer.style.borderRadius = '0px';
+    textContainer.style.padding = '0px';
+  }
 
   // Color y opacidad
   const r = Math.round(s.textColor[0]*255);
   const g = Math.round(s.textColor[1]*255);
   const b = Math.round(s.textColor[2]*255);
   const a = s.textColor[3].toFixed(3);
-  mainText.style.color = `rgba(${r},${g},${b},${a})`;
+  mainText.style.color = s.textNeon ? '#e0f2fe' : `rgba(${r},${g},${b},${a})`;
+
+  // Efectos: Sombra, Contorno, Glow, Neón, 3D
+  const shadows = [];
+  if (s.textGlow) {
+    shadows.push(`0 0 ${Math.max(4, 14*scale)}px rgba(56,189,248,0.85)`);
+    shadows.push(`0 0 ${Math.max(8, 28*scale)}px rgba(56,189,248,0.45)`);
+  }
+  if (s.textNeon) {
+    shadows.push(`0 0 ${Math.max(4, 10*scale)}px rgba(34,211,238,0.95)`);
+    shadows.push(`0 0 ${Math.max(10, 24*scale)}px rgba(6,182,212,0.8)`);
+  }
+  if (s.text3d) {
+    const d1 = Math.max(1, 2*scale), d2 = Math.max(2, 4*scale);
+    shadows.push(`${d1}px ${d1+scale}px 0 #27272a`);
+    shadows.push(`${d2}px ${d2+scale}px 0 #09090b`);
+  }
+  if (s.textOutline) {
+    const o = Math.max(1, 2*scale);
+    shadows.push(`-${o}px 0 0 rgba(0,0,0,0.94)`, `${o}px 0 0 rgba(0,0,0,0.94)`,
+                 `0 -${o}px 0 rgba(0,0,0,0.94)`, `0 ${o}px 0 rgba(0,0,0,0.94)`);
+  }
+  if (s.textShadow) {
+    shadows.push(`${Math.max(1, 2*scale)}px ${Math.max(2, 3*scale)}px ${Math.max(4, 12*scale)}px rgba(0,0,0,0.92)`);
+  }
+  mainText.style.textShadow = shadows.length ? shadows.join(', ') : 'none';
 
   // Alineación horizontal
   textContainer.classList.remove('h-left','h-center','h-right');
@@ -875,6 +1192,7 @@ poll();
 </body>
 </html>
 )html";
+    return ss.str();
 }
 
 // ── BuildChatHTMLPage ─────────────────────────────────────────────────────────

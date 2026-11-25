@@ -118,4 +118,10 @@ void SetStanzaColor(const std::string& filename, int stanzaIndex, unsigned int c
 
 void ApplySongSelection(LibraryContext& ctx, const std::string& filename);
 
+// Invalida la caché de búsqueda e indexación de canciones en memoria
+void ClearSongIndexCache();
+
+// Precarga e indexación en memoria de todas las canciones y letras (internas y carpetas externas de Pro)
+void PreloadAllSongs(const std::function<void(int done, int total, const std::string& name)>& onProgress = nullptr);
+
 } // namespace ProyecThor::Library

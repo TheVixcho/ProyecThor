@@ -62,6 +62,7 @@ private:
     QueueState m_State         = QueueState::Stopped;
     float      m_Volume        = 0.8f;
     bool       m_Muted         = false;
+    float      m_ItemPlayTimer = 0.0f;
 
     // Cuenta errores reales (codec/archivo corrupto) seguidos que hizo
     // avanzar la cola sin que hubiera un fin de clip normal de por medio.

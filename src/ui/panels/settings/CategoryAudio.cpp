@@ -1,7 +1,7 @@
 #include "SettingsPanel.h"
 #include "SettingsManager.h"
 #include "core/PresentationCore.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include <imgui.h>
 #include <vector>
 #include <string>
@@ -27,7 +27,7 @@ namespace ProyecThor::UI::Settings {
 
             // Aplicar volumen al reproductor VLC de fondo en tiempo real
             if (changed) {
-                Core::VLCBasePlayer* player = Core::PresentationCore::Get().GetBackgroundPlayer();
+                Core::MPVBasePlayer* player = Core::PresentationCore::Get().GetBackgroundPlayer();
                 if (player) {
                     player->SetVolume(a.muted ? 0 : a.masterVolume);
                     player->SetMute(a.muted);
@@ -48,7 +48,7 @@ namespace ProyecThor::UI::Settings {
                 s_DeviceIds.push_back("");
                 s_DeviceNames.push_back("(Por defecto del sistema)");
 
-                Core::VLCBasePlayer* player = Core::PresentationCore::Get().GetBackgroundPlayer();
+                Core::MPVBasePlayer* player = Core::PresentationCore::Get().GetBackgroundPlayer();
                 if (player) {
                     auto devices = player->GetAvailableAudioDevices();
                     for (auto& d : devices) {
@@ -75,7 +75,7 @@ namespace ProyecThor::UI::Settings {
                 ImGui::SetNextItemWidth(-1);
                 if (ImGui::Combo("##audiodev", &s_SelectedDevice, ptrs.data(), static_cast<int>(ptrs.size()))) {
                     a.audioDevice = s_DeviceIds[s_SelectedDevice];
-                    Core::VLCBasePlayer* player = Core::PresentationCore::Get().GetBackgroundPlayer();
+                    Core::MPVBasePlayer* player = Core::PresentationCore::Get().GetBackgroundPlayer();
                     if (player) {
                         player->SetAudioDevice(a.audioDevice);
                     }

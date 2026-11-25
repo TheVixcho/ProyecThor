@@ -1,0 +1,140 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "ProyecThor (Slint) - Linux Nativo",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-linux/ProyecThorSlint",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build-linux",
+            "environment": [
+                { "name": "LD_LIBRARY_PATH", "value": "${workspaceFolder}/build-linux" }
+            ],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Habilitar pretty-printing para gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "Compilar Slint (Linux)"
+        },
+        {
+            "name": "ProyecThor (Slint) - Windows con Wine (Linux)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/usr/bin/wine",
+            "args": [
+                "${workspaceFolder}/build-win/ProyecThorSlint.exe"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build-win",
+            "environment": [
+                { "name": "WINEDEBUG", "value": "-all" }
+            ],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Ignorar señales internas de Wine (SIGUSR1)",
+                    "text": "handle SIGUSR1 nostop noprint pass",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Ignorar señales internas de Wine (SIGUSR2)",
+                    "text": "handle SIGUSR2 nostop noprint pass",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Ignorar señales internas de Wine (SIG32)",
+                    "text": "handle SIG32 nostop noprint pass",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Habilitar pretty-printing para gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "ProyecThor (Slint) - Windows Nativo (MSVC)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-win/ProyecThorSlint.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build-win",
+            "environment": [],
+            "console": "integratedTerminal",
+            "preLaunchTask": "Compilar Slint (Windows)"
+        },
+        {
+            "name": "ProyecThor (Legacy ImGui) - Linux Nativo",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-linux/ProyecThor",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build-linux",
+            "environment": [
+                { "name": "LD_LIBRARY_PATH", "value": "${workspaceFolder}/build-linux" }
+            ],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Habilitar pretty-printing para gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "Compilar Linux"
+        },
+        {
+            "name": "ProyecThor (Legacy ImGui) - Windows con Wine (Linux)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/usr/bin/wine",
+            "args": [
+                "${workspaceFolder}/build-win/ProyecThor.exe"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build-win",
+            "environment": [
+                { "name": "WINEDEBUG", "value": "-all" }
+            ],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Ignorar señales internas de Wine (SIGUSR1)",
+                    "text": "handle SIGUSR1 nostop noprint pass",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Ignorar señales internas de Wine (SIGUSR2)",
+                    "text": "handle SIGUSR2 nostop noprint pass",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Ignorar señales internas de Wine (SIG32)",
+                    "text": "handle SIG32 nostop noprint pass",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "ProyecThor - Iniciar Web",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:5174",
+            "webRoot": "${workspaceFolder}/web",
+            "preLaunchTask": "Iniciar Web"
+        }
+    ]
+}

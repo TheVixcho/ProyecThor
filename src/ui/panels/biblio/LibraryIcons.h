@@ -33,6 +33,17 @@ inline void DrawIcon_Music(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
     dl->AddConvexPolyFilled(beam, 4, col);
 }
 
+inline void DrawIcon_Playlist(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
+{
+    float thick = sz * 0.085f;
+    // 3 líneas horizontales tipo lista / setlist + nota musical o viñeta
+    dl->AddLine(IcPt(o, sz, 0.16f, 0.26f), IcPt(o, sz, 0.84f, 0.26f), col, thick);
+    dl->AddLine(IcPt(o, sz, 0.16f, 0.48f), IcPt(o, sz, 0.84f, 0.48f), col, thick);
+    dl->AddLine(IcPt(o, sz, 0.16f, 0.70f), IcPt(o, sz, 0.52f, 0.70f), col, thick);
+    // Viñeta circular de lista activa a la derecha
+    dl->AddCircleFilled(IcPt(o, sz, 0.72f, 0.70f), sz * 0.08f, col, 12);
+}
+
 inline void DrawIcon_Play(ImDrawList* dl, ImVec2 o, float sz, ImU32 col)
 {
     dl->AddTriangleFilled(

@@ -13,7 +13,7 @@
 #include "settings/SettingsPanel.h"
 #include "panels/capture/CapturePanel.h"
 #include "panels/TransitionPanel.h"
-#include "Hub.h"
+#include "PatchNotesData.h"
 #include "GlassRenderer.h"
 #include "panels/PerformancePanel.h"
 #include "panels/StreamingPanel.h"
@@ -21,7 +21,9 @@
 #include "panels/BroadcastPanel.h"
 #include "panels/SyncPanel.h"
 #include "panels/OSCPanel.h"
-#include "panels/AIAssistantPanel.h"
+#include "panels/VoiceAssistantPanel.h"
+#include "panels/HelpPanel.h"
+#include "panels/DebugPanel.h"
 #include "ui/views/QuickNotes.h"
 #include "core/SubtitleImporter.h"
 #include "core/PresentationCore.h"
@@ -29,7 +31,9 @@
 namespace ProyecThor::UI {
 
 class LibraryPanel;
+class HomePanel;
 class ViewPanel;
+class StylesHubPanel;
 
 enum class ActiveLeftPanel {
     Library,
@@ -51,7 +55,6 @@ enum class ActiveLeftPanel {
 // Red/Chat ya estaban duplicados en Library/Vista en Vivo, y Biblia ya se
 // puede buscar desde Home -- ninguno necesitaba su propio modo de workspace.
 enum class WorkspaceMode {
-    Hub,
     Projector,
 };
 
@@ -63,31 +66,32 @@ public:
 // solo texto: el fondo/video tiene su propio crossfade independiente.
 uint64_t m_LastTransitionTrigger = 0;
     bool Initialize(GLFWwindow* window);
+    TransitionPanel* GetTransitionPanel() const { return m_TransitionPanel; }
     std::shared_ptr<TransitionPanel> GetTransitionPanelOwned() const { return m_TransitionPanelOwned; }
     void AddPanel(std::shared_ptr<ProyecThor::UI::IPanel> panel);
     void RenderAll();
     void Shutdown();
-    void RequestSettings();
+    void RequestSettings(int initialCategory = -1);
 
     GlassRenderer& GetGlassRenderer() { return m_GlassRenderer; }
 
-    // true si ESE panel (por su GetName(): "Library"/"Diseño"/"Vista en
-    // Vivo"/"Home") esta lo bastante colapsado (Alt Gr + 1..4) como para
-    // que el panel mismo deba omitir dibujar su ventana/toolbar este frame.
-    // Cada panel la consulta desde su propio Render() -- DESPUES de correr
-    // cualquier "pump incondicional" propio (ver LibraryPanel::m_OClock.
-    // Update() / HomePanel::m_MonitorView.Update()), nunca antes: esos
-    // pumps deben seguir corriendo aunque el panel este oculto.
     bool IsPanelCollapsedForRender(const std::string& name) const;
+    bool IsPanelCollapsed(int index) const;
+    void SetPanelCollapsed(int index, bool collapsed);
+    void TogglePanelCollapse(int index);
+    void ResetPanelCollapse();
 
-    // Antes enfocaba "Control" (eliminado) al resetear el layout; ahora
-    // enfoca "Vista en Vivo", que es el panel principal de ese dock.
     bool m_FocusViewNextFrame = false;
 
     ActiveLeftPanel GetActiveLeftPanel() const { return m_ActiveLeftPanel; }
     void SetActiveLeftPanel(ActiveLeftPanel p) { m_ActiveLeftPanel = p; }
 
     void OpenHub();
+    void OpenPatchNotes();
+    bool IsPatchNotesOpen() const { return m_ShowPatchNotesModal; }
+
+    void SetShowMediaPreviewWindow(bool show) { m_ShowMediaPreviewWindow = show; }
+    bool IsMediaPreviewWindowOpen() const { return m_ShowMediaPreviewWindow; }
 
     // "Biblioteca" (Settings::WorkspaceLayoutPreset::Library) es un preset
     // MAS de Entorno de trabajo (ver BuildWorkspaceLayoutLibrary), igual que
@@ -102,6 +106,12 @@ uint64_t m_LastTransitionTrigger = 0;
 
     void SetViewPanelRef(ViewPanel* p) { m_ViewPanelRef = p; }
     ViewPanel* GetViewPanelRef() const { return m_ViewPanelRef; }
+
+    void SetStylesHubPanelRef(StylesHubPanel* p) { m_StylesHubRef = p; }
+    StylesHubPanel* GetStylesHubPanelRef() const;
+
+    bool IsInBibleView() const;
+    bool IsBibleSearchActive() const;
 
     // ── Pantalla completa del SISTEMA OPERATIVO (F11) ─────────────────────
     // Publicos (antes privados) para que el Preview a pantalla completa
@@ -154,9 +164,16 @@ uint64_t m_LastTransitionTrigger = 0;
     OSCPanel&       GetOSCPanel()       { return m_OSC; }
 
     void ToggleNotesWindow();
-    void ToggleAIAssistant() { m_ShowAIAssistant = !m_ShowAIAssistant; }
+    void ToggleHelp();
+    void RequestHelp(int initialCategory = 0);
+    bool IsHelpOpen() const { return m_ShowHelp; }
+    void ToggleVoiceAssistant() { m_ShowVoiceAssistant = !m_ShowVoiceAssistant; }
     void ToggleConnectionsWindow() { m_ShowConnectionsWindow = !m_ShowConnectionsWindow; }
+    void OpenConnectionsTab(int tab) { m_ConnectionsActiveTab = tab; m_ShowConnectionsWindow = true; }
     void ToggleStageQuick(bool active);
+
+    bool IsAnyToolWindowOpen() const;
+    void CloseAllToolWindows();
 
 private:
     void BeginDockspace();
@@ -172,6 +189,8 @@ private:
     // reconstruccion de BeginDockspace (dockspace_id ya reseteado/limpio).
     void BuildWorkspaceLayoutClassic(ImGuiID dockspace_id);
     void BuildWorkspaceLayoutSimple(ImGuiID dockspace_id);
+    void RenderMediaPreviewFloatingWindow();
+
     void BuildWorkspaceLayoutBroadcast(ImGuiID dockspace_id);
     void BuildWorkspaceLayoutLibrary(ImGuiID dockspace_id);
     void BuildWorkspaceLayoutVideo(ImGuiID dockspace_id);
@@ -213,7 +232,7 @@ private:
     // Puntos "Público"/"Stage" + "Borrar Todo" — antes vivian en ViewPanel
     // (arriba del video), pedido explicito de subirlos a la toolbar
     // superior (lado derecho) para liberarle mas espacio a "Vista en Vivo".
-    void RenderModeToolbarStatusActions(float winW, float railH);
+    void RenderModeToolbarStatusActions(float screenX, float railH);
     void ToggleAudience(bool active);
 
     // Ventana flotante de Notas -- boton propio en RenderModeToolbar (junto
@@ -227,9 +246,9 @@ private:
     bool         m_ShowNotes = false;
     QuickNotes   m_NotesPanel;
 
-    void            RenderAIAssistantWindow();
-    bool            m_ShowAIAssistant = false;
-    AIAssistantPanel m_AIAssistant;
+    void                RenderVoiceAssistantWindow();
+    bool                m_ShowVoiceAssistant = false;
+    VoiceAssistantPanel m_VoiceAssistantPanel;
 
     void        RenderUrlImportModal();
     bool        m_ShowUrlImport        = false;
@@ -240,11 +259,35 @@ private:
     std::mutex  m_UrlImportMutex;
     std::optional<ProyecThor::Core::SubtitleFetchResult> m_UrlImportResult;
 
+    // ── Ventanas Flotantes de Diseño y Herramientas ─────────────────────────
+    void RenderStylesWindow();
+    bool m_ShowStylesWindow = false;
+
+    void RenderShadersWindow();
+    bool m_ShowShadersWindow = false;
+
+    void RenderTransitionsWindow();
+    bool m_ShowTransitionsWindow = false;
+
+    void RenderAnnouncementsWindow();
+    bool m_ShowAnnouncementsWindow = false;
+
+    void RenderPadsWindow();
+    bool m_ShowPadsWindow = false;
+
+    void RenderTilesWindow();
+    bool m_ShowTilesWindow = false;
+
+    void RenderChatWindow();
+    bool m_ShowChatWindow = false;
+
     void RenderStylesPopup();
 
     void RenderConnectionsWindow();
     bool m_ShowConnectionsWindow = false;
     int  m_ConnectionsActiveTab   = 0;
+
+    bool m_ShowMediaPreviewWindow = false;
 
     // Ver comentario de los getters (GetRedPanel/GetChatPanel/GetBroadcastPanel/GetOSCPanel).
     StreamingPanel m_Red;
@@ -256,6 +299,10 @@ private:
     std::vector<std::shared_ptr<IPanel>> m_Panels;
     bool                                 m_ShowConfig           = false;
     Settings::SettingsPanel              m_SettingsPanel;
+    bool                                 m_ShowHelp             = false;
+    HelpPanel                            m_HelpPanel;
+    bool                                 m_ShowDebug            = false;
+    DebugPanel                           m_DebugPanel;
     PerformancePanel                     m_PerformancePanel;
     ActiveLeftPanel                      m_ActiveLeftPanel      = ActiveLeftPanel::Library;
     std::shared_ptr<TransitionPanel>     m_TransitionPanelOwned;
@@ -279,14 +326,17 @@ private:
     // restaurarla al salir (glfwSetWindowMonitor no la recuerda solo).
     int  m_WindowedX = 0, m_WindowedY = 0, m_WindowedW = 1280, m_WindowedH = 800;
 
-    Hub           m_Hub;
-    WorkspaceMode m_Mode = WorkspaceMode::Hub;
+    bool          m_ShowPatchNotesModal = false;
+    void          RenderPatchNotesModal();
+    WorkspaceMode m_Mode = WorkspaceMode::Projector;
 
     // Ver LibraryPanel::SetMediaOnlyMode -- se sincroniza cada frame en
     // RenderAll() segun si el preset activo (Settings::WorkspaceSettings::
     // layoutPreset) es Library, no hace falta guardar estado propio aca.
-    LibraryPanel* m_LibraryPanelRef = nullptr;
-    ViewPanel*    m_ViewPanelRef    = nullptr;
+    LibraryPanel*   m_LibraryPanelRef = nullptr;
+    HomePanel*      m_HomePanelRef    = nullptr;
+    ViewPanel*      m_ViewPanelRef    = nullptr;
+    StylesHubPanel* m_StylesHubRef    = nullptr;
 
     // Selector rapido (Alt+Espacio) — ver RenderQuickSwitcher.
     bool m_QuickSwitchOpen  = false;
@@ -308,8 +358,6 @@ private:
     static constexpr int kCollapsiblePanelCount = 4;
     PanelCollapseState m_PanelCollapse[kCollapsiblePanelCount];
     void UpdatePanelCollapseAnim();
-    void TogglePanelCollapse(int index);
-    void ResetPanelCollapse();
 
     // Ver EnterFullscreenEditor/ExitFullscreenEditor.
     bool                   m_FullscreenEditorActive       = false;

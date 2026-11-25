@@ -1082,7 +1082,9 @@ void SyncServer::ServerThreadFunc(int port, std::promise<bool> startedPromise) {
         std::string ext = fs::path(filename).extension().string();
         for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 
-        Core::PresentationCore::Get().SetBackgroundMedia(fullPath, IsVideoExt(ext), false);
+        auto& core = Core::PresentationCore::Get();
+        core.SetProjecting(true);
+        core.SetBackgroundMedia(fullPath, IsVideoExt(ext), false);
         res.set_content(R"({"ok":true})", "application/json");
     });
 
@@ -1129,8 +1131,9 @@ void SyncServer::ServerThreadFunc(int port, std::promise<bool> startedPromise) {
         if (type == "video" || type == "image") {
             std::string folder   = (type == "video") ? "videos" : "images";
             std::string fullPath = ProyecThor::GetAssetsPath() + "/" + folder + "/" + filename;
-            Core::PresentationCore::Get().SetBackgroundMedia(fullPath, type == "video", /*allowAudio=*/true);
-            Core::PresentationCore::Get().SetProjecting(true);
+            auto& core = Core::PresentationCore::Get();
+            core.SetProjecting(true);
+            core.SetBackgroundMedia(fullPath, type == "video", /*allowAudio=*/true);
             res.set_content(R"({"ok":true})", "application/json");
             return;
         }

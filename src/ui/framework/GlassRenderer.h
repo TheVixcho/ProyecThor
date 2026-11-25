@@ -11,6 +11,7 @@ public:
 
     bool Initialize(int screenWidth, int screenHeight);
     void Resize(int screenWidth, int screenHeight);
+    void ReleaseTargets();
     void Shutdown();
 
     void CaptureCurrentFrame();

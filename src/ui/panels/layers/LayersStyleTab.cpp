@@ -4,7 +4,6 @@
 #include "core/FileDeletionManager.h"
 #include "ui/framework/UIManager.h"
 #include "ui/framework/IconRail.h"
-#include "ui/framework/UIStrings.h"
 #include <imgui.h>
 #ifdef _WIN32
 #include <windows.h>
@@ -338,7 +337,7 @@ void LayersStyleTab::RenderLeftRail() {
     const float gap   = 4.0f;
 
     // 1. Nuevo estilo (Acción principal arriba)
-    if (LPCornerIconBtn("##newstyle", LPDrawPlus, Loc("Nuevo estilo", "New style", "Novo estilo"), { btnSz, btnSz }, true))
+    if (LPCornerIconBtn("##newstyle", LPDrawPlus, "Nuevo estilo", { btnSz, btnSz }, true))
         OpenStyleEditorFullscreen(true, "", m_CurrentStyle);
     ImGui::Dummy(ImVec2(0.0f, gap));
 
@@ -352,7 +351,7 @@ void LayersStyleTab::RenderLeftRail() {
                 dl->AddLine({x, c.y - r*0.75f}, {x, c.y + r*0.75f}, col, th);
                 dl->AddCircleFilled({x, c.y + knobY[i]*r}, r*0.16f, col, 12);
             }
-        }, Loc("Ajustes rápidos", "Quick settings", "Configurações rápidas"), { btnSz, btnSz }))
+        }, "Ajustes rápidos", { btnSz, btnSz }))
         ImGui::OpenPopup("##QuickAdjustPopup");
 
     ImGui::Dummy(ImVec2(0.0f, gap + 2.0f));
@@ -365,7 +364,7 @@ void LayersStyleTab::RenderLeftRail() {
                 ImVec2 o = { c.x - cs - g*0.5f + cI*(cs+g), c.y - cs - g*0.5f + rI*(cs+g) };
                 dl->AddRectFilled(o, {o.x+cs, o.y+cs}, col, 1.5f);
             }
-        }, Loc("Vista en cuadrícula", "Grid view", "Visualização em grade"), { btnSz, btnSz }, m_GridMode))
+        }, "Vista en cuadrícula", { btnSz, btnSz }, m_GridMode))
         m_GridMode = true;
     ImGui::Dummy(ImVec2(0.0f, gap));
     if (LPCornerIconBtn("##slistm", +[](ImDrawList* dl, ImVec2 c, float r, ImU32 col){
@@ -373,14 +372,14 @@ void LayersStyleTab::RenderLeftRail() {
                 float y = c.y - r*0.5f + i*r*0.5f;
                 dl->AddRectFilled({c.x-r*0.7f, y}, {c.x+r*0.7f, y+r*0.22f}, col, 1.0f);
             }
-        }, Loc("Vista en lista", "List view", "Visualização em lista"), { btnSz, btnSz }, !m_GridMode))
+        }, "Vista en lista", { btnSz, btnSz }, !m_GridMode))
         m_GridMode = false;
     ImGui::PopID();
 
     ImGui::Dummy(ImVec2(0.0f, gap + 2.0f));
 
     // 4. Recargar fuentes
-    if (LPCornerIconBtn("##reloadfonts", LPDrawRefresh, Loc("Recargar fuentes", "Reload fonts", "Recarregar fontes"), { btnSz, btnSz }))
+    if (LPCornerIconBtn("##reloadfonts", LPDrawRefresh, "Recargar fuentes", { btnSz, btnSz }))
         LoadFontsList();
 }
 
@@ -421,7 +420,7 @@ void LayersStyleTab::RenderThemeCard(const std::string& name, float W, float H,
 
     ImVec4 textCol = hasData ? ImVec4(thData.lyrics.color[0], thData.lyrics.color[1], thData.lyrics.color[2], thData.lyrics.color[3])
                              : ImVec4(1.0f, 1.0f, 1.0f, 0.95f);
-    std::string fontName = (hasData && !thData.lyrics.fontName.empty()) ? thData.lyrics.fontName : Loc("Fuente Predeterminada", "Default Font", "Fonte Padrão");
+    std::string fontName = (hasData && !thData.lyrics.fontName.empty()) ? thData.lyrics.fontName : "Fuente Predeterminada";
 
     // Obtain the real assigned font
     ImFont* customFont = hasData ? Core::PresentationCore::Get().GetImGuiFont(thData.lyrics.fontName, 22.0f) : nullptr;
@@ -441,7 +440,7 @@ void LayersStyleTab::RenderThemeCard(const std::string& name, float W, float H,
 
     // Active badge
     if (isSel) {
-        LPBadge(dl, { p1.x - 56.0f, p0.y + 8.0f }, Loc("ACTIVO", "ACTIVE", "ATIVO"), LP::Accent, { 1, 1, 1, 1 }, 6.0f, 2.5f);
+        LPBadge(dl, { p1.x - 56.0f, p0.y + 8.0f }, "ACTIVO", LP::Accent, { 1, 1, 1, 1 }, 6.0f, 2.5f);
     }
 
     // Bottom banner with theme name
@@ -459,11 +458,11 @@ void LayersStyleTab::RenderThemeCard(const std::string& name, float W, float H,
         ImGui::PushStyleColor(ImGuiCol_Text, LP::Accent);
         ImGui::Text("%s", name.c_str()); ImGui::PopStyleColor();
         ImGui::Separator();
-        if (ImGui::Selectable(Loc("  Editar", "  Edit", "  Editar"))) {
+        if (ImGui::Selectable("  Editar")) {
             StyleData ed; if (LoadThemeData(name, ed)) OpenStyleEditorFullscreen(false, name, ed);
         }
         ImGui::PushStyleColor(ImGuiCol_Text, LP::Red);
-        if (ImGui::Selectable(Loc("  Eliminar", "  Delete", "  Excluir"))) DeleteTheme(name);
+        if (ImGui::Selectable("  Eliminar")) DeleteTheme(name);
         ImGui::PopStyleColor();
         ImGui::EndPopup();
     }
@@ -521,7 +520,7 @@ void LayersStyleTab::RenderThemeRow(const std::string& name, float W, float rowH
     }
 
     if (isSel) {
-        LPBadge(dl, { pos.x + W - 58.0f, pos.y + (rowH - 18.0f) * 0.5f }, Loc("ACTIVO", "ACTIVE", "ATIVO"), LP::Accent, { 1, 1, 1, 1 }, 5.0f, 2.0f);
+        LPBadge(dl, { pos.x + W - 58.0f, pos.y + (rowH - 18.0f) * 0.5f }, "ACTIVO", LP::Accent, { 1, 1, 1, 1 }, 5.0f, 2.0f);
     }
 
     ImGui::InvisibleButton("##trow", { W, rowH });
@@ -531,11 +530,11 @@ void LayersStyleTab::RenderThemeRow(const std::string& name, float W, float rowH
         ImGui::PushStyleColor(ImGuiCol_Text, LP::Accent);
         ImGui::Text("%s", name.c_str()); ImGui::PopStyleColor();
         ImGui::Separator();
-        if (ImGui::Selectable(Loc("  Editar", "  Edit", "  Editar"))) {
+        if (ImGui::Selectable("  Editar")) {
             StyleData ed; if (LoadThemeData(name, ed)) OpenStyleEditorFullscreen(false, name, ed);
         }
         ImGui::PushStyleColor(ImGuiCol_Text, LP::Red);
-        if (ImGui::Selectable(Loc("  Eliminar", "  Delete", "  Excluir"))) DeleteTheme(name);
+        if (ImGui::Selectable("  Eliminar")) DeleteTheme(name);
         ImGui::PopStyleColor();
         ImGui::EndPopup();
     }
@@ -554,7 +553,7 @@ void LayersStyleTab::RenderThemeGrid() {
         ImGui::GetWindowDrawList()->AddRectFilled(p, {p.x + w, p.y + 60}, LPU32(LP::Surface1), 12.0f);
         ImGui::Dummy({0, 18});
         ImGui::PushStyleColor(ImGuiCol_Text, LP::TextMuted);
-        const char* h = Loc("Crea tu primer estilo con el botón + de la izquierda", "Create your first style using the + button on the left", "Crie seu primeiro estilo com o botão + à esquerda");
+        const char* h = "Crea tu primer estilo con el botón + de arriba";
         float tw = ImGui::CalcTextSize(h).x;
         ImGui::SetCursorPosX(std::max(0.0f, (w - tw) * 0.5f));
         ImGui::Text("%s", h);
@@ -567,7 +566,7 @@ void LayersStyleTab::RenderThemeGrid() {
     {
         ImGui::AlignTextToFramePadding();
         ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
-        ImGui::Text("%s (%d)", Loc("Estilos", "Styles", "Estilos"), (int)m_AvailableThemes.size());
+        ImGui::Text("Estilos (%d)", (int)m_AvailableThemes.size());
         ImGui::PopStyleColor();
 
         if (m_GridMode) {
@@ -612,7 +611,7 @@ void LayersStyleTab::RenderQuickAdjust() {
     
     // Titulo limpio en lugar de un header colapsable que roba espacio
     ImGui::PushStyleColor(ImGuiCol_Text, LP::TextSub);
-    ImGui::Text(" %s", Loc("AJUSTES RÁPIDOS", "QUICK SETTINGS", "CONFIGURAÇÕES RÁPIDAS"));
+    ImGui::Text(" AJUSTES RÁPIDOS");
     ImGui::PopStyleColor();
     LPSeparatorLine();
     ImGui::Dummy(ImVec2(0.0f, 4.0f));
@@ -629,7 +628,7 @@ void LayersStyleTab::RenderQuickAdjust() {
         // --- FUENTE ---
         ImGui::TableNextRow(); ImGui::TableNextColumn();
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(LP::TextMuted, "%s", Loc("Fuente", "Font", "Fonte"));
+        ImGui::TextColored(LP::TextMuted, "Fuente");
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
         if (ImGui::BeginCombo("##qf", m_CurrentStyle.lyrics.fontName.c_str())) {
@@ -647,7 +646,7 @@ void LayersStyleTab::RenderQuickAdjust() {
         // --- COLOR ---
         ImGui::TableNextRow(); ImGui::TableNextColumn();
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(LP::TextMuted, "%s", Loc("Color Base", "Base Color", "Cor Base"));
+        ImGui::TextColored(LP::TextMuted, "Color Base");
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
         changed |= ImGui::ColorEdit4("##qc", m_CurrentStyle.lyrics.color,
@@ -657,7 +656,7 @@ void LayersStyleTab::RenderQuickAdjust() {
         // --- TAMAÑO ---
         ImGui::TableNextRow(); ImGui::TableNextColumn();
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(LP::TextMuted, "%s", Loc("Tamaño", "Size", "Tamanho"));
+        ImGui::TextColored(LP::TextMuted, "Tamaño");
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
         changed |= ImGui::DragFloat("##qs", &m_CurrentStyle.lyrics.textSize, 1.0f, 10.0f, 500.0f, "%.1f px");
@@ -665,10 +664,10 @@ void LayersStyleTab::RenderQuickAdjust() {
         // --- ALINEACIÓN HORIZONTAL ---
         ImGui::TableNextRow(); ImGui::TableNextColumn();
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(LP::TextMuted, "%s", Loc("Alineación H", "H Alignment", "Alinhamento H"));
+        ImGui::TextColored(LP::TextMuted, "Alineación H");
         ImGui::TableNextColumn();
 
-        const char* hA[] = { Loc("Izq", "Left", "Esq"), Loc("Cen", "Ctr", "Cen"), Loc("Der", "Right", "Dir") };
+        const char* hA[] = {"Izq", "Cen", "Der"};
         float btnW = ImGui::GetContentRegionAvail().x / 3.0f;
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
         for (int a = 0; a < 3; a++) {
@@ -692,10 +691,10 @@ void LayersStyleTab::RenderQuickAdjust() {
         // --- ALINEACIÓN VERTICAL ---
         ImGui::TableNextRow(); ImGui::TableNextColumn();
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(LP::TextMuted, "%s", Loc("Alineación V", "V Alignment", "Alinhamento V"));
+        ImGui::TextColored(LP::TextMuted, "Alineación V");
         ImGui::TableNextColumn();
 
-        const char* vA[] = { Loc("Arr", "Top", "Cima"), Loc("Cen", "Ctr", "Cen"), Loc("Aba", "Bot", "Baixo") };
+        const char* vA[] = {"Arr", "Cen", "Aba"};
         btnW = ImGui::GetContentRegionAvail().x / 3.0f;
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
         for (int a = 0; a < 3; a++) {

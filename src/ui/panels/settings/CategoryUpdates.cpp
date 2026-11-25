@@ -1,6 +1,7 @@
 #include "SettingsPanel.h"
 #include "SettingsManager.h"
 #include "core/AppPaths.h"
+#include "core/AppLog.h"
 #include "ui/framework/FilePicker.h"
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -221,49 +222,71 @@ static std::string FetchURL(const std::string& host, const std::string& path) {
 }
 #endif
 
+static void DoDownloadAndInstall(const std::string& urlStr);
+
 static void DoCheckUpdate(const std::string& currentVersion,
                            const std::string& channel,
-                           bool showPopupIfAvailable) {
+                           bool showPopupIfAvailable,
+                           bool autoInstallIfAvailable = false) {
     s_Status = UpdateStatus::Checking;
 
+    ProyecThor::Core::AppLog::Inf("Updater", "Buscando actualización en GitHub Releases (TheVixcho/ProyecThor)...");
+
+    std::string body;
 #if defined(_WIN32)
     std::wstring host = L"api.github.com";
     std::wstring path = (channel == "beta")
         ? L"/repos/TheVixcho/ProyecThor/releases?per_page=1"
         : L"/repos/TheVixcho/ProyecThor/releases/latest";
-
-    std::string body = FetchURL(host, path);
+    body = FetchURL(host, path);
 #else
     std::string host = "api.github.com";
     std::string path = (channel == "beta")
         ? "/repos/TheVixcho/ProyecThor/releases?per_page=1"
         : "/repos/TheVixcho/ProyecThor/releases/latest";
-
-    std::string body = FetchURL(host, path);
+    body = FetchURL(host, path);
 #endif
     if (body.empty()) {
-        s_ErrorMsg = "No se pudo conectar al servidor.";
+        s_ErrorMsg = "No se pudo conectar con GitHub Releases.";
         s_Status   = UpdateStatus::Error;
         return;
     }
 
     std::string tag = ExtractJsonString(body, "tag_name");
     if (tag.empty()) {
-        s_ErrorMsg = "Respuesta inesperada del servidor.";
-        s_Status   = UpdateStatus::Error;
+        tag = ExtractJsonString(body, "version");
+    }
+    if (tag.empty()) {
+        s_ErrorMsg = "No hay releases publicados aún en GitHub.";
+        s_Status   = UpdateStatus::UpToDate;
         return;
     }
-    if (tag[0] == 'v') tag = tag.substr(1);
+    if (tag[0] == 'v' || tag[0] == 'V') tag = tag.substr(1);
 
 #if defined(_WIN32)
-    s_DownloadUrl    = ExtractAssetDownloadUrl(body, "ProyecThor_Setup.exe");
+    s_DownloadUrl = ExtractAssetDownloadUrl(body, "ProyecThor_Setup_" + tag + ".exe");
+    if (s_DownloadUrl.empty()) {
+        s_DownloadUrl = ExtractAssetDownloadUrl(body, "ProyecThor_Setup.exe");
+    }
+    if (s_DownloadUrl.empty()) {
+        s_DownloadUrl = ExtractJsonString(body, "browser_download_url");
+    }
+    if (s_DownloadUrl.empty()) {
+        s_DownloadUrl = ExtractJsonString(body, "html_url");
+    }
 #else
-    s_DownloadUrl    = ExtractAssetDownloadUrl(body, "ProyecThor-x86_64.AppImage");
+    s_DownloadUrl = ExtractAssetDownloadUrl(body, "ProyecThor-x86_64.AppImage");
     if (s_DownloadUrl.empty()) {
         s_DownloadUrl = ExtractAssetDownloadUrl(body, "ProyecThor.AppImage");
     }
     if (s_DownloadUrl.empty()) {
         s_DownloadUrl = ExtractAppImageDownloadUrl(body);
+    }
+    if (s_DownloadUrl.empty()) {
+        s_DownloadUrl = ExtractJsonString(body, "browser_download_url");
+    }
+    if (s_DownloadUrl.empty()) {
+        s_DownloadUrl = ExtractJsonString(body, "html_url");
     }
 #endif
     s_LatestVersion  = tag;
@@ -275,8 +298,11 @@ static void DoCheckUpdate(const std::string& currentVersion,
 
     if (IsNewer(currentVersion, tag)) {
         s_Status = UpdateStatus::Available;
-        if (showPopupIfAvailable && !s_DownloadUrl.empty())
+        if (autoInstallIfAvailable && !s_DownloadUrl.empty()) {
+            DoDownloadAndInstall(s_DownloadUrl);
+        } else if (showPopupIfAvailable && !s_DownloadUrl.empty()) {
             s_ShowModal = true;
+        }
     } else {
         s_Status = UpdateStatus::UpToDate;
     }
@@ -708,7 +734,7 @@ void CheckUpdateOnStartup() {
     auto& u = ProyecThor::Settings::SettingsManager::Get().GetSettings().updates;
     if (u.checkOnStartup) {
         if (s_TaskThread.joinable()) s_TaskThread.join();
-        s_TaskThread = std::thread(DoCheckUpdate, u.currentVersion, u.updateChannel, true);
+        s_TaskThread = std::thread(DoCheckUpdate, u.currentVersion, u.updateChannel, true, false);
         s_TaskThread.detach();
     }
 }
@@ -840,331 +866,231 @@ void RenderGlobalUpdatePopup() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 void SettingsPanel::RenderCategoryUpdates() {
-    auto& u   = ProyecThor::Settings::SettingsManager::Get().GetSettings().updates;
-    auto  st  = s_Status.load();
+    auto& u  = ProyecThor::Settings::SettingsManager::Get().GetSettings().updates;
+    auto  st = s_Status.load();
+    u.updateChannel = "stable"; // Canal oficial único y estable
 
-    // Version instalada + Estado + Configuracion fusionadas en una sola
-    // subcategoria (pedido explicito): antes eran 3 entradas de sidebar
-    // para algo que se lee de punta a punta como una sola pagina.
-    if (SectionTitle("Versión instalada", "Actualizaciones")) {
-        // Badge de versión
-        {
-            ImDrawList* dl  = ImGui::GetWindowDrawList();
-            ImVec2      p   = ImGui::GetCursorScreenPos();
-            char        vtxt[32];
-            snprintf(vtxt, sizeof(vtxt), "  v%s  ", u.currentVersion.c_str());
-            ImVec2 tsz = ImGui::CalcTextSize(vtxt);
+    const bool isEn = (ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language == ProyecThor::Settings::Language::English);
 
-            dl->AddRectFilled(p, ImVec2(p.x + tsz.x, p.y + tsz.y + 8.0f),
-                              IM_COL32(30, 56, 110, 180), 6.0f);
-            dl->AddRect(p, ImVec2(p.x + tsz.x, p.y + tsz.y + 8.0f),
-                        IM_COL32(61, 127, 245, 100), 6.0f, 0, 1.0f);
-            ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + 4.0f));
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.78f, 1.00f, 1.0f));
-            ImGui::TextUnformatted(vtxt);
-            ImGui::PopStyleColor();
-            ImGui::SetCursorScreenPos(ImVec2(p.x, p.y + tsz.y + 8.0f + 8.0f));
+    if (SectionTitle(isEn ? "Installed Version" : "Versión instalada", isEn ? "Updates" : "Actualizaciones")) {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        float availW = ImGui::GetContentRegionAvail().x;
+
+        // ── Tarjeta Principal de Versión & Canal Oficial ────────────────────
+        ImVec2 heroPos = ImGui::GetCursorScreenPos();
+        float heroH = 92.0f;
+        dl->AddRectFilled(heroPos, ImVec2(heroPos.x + availW, heroPos.y + heroH),
+                          IM_COL32(18, 22, 34, 235), 10.0f);
+        dl->AddRect(heroPos, ImVec2(heroPos.x + availW, heroPos.y + heroH),
+                    IM_COL32(56, 189, 248, 60), 10.0f, 0, 1.2f);
+
+        // Icono circular
+        ImVec2 iconC(heroPos.x + 36.0f, heroPos.y + heroH * 0.5f);
+        dl->AddCircleFilled(iconC, 20.0f, IM_COL32(56, 189, 248, 30), 24);
+        dl->AddCircle(iconC, 20.0f, IM_COL32(56, 189, 248, 120), 24, 1.2f);
+        dl->AddLine(ImVec2(iconC.x, iconC.y - 8.0f), ImVec2(iconC.x, iconC.y + 4.0f), IM_COL32(56, 189, 248, 255), 2.0f);
+        dl->AddTriangleFilled(ImVec2(iconC.x - 6.0f, iconC.y + 2.0f),
+                              ImVec2(iconC.x + 6.0f, iconC.y + 2.0f),
+                              ImVec2(iconC.x, iconC.y + 8.0f), IM_COL32(56, 189, 248, 255));
+        dl->AddLine(ImVec2(iconC.x - 8.0f, iconC.y + 11.0f), ImVec2(iconC.x + 8.0f, iconC.y + 11.0f), IM_COL32(56, 189, 248, 255), 1.5f);
+
+        // Textos del Hero
+        float textX = heroPos.x + 70.0f;
+        dl->AddText(ImVec2(textX, heroPos.y + 16.0f), IM_COL32(255, 255, 255, 255), "ProyecThor Desktop");
+
+        std::string verStr = std::string(isEn ? "Version " : "Versión ") + "v" + u.currentVersion;
+        dl->AddText(ImVec2(textX, heroPos.y + 38.0f), IM_COL32(148, 163, 184, 255), verStr.c_str());
+
+        std::string lastChk = u.lastChecked.empty()
+            ? (isEn ? "Not checked yet" : "Sin comprobaciones recientes")
+            : ((isEn ? "Last check: " : "Última comprobación: ") + u.lastChecked);
+        dl->AddText(ImVec2(textX, heroPos.y + 58.0f), IM_COL32(100, 116, 139, 255), lastChk.c_str());
+
+
+
+        ImGui::SetCursorScreenPos(ImVec2(heroPos.x, heroPos.y + heroH + 16.0f));
+
+        // ── Tarjeta de Estado ───────────────────────────────────────────────
+        struct StatusStyle {
+            ImVec4 borderCol;
+            ImVec4 bgCol;
+            ImVec4 textCol;
+        };
+        StatusStyle ss;
+        const char* statusTitle  = "";
+        const char* statusDetail = "";
+        bool showSpinner         = false;
+
+        switch (st) {
+            case UpdateStatus::Idle:
+                ss = { ImVec4(0.24f,0.26f,0.38f,0.8f), ImVec4(0.08f,0.09f,0.14f,0.9f), ImVec4(0.70f,0.72f,0.86f,1) };
+                statusTitle  = isEn ? "Update System Ready" : "Sistema de actualización listo";
+                statusDetail = isEn
+                    ? "Click 'Check for Updates' to search and install the latest official release automatically."
+                    : "Presiona 'Comprobar Actualizaciones' para buscar e instalar la última versión automáticamente sin complicaciones.";
+                break;
+            case UpdateStatus::Checking:
+                ss = { ImVec4(0.22f,0.40f,0.88f,0.8f), ImVec4(0.06f,0.10f,0.22f,0.9f), ImVec4(0.55f,0.75f,1.00f,1) };
+                statusTitle  = isEn ? "Checking official server..." : "Comprobando servidor oficial...";
+                statusDetail = isEn
+                    ? "Connecting to repository to check for updates..."
+                    : "Conectando al repositorio oficial para verificar nuevas versiones estables...";
+                showSpinner  = true;
+                break;
+            case UpdateStatus::UpToDate:
+                ss = { ImVec4(0.20f,0.66f,0.40f,0.8f), ImVec4(0.05f,0.14f,0.09f,0.9f), ImVec4(0.40f,0.92f,0.60f,1) };
+                statusTitle  = isEn ? "You are up to date!" : "¡Tu versión está al día!";
+                statusDetail = isEn
+                    ? "You have the latest release of ProyecThor installed. No updates needed."
+                    : "Tienes instalada la versión más reciente de ProyecThor. No hay actualizaciones pendientes.";
+                break;
+            case UpdateStatus::Available:
+                ss = { ImVec4(0.88f,0.58f,0.10f,0.8f), ImVec4(0.18f,0.12f,0.04f,0.9f), ImVec4(0.98f,0.80f,0.35f,1) };
+                statusTitle  = isEn ? "New version found!" : "¡Nueva versión disponible!";
+                statusDetail = isEn
+                    ? "Downloading and launching installer automatically..."
+                    : "Descargando e iniciando el instalador automáticamente...";
+                break;
+            case UpdateStatus::Error:
+                ss = { ImVec4(0.88f,0.28f,0.28f,0.8f), ImVec4(0.16f,0.04f,0.04f,0.9f), ImVec4(0.96f,0.55f,0.55f,1) };
+                statusTitle  = isEn ? "Connection error" : "No se pudo conectar";
+                statusDetail = s_ErrorMsg.empty()
+                    ? (isEn ? "Failed to contact update server." : "No se pudo contactar al servidor de actualizaciones.")
+                    : s_ErrorMsg.c_str();
+                break;
         }
 
-        // Fecha de última comprobación
-        if (!u.lastChecked.empty()) {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.38f, 0.40f, 0.54f, 1.0f));
-            ImGui::Text("Ultima comprobación: %s", u.lastChecked.c_str());
-            ImGui::PopStyleColor();
+        ImVec2 boxPos = ImGui::GetCursorScreenPos();
+        float boxH = 68.0f;
+        dl->AddRectFilled(boxPos, ImVec2(boxPos.x + availW, boxPos.y + boxH),
+                          ImGui::ColorConvertFloat4ToU32(ss.bgCol), 8.0f);
+        dl->AddRect(boxPos, ImVec2(boxPos.x + availW, boxPos.y + boxH),
+                    ImGui::ColorConvertFloat4ToU32(ss.borderCol), 8.0f, 0, 1.0f);
+
+        ImGui::SetCursorScreenPos(ImVec2(boxPos.x + 16.0f, boxPos.y + 14.0f));
+        if (showSpinner) {
+            SpinnerWidget(8.0f, 2.0f, ss.textCol);
+            ImGui::SameLine(0, 10.0f);
         }
 
-        // El instalador (ver packaging/windows/ProyecThor.iss) ya borra
-        // automaticamente cualquier version anterior detectada al instalar
-        // una nueva -- este boton hace lo mismo pero on-demand, DESDE la app
-        // ya corriendo, para instalaciones viejas sueltas que quedaron antes
-        // de que existiera esa limpieza (tipicamente .msi de WiX de mas de
-        // una version atras). Solo toca versiones ESTRICTAMENTE mas viejas
-        // que la actual -- nunca la actual ni ninguna mas nueva.
-#ifdef _WIN32
-        {
-            auto cst         = s_CleanupStatus.load();
-            bool cleanupBusy = (cst == CleanupStatus::Running);
-
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(14.0f, 6.0f));
-            ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.10f, 0.112f, 0.160f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.14f, 0.155f, 0.220f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.18f, 0.200f, 0.280f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.70f, 0.72f, 0.86f, 1.0f));
-
-            if (cleanupBusy) ImGui::BeginDisabled();
-            if (ImGui::Button(cleanupBusy ? "Buscando..." : "Desinstalar versiones anteriores",
-                              ImVec2(240.0f, 30.0f)))
-                ImGui::OpenPopup("Desinstalar versiones anteriores?##cleanupOld");
-            if (cleanupBusy) ImGui::EndDisabled();
-
-            ImGui::PopStyleColor(4);
-            ImGui::PopStyleVar(2);
-
-            char tip[192];
-            snprintf(tip, sizeof(tip),
-                "Busca en el registro de Windows cualquier instalacion de ProyecThor "
-                "(Inno o un .msi viejo de WiX) mas vieja que la version actual (v%s) "
-                "y la desinstala en silencio. Nunca toca la version actual ni ninguna mas nueva.",
-                u.currentVersion.c_str());
-            HelpTooltip(tip);
-
-            ImVec2 mcenter = ImGui::GetMainViewport()->GetCenter();
-            ImGui::SetNextWindowPos(mcenter, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-            if (ImGui::BeginPopupModal("Desinstalar versiones anteriores?##cleanupOld", nullptr,
-                                        ImGuiWindowFlags_AlwaysAutoResize)) {
-                ImGui::TextWrapped(
-                    "Se buscaran instalaciones de ProyecThor mas viejas que v%s (incluye "
-                    "instalaciones .msi antiguas) y se desinstalaran en silencio. Esto no "
-                    "afecta la version que estas usando ahora.\n\n"
-                    "Si alguna instalacion vieja es de tipo .msi, Windows puede pedir "
-                    "permisos de administrador para quitarla -- es normal, aceptalo para "
-                    "que se complete.", u.currentVersion.c_str());
-                ImGui::Spacing();
-                if (ImGui::Button("Desinstalar", ImVec2(120, 0))) {
-                    if (s_CleanupThread.joinable()) s_CleanupThread.join();
-                    s_CleanupStatus = CleanupStatus::Running;
-                    s_CleanupThread = std::thread(DoCleanupOldInstalls, u.currentVersion);
-                    s_CleanupThread.detach();
-                    ImGui::CloseCurrentPopup();
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Cancelar", ImVec2(120, 0)))
-                    ImGui::CloseCurrentPopup();
-                ImGui::EndPopup();
-            }
-
-            if (cst == CleanupStatus::Done && !s_CleanupSummary.empty()) {
-                ImGui::Spacing();
-                ImGui::PushStyleColor(ImGuiCol_Text, s_CleanupHadIssues
-                    ? ImVec4(0.90f, 0.70f, 0.35f, 1.0f)   // amarillo/naranja: hubo cancelaciones o fallas
-                    : ImVec4(0.50f, 0.80f, 0.55f, 1.0f)); // verde: todo bien
-                ImGui::TextWrapped("%s", s_CleanupSummary.c_str());
-                ImGui::PopStyleColor();
-            }
-        }
-#else
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.38f, 0.40f, 0.54f, 1.0f));
-        ImGui::TextUnformatted("Verificar versiones antiguas instaladas");
+        ImGui::PushStyleColor(ImGuiCol_Text, ss.textCol);
+        ImGui::TextUnformatted(statusTitle);
         ImGui::PopStyleColor();
-        HelpTooltip("Revisa el gestor de paquetes de tu distro (apt/dnf/etc.) y "
-                    "desinstala a mano cualquier version vieja de ProyecThor si te "
-                    "quedo mas de una instalada.");
-#endif
 
-    ImGui::Spacing();
-    ImGui::SeparatorText("Estado");
-    ImGui::Spacing();
-
-    // Dimensiones y colores según estado
-    struct StatusStyle {
-        ImVec4 borderCol;
-        ImVec4 bgCol;
-        ImVec4 textCol;
-    };
-
-    StatusStyle ss;
-    const char* statusTitle  = "";
-    const char* statusDetail = "";
-    bool        showSpinner  = false;
-
-    switch (st) {
-        case UpdateStatus::Idle:
-            ss = { ImVec4(0.24f,0.26f,0.38f,1), ImVec4(0.08f,0.09f,0.14f,1), ImVec4(0.50f,0.52f,0.66f,1) };
-            statusTitle  = "Sin comprobar";
-            statusDetail = "Haz clic en Comprobar ahora para buscar actualizaciones en GitHub.";
-            break;
-        case UpdateStatus::Checking:
-            ss = { ImVec4(0.22f,0.40f,0.88f,0.60f), ImVec4(0.06f,0.10f,0.22f,1), ImVec4(0.55f,0.75f,1.00f,1) };
-            statusTitle  = "Comprobando...";
-            statusDetail = "Conectando con el servidor de actualizaciones.";
-            showSpinner  = true;
-            break;
-        case UpdateStatus::UpToDate:
-            ss = { ImVec4(0.20f,0.66f,0.40f,0.55f), ImVec4(0.05f,0.14f,0.09f,1), ImVec4(0.30f,0.86f,0.56f,1) };
-            statusTitle  = "Estas al dia";
-            statusDetail = "No hay actualizaciones disponibles en este momento.";
-            break;
-        case UpdateStatus::Available:
-            ss = { ImVec4(0.88f,0.58f,0.10f,0.55f), ImVec4(0.14f,0.10f,0.03f,1), ImVec4(0.96f,0.75f,0.30f,1) };
-            statusTitle  = "Nueva versión disponible";
-            statusDetail = "";
-            break;
-        case UpdateStatus::Error:
-            ss = { ImVec4(0.88f,0.28f,0.28f,0.55f), ImVec4(0.14f,0.04f,0.04f,1), ImVec4(0.96f,0.50f,0.50f,1) };
-            statusTitle  = "Error de conexion";
-            statusDetail = s_ErrorMsg.c_str();
-            break;
-    }
-
-    // Dibujar la caja de estado
-    ImVec2 boxPos = ImGui::GetCursorScreenPos();
-    float  boxW   = ImGui::GetContentRegionAvail().x;
-    float  boxH   = (st == UpdateStatus::Available) ? 80.0f : 64.0f;
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-
-    dl->AddRectFilled(boxPos, ImVec2(boxPos.x + boxW, boxPos.y + boxH),
-                      ImGui::ColorConvertFloat4ToU32(ss.bgCol), 8.0f);
-    dl->AddRect(boxPos, ImVec2(boxPos.x + boxW, boxPos.y + boxH),
-                ImGui::ColorConvertFloat4ToU32(ss.borderCol), 8.0f, 0, 1.0f);
-
-    ImGui::SetCursorScreenPos(ImVec2(boxPos.x + 16.0f, boxPos.y + 14.0f));
-
-    if (showSpinner) {
-        SpinnerWidget(8.0f, 2.0f, ss.textCol);
-        ImGui::SameLine(0, 10.0f);
-    }
-
-    ImGui::PushStyleColor(ImGuiCol_Text, ss.textCol);
-    ImGui::TextUnformatted(statusTitle);
-    ImGui::PopStyleColor();
-
-    if (statusDetail[0] != '\0') {
-        ImGui::SetCursorScreenPos(ImVec2(boxPos.x + 16.0f, boxPos.y + 36.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(ss.textCol.x, ss.textCol.y, ss.textCol.z, 0.72f));
+        ImGui::SetCursorScreenPos(ImVec2(boxPos.x + 16.0f, boxPos.y + 38.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(ss.textCol.x, ss.textCol.y, ss.textCol.z, 0.78f));
         ImGui::TextUnformatted(statusDetail);
         ImGui::PopStyleColor();
-    }
 
-    if (st == UpdateStatus::Available && !s_LatestVersion.empty()) {
-        ImGui::SetCursorScreenPos(ImVec2(boxPos.x + 16.0f, boxPos.y + 34.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.96f, 0.75f, 0.30f, 0.80f));
-        ImGui::Text("Versión %s disponible", s_LatestVersion.c_str());
-        ImGui::PopStyleColor();
-    }
+        ImGui::SetCursorScreenPos(ImVec2(boxPos.x, boxPos.y + boxH + 16.0f));
 
-    ImGui::SetCursorScreenPos(ImVec2(boxPos.x, boxPos.y + boxH + 14.0f));
+        // ── Descarga activa con barra animada ───────────────────────────────
+        if (s_IsDownloading) {
+            float pct   = s_DownloadProgress.load();
+            float dlMB  = s_DownloadedMB.load();
+            float totMB = s_TotalMB.load();
+            float speed = s_DownloadSpeedMBs.load();
 
-    // ── Sección de descarga activa ─────────────────────────────────────────────
-    // No es un SectionTitle propio a proposito: es parte de la MISMA pagina
-    // "Estado" (aparece/desaparece segun s_IsDownloading), no una
-    // subcategoria navegable aparte que vaya y venga del sidebar.
-    if (s_IsDownloading) {
-        float pct   = s_DownloadProgress.load();
-        float dlMB  = s_DownloadedMB.load();
-        float totMB = s_TotalMB.load();
-        float speed = s_DownloadSpeedMBs.load();
+            ImGui::SeparatorText(isEn ? "Downloading update" : "Descargando actualización");
+            AnimatedProgressBar(pct, ImVec2(availW - 40.0f, 10.0f),
+                                ImVec4(0.220f, 0.740f, 0.970f, 1.0f));
 
-        ImGui::SeparatorText("Descargando actualizacion");
+            ImGui::Spacing();
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.70f, 0.75f, 0.88f, 1.0f));
+            if (totMB > 0.0f) {
+                ImGui::Text(isEn ? "%.1f MB / %.1f MB  ·  %.1f MB/s  (Installing automatically when finished...)"
+                                 : "%.1f MB / %.1f MB  ·  %.1f MB/s  (Se iniciará el instalador automáticamente al finalizar...)",
+                            dlMB, totMB, speed);
+            } else {
+                ImGui::TextUnformatted(isEn ? "Downloading..." : "Descargando...");
+            }
+            ImGui::PopStyleColor();
+            ImGui::Spacing();
+        }
 
-        // Barra de progreso animada personalizada (helper del panel)
-        AnimatedProgressBar(pct, ImVec2(ImGui::GetContentRegionAvail().x - 56.0f, 8.0f),
-                             ImVec4(0.350f, 0.500f, 0.970f, 1.0f));
+        // ── Botón Prominente: "Comprobar Actualizaciones" ────────────────────
+        bool busy = (st == UpdateStatus::Checking) || s_IsDownloading;
+        if (busy) ImGui::BeginDisabled();
 
-        ImGui::Spacing();
+        const float actionBtnW = 260.0f;
+        const float actionBtnH = 38.0f;
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button,        IM_COL32(38, 100, 235, 230));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(56, 120, 248, 255));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  IM_COL32(28, 80, 200, 255));
+        ImGui::PushStyleColor(ImGuiCol_Text,          IM_COL32(255, 255, 255, 255));
 
-        // Metadatos de descarga
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.40f, 0.42f, 0.58f, 1.0f));
-        if (totMB > 0.0f)
-            ImGui::Text("%.1f MB / %.1f MB   %.1f MB/s", dlMB, totMB, speed);
-        else
-            ImGui::Text("Descargando...");
-        ImGui::PopStyleColor();
+        const char* btnLabel = busy
+            ? (s_IsDownloading ? (isEn ? "Downloading update..." : "Descargando actualización...")
+                               : (isEn ? "Checking..." : "Comprobando..."))
+            : (isEn ? "Check for Updates" : "Comprobar Actualizaciones");
 
-        ImGui::Spacing();
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.80f, 0.38f, 0.38f, 1.0f));
-        ImGui::TextUnformatted("No cierres ProyecThor durante la descarga.");
-        ImGui::PopStyleColor();
-        ImGui::Spacing();
-    }
-
-    // ── Botones de acción ──────────────────────────────────────────────────────
-    ImGui::Spacing();
-
-    bool busy = (st == UpdateStatus::Checking) || s_IsDownloading;
-    if (busy) ImGui::BeginDisabled();
-
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(14.0f, 6.0f));
-
-    // Botón comprobar
-    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.10f, 0.112f, 0.160f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.14f, 0.155f, 0.220f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.18f, 0.200f, 0.280f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.70f, 0.72f, 0.86f, 1.0f));
-
-    if (ImGui::Button("Comprobar ahora", ImVec2(170.0f, 30.0f))) {
-        if (s_TaskThread.joinable()) s_TaskThread.join();
-        s_TaskThread = std::thread(DoCheckUpdate, u.currentVersion, u.updateChannel, true);
-        s_TaskThread.detach();
-    }
-    ImGui::PopStyleColor(4);
-
-    // Botón descargar (solo si hay actualización disponible)
-    if (st == UpdateStatus::Available && !s_DownloadUrl.empty() && !s_IsDownloading) {
-        ImGui::SameLine(0, 10.0f);
-
-        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.24f, 0.18f, 0.06f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.42f, 0.32f, 0.10f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.56f, 0.42f, 0.12f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.96f, 0.75f, 0.30f, 1.0f));
-
-        if (ImGui::Button("Descargar ahora", ImVec2(170.0f, 30.0f))) {
+        if (ImGui::Button(btnLabel, ImVec2(actionBtnW, actionBtnH))) {
             if (s_TaskThread.joinable()) s_TaskThread.join();
-            s_TaskThread = std::thread(DoDownloadAndInstall, s_DownloadUrl);
+            s_TaskThread = std::thread(DoCheckUpdate, u.currentVersion, "stable", false, true);
             s_TaskThread.detach();
         }
         ImGui::PopStyleColor(4);
-    }
+        ImGui::PopStyleVar();
 
-    ImGui::PopStyleVar(2);
-    if (busy) ImGui::EndDisabled();
+        if (busy) ImGui::EndDisabled();
 
-    ImGui::Spacing();
-    ImGui::SeparatorText("Configuracion");
-
-    {
-        ImGui::Checkbox("Comprobar al iniciar", &u.checkOnStartup);
-        HelpTooltip("Comprueba actualizaciones automaticamente al abrir ProyecThor.");
-
-        ImGui::Checkbox("Descarga automatica", &u.autoDownload);
-        HelpTooltip("Descarga la nueva versión en segundo plano sin pedir confirmación.");
-
+        // ── Herramienta de Limpieza de versiones viejas ─────────────────────
+#ifdef _WIN32
         ImGui::Spacing();
+        ImGui::Dummy(ImVec2(0.0f, 10.0f));
+        ImGui::SeparatorText(isEn ? "Maintenance Tools" : "Herramientas de instalación");
 
-        // Canal
-        const char* channels[] = { "stable", "beta" };
-        const char* labels[]   = { "Estable", "Beta" };
-        int         chIdx      = (u.updateChannel == "beta") ? 1 : 0;
+        auto cst         = s_CleanupStatus.load();
+        bool cleanupBusy = (cst == CleanupStatus::Running);
 
-        ImGui::TextUnformatted("Canal de actualizacion:");
-        HelpTooltip("'Estable': versiones probadas y recomendadas.\n'Beta': acceso anticipado, puede contener errores.");
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.10f, 0.112f, 0.160f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.14f, 0.155f, 0.220f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.18f, 0.200f, 0.280f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.65f, 0.68f, 0.80f, 1.0f));
 
-        ImGui::Spacing();
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 20.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(14.0f, 5.0f));
+        if (cleanupBusy) ImGui::BeginDisabled();
+        if (ImGui::Button(cleanupBusy ? (isEn ? "Searching..." : "Buscando...") : (isEn ? "Uninstall previous versions" : "Desinstalar versiones anteriores"),
+                          ImVec2(230.0f, 28.0f)))
+            ImGui::OpenPopup("Desinstalar versiones anteriores?##cleanupOld");
+        if (cleanupBusy) ImGui::EndDisabled();
 
-        for (int i = 0; i < 2; i++) {
-            bool isActive = (chIdx == i);
+        ImGui::PopStyleColor(4);
+        ImGui::PopStyleVar();
 
-            if (isActive) {
-                ImGui::PushStyleColor(ImGuiCol_Button,
-                    i == 0 ? ImVec4(0.10f,0.28f,0.14f,1.0f) : ImVec4(0.28f,0.18f,0.04f,1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
-                    i == 0 ? ImVec4(0.14f,0.36f,0.18f,1.0f) : ImVec4(0.36f,0.24f,0.06f,1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive,
-                    i == 0 ? ImVec4(0.18f,0.44f,0.22f,1.0f) : ImVec4(0.44f,0.30f,0.08f,1.0f));
-                ImGui::PushStyleColor(ImGuiCol_Text,
-                    i == 0 ? ImVec4(0.30f,0.86f,0.48f,1.0f) : ImVec4(0.96f,0.65f,0.14f,1.0f));
-            } else {
-                ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.08f,0.09f,0.14f,1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.11f,0.12f,0.18f,1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.14f,0.15f,0.22f,1.0f));
-                ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.40f,0.42f,0.56f,1.0f));
+        ImVec2 mcenter = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(mcenter, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        if (ImGui::BeginPopupModal("Desinstalar versiones anteriores?##cleanupOld", nullptr,
+                                    ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::TextWrapped(
+                isEn ? "Previous ProyecThor installations older than v%s will be searched and removed. Your current version will not be affected."
+                     : "Se buscarán instalaciones de ProyecThor más viejas que v%s y se desinstalarán en silencio. Esto no afecta la versión que estás usando ahora.",
+                u.currentVersion.c_str());
+            ImGui::Spacing();
+            if (ImGui::Button(isEn ? "Uninstall" : "Desinstalar", ImVec2(120, 0))) {
+                if (s_CleanupThread.joinable()) s_CleanupThread.join();
+                s_CleanupStatus = CleanupStatus::Running;
+                s_CleanupThread = std::thread(DoCleanupOldInstalls, u.currentVersion);
+                s_CleanupThread.detach();
+                ImGui::CloseCurrentPopup();
             }
-
-            if (i > 0) ImGui::SameLine(0, 6.0f);
-
-            if (ImGui::Button(labels[i], ImVec2(100.0f, 28.0f)))
-                u.updateChannel = channels[i];
-
-            ImGui::PopStyleColor(4);
+            ImGui::SameLine();
+            if (ImGui::Button(isEn ? "Cancel" : "Cancelar", ImVec2(120, 0)))
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
         }
 
-        ImGui::PopStyleVar(2);
+        if (cst == CleanupStatus::Done && !s_CleanupSummary.empty()) {
+            ImGui::Spacing();
+            ImGui::PushStyleColor(ImGuiCol_Text, s_CleanupHadIssues
+                ? ImVec4(0.90f, 0.70f, 0.35f, 1.0f)
+                : ImVec4(0.50f, 0.80f, 0.55f, 1.0f));
+            ImGui::TextWrapped("%s", s_CleanupSummary.c_str());
+            ImGui::PopStyleColor();
+        }
+#endif
     }
-
-    } // if (SectionTitle("Versión instalada", "Actualizaciones"))
 }
 
 } // namespace ProyecThor::UI::Settings

@@ -4,6 +4,7 @@
 #include <imgui_internal.h>
 #include <cmath>
 #include <string>
+#include <vector>
 #include <algorithm>
 
 namespace ProyecThor::UI {
@@ -15,8 +16,8 @@ float IconRailThickness(bool vertical)
 {
     bool wantLabels = ProyecThor::Settings::SettingsManager::Get().GetSettings().general.showRailLabels;
     float target = vertical
-        ? (wantLabels ? kIconRailVerticalSize   : kIconRailVerticalSizeCompact)
-        : (wantLabels ? kIconRailHorizontalSize : kIconRailHorizontalSizeCompact);
+        ? (wantLabels ? kIconRailVerticalSize : kIconRailVerticalSizeCompact)
+        : kIconRailHorizontalSizeCompact;
 
     ImGuiStorage* storage = ImGui::GetStateStorage();
     ImGuiID id = ImGui::GetID(vertical ? "##railThicknessV" : "##railThicknessH");
@@ -39,7 +40,7 @@ static float RailLabelProgress()
     return *cur;
 }
 
-static void RenderVertical(const IconRailItem* items, int count, int& currentIndex,
+static bool RenderVertical(const IconRailItem* items, int count, int& currentIndex,
                             const float (*categoryColor)[4])
 {
     ImDrawList*  dl       = ImGui::GetWindowDrawList();
@@ -61,6 +62,8 @@ static void RenderVertical(const IconRailItem* items, int count, int& currentInd
     ImGuiStorage* storage = ImGui::GetStateStorage();
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.f, btnGapY));
 
+    bool clickedAny = false;
+
     for (int i = 0; i < count; i++)
     {
         const auto& item   = items[i];
@@ -72,58 +75,48 @@ static void RenderVertical(const IconRailItem* items, int count, int& currentInd
         ImVec2 bMin   = cursor;
         ImVec2 bMax   = { cursor.x + railW, cursor.y + btnH };
 
-        ImGuiID hovId = ImGui::GetID(item.label);
-        float*  pT    = storage->GetFloatRef(hovId ^ 0xABCD1234u, 0.0f);
-        bool hovered  = ImGui::IsMouseHoveringRect(bMin, bMax, false);
-        *pT = Lerp(*pT, hovered ? 1.0f : 0.0f, ImGui::GetIO().DeltaTime * 14.0f);
-        float t = *pT;
+        ImGui::SetCursorScreenPos(bMin);
+        const std::string btnId = std::string("##rail_") + item.label;
+        bool clicked = ImGui::InvisibleButton(btnId.c_str(), { railW, btnH });
+        bool hovered = ImGui::IsItemHovered();
+        float t = hovered ? 1.0f : 0.0f;
 
         if (active) {
             ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accent);
+            ac.w = 0.14f;
+            dl->AddRectFilled(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding);
+            ac.w = 0.28f;
+            dl->AddRect(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding, 0, 1.0f);
+        } else if (t > 0.01f) {
+            ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accent);
             ac.w = 0.12f;
             dl->AddRectFilled(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding);
-        } else if (t > 0.01f) {
-            dl->AddRectFilled(bMin, bMax, IM_COL32(255, 255, 255, (int)(t * 14.f)), rounding);
+            ac.w = 0.22f;
+            dl->AddRect(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding, 0, 1.0f);
         }
 
         // Barra lateral izquierda (indicador de seleccion)
+        if (active || t > 0.01f)
         {
             float barH     = btnH * 0.60f * (active ? 1.0f : t);
             float barY0    = cursor.y + (btnH - barH) * 0.5f;
-            float barAlpha = active ? 1.0f : t * 0.55f;
+            float barAlpha = active ? 1.0f : 0.65f;
             ImVec4 ac      = ImGui::ColorConvertU32ToFloat4(accent);
             ac.w           = barAlpha;
             dl->AddRectFilled({ bMin.x, barY0 }, { bMin.x + 3.0f, barY0 + barH },
                               ImGui::ColorConvertFloat4ToU32(ac), 2.0f);
         }
 
-        ImGui::SetCursorScreenPos(bMin);
-        const std::string btnId = std::string("##rail_") + item.label;
-        bool clicked = ImGui::InvisibleButton(btnId.c_str(), { railW, btnH });
-
         {
-            // Base del icono/label = TextSecondary..TextPrimary del TEMA, no
-            // un gris fijo que asumia fondo oscuro -- pedido explicito: al
-            // seleccionar (active=true) esto quedaba en blanco puro (1.0f),
-            // invisible contra un rail con fondo claro (ver DS::GlassFillTop
-            // arriba, ya theme-aware). Se sigue mezclando 35%/25% hacia el
-            // color de categoria cuando esta activo, igual que antes.
-            ImVec4 textPriV = ImGui::ColorConvertU32ToFloat4(DS::TextPrimary);
             ImVec4 textDimV = ImGui::ColorConvertU32ToFloat4(DS::TextSecondary);
-            float  brightT  = active ? 1.0f : t;
+            ImVec4 ac       = ImGui::ColorConvertU32ToFloat4(accent);
+            float  colorT   = active ? 1.0f : (t * 0.85f);
             ImVec4 icF = {
-                Lerp(textDimV.x, textPriV.x, brightT),
-                Lerp(textDimV.y, textPriV.y, brightT),
-                Lerp(textDimV.z, textPriV.z, brightT),
+                Lerp(textDimV.x, ac.x, colorT),
+                Lerp(textDimV.y, ac.y, colorT),
+                Lerp(textDimV.z, ac.z, colorT),
                 1.0f
             };
-            if (active) {
-                ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accent);
-                icF.x = Lerp(icF.x, ac.x, 0.35f);
-                icF.y = Lerp(icF.y, ac.y, 0.35f);
-                icF.z = Lerp(icF.z, ac.z, 0.35f);
-                icF.w = 1.0f;
-            }
 
             ImVec2 lblDim       = ImGui::CalcTextSize(item.label);
             float  totalContent = iconSz + lt * (5.0f + lblDim.y);
@@ -134,18 +127,11 @@ static void RenderVertical(const IconRailItem* items, int count, int& currentInd
 
             if (lt > 0.01f) {
                 ImVec4 lblF = {
-                    Lerp(textDimV.x, textPriV.x, brightT),
-                    Lerp(textDimV.y, textPriV.y, brightT),
-                    Lerp(textDimV.z, textPriV.z, brightT),
+                    Lerp(textDimV.x, ac.x, colorT),
+                    Lerp(textDimV.y, ac.y, colorT),
+                    Lerp(textDimV.z, ac.z, colorT),
                     lt
                 };
-                if (active) {
-                    ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accent);
-                    lblF.x = Lerp(lblF.x, ac.x, 0.25f);
-                    lblF.y = Lerp(lblF.y, ac.y, 0.25f);
-                    lblF.z = Lerp(lblF.z, ac.z, 0.25f);
-                }
-
                 float lblX = cursor.x + (railW - lblDim.x) * 0.5f;
                 float lblY = startY + iconSz + 5.0f;
                 dl->AddText({ lblX, lblY }, ImGui::ColorConvertFloat4ToU32(lblF), item.label);
@@ -155,33 +141,64 @@ static void RenderVertical(const IconRailItem* items, int count, int& currentInd
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
             ImGui::SetTooltip("%s", item.label);
 
-        if (clicked) currentIndex = item.index;
+        if (clicked) {
+            currentIndex = item.index;
+            clickedAny = true;
+        }
     }
 
     ImGui::PopStyleVar();
+    return clickedAny;
 }
 
-static void RenderHorizontal(const IconRailItem* items, int count, int& currentIndex,
-                              const float (*categoryColor)[4])
+static bool RenderHorizontal(const IconRailItem* items, int count, int& currentIndex,
+                              const float (*categoryColor)[4], float reservedRightPx)
 {
     ImDrawList*  dl     = ImGui::GetWindowDrawList();
     const float  railH  = ImGui::GetContentRegionAvail().y;
     const float  winW   = ImGui::GetWindowWidth();
     const ImVec2 winPos = ImGui::GetWindowPos();
-    const float  lt     = RailLabelProgress();
+    const float  lt     = 0.0f; // Main toolbar icon-only sin texto inferior
 
     dl->AddRectFilled(winPos, { winPos.x + winW, winPos.y + railH },
                       DS::GlassFillTop);
 
-    ImGui::Dummy({ 6.0f, railH });
+    if (count <= 0) return false;
+
+    const float leftPad  = 6.0f;
+    const float usableW  = std::max(60.0f, winW - leftPad * 2.0f - reservedRightPx);
+
+    std::vector<ImVec2> lblDims(count);
+    std::vector<float>  btnWidths(count);
+    float totalIdealW = 0.0f;
+    for (int i = 0; i < count; i++) {
+        lblDims[i]   = ImGui::CalcTextSize(items[i].label);
+        btnWidths[i] = (lt > 0.01f) ? std::max(lblDims[i].x + 24.0f, 64.0f) : 46.0f;
+        totalIdealW += btnWidths[i];
+    }
+
+    float btnGapX = 4.0f;
+    float neededW = totalIdealW + btnGapX * static_cast<float>(count - 1);
+    if (neededW > usableW && neededW > 1.0f) {
+        const float scale = usableW / neededW;
+        btnGapX = std::max(2.0f, std::floor(btnGapX * scale));
+        const float availForBtns = std::max(40.0f, usableW - btnGapX * static_cast<float>(count - 1));
+        const float btnScale = (totalIdealW > 1.0f) ? (availForBtns / totalIdealW) : 1.0f;
+        for (int i = 0; i < count; i++) {
+            btnWidths[i] = std::max(34.0f, std::floor(btnWidths[i] * btnScale));
+        }
+    }
+
+    ImGui::Dummy({ leftPad, railH });
     ImGui::SameLine(0.0f, 0.0f);
 
-    constexpr float btnGapX  = 4.0f;
     constexpr float rounding = 6.0f;
     const float     iconSz   = std::clamp(std::floor(railH * 0.36f), 15.0f, 18.0f);
 
     ImGuiStorage* storage = ImGui::GetStateStorage();
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(btnGapX, 0.f));
+
+    bool clickedAny = false;
 
     for (int i = 0; i < count; i++)
     {
@@ -190,19 +207,19 @@ static void RenderHorizontal(const IconRailItem* items, int count, int& currentI
         const float* cc    = categoryColor[i];
         const ImU32 accent = ImGui::ColorConvertFloat4ToU32(ImVec4(cc[0], cc[1], cc[2], cc[3]));
 
-        ImVec2 lblDim = ImGui::CalcTextSize(item.label);
-        float btnW = (lt > 0.01f) ? std::max(lblDim.x + 28.0f, 68.0f) : 46.0f;
+        ImVec2 lblDim = lblDims[i];
+        float btnW    = btnWidths[i];
 
         if (i > 0) ImGui::SameLine();
         ImVec2 cursor = ImGui::GetCursorScreenPos();
         ImVec2 bMin   = { cursor.x, cursor.y + 3.0f };
         ImVec2 bMax   = { cursor.x + btnW, cursor.y + railH - 3.0f };
 
-        ImGuiID hovId = ImGui::GetID(item.label);
-        float*  pT    = storage->GetFloatRef(hovId ^ 0xABCD1234u, 0.0f);
-        bool hovered  = ImGui::IsMouseHoveringRect(bMin, bMax, false);
-        *pT = Lerp(*pT, hovered ? 1.0f : 0.0f, ImGui::GetIO().DeltaTime * 14.0f);
-        float t = *pT;
+        ImGui::SetCursorScreenPos(cursor);
+        const std::string btnId = std::string("##rail_") + item.label;
+        bool clicked = ImGui::InvisibleButton(btnId.c_str(), { btnW, railH });
+        bool hovered = ImGui::IsItemHovered();
+        float t = hovered ? 1.0f : 0.0f;
 
         if (active) {
             ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accent);
@@ -211,43 +228,35 @@ static void RenderHorizontal(const IconRailItem* items, int count, int& currentI
             ac.w = 0.28f;
             dl->AddRect(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding, 0, 1.0f);
         } else if (t > 0.01f) {
-            dl->AddRectFilled(bMin, bMax, IM_COL32(255, 255, 255, (int)(t * 18.f)), rounding);
+            ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accent);
+            ac.w = t * 0.12f;
+            dl->AddRectFilled(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding);
+            ac.w = t * 0.22f;
+            dl->AddRect(bMin, bMax, ImGui::ColorConvertFloat4ToU32(ac), rounding, 0, 1.0f);
         }
 
         // Barra inferior (indicador de seleccion)
+        if (active || t > 0.01f)
         {
-            float barW     = (btnW - 20.0f) * (active ? 1.0f : t);
+            float barW     = std::max(12.0f, btnW - 20.0f) * (active ? 1.0f : t);
             float barX0    = cursor.x + (btnW - barW) * 0.5f;
-            float barAlpha = active ? 1.0f : t * 0.60f;
+            float barAlpha = active ? 1.0f : t * 0.65f;
             ImVec4 ac      = ImGui::ColorConvertU32ToFloat4(accent);
             ac.w           = barAlpha;
             dl->AddRectFilled({ barX0, bMax.y - 2.5f }, { barX0 + barW, bMax.y },
                               ImGui::ColorConvertFloat4ToU32(ac), 1.5f);
         }
 
-        ImGui::SetCursorScreenPos(cursor);
-        const std::string btnId = std::string("##rail_") + item.label;
-        bool clicked = ImGui::InvisibleButton(btnId.c_str(), { btnW, railH });
-
         {
-            // Ver comentario equivalente en RenderVertical: base theme-aware
-            // en vez de gris/blanco fijo (invisible en rail con fondo claro).
-            ImVec4 textPriV = ImGui::ColorConvertU32ToFloat4(DS::TextPrimary);
             ImVec4 textDimV = ImGui::ColorConvertU32ToFloat4(DS::TextSecondary);
-            float  brightT  = active ? 1.0f : t;
+            ImVec4 ac       = ImGui::ColorConvertU32ToFloat4(accent);
+            float  colorT   = active ? 1.0f : (t * 0.85f);
             ImVec4 icF = {
-                Lerp(textDimV.x, textPriV.x, brightT),
-                Lerp(textDimV.y, textPriV.y, brightT),
-                Lerp(textDimV.z, textPriV.z, brightT),
+                Lerp(textDimV.x, ac.x, colorT),
+                Lerp(textDimV.y, ac.y, colorT),
+                Lerp(textDimV.z, ac.z, colorT),
                 1.0f
             };
-            if (active) {
-                ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accent);
-                icF.x = Lerp(icF.x, ac.x, 0.35f);
-                icF.y = Lerp(icF.y, ac.y, 0.35f);
-                icF.z = Lerp(icF.z, ac.z, 0.35f);
-                icF.w = 1.0f;
-            }
 
             float  totalContent = iconSz + lt * (4.0f + lblDim.y);
             float  startY       = cursor.y + (railH - totalContent) * 0.5f - (lt > 0.01f ? 1.0f : 0.0f);
@@ -257,40 +266,40 @@ static void RenderHorizontal(const IconRailItem* items, int count, int& currentI
 
             if (lt > 0.01f) {
                 ImVec4 lblF = {
-                    Lerp(textDimV.x, textPriV.x, brightT),
-                    Lerp(textDimV.y, textPriV.y, brightT),
-                    Lerp(textDimV.z, textPriV.z, brightT),
+                    Lerp(textDimV.x, ac.x, colorT),
+                    Lerp(textDimV.y, ac.y, colorT),
+                    Lerp(textDimV.z, ac.z, colorT),
                     lt
                 };
-                if (active) {
-                    ImVec4 ac = ImGui::ColorConvertU32ToFloat4(accent);
-                    lblF.x = Lerp(lblF.x, ac.x, 0.25f);
-                    lblF.y = Lerp(lblF.y, ac.y, 0.25f);
-                    lblF.z = Lerp(lblF.z, ac.z, 0.25f);
-                }
-
-                float lblX = cursor.x + (btnW - lblDim.x) * 0.5f;
+                float lblX = std::max(bMin.x + 2.0f, cursor.x + (btnW - lblDim.x) * 0.5f);
                 float lblY = startY + iconSz + 4.0f;
+                dl->PushClipRect(bMin, bMax, true);
                 dl->AddText({ lblX, lblY }, ImGui::ColorConvertFloat4ToU32(lblF), item.label);
+                dl->PopClipRect();
             }
         }
 
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
             ImGui::SetTooltip("%s", item.label);
 
-        if (clicked) currentIndex = item.index;
+        if (clicked) {
+            currentIndex = item.index;
+            clickedAny = true;
+        }
     }
 
     ImGui::PopStyleVar();
+    return clickedAny;
 }
 
-void RenderIconRail(const IconRailItem* items, int count, int& currentIndex,
-                     IconRailOrientation orientation, const float (*categoryColor)[4])
+bool RenderIconRail(const IconRailItem* items, int count, int& currentIndex,
+                     IconRailOrientation orientation, const float (*categoryColor)[4],
+                     float reservedRightPx)
 {
     if (orientation == IconRailOrientation::Horizontal)
-        RenderHorizontal(items, count, currentIndex, categoryColor);
+        return RenderHorizontal(items, count, currentIndex, categoryColor, reservedRightPx);
     else
-        RenderVertical(items, count, currentIndex, categoryColor);
+        return RenderVertical(items, count, currentIndex, categoryColor);
 }
 
 } // namespace ProyecThor::UI

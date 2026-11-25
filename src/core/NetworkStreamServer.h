@@ -11,6 +11,27 @@
 
 namespace ProyecThor::Core {
 
+// ── OverlaySnapshot ───────────────────────────────────────────────────────────
+struct OverlaySnapshot {
+    bool        active       = false;
+    bool        showClock    = false;
+    std::string clockText;
+    std::string titleText;
+    std::string subText;
+    float       textColor[3]   = { 1.0f, 1.0f, 1.0f };
+    float       bgColor[3]     = { 0.035f, 0.035f, 0.043f };
+    float       bgOpacity      = 0.82f;
+    bool        showBorder     = true;
+    float       borderColor[3] = { 0.22f, 0.74f, 0.97f };
+    float       fontSize       = 42.0f;
+    float       borderRadius   = 12.0f;
+    float       boxPadding     = 16.0f;
+    float       minBoxWidth    = 0.0f;
+    int         posPreset      = 3;
+    float       posX           = 0.85f;
+    float       posY           = 0.10f;
+};
+
 // ── StreamSnapshot ────────────────────────────────────────────────────────────
 struct StreamSnapshot {
     bool        isProjecting   = false;
@@ -23,13 +44,25 @@ struct StreamSnapshot {
     float       margins[4]     = { 50.0f, 50.0f, 50.0f, 50.0f }; // L,T,R,B — igual que PresentationState
     bool        autoScale      = true;
     std::string fontFamily     = "Predeterminada";  // nombre de fuente activo
+    int         fontWeight     = 700;               // 400=Normal, 700=Bold, 900=Extra
+    bool        textShadow     = true;
+    bool        textOutline    = false;
+    bool        textGlow       = false;
+    bool        textNeon       = false;
+    bool        text3d         = false;
+    bool        textUnderline  = false;
+    bool        textBoxBg      = false;
     float       bgColor[3]     = { 0.0f, 0.0f, 0.0f };
     bool        isBgVideo      = false;
     bool        hasFrame       = false;   // true cuando hay frame JPEG disponible
     int         refW           = 1920;    // resolución real del proyector destino
     int         refH           = 1080;
-uint64_t    version        = 0;
+    uint64_t    version        = 0;
     uint64_t    fontVersion    = 0;       // cambia solo cuando cambia la fuente (evita recargar /font en cada poll)
+
+    bool            showPngOverlay = false;
+    uint64_t        overlayVersion = 0;
+    OverlaySnapshot overlay;
 
     uint64_t    transitionTrigger  = 0;
     int         transitionType     = 0;
@@ -39,9 +72,10 @@ uint64_t    version        = 0;
 // ── StreamConfig ──────────────────────────────────────────────────────────────
 // Qué capas transmitir y en qué calidad
 struct StreamConfig {
-    bool sendBackground = true;
-    bool sendText       = true;
-    bool sendOverlay    = true;
+    bool transparentMode = false; // Transparencia / Canal Alpha para OBS (PRO)
+    bool sendBackground  = true;  // true = emite fondo / color sólido; false = transparente
+    bool sendText        = true;
+    bool sendOverlay     = true;
 
     enum class VideoMode {
         HighQuality,   // MJPEG continuo ~30fps, prioriza latencia baja
@@ -99,6 +133,9 @@ public:
     using FontPathProvider = std::function<std::string()>;
     void SetFontPathProvider(FontPathProvider provider);
 
+    using OverlayPathProvider = std::function<std::string()>;
+    void SetOverlayPathProvider(OverlayPathProvider provider);
+
     // Feed de mensajes para las rutas /chat*. nullptr (default) = esas rutas
     // devuelven 404, como si no existieran. El puntero es propiedad de quien
     // lo pasa (PresentationCore) — este server solo lo referencia mientras
@@ -109,7 +146,7 @@ public:
     void SetConfig(const StreamConfig& cfg);
     StreamConfig GetConfig() const;
 
-    bool Start(int port = 8080);
+    bool Start(int port = 8080, const std::string& advertisedIp = "");
     void Stop();
 
     bool        IsRunning()  const { return m_Running.load(); }
@@ -118,7 +155,7 @@ public:
 
 private:
     static std::string DetectLocalIP();
-    static std::string BuildHTMLPage();
+    std::string        BuildHTMLPage() const;
     static std::string BuildChatHTMLPage();
     std::string SnapshotToJSON(const StreamSnapshot& snap) const;
     std::string ChatMessagesToJSON(const std::vector<ChatMessage>& msgs) const;
@@ -134,10 +171,12 @@ double m_LastCaptureTime = 0.0;
     SnapshotProvider    m_SnapshotProvider;
     FrameProvider       m_FrameProvider;
     FontPathProvider    m_FontPathProvider;
+    OverlayPathProvider m_OverlayPathProvider;
     ChatMessageStore*   m_ChatStore { nullptr };
 
-    mutable std::mutex  m_ConfigMutex;
-    StreamConfig        m_Config;
+    std::atomic<uint64_t> m_ConfigVersion { 1 };
+    mutable std::mutex    m_ConfigMutex;
+    StreamConfig          m_Config;
 };
 
 } // namespace ProyecThor::Core

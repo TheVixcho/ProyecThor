@@ -1,8 +1,9 @@
 #include "MediaView.h"
 #include "core/PresentationCore.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include "core/AppPaths.h"
 #include "UIStrings.h"
+#include "ui/panels/biblio/LibraryHelpers.h"
 #include <imgui.h>
 #include <iomanip>
 #include <sstream>
@@ -23,7 +24,7 @@ namespace ProyecThor::UI {
         return oss.str();
     }
 
-    void MediaView::Render(Core::VLCBasePlayer* previewPlayer) {
+    void MediaView::Render(Core::MPVBasePlayer* previewPlayer) {
         const auto& str = ProyecThor::UI::GetUIStrings();
 
         auto selection = Core::PresentationCore::Get().PeekSelection();
@@ -80,7 +81,7 @@ namespace ProyecThor::UI {
             }
             ImGui::EndChild();
         } else if (selection.type == Core::ItemType::Image) {
-            std::string dispTitle = std::filesystem::path(selection.title).filename().string();
+            std::string dispTitle = ProyecThor::Library::PathToUtf8(std::filesystem::path(selection.title).filename());
             ImGui::TextDisabled("%s", dispTitle.c_str());
             ImGui::Spacing();
 
@@ -91,7 +92,9 @@ namespace ProyecThor::UI {
                 if (!std::filesystem::path(imgPath).is_absolute()) {
                     imgPath = ImagesPath() + imgPath;
                 }
-                Core::PresentationCore::Get().SetBackgroundMedia(imgPath, false);
+                auto& core = Core::PresentationCore::Get();
+                core.SetProjecting(true);
+                core.SetBackgroundMedia(imgPath, false);
             }
             ImGui::PopStyleColor(2);
 

@@ -6,6 +6,30 @@ PLATFORM="$1"
 
 export PATH="/home/vixcho/.local/bin:/home/vixcho/.local/mingw-w64/bin:$PATH"
 
+# Actualizar contador de compilación (Build Number) e inyectar en Version.h
+BUILD_FILE="$PROJECT_ROOT/build_count.txt"
+BUILD_NUM=1
+if [ -f "$BUILD_FILE" ]; then
+    BUILD_NUM=$(cat "$BUILD_FILE" | tr -d '[:space:]')
+fi
+BUILD_NUM=$((BUILD_NUM + 1))
+echo -n "$BUILD_NUM" > "$BUILD_FILE"
+echo -e "\033[36m[BUILD] Compilando ProyecThor v1.2.0 - Build #$BUILD_NUM\033[0m"
+
+for vdir in "$PROJECT_ROOT/build-win/generated" "$PROJECT_ROOT/build-linux/generated"; do
+    if [ -d "$vdir" ]; then
+        cat <<EOF > "$vdir/Version.h"
+#pragma once
+
+#define PROYECTHOR_VERSION_MAJOR 1
+#define PROYECTHOR_VERSION_MINOR 2
+#define PROYECTHOR_VERSION_PATCH 0
+#define PROYECTHOR_VERSION_STRING "1.2.0"
+#define PROYECTHOR_BUILD_NUMBER $BUILD_NUM
+EOF
+    fi
+done
+
 case "$PLATFORM" in
     windows)
         if ! command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then
@@ -63,18 +87,11 @@ case "$PLATFORM" in
         $FLATPAK_BIN build-finish "$PROJECT_ROOT/build-flatpak/app" \
             --command=proyecthor \
             --share=ipc \
-            --socket=fallback-x11 \
+            --socket=x11 \
             --socket=wayland \
             --device=dri \
             --socket=pulseaudio \
-            --share=network \
-            --filesystem=xdg-documents \
-            --filesystem=xdg-videos \
-            --filesystem=xdg-pictures \
-            --filesystem=xdg-music \
-            --filesystem=xdg-download \
-            --talk-name=org.freedesktop.portal.FileChooser \
-            --talk-name=org.freedesktop.portal.OpenURI
+            --share=network
         $FLATPAK_BIN build-export "$PROJECT_ROOT/build-flatpak/repo" "$PROJECT_ROOT/build-flatpak/app"
         $FLATPAK_BIN build-bundle "$PROJECT_ROOT/build-flatpak/repo" "$PROJECT_ROOT/ProyecThor.flatpak" io.github.thevixcho.ProyecThor
         echo "=========================================================="
@@ -111,18 +128,15 @@ HERE="$(dirname "$(readlink -f "$0")")"
 export PATH="${HERE}/usr/bin:${PATH}"
 export LD_LIBRARY_PATH="${HERE}/usr/lib/proyecthor:${HERE}/usr/lib64/proyecthor:${HERE}/usr/lib:${HERE}/usr/lib64:${LD_LIBRARY_PATH}"
 
-if [ -d "${HERE}/usr/lib/proyecthor/plugins" ]; then
-    export VLC_PLUGIN_PATH="${HERE}/usr/lib/proyecthor/plugins"
-elif [ -d "${HERE}/usr/lib64/proyecthor/plugins" ]; then
-    export VLC_PLUGIN_PATH="${HERE}/usr/lib64/proyecthor/plugins"
-fi
-
 if [ -d "${HERE}/usr/lib/proyecthor" ]; then
     cd "${HERE}/usr/lib/proyecthor"
 elif [ -d "${HERE}/usr/lib64/proyecthor" ]; then
     cd "${HERE}/usr/lib64/proyecthor"
 fi
 
+if [ -x ./ProyecThorSlint ]; then
+    exec ./ProyecThorSlint "$@"
+fi
 exec ./ProyecThor "$@"
 EOF
         chmod +x "$PROJECT_ROOT/build-appimage/AppDir/AppRun"

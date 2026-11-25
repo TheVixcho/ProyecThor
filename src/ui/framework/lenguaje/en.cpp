@@ -171,36 +171,7 @@ extern const UIStrings kEnglish = {
     // LibrarySidebar
     "Lyrics",
     "Media",
-    "Doc",
-
-    // Menus and Toolbars
-    "Workspace",
-    "Screens",
-    "Window",
-    "Fullscreen",
-    "Start Hub",
-    "Performance",
-    "Report Bugs",
-    "Mobile App (Remote Control)",
-    "Windows",
-    "Sidebar Panels",
-
-    "Hub",
-    "Projector",
-    "Notes",
-    "AI Assistant",
-    "Styles",
-    "Connections",
-    "Clear All",
-    "Live",
-    "Stage",
-
-    "Live View",
-    "Settings",
-    "Production",
-    "Design",
-    "Performance",
-    "Panels"
+    "Doc"
 };
 
 } // namespace ProyecThor::UI

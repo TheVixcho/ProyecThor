@@ -1,0 +1,794 @@
+import { Theme } from "theme.slint";
+
+export component StyledTextBlock inherits Rectangle {
+    in property <string> text-body: "";
+    in property <float> text-size: 60.0;
+    in property <int> text-align: 1;
+    in property <int> text-valign: 1; // 0=Top, 1=Center, 2=Bottom
+    in property <color> text-color: #ffffff;
+    in property <string> font-family-name: "";
+    in property <int> font-weight-val: 700;
+    in property <bool> text-shadow: true;
+    in property <bool> text-outline: false;
+    in property <bool> text-glow: false;
+    in property <bool> text-neon: false;
+    in property <bool> text-3d: false;
+    in property <bool> text-underline: false;
+    in property <color> glow-color: #38bdf8;
+    in property <bool> text-box-bg: false;
+    in property <length> box-padding: 16px;
+    in property <int> text-fit-mode: 0; // 0=Normal, 1=Auto-Achicar si no cabe, 2=Auto-Cortar
+    in property <length> fit-box-height: 240px;
+
+    property <length> inner-pad: root.text-box-bg ? root.box-padding : 4px;
+    property <length> avail-h: Math.max(20px, root.fit-box-height - root.inner-pad * 2 - (root.text-underline ? 12px : 0px));
+    property <float> fitted-size: (root.text-fit-mode == 1 && fg-measure.preferred-height > root.avail-h && fg-measure.preferred-height > 1px)
+        ? Math.max(10.0, root.text-size * Math.clamp(Math.sqrt(root.avail-h / fg-measure.preferred-height) * 0.94, 0.24, 1.0))
+        : root.text-size;
+
+    clip: true;
+    border-radius: 10px;
+    background: root.text-box-bg ? #0000009e : transparent;
+
+    // Hidden measurement text bound strictly to root.text-size (zero circular dependency!)
+    fg-measure := Text {
+        visible: false;
+        x: root.inner-pad;
+        y: 0px;
+        width: Math.max(20px, root.width - root.inner-pad * 2);
+        text: root.text-body;
+        font-family: root.font-family-name;
+        font-size: root.text-size * 1px;
+        font-weight: root.font-weight-val;
+        wrap: word-wrap;
+    }
+
+    VerticalLayout {
+        padding: root.inner-pad;
+        spacing: 8px;
+        alignment: root.text-valign == 0 ? start : (root.text-valign == 2 ? end : center);
+
+        // Every effect layer shares EXACT width, height, fitted-size, wrap and alignment
+        // strictly inside the user's defined bounding box (never overflows width/height!)
+        Rectangle {
+            width: 100%;
+            height: fg-txt.preferred-height;
+
+            // Optional Glow multi-directional soft halo (exact same font-size!)
+            if root.text-glow : Text {
+                x: -3px; y: 0px; width: parent.width; height: parent.height;
+                text: root.text-body; color: root.glow-color.transparentize(0.55);
+                font-family: root.font-family-name; font-size: root.fitted-size * 1px; font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                vertical-alignment: center; wrap: word-wrap;
+            }
+            if root.text-glow : Text {
+                x: 3px; y: 0px; width: parent.width; height: parent.height;
+                text: root.text-body; color: root.glow-color.transparentize(0.55);
+                font-family: root.font-family-name; font-size: root.fitted-size * 1px; font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                vertical-alignment: center; wrap: word-wrap;
+            }
+            if root.text-glow : Text {
+                x: 0px; y: -3px; width: parent.width; height: parent.height;
+                text: root.text-body; color: root.glow-color.transparentize(0.55);
+                font-family: root.font-family-name; font-size: root.fitted-size * 1px; font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                vertical-alignment: center; wrap: word-wrap;
+            }
+            if root.text-glow : Text {
+                x: 0px; y: 3px; width: parent.width; height: parent.height;
+                text: root.text-body; color: root.glow-color.transparentize(0.55);
+                font-family: root.font-family-name; font-size: root.fitted-size * 1px; font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                vertical-alignment: center; wrap: word-wrap;
+            }
+
+            // Optional Neon bright cyan outer + inner halo (exact same font-size!)
+            if root.text-neon : Text {
+                x: -3px; y: -2px; width: parent.width; height: parent.height;
+                text: root.text-body; color: #22d3ee78;
+                font-family: root.font-family-name; font-size: root.fitted-size * 1px; font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                vertical-alignment: center; wrap: word-wrap;
+            }
+            if root.text-neon : Text {
+                x: 3px; y: 2px; width: parent.width; height: parent.height;
+                text: root.text-body; color: #22d3ee78;
+                font-family: root.font-family-name; font-size: root.fitted-size * 1px; font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                vertical-alignment: center; wrap: word-wrap;
+            }
+            if root.text-neon : Text {
+                x: 3px; y: -2px; width: parent.width; height: parent.height;
+                text: root.text-body; color: #06b6d470;
+                font-family: root.font-family-name; font-size: root.fitted-size * 1px; font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                vertical-alignment: center; wrap: word-wrap;
+            }
+            if root.text-neon : Text {
+                x: -3px; y: 2px; width: parent.width; height: parent.height;
+                text: root.text-body; color: #06b6d470;
+                font-family: root.font-family-name; font-size: root.fitted-size * 1px; font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                vertical-alignment: center; wrap: word-wrap;
+            }
+
+            // Optional 3D Extrusion Depth
+            if root.text-3d : Text {
+                x: 4px; y: 5px; width: parent.width; height: parent.height;
+                text: root.text-body; color: #09090bee;
+                font-family: root.font-family-name; font-size: root.fitted-size * 1px; font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                vertical-alignment: center; wrap: word-wrap;
+            }
+            if root.text-3d : Text {
+                x: 2px; y: 3px; width: parent.width; height: parent.height;
+                text: root.text-body; color: #27272aee;
+                font-family: root.font-family-name; font-size: root.fitted-size * 1px; font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                vertical-alignment: center; wrap: word-wrap;
+            }
+
+            // Optional Drop Shadow
+            if root.text-shadow : Text {
+                x: 3px; y: 4px; width: parent.width; height: parent.height;
+                text: root.text-body; color: #000000cc;
+                font-family: root.font-family-name; font-size: root.fitted-size * 1px; font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                vertical-alignment: center; wrap: word-wrap;
+            }
+
+            // Optional 4-way crisp outline
+            if root.text-outline : Text {
+                x: -2px; y: 0px; width: parent.width; height: parent.height;
+                text: root.text-body; color: #000000f0;
+                font-family: root.font-family-name; font-size: root.fitted-size * 1px; font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                vertical-alignment: center; wrap: word-wrap;
+            }
+            if root.text-outline : Text {
+                x: 2px; y: 0px; width: parent.width; height: parent.height;
+                text: root.text-body; color: #000000f0;
+                font-family: root.font-family-name; font-size: root.fitted-size * 1px; font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                vertical-alignment: center; wrap: word-wrap;
+            }
+            if root.text-outline : Text {
+                x: 0px; y: -2px; width: parent.width; height: parent.height;
+                text: root.text-body; color: #000000f0;
+                font-family: root.font-family-name; font-size: root.fitted-size * 1px; font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                vertical-alignment: center; wrap: word-wrap;
+            }
+            if root.text-outline : Text {
+                x: 0px; y: 2px; width: parent.width; height: parent.height;
+                text: root.text-body; color: #000000f0;
+                font-family: root.font-family-name; font-size: root.fitted-size * 1px; font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                vertical-alignment: center; wrap: word-wrap;
+            }
+
+            // Main Crisp Foreground Text (pinned at exact 0,0 matching all effect layers)
+            fg-txt := Text {
+                x: 0px; y: 0px; width: parent.width; height: parent.height;
+                text: root.text-body;
+                color: root.text-neon ? #e0f2fe : root.text-color;
+                font-family: root.font-family-name;
+                font-size: root.fitted-size * 1px;
+                font-weight: root.font-weight-val;
+                horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                vertical-alignment: center;
+                wrap: word-wrap;
+            }
+        }
+
+        if root.text-underline && root.text-body != "" : Rectangle {
+            height: 3px;
+            border-radius: 1.5px;
+            background: root.text-color.transparentize(0.25);
+        }
+    }
+}
+
+export component CustomOverlayView inherits Rectangle {
+    in property <bool> show-clock: true;
+    in property <string> clock-text: "";
+    in property <string> title-text: "";
+    in property <string> sub-text: "";
+    in property <color> text-color: #ffffff;
+    in property <color> bg-color: #09090b;
+    in property <float> bg-opacity: 0.82;
+    in property <bool> show-border: true;
+    in property <color> accent-border-color: #38bdf8;
+    in property <float> font-size: 42.0;
+    in property <float> radius-px: 12.0;
+    in property <float> box-padding: 16.0;
+    in property <float> min-box-width: 0.0;
+    in property <int> pos-preset: 3; // 0=Centro, 1=Sup-Izq, 2=Sup-Cen, 3=Sup-Der, 4=Inf-Izq, 5=Inf-Cen, 6=Inf-Der, 7=Custom
+    in property <float> norm-x: 0.85;
+    in property <float> norm-y: 0.10;
+    in property <float> ui-scale: 1.0;
+    in property <length> container-w: 1920px;
+    in property <length> container-h: 1080px;
+
+    property <length> pad-x: Math.max(4px, root.box-padding * root.ui-scale * 1px);
+    property <length> pad-y: Math.max(2px, root.box-padding * 0.65 * root.ui-scale * 1px);
+
+    x: root.pos-preset == 1 || root.pos-preset == 4 ? root.container-w * 0.03
+     : root.pos-preset == 3 || root.pos-preset == 6 ? root.container-w - self.width - root.container-w * 0.03
+     : root.pos-preset == 0 || root.pos-preset == 2 || root.pos-preset == 5 ? (root.container-w - self.width) / 2
+     : Math.clamp(root.norm-x * root.container-w - self.width / 2, 0px, Math.max(0px, root.container-w - self.width));
+
+    y: root.pos-preset == 1 || root.pos-preset == 2 || root.pos-preset == 3 ? root.container-h * 0.04
+     : root.pos-preset == 4 || root.pos-preset == 5 || root.pos-preset == 6 ? root.container-h - self.height - root.container-h * 0.05
+     : root.pos-preset == 0 ? (root.container-h - self.height) / 2
+     : Math.clamp(root.norm-y * root.container-h - self.height / 2, 0px, Math.max(0px, root.container-h - self.height));
+
+    width: Math.min(root.container-w * 0.96, Math.max(root.min-box-width * root.ui-scale * 1px, inner-col.preferred-width + root.pad-x * 2));
+    height: inner-col.preferred-height + root.pad-y * 2;
+    border-radius: root.radius-px * root.ui-scale * 1px;
+    background: root.bg-color.transparentize(1.0 - Math.clamp(root.bg-opacity, 0.0, 1.0));
+    border-width: root.show-border && root.bg-opacity > 0.02 ? Math.max(1px, 1.5px * root.ui-scale) : 0px;
+    border-color: root.accent-border-color.transparentize(0.25);
+
+    inner-col := VerticalLayout {
+        padding-left: root.pad-x;
+        padding-right: root.pad-x;
+        padding-top: root.pad-y;
+        padding-bottom: root.pad-y;
+        spacing: Math.max(1px, 3px * root.ui-scale);
+        alignment: center;
+
+        if root.title-text != "" : Text {
+            text: root.title-text;
+            color: root.text-color.transparentize(0.08);
+            font-size: Math.max(6px, root.font-size * 0.44 * root.ui-scale * 1px);
+            font-weight: 800;
+            horizontal-alignment: center;
+        }
+        if root.show-clock && root.clock-text != "" : Text {
+            text: root.clock-text;
+            color: root.text-color;
+            font-size: Math.max(8px, root.font-size * root.ui-scale * 1px);
+            font-weight: 800;
+            horizontal-alignment: center;
+        }
+        if root.sub-text != "" : Text {
+            text: root.sub-text;
+            color: root.text-color.transparentize(0.25);
+            font-size: Math.max(5.5px, root.font-size * 0.34 * root.ui-scale * 1px);
+            font-weight: 600;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+export component ProjectorWindow inherits Window {
+    title: "ProyecThor — Salida Público";
+    preferred-width: 1280px;
+    preferred-height: 720px;
+    background: #000000;
+    forward-focus: proj-keys;
+
+    callback close-requested();
+    callback next-slide-requested();
+    callback prev-slide-requested();
+    public function focus-window() { proj-keys.focus(); }
+
+    proj-keys := FocusScope {
+        width: 0px;
+        height: 0px;
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                root.close-requested();
+                return accept;
+            }
+            if (event.text == Key.RightArrow || event.text == Key.DownArrow || event.text == Key.PageDown) {
+                root.next-slide-requested();
+                return accept;
+            }
+            if (event.text == Key.LeftArrow || event.text == Key.UpArrow || event.text == Key.PageUp) {
+                root.prev-slide-requested();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    in property <string> live-text: "";
+    in property <string> live-ref: "";
+    in property <bool> live-is-bible: false;
+    in property <string> tile2-text: "";
+    in property <string> tile2-ref: "";
+    in property <string> alert-text: "";
+    in property <int> alert-anim-mode: 1;     // 0=Estático, 1=Letrero (Marquee), 2=Deslizar, 3=Pulso
+    in property <int> alert-position: 0;      // 0=Abajo, 1=Arriba
+    in property <int> alert-theme: 0;         // 0=Oscuro, 1=Rojo Urgente, 2=Ámbar, 3=Azul
+    in property <float> alert-ticker-pos: 0.0; // 0.0..1.0 driven at 30fps for smooth marquee
+    in property <float> alert-pulse-alpha: 1.0;
+    in property <bool> alert-visible: true;
+    in property <bool> show-custom-overlay: false;
+    in property <bool> ov-show-clock: false;
+    in property <string> ov-clock-text: "";
+    in property <string> ov-title: "";
+    in property <string> ov-sub: "";
+    in property <color> ov-text-color: #ffffff;
+    in property <color> ov-bg-color: #09090b;
+    in property <float> ov-bg-opacity: 0.82;
+    in property <bool> ov-show-border: true;
+    in property <color> ov-border-color: #38bdf8;
+    in property <float> ov-font-size: 42.0;
+    in property <float> ov-radius: 12.0;
+    in property <float> ov-box-padding: 16.0;
+    in property <float> ov-min-width: 0.0;
+    in property <int> ov-pos-preset: 3;
+    in property <float> ov-pos-x: 0.85;
+    in property <float> ov-pos-y: 0.10;
+
+    in property <image> bg-image;
+    in property <bool> has-bg-image: false;
+    in property <color> bg-solid-color: #000000;
+    in property <image> overlay-image;
+    in property <bool> has-overlay-image: false;
+
+    // Typography & Text Effects
+    in property <float> text-size: 60.0;
+    in property <int> text-fit-mode: 0; // 0=Normal, 1=Auto-Achicar, 2=Auto-Cortar
+    in property <int> text-align: 1;
+    in property <int> text-valign: 1;
+    in property <color> text-color: #ffffff;
+    in property <string> font-family-name: "";
+    in property <int> font-weight-val: 700;
+    in property <bool> text-shadow: true;
+    in property <bool> text-outline: false;
+    in property <bool> text-glow: false;
+    in property <bool> text-neon: false;
+    in property <bool> text-3d: false;
+    in property <bool> text-underline: false;
+    in property <color> glow-color: #38bdf8;
+    in property <bool> text-box-bg: false;
+    in property <float> text-margin-h: 64.0;
+    in property <float> lyrics-pos-x: 0.5;   // 0.0 .. 1.0
+    in property <float> lyrics-pos-y: 0.5;   // 0.0 .. 1.0
+    in property <float> lyrics-width: 0.90;  // 0.15 .. 1.0 (box width independent of font-size)
+    in property <float> lyrics-height: 0.55; // 0.08 .. 1.0 (box height independent of font-size)
+
+    // Independent Index / Bible Reference Box (100% separate from Lyrics — Bible ONLY)
+    in property <bool> index-box-enabled: true;
+    in property <float> index-pos-x: 0.5;
+    in property <float> index-pos-y: 0.86;
+    in property <float> index-width: 0.50;
+    in property <float> index-height: 0.14;
+    in property <float> index-size: 30.0;
+    in property <int> index-align: 1;
+    in property <color> index-color: #fbbf24;
+    in property <string> index-font-family-name: "";
+    in property <int> index-font-weight-val: 700;
+    in property <bool> index-shadow: true;
+    in property <bool> index-outline: false;
+    in property <bool> index-glow: false;
+    in property <bool> index-box-bg: true;
+
+    // Shaders & Scaling overlay (applies live to Videos, Images & Solid Colors!)
+    in property <bool> vignette-enabled: false;
+    in property <int> bg-scale-mode: 0;      // 0=Cover (Recortar), 1=Fill (Estirar), 2=Contain (Original)
+    in property <int> shader-preset: 0;      // 0=Normal, 1=Cálido, 2=Cine, 3=Noir, 4=Sepia, 5=Contraste
+    in property <float> shader-brightness: 0.0; // -50..50
+    in property <bool> bg-is-static-image: false;
+
+    // Transitions
+    in property <int> transition-type: 1;      // 0=None, 1=Fade, 2=SlideLeft, 3=SlideUp, 4=SlideRight
+    in property <duration> transition-dur: 350ms;
+    in property <bool> transition-visible: true;
+
+    // Tiles (Split Screen)
+    in property <bool> tiles-enabled: false;
+    in property <int> tiles-layout: 0;         // 0=SplitVertical (2 cols), 1=SplitHorizontal (2 rows)
+    in property <bool> tiles-show-divider: true;
+
+    // Layer 0: Solid Background Color + Video / Image
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: 100%;
+        background: root.bg-solid-color;
+    }
+
+    if root.has-bg-image : Image {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: 100%;
+        source: root.bg-image;
+        image-fit: root.bg-scale-mode == 1 ? fill : (root.bg-scale-mode == 2 ? contain : cover);
+    }
+
+    // Live Shader Color/Brightness pass for Static Images (videos already run full lavfi eq/colorbalance in libmpv!)
+    if root.bg-is-static-image && root.shader-preset != 0 : Rectangle {
+        background: root.shader-preset == 1 ? #f9731628
+                  : root.shader-preset == 2 ? #0284c72b
+                  : root.shader-preset == 3 ? #09090b78
+                  : root.shader-preset == 4 ? #92400e44
+                  : #00000038;
+    }
+    if root.bg-is-static-image && root.shader-brightness < -1.0 : Rectangle {
+        background: #000000;
+        opacity: Math.clamp(-root.shader-brightness / 65.0, 0.0, 0.78);
+    }
+    if root.bg-is-static-image && root.shader-brightness > 1.0 : Rectangle {
+        background: #ffffff;
+        opacity: Math.clamp(root.shader-brightness / 95.0, 0.0, 0.55);
+    }
+
+    // Optional Vignette Shader effect (NO automatic background darkening when text is shown!)
+    if root.vignette-enabled : Rectangle {
+        background: @radial-gradient(circle, #00000000 45%, #000000b8 100%);
+    }
+
+    // Layer 1: Optional PNG Overlay
+    if root.has-overlay-image : Image {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: 100%;
+        source: root.overlay-image;
+        image-fit: contain;
+    }
+
+    // Layer 2: Live Text (Single or Split Tiles) with Transition Animation
+    Rectangle {
+        opacity: root.transition-visible ? 1.0 : (root.transition-type == 0 ? 1.0 : 0.0);
+        x: root.transition-visible ? 0px : (root.transition-type == 2 ? 80px : (root.transition-type == 4 ? -80px : 0px));
+        y: root.transition-visible ? 0px : (root.transition-type == 3 ? 54px : 0px);
+
+        animate opacity { duration: root.transition-dur; easing: ease-out; }
+        animate x       { duration: root.transition-dur; easing: ease-out; }
+        animate y       { duration: root.transition-dur; easing: ease-out; }
+
+        // Standard Single Screen Mode (bounded text box — width & height independent of font size!)
+        if !root.tiles-enabled : Rectangle {
+            if root.live-text != "" : StyledTextBlock {
+                width: Math.clamp(root.lyrics-width, 0.15, 1.0) * parent.width;
+                height: Math.clamp(root.lyrics-height, 0.08, 1.0) * parent.height;
+                x: Math.clamp(root.lyrics-pos-x * parent.width - self.width / 2, 0px, Math.max(0px, parent.width - self.width));
+                y: Math.clamp(root.lyrics-pos-y * parent.height - self.height / 2, 0px, Math.max(0px, parent.height - self.height));
+                text-body: root.live-text;
+                text-size: root.text-size;
+                text-fit-mode: root.text-fit-mode;
+                fit-box-height: Math.clamp(root.lyrics-height, 0.08, 1.0) * parent.height;
+                text-align: root.text-align;
+                text-valign: root.text-valign;
+                text-color: root.text-color;
+                font-family-name: root.font-family-name;
+                font-weight-val: root.font-weight-val;
+                text-shadow: root.text-shadow;
+                text-outline: root.text-outline;
+                text-glow: root.text-glow;
+                text-neon: root.text-neon;
+                text-3d: root.text-3d;
+                text-underline: root.text-underline;
+                glow-color: root.glow-color;
+                text-box-bg: root.text-box-bg;
+            }
+
+            // Independent Bible Index Box (ONLY shown when enabled AND projecting Bible — own bounded box!)
+            if root.index-box-enabled && root.live-is-bible && root.live-ref != "" : StyledTextBlock {
+                width: Math.clamp(root.index-width, 0.12, 1.0) * parent.width;
+                height: Math.clamp(root.index-height, 0.06, 0.60) * parent.height;
+                x: Math.clamp(root.index-pos-x * parent.width - self.width / 2, 0px, Math.max(0px, parent.width - self.width));
+                y: Math.clamp(root.index-pos-y * parent.height - self.height / 2, 0px, Math.max(0px, parent.height - self.height));
+                text-body: root.live-ref;
+                text-size: root.index-size;
+                text-align: root.index-align;
+                text-valign: 1;
+                text-color: root.index-color;
+                font-family-name: root.index-font-family-name;
+                font-weight-val: root.index-font-weight-val;
+                text-shadow: root.index-shadow;
+                text-outline: root.index-outline;
+                text-glow: root.index-glow;
+                glow-color: root.index-color;
+                text-box-bg: root.index-box-bg;
+                box-padding: 10px;
+            }
+        }
+
+        // Tiles Split Vertical (2 Columns)
+        if root.tiles-enabled && root.tiles-layout == 0 : HorizontalLayout {
+            padding: 36px;
+            spacing: 20px;
+
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                if root.live-text != "" : StyledTextBlock {
+                    text-body: root.live-text;
+                    text-size: root.text-size * 0.78;
+                    text-align: root.text-align;
+                    text-color: root.text-color;
+                    font-family-name: root.font-family-name;
+                    font-weight-val: root.font-weight-val;
+                    text-shadow: root.text-shadow;
+                    text-outline: root.text-outline;
+                    text-glow: root.text-glow;
+                    glow-color: root.glow-color;
+                    text-box-bg: root.text-box-bg;
+                }
+            }
+
+            if root.tiles-show-divider : Rectangle {
+                width: 2px;
+                background: #ffffff35;
+            }
+
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                if root.tile2-text != "" : StyledTextBlock {
+                    text-body: root.tile2-text;
+                    text-size: root.text-size * 0.72;
+                    text-align: root.text-align;
+                    text-color: #d4d4d8;
+                    font-family-name: root.font-family-name;
+                    font-weight-val: root.font-weight-val;
+                    text-shadow: root.text-shadow;
+                    text-outline: root.text-outline;
+                    text-box-bg: root.text-box-bg;
+                }
+            }
+        }
+
+        // Tiles Split Horizontal (2 Rows)
+        if root.tiles-enabled && root.tiles-layout == 1 : VerticalLayout {
+            padding: 36px;
+            spacing: 16px;
+
+            VerticalLayout {
+                vertical-stretch: 1;
+                alignment: center;
+                if root.live-text != "" : StyledTextBlock {
+                    text-body: root.live-text;
+                    text-size: root.text-size * 0.80;
+                    text-align: root.text-align;
+                    text-color: root.text-color;
+                    font-family-name: root.font-family-name;
+                    font-weight-val: root.font-weight-val;
+                    text-shadow: root.text-shadow;
+                    text-outline: root.text-outline;
+                    text-glow: root.text-glow;
+                    glow-color: root.glow-color;
+                    text-box-bg: root.text-box-bg;
+                }
+            }
+
+            if root.tiles-show-divider : Rectangle {
+                height: 2px;
+                background: #ffffff35;
+            }
+
+            VerticalLayout {
+                vertical-stretch: 1;
+                alignment: center;
+                if root.tile2-text != "" : StyledTextBlock {
+                    text-body: root.tile2-text;
+                    text-size: root.text-size * 0.72;
+                    text-align: root.text-align;
+                    text-color: #d4d4d8;
+                    font-family-name: root.font-family-name;
+                    font-weight-val: root.font-weight-val;
+                    text-shadow: root.text-shadow;
+                    text-outline: root.text-outline;
+                    text-box-bg: root.text-box-bg;
+                }
+            }
+        }
+    }
+
+        // Layer 3: Dynamic Custom Overlay (Clock / Countdown / Count-up / Lower-Third Pleca)
+        if root.show-custom-overlay && ((root.ov-show-clock && root.ov-clock-text != "") || root.ov-title != "" || root.ov-sub != "") : CustomOverlayView {
+            container-w: parent.width;
+            container-h: parent.height;
+            ui-scale: parent.width / 1920px;
+            show-clock: root.ov-show-clock;
+            clock-text: root.ov-clock-text;
+            title-text: root.ov-title;
+            sub-text: root.ov-sub;
+            text-color: root.ov-text-color;
+            bg-color: root.ov-bg-color;
+            bg-opacity: root.ov-bg-opacity;
+            show-border: root.ov-show-border;
+            accent-border-color: root.ov-border-color;
+            font-size: root.ov-font-size;
+            radius-px: root.ov-radius;
+            box-padding: root.ov-box-padding;
+            min-box-width: root.ov-min-width;
+            pos-preset: root.ov-pos-preset;
+            norm-x: root.ov-pos-x;
+            norm-y: root.ov-pos-y;
+        }
+
+    // Layer 4: Animated Public Alert Banner (Estático | Letrero Marquee | Deslizar | Pulso)
+    if root.alert-text != "" : Rectangle {
+        x: 0px;
+        y: root.alert-position == 1
+            ? (root.alert-anim-mode == 2 && !root.alert-visible ? -72px : 0px)
+            : (root.alert-anim-mode == 2 && !root.alert-visible ? parent.height + 10px : parent.height - 68px);
+        width: 100%;
+        height: 68px;
+        background: root.alert-theme == 1 ? #7f1d1df0
+                  : root.alert-theme == 2 ? #78350ff0
+                  : root.alert-theme == 3 ? #1e3a8af0
+                  : #0d0d10f0;
+        opacity: root.alert-anim-mode == 3 ? root.alert-pulse-alpha : 1.0;
+        clip: true;
+
+        animate y { duration: 360ms; easing: ease-out; }
+
+        // Accent top/bottom hairline bar
+        Rectangle {
+            y: root.alert-position == 1 ? parent.height - 3px : 0px;
+            width: 100%;
+            height: 3px;
+            background: root.alert-theme == 1 ? #ef4444
+                      : root.alert-theme == 2 ? #f59e0b
+                      : root.alert-theme == 3 ? #38bdf8
+                      : Theme.accent-strong;
+        }
+
+        // Mode 1: Broadcast Scrolling Marquee Ticker (Letrero)
+        if root.alert-anim-mode == 1 : marquee-txt := Text {
+            x: parent.width - root.alert-ticker-pos * (parent.width + self.preferred-width);
+            y: 0px;
+            height: parent.height;
+            text: "   ★   " + root.alert-text + "   ★   ";
+            color: #ffffff;
+            font-size: 27px;
+            font-weight: 800;
+            vertical-alignment: center;
+        }
+
+        // Modes 0 (Estático), 2 (Deslizar), 3 (Pulso)
+        if root.alert-anim-mode != 1 : Text {
+            x: 24px;
+            y: 0px;
+            width: parent.width - 48px;
+            height: parent.height;
+            text: root.alert-text;
+            color: #ffffff;
+            font-size: 26px;
+            font-weight: 800;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+}
+
+export component StageWindow inherits Window {
+    title: "ProyecThor — Stage Display";
+    preferred-width: 1120px;
+    preferred-height: 640px;
+    background: #08080a;
+
+    in property <string> live-text: "";
+    in property <string> live-ref: "";
+    in property <string> next-text: "";
+    in property <string> clock-text: "00:00:00";
+    in property <string> timer-text: "";
+    in property <string> stage-alert: "";
+    in property <float> text-size: 40.0;
+    in property <int> text-align: 1;
+    in property <color> text-color: #ffffff;
+    in property <string> font-family-name: "";
+    in property <int> font-weight-val: 700;
+
+    VerticalLayout {
+        padding: 26px;
+        spacing: 18px;
+
+        HorizontalLayout {
+            alignment: space-between;
+            Text {
+                text: "STAGE DISPLAY";
+                color: Theme.stage-amber;
+                font-size: 15px;
+                font-weight: 800;
+                vertical-alignment: center;
+            }
+            Text {
+                text: root.live-ref;
+                color: Theme.accent;
+                font-size: 20px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+            HorizontalLayout {
+                spacing: 18px;
+                if root.timer-text != "" : Text {
+                    text: root.timer-text;
+                    color: Theme.stage-amber;
+                    font-size: 32px;
+                    font-weight: 800;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: root.clock-text;
+                    color: #ffffff;
+                    font-size: 32px;
+                    font-weight: 800;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        if root.stage-alert != "" : Rectangle {
+            height: 56px;
+            border-radius: 12px;
+            background: Theme.danger-soft;
+            border-width: 2px;
+            border-color: Theme.danger;
+
+            Text {
+                text: "ALERTA: " + root.stage-alert;
+                color: #fecaca;
+                font-size: 22px;
+                font-weight: 800;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle {
+            vertical-stretch: 2;
+            border-radius: 16px;
+            background: Theme.bg-surface-0;
+            border-width: 2px;
+            border-color: Theme.live-green.transparentize(0.35);
+            clip: true;
+
+            VerticalLayout {
+                padding: 26px;
+                alignment: center;
+                Text {
+                    text: root.live-text == "" ? "(En espera)" : root.live-text;
+                    color: root.live-text == "" ? Theme.text-muted : root.text-color;
+                    font-family: root.font-family-name;
+                    font-size: root.text-size * 1px;
+                    font-weight: root.font-weight-val;
+                    horizontal-alignment: root.text-align == 0 ? left : (root.text-align == 2 ? right : center);
+                    wrap: word-wrap;
+                }
+            }
+        }
+
+        Rectangle {
+            vertical-stretch: 1;
+            border-radius: 14px;
+            background: Theme.bg-surface-1;
+            border-width: 1px;
+            border-color: Theme.border-subtle;
+
+            VerticalLayout {
+                padding: 18px;
+                spacing: 6px;
+                Text {
+                    text: "SIGUIENTE";
+                    color: Theme.text-muted;
+                    font-size: 12.5px;
+                    font-weight: 700;
+                }
+                Text {
+                    text: root.next-text == "" ? "—" : root.next-text;
+                    color: Theme.text-secondary;
+                    font-size: 23px;
+                    font-weight: 500;
+                    wrap: word-wrap;
+                    overflow: elide;
+                    vertical-stretch: 1;
+                }
+            }
+        }
+    }
+}

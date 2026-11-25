@@ -100,18 +100,54 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
                 if (ImGui::Combo("Monitor de Proyeccion##mon", &sel,
                                  names.data(), static_cast<int>(names.size()))) {
                     p.targetMonitor = sel;
+                    Core::PresentationCore::Get().SetTargetMonitor(sel);
+#ifndef _WIN32
+                    if (Core::PresentationCore::Get().IsProjecting()) {
+                        Core::PresentationCore::Get().DestroyProjectorWindow();
+                        Core::PresentationCore::Get().CreateProjectorWindow(sel);
+                    }
+#endif
                     changed = true;
                 }
                 HelpTooltip("Elige en que pantalla se mostrara la proyeccion.\n"
                             "Se recomienda usar la pantalla secundaria (indice 1 o superior).");
 
-                // Monitores ADICIONALES (opcional) -- todos muestran
-                // exactamente lo mismo que el monitor principal de arriba.
-                // Pensado para quien maneja varias pantallas de salida al
-                // publico a la vez (ver PresentationState::extraTargetMonitors).
+                ImGui::Spacing();
+                ImGui::TextUnformatted("Modo de Ventana de Proyección");
+                float wDisp = ImGui::GetContentRegionAvail().x;
+                float btnWDisp = (wDisp - 6.0f) * 0.5f;
+
+                if (QualityModeButton("dispFull", "Pantalla Completa", p.windowFullscreen, btnWDisp)) {
+                    p.windowFullscreen = true;
+                    Core::PresentationCore::Get().SetWindowFullscreen(true);
+#ifndef _WIN32
+                    if (Core::PresentationCore::Get().IsProjecting()) {
+                        Core::PresentationCore::Get().DestroyProjectorWindow();
+                        Core::PresentationCore::Get().CreateProjectorWindow(p.targetMonitor);
+                    }
+#endif
+                    changed = true;
+                }
+                ImGui::SameLine(0.0f, 6.0f);
+                if (QualityModeButton("dispWin", "Modo Ventana (Flotante)", !p.windowFullscreen, btnWDisp)) {
+                    p.windowFullscreen = false;
+                    Core::PresentationCore::Get().SetWindowFullscreen(false);
+#ifndef _WIN32
+                    if (Core::PresentationCore::Get().IsProjecting()) {
+                        Core::PresentationCore::Get().DestroyProjectorWindow();
+                        Core::PresentationCore::Get().CreateProjectorWindow(p.targetMonitor);
+                    }
+#endif
+                    changed = true;
+                }
+                HelpTooltip("Pantalla Completa (Recomendado): Cubre por completo el monitor seleccionado sin bordes ni barra de título.\n\n"
+                            "Modo Ventana: Abre la proyección en una ventana flotante redimensionable con barra de título, ideal para probar en un solo monitor o capturar la ventana en OBS.");
+
+                // Monitores ADICIONALES (Multi-salida)
                 if (monitorCount > 1) {
                     ImGui::Spacing();
-                    ImGui::TextDisabled("Enviar tambien a estas pantallas (opcional):");
+                    ImGui::TextDisabled("Multi-salida — Proyectar a varias pantallas a la vez:");
+
                     static const float accent[4] = { 0.35f, 0.55f, 0.95f, 1.0f };
                     static const float track[4]  = { 1.0f, 1.0f, 1.0f, 0.10f };
 
@@ -137,50 +173,6 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
                         ImGui::SameLine();
                         ImGui::AlignTextToFramePadding();
                         ImGui::Text("%s", names[i]);
-                    }
-                }
-                // Modo de Visualización (Pantalla Completa vs Ventana)
-                ImGui::Spacing();
-                ImGui::TextDisabled("Modo de Visualización:");
-                bool isFs = p.windowFullscreen;
-                if (ImGui::RadioButton("Pantalla Completa (Fullscreen)##projFs", isFs)) {
-                    if (!p.windowFullscreen) {
-                        p.windowFullscreen = true;
-                        changed = true;
-                    }
-                }
-                ImGui::SameLine(0.0f, 20.0f);
-                if (ImGui::RadioButton("Modo Ventana (Windowed)##projWin", !isFs)) {
-                    if (p.windowFullscreen) {
-                        p.windowFullscreen = false;
-                        changed = true;
-                    }
-                }
-
-                if (!p.windowFullscreen || !p.windowAutoDetectRes) {
-                    ImGui::Spacing();
-                    ImGui::TextDisabled("Resolución de la Ventana:");
-                    ImGui::SetNextItemWidth(130.0f);
-                    if (ImGui::InputInt("Ancho##pWinW", &p.windowWidth, 10, 100)) {
-                        p.windowWidth = std::clamp(p.windowWidth, 320, 7680);
-                        changed = true;
-                    }
-                    ImGui::SameLine(0.0f, 15.0f);
-                    ImGui::SetNextItemWidth(130.0f);
-                    if (ImGui::InputInt("Alto##pWinH", &p.windowHeight, 10, 100)) {
-                        p.windowHeight = std::clamp(p.windowHeight, 240, 4320);
-                        changed = true;
-                    }
-                    ImGui::SameLine(0.0f, 10.0f);
-                    if (ImGui::Button("16:9##pRatio169")) {
-                        p.windowHeight = (p.windowWidth * 9) / 16;
-                        changed = true;
-                    }
-                } else if (p.windowFullscreen) {
-                    bool autoRes = p.windowAutoDetectRes;
-                    if (ImGui::Checkbox("Usar resolución nativa del monitor##pAutoRes", &autoRes)) {
-                        p.windowAutoDetectRes = autoRes;
-                        changed = true;
                     }
                 }
             } else {
@@ -285,46 +277,143 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
             }
 
             ImGui::Spacing();
-            ImGui::SeparatorText("Motor de Renderizado (Videos)");
+            ImGui::SeparatorText("Motor de Vídeo (VLC)");
+            ImGui::TextDisabled("Ajusta la salida gráfica, decodificación por hardware y desentrelazado de VLC:");
+
+            // ── Salida de Vídeo / Método de Muestreo (VOut) ───────────────
+            ImGui::Spacing();
+            ImGui::TextUnformatted("Salida de Vídeo / Método de Muestreo (VOut)");
 
 #ifdef _WIN32
-            int engine = Core::PresentationCore::Get().GetVideoRenderEngine();
-            float w2    = ImGui::GetContentRegionAvail().x;
-            float btnW2 = (w2 - 6.0f) * 0.5f;
-
-            if (QualityModeButton("engOpenGL", "OpenGL", engine == 0, btnW2)) {
-                p.videoRenderEngine = 0;
-                Core::PresentationCore::Get().SetVideoRenderEngine(0);
-                changed = true;
-            }
-            ImGui::SameLine(0.0f, 6.0f);
-            if (QualityModeButton("engLibvlc", "libvlc", engine == 1, btnW2)) {
-                p.videoRenderEngine = 1;
-                Core::PresentationCore::Get().SetVideoRenderEngine(1);
-                changed = true;
-            }
-            HelpTooltip("Solo afecta a VIDEOS reales (Biblioteca > Videos / cola del Monitor "
-                        "con audio) -- los Fondos (loops decorativos, imagenes, color solido) "
-                        "siempre se muestran por OpenGL, con overlays y texto en vivo encima, "
-                        "sin importar esta opcion.\n\n"
-                        "OpenGL (default): el video se compone junto con overlays/texto/"
-                        "anuncios en la misma salida.\n"
-                        "libvlc: el video se muestra en una ventana nativa aparte, con el "
-                        "renderer acelerado propio de VLC. Cambiar este ajuste requiere "
-                        "reiniciar Audiencia para que tenga efecto.");
-
-            if (engine == 1) {
-                ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f),
-                    "Con libvlc: mientras un video este activo, sin overlays/texto encima "
-                    "y sin transicion animada entre clips (corte seco).");
-            }
+            struct VOutOpt {
+                const char* id;
+                const char* label;
+                const char* desc;
+            };
+            static const VOutOpt kVOutOpts[] = {
+                { "auto",       "Automático (Recomendado)",                "VLC selecciona el motor de salida de vídeo óptimo para Windows." },
+                { "d3d11",      "Direct3D 11 (D3D11)",                     "Salida nativa Direct3D 11 (recomendado para Windows 10/11)." },
+                { "direct3d9",  "Direct3D 9",                              "Salida Direct3D 9 legacy (para GPUs más antiguas)." },
+                { "gl",         "OpenGL para Windows",                     "Salida por OpenGL genérico." },
+                { "wingdi",     "GDI de Windows (CPU / compatibilidad)",   "Salida por GDI sin aceleración 3D (para casos extremos de incompatibilidad)." },
+                { "dummy",      "Dummy (Sin salida gráfica)",              "Salida ficticia para pruebas o sólo audio." }
+            };
 #else
-            ImGui::TextColored(ImVec4(0.4f, 0.85f, 0.55f, 1.0f), "OpenGL (Composición GPU activa)");
-            ImGui::TextDisabled("En Linux el renderizado se realiza mediante OpenGL con soporte de aceleración por hardware,\npermitiendo capas, overlays, textos en vivo y transiciones fluidas sin ventanas externas.");
+            struct VOutOpt {
+                const char* id;
+                const char* label;
+                const char* desc;
+            };
+            static const VOutOpt kVOutOpts[] = {
+                { "auto",       "Automático (Recomendado)",                "VLC selecciona la salida óptima según el servidor gráfico y los controladores." },
+                { "xcb_xv",     "XVideo (XCB / xv)",                       "Aceleración XVideo por hardware en X11. Muy estable, evita parpadeos y líneas en Linux." },
+                { "gl",         "OpenGL (GLX / EGL)",                      "Salida gráfica acelerada por OpenGL nativo." },
+                { "wl_shm",     "Wayland compartida (wl_shm)",             "Salida en memoria compartida para servidores Wayland." },
+                { "xcb_x11",    "X11 (XCB / x11)",                         "Salida estándar X11 básica (compatibilidad universal en X11 sin XVideo)." },
+                { "vdpau",      "VDPAU (NVIDIA)",                          "Salida de vídeo directa para controladores privativos de NVIDIA." },
+                { "fb",         "Linux Framebuffer",                       "Salida directa a Framebuffer de Linux." },
+                { "caca",       "Arte ASCII en color (libcaca)",           "Salida en modo texto ASCII." },
+                { "dummy",      "Dummy (Sin salida gráfica)",              "Salida ficticia para pruebas o sólo audio." }
+            };
 #endif
 
+            int voutIdx = 0;
+            for (int i = 0; i < (int)(sizeof(kVOutOpts) / sizeof(kVOutOpts[0])); ++i) {
+                if (p.vlcVideoOutput == kVOutOpts[i].id) {
+                    voutIdx = i;
+                    break;
+                }
+            }
+
+            ImGui::SetNextItemWidth(300.0f);
+            if (ImGui::BeginCombo("##vlcVout", kVOutOpts[voutIdx].label)) {
+                for (int i = 0; i < (int)(sizeof(kVOutOpts) / sizeof(kVOutOpts[0])); ++i) {
+                    bool isSelected = (voutIdx == i);
+                    if (ImGui::Selectable(kVOutOpts[i].label, isSelected)) {
+                        p.vlcVideoOutput = kVOutOpts[i].id;
+                        Core::PresentationCore::Get().SetVLCVideoOutput(p.vlcVideoOutput);
+                        changed = true;
+                    }
+                    if (ImGui::IsItemHovered() && kVOutOpts[i].desc) {
+                        ImGui::SetTooltip("%s", kVOutOpts[i].desc);
+                    }
+                    if (isSelected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::SameLine();
+            HelpTooltip("Permite cambiar el método de salida de vídeo (VOut) de VLC.\n\n"
+#ifdef _WIN32
+                        "• Automático: Selección estándar de VLC.\n"
+                        "• Direct3D 11: Recomendado para Windows moderno (evita desgarro y parpadeo).\n"
+                        "• Direct3D 9: Compatible con PCs antiguas.\n"
+                        "• OpenGL: Alternativa acelerada para Windows.\n"
+                        "• GDI: Compatibilidad máxima sin 3D.\n\n"
+#else
+                        "• Automático: Selección estándar de VLC según el entorno.\n"
+                        "• XVideo (XCB): Recomendado si la pantalla parpadea en negro o hay líneas en Linux.\n"
+                        "• OpenGL: Renderizado acelerado por OpenGL nativo.\n"
+                        "• Wayland: Para sesiones nativas de Wayland.\n"
+                        "• X11 (XCB): Salida estándar X11 sin extensiones.\n\n"
+#endif
+                        "Nota: Se aplica al reproducir el siguiente vídeo o cambiar de fondo.");
+
+            // ── Filtro de Desentrelazado ──────────────────────────────────
             ImGui::Spacing();
-            ImGui::TextUnformatted("Decodificador de Video / Aceleración de Hardware (libvlc)");
+            ImGui::TextUnformatted("Filtro de Desentrelazado (libmpv)");
+
+            struct DeinterlaceOpt {
+                const char* id;
+                const char* label;
+                const char* desc;
+            };
+            static const DeinterlaceOpt kDeintOpts[] = {
+                { "discard",  "Desactivado (Descartar)",  "No aplica desentrelazado (óptimo para vídeos progresivos modernos)." },
+                { "auto",     "Automático",              "VLC detecta si el contenido es entrelazado y activa el filtro." },
+                { "yadif",    "Yadif (Recomendado)",     "Filtro adaptativo de alto rendimiento y excelente calidad visual." },
+                { "yadif2x",  "Yadif (2x)",              "Yadif a doble tasa de cuadros (mayor fluidez en vídeo 50i/60i)." },
+                { "blend",    "Mezcla (Blend)",          "Combina campos consecutivos (suave, ligero desenfoque en movimiento)." },
+                { "linear",   "Lineal",                  "Interpolación lineal simple entre líneas." },
+                { "bob",      "Bob",                     "Duplica líneas del campo actual a 2x framerate." }
+            };
+
+            int deintIdx = 0;
+            for (int i = 0; i < (int)(sizeof(kDeintOpts) / sizeof(kDeintOpts[0])); ++i) {
+                if (p.vlcDeinterlace == kDeintOpts[i].id) {
+                    deintIdx = i;
+                    break;
+                }
+            }
+
+            ImGui::SetNextItemWidth(300.0f);
+            if (ImGui::BeginCombo("##vlcDeint", kDeintOpts[deintIdx].label)) {
+                for (int i = 0; i < (int)(sizeof(kDeintOpts) / sizeof(kDeintOpts[0])); ++i) {
+                    bool isSelected = (deintIdx == i);
+                    if (ImGui::Selectable(kDeintOpts[i].label, isSelected)) {
+                        p.vlcDeinterlace = kDeintOpts[i].id;
+                        Core::PresentationCore::Get().SetVLCDeinterlace(p.vlcDeinterlace);
+                        changed = true;
+                    }
+                    if (ImGui::IsItemHovered() && kDeintOpts[i].desc) {
+                        ImGui::SetTooltip("%s", kDeintOpts[i].desc);
+                    }
+                    if (isSelected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::SameLine();
+            HelpTooltip("Corrige las líneas horizontales (\"peinado\" o artefactos de entrelazado) en vídeos grabados en formato entrelazado (cámaras de TV, grabaciones antiguas, 1080i).\n\n"
+                        "• Desactivado: Para vídeos progresivos modernos (720p, 1080p, 4K).\n"
+                        "• Yadif: Algoritmo adaptativo inteligente (calidad excelente sin consumo excesivo).\n"
+                        "• Mezcla / Lineal / Bob: Filtros alternativos clásicos.\n\n"
+                        "Nota: Se aplica inmediatamente en reproducción activa y futuros vídeos.");
+
+            ImGui::Spacing();
+            ImGui::TextUnformatted("Decodificador de Video / Aceleración de Hardware (libmpv)");
 
 #ifdef _WIN32
             struct HwDecoderOpt {
@@ -367,6 +456,7 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
                     if (ImGui::Selectable(kHwOpts[i].label, isSelected)) {
                         p.vlcHardwareDecoder = kHwOpts[i].id;
                         Core::PresentationCore::Get().SetVLCHardwareDecoder(p.vlcHardwareDecoder);
+                        Core::PresentationCore::Get().ReloadVLCPlayers();
                         changed = true;
                     }
                     if (ImGui::IsItemHovered() && kHwOpts[i].desc) {
@@ -393,54 +483,13 @@ static bool ModernToggle(const char* id, bool* value, const float accent[4], con
                         "Nota: Se aplica al reproducir el siguiente vídeo o cambiar de fondo.");
 
             ImGui::Spacing();
-            ImGui::TextUnformatted("Desentrelazado de Video (libvlc)");
-
-            struct DeintOpt {
-                const char* id;
-                const char* label;
-                const char* desc;
-            };
-            static const DeintOpt kDeintOpts[] = {
-                { "disabled", "Desactivado (Progresivo)", "No se aplica desentrelazado. Ideal para vídeos progresivos modernos." },
-                { "yadif",    "Yadif (Recomendado)",     "Desentrelazado adaptativo por movimiento de alta calidad (1x)." },
-                { "yadif2x",  "Yadif 2x",                "Yadif a doble frecuencia de cuadros para movimientos ultra suaves." },
-                { "blend",    "Mezclar (Blend)",         "Combina campos consecutivos (suave pero puede producir efecto fantasma)." },
-                { "bob",      "Bob",                     "Duplica cada campo interpolando las líneas ausentes." },
-                { "linear",   "Lineal",                  "Interpolación lineal simple entre líneas." },
-                { "discard",  "Descartar",               "Descarta la mitad de las líneas entrelazadas (menor resolución vertical)." }
-            };
-
-            int deintIdx = 0;
-            for (int i = 0; i < (int)(sizeof(kDeintOpts) / sizeof(kDeintOpts[0])); ++i) {
-                if (p.vlcDeinterlace == kDeintOpts[i].id) {
-                    deintIdx = i;
-                    break;
-                }
-            }
-
-            ImGui::SetNextItemWidth(300.0f);
-            if (ImGui::BeginCombo("##vlcDeint", kDeintOpts[deintIdx].label)) {
-                for (int i = 0; i < (int)(sizeof(kDeintOpts) / sizeof(kDeintOpts[0])); ++i) {
-                    bool isSelected = (deintIdx == i);
-                    if (ImGui::Selectable(kDeintOpts[i].label, isSelected)) {
-                        p.vlcDeinterlace = kDeintOpts[i].id;
-                        Core::PresentationCore::Get().SetVLCDeinterlace(p.vlcDeinterlace);
-                        changed = true;
-                    }
-                    if (ImGui::IsItemHovered() && kDeintOpts[i].desc) {
-                        ImGui::SetTooltip("%s", kDeintOpts[i].desc);
-                    }
-                    if (isSelected) {
-                        ImGui::SetItemDefaultFocus();
-                    }
-                }
-                ImGui::EndCombo();
+            if (ImGui::Checkbox("Forzar ventana nativa MPV también en Fondos de bucle", &p.vlcNativeForFondos)) {
+                Core::PresentationCore::Get().SetVLCNativeForFondos(p.vlcNativeForFondos);
+                changed = true;
             }
             ImGui::SameLine();
-            HelpTooltip("Elimina las líneas horizontales o efecto 'peine' en vídeos grabados en formato entrelazado (1080i, cámaras antiguas, emisiones de TV, DVDs).\n\n"
-                        "• Desactivado: Para vídeos progresivos normales (1080p, 720p, etc.).\n"
-                        "• Yadif: Algoritmo inteligente que detecta movimiento y preserva nitidez.\n"
-                        "• Yadif 2x: Genera 50/60 fps fluidos duplicando la cadencia de campos.");
+            HelpTooltip("Por defecto, los Fondos de bucle se renderizan a través del compositor gráfico para permitir letras de canciones y versículos bíblicos superpuestos encima.\n\n"
+                        "Si activas esta opción, los Fondos se reproducirán también directamente en la ventana nativa acelerada de VLC con la salida elegida (ej. XVideo), eliminando cualquier procesamiento gráfico intermedio. Nota: mientras esta opción esté activa, las letras y textos en vivo no se superpondrán sobre el fondo de vídeo.");
 
             ImGui::Spacing();
 

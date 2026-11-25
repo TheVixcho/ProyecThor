@@ -332,6 +332,8 @@ bool BibleQuickNav::Update(const BibleData& bible) {
         return false;
     }
 
+    ImGui::SetNextFrameWantCaptureKeyboard(true);
+
     bool justOpenedThisFrame = (ImGui::GetFrameCount() == m_OpenedFrame);
 
     bool clickOutside = false;
@@ -342,7 +344,7 @@ bool BibleQuickNav::Update(const BibleData& bible) {
         if (!insideCard) clickOutside = true;
     }
 
-    if ((hotkeyPressed && !justOpenedThisFrame) || clickOutside) {
+    if ((hotkeyPressed && !justOpenedThisFrame) || clickOutside || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
         Close();
         return false;
     }
@@ -364,20 +366,36 @@ bool BibleQuickNav::Update(const BibleData& bible) {
         }
     }
 
-    for (int i = 0; i < io.InputQueueCharacters.Size; i++) {
-        ImWchar wc = io.InputQueueCharacters[i];
-        if (wc < 32 || wc >= 128) continue;
-        char c = (char)wc;
+    if (!io.KeyCtrl && !io.KeyAlt) {
+        for (int i = 0; i < io.InputQueueCharacters.Size; i++) {
+            ImWchar wc = io.InputQueueCharacters[i];
+            char folded = 0;
+            if (wc >= 32 && wc < 128) {
+                folded = (char)wc;
+            } else {
+                switch (wc) {
+                    case 0x00E1: case 0x00C1: folded = 'a'; break;
+                    case 0x00E9: case 0x00C9: folded = 'e'; break;
+                    case 0x00ED: case 0x00CD: folded = 'i'; break;
+                    case 0x00F3: case 0x00D3: folded = 'o'; break;
+                    case 0x00FA: case 0x00DA:
+                    case 0x00FC: case 0x00DC: folded = 'u'; break;
+                    case 0x00F1: case 0x00D1: folded = 'n'; break;
+                    default: break;
+                }
+            }
+            if (!folded) continue;
 
-        if (m_Step == QuickNavStep::Book) {
-            if (std::isalnum((unsigned char)c) || c == ' ') {
-                m_BookBuffer += c;
-                bookBufferChanged = true;
+            if (m_Step == QuickNavStep::Book) {
+                if (std::isalnum((unsigned char)folded) || folded == ' ') {
+                    m_BookBuffer += folded;
+                    bookBufferChanged = true;
+                    m_StatusMessage.clear();
+                }
+            } else if (std::isdigit((unsigned char)folded)) {
+                activeBuffer->push_back(folded);
                 m_StatusMessage.clear();
             }
-        } else if (std::isdigit((unsigned char)c)) {
-            activeBuffer->push_back(c);
-            m_StatusMessage.clear();
         }
     }
 

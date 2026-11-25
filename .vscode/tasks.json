@@ -1,0 +1,123 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Compilar Slint (Linux)",
+            "type": "shell",
+            "command": "cmake -B build-linux -G Ninja && cmake --build build-linux --target ProyecThorSlint",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$gcc"],
+            "detail": "Compila la nueva UI Slint + libmpv nativa en build-linux/ProyecThorSlint"
+        },
+        {
+            "label": "Compilar Slint (Windows)",
+            "type": "shell",
+            "command": "cmake -B build-win -G Ninja && cmake --build build-win --target ProyecThorSlint",
+            "group": {
+                "kind": "build"
+            },
+            "problemMatcher": ["$msCompile", "$gcc"],
+            "detail": "Compila la nueva UI Slint + libmpv para Windows en build-win/ProyecThorSlint.exe"
+        },
+        {
+            "label": "Compilar Windows",
+            "type": "process",
+            "command": "cmd.exe",
+            "args": [
+                "/d",
+                "/c",
+                "${workspaceFolder}\\scripts\\build-win.bat"
+            ],
+            "linux": {
+                "command": "bash",
+                "args": ["./scripts/build.sh", "windows"]
+            },
+            "osx": {
+                "command": "bash",
+                "args": ["./scripts/build.sh", "windows"]
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$msCompile", "$gcc"],
+            "detail": "Compila el ejecutable para Windows en build-win/ usando Ninja + MSVC (el más rápido en Windows)"
+        },
+        {
+            "label": "Compilar Linux",
+            "type": "shell",
+            "command": "bash ./scripts/build.sh linux",
+            "windows": {
+                "command": "cmd.exe",
+                "args": ["/d", "/c", "${workspaceFolder}\\scripts\\build-win.bat"]
+            },
+            "linux": {
+                "command": "bash ./scripts/build.sh linux"
+            },
+            "osx": {
+                "command": "bash ./scripts/build.sh linux"
+            },
+            "group": {
+                "kind": "build"
+            },
+            "problemMatcher": ["$gcc"],
+            "detail": "Compila el binario nativo para Linux en build-linux/"
+        },
+        {
+            "label": "Ejecutar con Wine",
+            "type": "shell",
+            "command": "bash ./scripts/build.sh windows-run",
+            "problemMatcher": [],
+            "detail": "Compila (si es necesario) y ejecuta ProyecThor.exe bajo Wine en Linux"
+        },
+        {
+            "label": "Ejecutar Linux",
+            "type": "shell",
+            "command": "bash ./scripts/build.sh linux-run",
+            "dependsOn": "Compilar Linux",
+            "problemMatcher": [],
+            "detail": "Compila (si es necesario) y ejecuta ProyecThor nativo en Linux"
+        },
+        {
+            "label": "Ejecutar Flatpak (Flathub)",
+            "type": "shell",
+            "command": "flatpak-spawn --host flatpak run io.github.thevixcho.ProyecThor",
+            "problemMatcher": [],
+            "detail": "Ejecuta la versión instalada de Flatpak bajo el sandbox de Flathub"
+        },
+        {
+            "label": "Iniciar Web",
+            "type": "process",
+            "command": "npm",
+            "args": ["run", "dev"],
+            "windows": {
+                "command": "C:\\Program Files\\nodejs\\npm.cmd",
+                "args": ["run", "dev"],
+                "options": {
+                    "env": {
+                        "PATH": "C:\\Program Files\\nodejs;${env:PATH}"
+                    }
+                }
+            },
+            "options": {
+                "cwd": "${workspaceFolder}/web"
+            },
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "vite-proyecthor",
+                "pattern": {
+                    "regexp": "^$"
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "VITE",
+                    "endsPattern": "Local:\\s+http://localhost:5174"
+                }
+            },
+            "detail": "Inicia el servidor de desarrollo Vite para la página web en web/"
+        }
+    ]
+}

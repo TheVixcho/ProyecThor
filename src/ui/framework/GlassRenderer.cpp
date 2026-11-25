@@ -188,6 +188,17 @@ void GlassRenderer::Resize(int screenWidth, int screenHeight)
     CreateBlurTargets(m_BlurW, m_BlurH);
 }
 
+void GlassRenderer::ReleaseTargets()
+{
+    if (m_SceneFBO == 0 && m_BlurFBOA == 0 && m_BlurFBOB == 0)
+        return;
+    DestroyTargets();
+    m_ScreenW = 0;
+    m_ScreenH = 0;
+    m_BlurW   = 0;
+    m_BlurH   = 0;
+}
+
 void GlassRenderer::Shutdown()
 {
     DestroyTargets();
@@ -201,7 +212,7 @@ void GlassRenderer::Shutdown()
 
 void GlassRenderer::CaptureCurrentFrame()
 {
-    if (!m_Initialized) return;
+    if (!m_Initialized || m_SceneFBO == 0) return;
 
     // Copia el backbuffer actual al SceneFBO
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
@@ -259,7 +270,7 @@ void GlassRenderer::BlurPass(GLuint srcTex, GLuint dstFBO,
 
 void GlassRenderer::Blur(float spread, int passes)
 {
-    if (!m_Initialized) return;
+    if (!m_Initialized || m_SceneFBO == 0 || m_BlurFBOA == 0 || m_BlurFBOB == 0) return;
 
     passes = std::max(1, passes);
 

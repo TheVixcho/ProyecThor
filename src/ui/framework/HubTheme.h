@@ -38,9 +38,9 @@ inline ImU32 TextFaint   = IM_COL32(255, 255, 255,  70);
 // Radios de esquina derivados de theme.windowRounding/frameRounding, para
 // que el rounding de cards/modal/botones del Hub cambie con el preset en
 // vez de estar hardcodeado (ver Sync()).
-inline float RadiusSm = 6.0f;
-inline float RadiusMd = 8.0f;
-inline float RadiusLg = 10.0f;
+inline float RadiusSm = 2.0f;
+inline float RadiusMd = 3.0f;
+inline float RadiusLg = 4.0f;
 
 // Paleta del fondo animado (grilla + particulas conectadas): dos tonos
 // derivados del acento del tema en vez de cian/verde fijos, para que el

@@ -1,4 +1,5 @@
 #include "NativeVideoOutputWindow.h"
+#include "core/PresentationCore.h"
 
 #ifdef _WIN32
 #define GLFW_EXPOSE_NATIVE_WIN32
@@ -48,7 +49,6 @@ static void PaintWindowBlack(GLFWwindow* window)
     FillRect(hdc, &rc, (HBRUSH)GetStockObject(BLACK_BRUSH));
     ReleaseDC(hwnd, hdc);
 #else
-    if (glfwGetPlatform() != GLFW_PLATFORM_X11) return;
     Display* dpy = glfwGetX11Display();
     ::Window  xwin = glfwGetX11Window(window);
     if (!dpy || !xwin) return;
@@ -67,29 +67,52 @@ void* NativeVideoOutputWindow::CreateHidden(int monitorIndex)
     int monitorCount = 0;
     GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
     if (monitorIndex < 0 || monitorIndex >= monitorCount) {
-        std::cerr << "[NativeVideoOutputWindow] Indice de monitor invalido: " << monitorIndex << "\n";
-        return nullptr;
+        monitorIndex = PresentationCore::Get().GetState().targetMonitorIndex;
+        if (monitorIndex < 0 || monitorIndex >= monitorCount) {
+            monitorIndex = (monitorCount > 1) ? 1 : 0;
+        }
     }
+    m_MonitorIndex = monitorIndex;
 
-    GLFWmonitor* target = monitors[monitorIndex];
+    GLFWmonitor* target = (monitors && monitorCount > 0) ? monitors[monitorIndex] : nullptr;
+    if (!target) return nullptr;
+
     const GLFWvidmode* vm = glfwGetVideoMode(target);
     if (!vm) return nullptr;
 
     int monX = 0, monY = 0;
     glfwGetMonitorPos(target, &monX, &monY);
 
+    bool wantFullscreen = PresentationCore::Get().GetWindowFullscreen();
+    if (!wantFullscreen) {
+        m_Width  = 1280;
+        m_Height = 720;
+        if (vm->width < m_Width || vm->height < m_Height) {
+            m_Width  = vm->width * 3 / 4;
+            m_Height = vm->height * 3 / 4;
+        }
+        m_MonX   = monX + (vm->width - m_Width) / 2;
+        m_MonY   = monY + (vm->height - m_Height) / 2;
+    } else {
+        m_MonX   = monX;
+        m_MonY   = monY;
+        m_Width  = vm->width;
+        m_Height = vm->height;
+    }
+
     if (!m_Window)
     {
         // GLFW_NO_API: sin contexto GL — VLC dibuja directo en la
         // superficie nativa via AttachNativeWindow().
         glfwWindowHint(GLFW_CLIENT_API,    GLFW_NO_API);
-        glfwWindowHint(GLFW_DECORATED,     GLFW_FALSE);
-        glfwWindowHint(GLFW_FLOATING,      GLFW_TRUE);
-        glfwWindowHint(GLFW_RESIZABLE,     GLFW_FALSE);
+        glfwWindowHint(GLFW_DECORATED,     wantFullscreen ? GLFW_FALSE : GLFW_TRUE);
+        glfwWindowHint(GLFW_FLOATING,      wantFullscreen ? GLFW_TRUE : GLFW_FALSE);
+        glfwWindowHint(GLFW_RESIZABLE,     GLFW_TRUE);
+        glfwWindowHint(GLFW_AUTO_ICONIFY,  GLFW_FALSE);
         glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_FALSE);
-        glfwWindowHint(GLFW_VISIBLE,       GLFW_FALSE);
+        glfwWindowHint(GLFW_VISIBLE,       GLFW_TRUE);
 
-        m_Window = glfwCreateWindow(vm->width, vm->height,
+        m_Window = glfwCreateWindow(m_Width, m_Height,
                                     "ProyecThor - Video (VLC)", nullptr, nullptr);
         glfwDefaultWindowHints();
 
@@ -101,18 +124,31 @@ void* NativeVideoOutputWindow::CreateHidden(int monitorIndex)
             return nullptr;
         }
 
-        // Pintar apenas se crea: nunca debe llegar a mostrarse (ni
-        // siquiera un frame) con el fondo blanco por defecto.
+        // Pintar apenas se crea: fondo negro inmediato (evita cualquier flash blanco).
         PaintWindowBlack(m_Window);
     }
+    else
+    {
+        glfwSetWindowAttrib(m_Window, GLFW_DECORATED, wantFullscreen ? GLFW_FALSE : GLFW_TRUE);
+        glfwSetWindowAttrib(m_Window, GLFW_FLOATING,  wantFullscreen ? GLFW_TRUE : GLFW_FALSE);
+        glfwSetWindowAttrib(m_Window, GLFW_RESIZABLE, GLFW_TRUE);
+    }
 
-    glfwSetWindowPos(m_Window, monX, monY);
-    glfwSetWindowSize(m_Window, vm->width, vm->height);
+    glfwSetWindowPos(m_Window, m_MonX, m_MonY);
+    glfwSetWindowSize(m_Window, m_Width, m_Height);
+
+#ifndef _WIN32
+    Display* dpy = glfwGetX11Display();
+    ::Window xwin = glfwGetX11Window(m_Window);
+    if (dpy && xwin) {
+        XMoveResizeWindow(dpy, xwin, m_MonX, m_MonY, m_Width, m_Height);
+        XFlush(dpy);
+    }
+#endif
 
 #ifdef _WIN32
     return static_cast<void*>(glfwGetWin32Window(m_Window));
 #else
-    if (glfwGetPlatform() != GLFW_PLATFORM_X11) return nullptr;
     return reinterpret_cast<void*>(static_cast<uintptr_t>(glfwGetX11Window(m_Window)));
 #endif
 }
@@ -128,6 +164,35 @@ void NativeVideoOutputWindow::Reveal()
 {
     if (!m_Window) return;
     glfwShowWindow(m_Window);
+    glfwSetWindowPos(m_Window, m_MonX, m_MonY);
+    glfwSetWindowSize(m_Window, m_Width, m_Height);
+
+#ifndef _WIN32
+    Display* dpy = glfwGetX11Display();
+    ::Window xwin = glfwGetX11Window(m_Window);
+    if (dpy && xwin) {
+        bool wantFullscreen = PresentationCore::Get().GetWindowFullscreen();
+        Atom wmState = XInternAtom(dpy, "_NET_WM_STATE", False);
+        Atom wmAbove = XInternAtom(dpy, "_NET_WM_STATE_ABOVE", False);
+
+        XEvent xevState = {};
+        xevState.type = ClientMessage;
+        xevState.xclient.window = xwin;
+        xevState.xclient.message_type = wmState;
+        xevState.xclient.format = 32;
+        xevState.xclient.data.l[0] = wantFullscreen ? 1 : 0; // 1 = _NET_WM_STATE_ADD, 0 = _NET_WM_STATE_REMOVE
+        xevState.xclient.data.l[1] = wmAbove;
+        xevState.xclient.data.l[2] = 0;
+        xevState.xclient.data.l[3] = 1;
+        ::Window root = DefaultRootWindow(dpy);
+        XSendEvent(dpy, root, False, SubstructureRedirectMask | SubstructureNotifyMask, &xevState);
+
+        XMoveResizeWindow(dpy, xwin, m_MonX, m_MonY, m_Width, m_Height);
+        XRaiseWindow(dpy, xwin);
+        XFlush(dpy);
+    }
+#endif
+
     m_Visible = true;
 }
 

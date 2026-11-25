@@ -32,11 +32,10 @@ void Sync(const ProyecThor::Settings::ThemeSettings& t) {
     BorderFaint = U32(t.borderFaint);
     TextFaint   = U32(t.textFaint);
 
-    // Proporciones fijas sobre el rounding del preset: mas chico para
-    // botones/badges, mas grande para cards y modal.
-    RadiusSm = t.frameRounding * 0.65f;
-    RadiusMd = t.frameRounding * 0.9f;
-    RadiusLg = t.windowRounding * 0.7f;
+    // Proporciones fijas sobre el rounding del preset: cuadrado y moderno
+    RadiusSm = std::clamp(t.frameRounding * 0.65f, 0.0f, 2.0f);
+    RadiusMd = std::clamp(t.frameRounding * 0.9f, 0.0f, 3.0f);
+    RadiusLg = std::clamp(t.windowRounding * 0.7f, 0.0f, 4.0f);
 
     ParticleA = U32(t.accentLight);
     ParticleB = U32(t.accent);

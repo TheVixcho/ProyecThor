@@ -4,7 +4,7 @@
 #include <vector>
 #include "ui/panels/StageDisplayPanel.h"
 
-namespace ProyecThor::UI { class OSCPanel; class BroadcastPanel; class StreamingPanel; class SyncPanel; }
+namespace ProyecThor::UI { class OSCPanel; class BroadcastPanel; class StreamingPanel; class SyncPanel; class UIManager; }
 
 namespace ProyecThor::UI::Settings {
 
@@ -14,6 +14,9 @@ namespace ProyecThor::UI::Settings {
         void Render(bool* isOpen);
         void InitializeTheme();
         void SetInitialCategory(int idx) { m_SelectedCategory = idx; }
+        int  GetSelectedCategory() const { return m_SelectedCategory; }
+
+        void SetUIManagerRef(ProyecThor::UI::UIManager* ref) { m_UIManagerRef = ref; }
 
         // Misma instancia que UIManager::GetOSCPanel() -- subcategoria "OSC"
         // dentro de Ajustes > Conexiones (ver CategoryConnections.cpp) pero
@@ -37,7 +40,7 @@ namespace ProyecThor::UI::Settings {
         // app movil companion).
         void SetSyncPanelRef(ProyecThor::UI::SyncPanel* ref) { m_SyncPanelRef = ref; }
     private:
-        int         m_SelectedCategory  = 0;
+        int         m_SelectedCategory  = 7;
         int         m_PrevCategory      = -1;   // para detectar cambio de categoría
         float       m_SaveTimer         = 0.0f;
         std::string m_SaveStatusMsg     = "";
@@ -85,11 +88,15 @@ namespace ProyecThor::UI::Settings {
         void RenderCategoryShortcuts();
         void RenderCategorySongs();
         void RenderCategoryData();
+        void RenderCategoryPerformance();
+        void RenderCategoryPatchNotes();
 
         ProyecThor::UI::OSCPanel*       m_OSCPanelRef       = nullptr;
         ProyecThor::UI::BroadcastPanel* m_BroadcastPanelRef = nullptr;
         ProyecThor::UI::StreamingPanel* m_StreamingPanelRef = nullptr;
         ProyecThor::UI::SyncPanel*      m_SyncPanelRef      = nullptr;
+        ProyecThor::UI::UIManager*      m_UIManagerRef      = nullptr;
+        bool*                           m_IsOpenRef         = nullptr;
 
         // Antes vivia dentro del hub "Control" (ver ControlPanel, eliminado);
         // ahora es directamente el contenido de la categoria Stage de Ajustes.

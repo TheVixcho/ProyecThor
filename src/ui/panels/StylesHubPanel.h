@@ -6,20 +6,33 @@
 #include "layers/LayersTransitionsTab.h"
 #include "ui/views/Announcements.h"
 #include "capture/CapturePanel.h"
+#include "overlay/OverlayLibraryTab.h"
 #include <string>
+#include <memory>
+#include <functional>
 
 namespace ProyecThor::UI {
 
 class UIManager;
 class TransitionPanel;
 
-// Hub de Diseño: reune Fondos + Estilos + Transiciones + Anuncios + Captura
-// en un solo panel con rail de iconos a la izquierda (igual que
-// Biblioteca/Home). Anuncios y Captura se movieron aca desde Home, junto
-// con el resto de las herramientas de "preparar/vestir" la salida en vivo.
+// Hub de Diseño / Barra de herramientas inferior de Main:
+// Reúne Fondos + Multimedia + Overlays + Estilos + Shaders + Transiciones + Anuncios + Captura
+// y módulos adicionales activados (Render, Web, 3D, Lab, Plugins).
 enum class StylesSection {
-    Backgrounds = 0, Styles = 1, Shaders = 2, Transitions = 3,
-    Announcements = 4, Capture = 5,
+    Backgrounds   = 0,
+    Multimedia    = 1,
+    Overlays      = 2,
+    Styles        = 3,
+    Shaders       = 4,
+    Transitions   = 5,
+    Announcements = 6,
+    Capture       = 7,
+    Render        = 8,
+    Web           = 9,
+    Model3D       = 10,
+    Lab           = 11,
+    Plugins       = 12,
 };
 
 class StylesHubPanel : public IPanel {
@@ -29,6 +42,16 @@ public:
 
     void        Render()  override;
     std::string GetName() const override { return "Diseño"; }
+
+    void SelectSection(StylesSection section);
+    StylesSection GetCurrentSection() const { return m_CurrentSection; }
+
+    // ── Integración de Toolbar y Contenido en Main ──
+    void RenderTopToolbar(float totalW);
+    void RenderCurrentSectionContent();
+    bool IsInDesignMode() const { return m_InDesignMode; }
+    void SetDesignMode(bool active) { m_InDesignMode = active; }
+    void SwitchToPresentation() { m_InDesignMode = false; }
 
     // TransitionPanel sigue siendo dueño de UIManager (su Update/Trigger ya
     // corre incondicionalmente cada frame, independiente de este hub) — acá
@@ -41,8 +64,18 @@ public:
     // Usado por UIManager (bloque ProjectorLive) para llegar a Anuncios/
     // Captura en vivo sin que sean IPanel propios (mismo patron que HomePanel
     // usaba antes de que se mudaran aca).
-    Announcements& GetAnnouncements() { return m_Announcements; }
-    CapturePanel&  GetCapturePanel()  { return m_Capture; }
+    Announcements&        GetAnnouncements() { return m_Announcements; }
+    CapturePanel&         GetCapturePanel()  { return m_Capture; }
+    CanvasStylesPanel&    GetStyles()        { return m_Styles; }
+    ShadersPanel&         GetShaders()       { return m_Shaders; }
+    LayersTransitionsTab& GetTransitions()   { return m_TransitionsTab; }
+    BackgroundsPanel&     GetBackgrounds()   { return m_Backgrounds; }
+    void                  RenderBackgrounds() { m_Backgrounds.RenderContent(); }
+    void                  SetBackgroundsOnCollapse(std::function<void()> cb) { m_Backgrounds.SetOnCollapseCallback(std::move(cb)); }
+
+    void PreloadThumbnails(const std::function<void(int done, int total, const std::string& name)>& onProgress = nullptr) {
+        m_Backgrounds.PreloadThumbnails(onProgress);
+    }
 
 private:
     // Barra compacta de transicion (duracion + Sin transicion/Disolver/
@@ -54,17 +87,22 @@ private:
     // anidado, para los tipos complejos (Zoom, Slide, Cover, Uncover).
     void RenderTransitionQuickBar();
     void RenderTransitionRailButton();
+    void RenderMultimedia();
 
     UIManager*    m_UIManager = nullptr;
     StylesSection m_CurrentSection = StylesSection::Backgrounds;
 
-    BackgroundsPanel      m_Backgrounds;
-    CanvasStylesPanel     m_Styles;
-    ShadersPanel          m_Shaders;
-    TransitionPanel*      m_TransitionsRef = nullptr;
-    LayersTransitionsTab  m_TransitionsTab; // pestaña "Transiciones" (catalogo con nombre)
-    Announcements         m_Announcements;
-    CapturePanel          m_Capture;
+    BackgroundsPanel                   m_Backgrounds;
+    CanvasStylesPanel                  m_Styles;
+    ShadersPanel                       m_Shaders;
+    TransitionPanel*                   m_TransitionsRef = nullptr;
+    LayersTransitionsTab               m_TransitionsTab; // pestaña "Transiciones" (catalogo con nombre)
+    Announcements                      m_Announcements;
+    CapturePanel                       m_Capture;
+    std::unique_ptr<OverlayLibraryTab> m_OverlayTab;
+
+    char m_MultimediaSearch[128] = {0};
+    bool m_InDesignMode          = false;
 };
 
 } // namespace ProyecThor::UI

@@ -287,9 +287,7 @@ bool GlassListRow(const char* label, bool selected, float indent, float height)
     ImVec2 rMax = ImVec2(cursor.x + rowW, cursor.y + height);
 
     if (selected) {
-        // Plano: mismo tratamiento sutil que SongListRow (un solo tono
-        // translucido en vez del relleno solido "liquid glass" anterior).
-        dl->AddRectFilled(rMin, rMax, IM_COL32(99, 112, 255, 42));
+        dl->AddRectFilled(rMin, rMax, RowSelectedFill, RadiusSmall);
 
         dl->AddRectFilled(
             rMin,
@@ -300,11 +298,11 @@ bool GlassListRow(const char* label, bool selected, float indent, float height)
         dl->AddLine(
             ImVec2(rMin.x + 4.0f, rMax.y - 0.5f),
             ImVec2(rMax.x,        rMax.y - 0.5f),
-            IM_COL32(99, 112, 255, 40), 1.0f);
+            SepColor, 1.0f);
 
     } else if (hovered) {
-        dl->AddRectFilled(rMin, rMax, RowHoverFill, RadiusSmall * 0.5f);
-        dl->AddRect(rMin, rMax, IM_COL32(255, 255, 255, 18), RadiusSmall * 0.5f, 0, 0.5f);
+        dl->AddRectFilled(rMin, rMax, RowHoverFill, RadiusSmall);
+        dl->AddRect(rMin, rMax, SepColor, RadiusSmall, 0, 0.5f);
     }
 
     ImFont* font = ImGui::GetFont();

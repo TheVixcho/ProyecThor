@@ -3,15 +3,17 @@
 #include "MonitorQueueIO.h"
 #include "MonitorQueueHelpers.h"
 #include "core/PresentationCore.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include "StyleGeneralApp.h"
 #include <imgui.h>
 #include <algorithm>
 #include <cmath>
 #include "ui/framework/bin/StyleGeneralApp.h"
 #include "core/AppPaths.h"
+#include "ui/panels/biblio/LibraryHelpers.h"
 #include "ui/views/audio/AudioHelpers.h"
 #include "ui/views/audio/AudioAlbumArt.h"
+#include "core/MediaCollections.h"
 #include <filesystem>
 
 namespace ProyecThor::UI {
@@ -31,15 +33,15 @@ void MonitorView::Update()
     //
     // ConsumeEndReached() es "se consume una sola vez por clip" -- por eso
     // esto SOLO corre si la cola NO esta activa (ella ya lo consume arriba
-    // en m_QueueEngine.Update(), con su propio criterio de loop). Los dos
-    // consumidores nunca deben pisarse sobre el mismo reproductor.
-    if (!m_QueueEngine.IsActive())
+    // en m_QueueEngine.Update() o en MediaCollectionManager, con su propio criterio de loop).
+    // Los consumidores nunca deben pisarse sobre el mismo reproductor.
+    if (!m_QueueEngine.IsActive() && !Core::MediaCollectionManager::Get().IsQueuePlaying())
     {
         auto& core  = Core::PresentationCore::Get();
         auto  state = core.GetState();
         if (state.bgType == Core::PresentationState::BackgroundType::Video)
         {
-            if (Core::VLCBasePlayer* bg = core.GetBackgroundPlayer())
+            if (Core::MPVBasePlayer* bg = core.GetBackgroundPlayer())
             {
                 if (bg->ConsumeEndReached())
                 {
@@ -65,7 +67,7 @@ void MonitorView::Update()
     }
 }
 
-void MonitorView::Render(Core::VLCBasePlayer* player)
+void MonitorView::Render(Core::MPVBasePlayer* player)
 {
     if (!player) {
         ImGui::PushStyleColor(ImGuiCol_Text, k_TextDim);
@@ -74,7 +76,7 @@ void MonitorView::Render(Core::VLCBasePlayer* player)
         return;
     }
 
-    Core::VLCBasePlayer* bg            = Core::PresentationCore::Get().GetBackgroundPlayer();
+    Core::MPVBasePlayer* bg            = Core::PresentationCore::Get().GetBackgroundPlayer();
     bool                 isSharedPlayer = (player == bg);
 
     // Antes se recalculaba al principio de RenderLiveControls (ahora vive en
@@ -109,7 +111,7 @@ void MonitorView::Render(Core::VLCBasePlayer* player)
 {
     std::string path = currentSel.title;
     if (path.rfind("http", 0) != 0 && !std::filesystem::path(path).is_absolute())
-        path = GetAssetsPath() + "/videos/" + path;
+        path = Library::GetVideoLibraryPath() + "/" + path;
 
     // Carga en un hilo aparte (ver PresentationCore::RequestPreviewLoad):
     // el video en vivo al publico nunca debe esperar a que el Preview
@@ -199,6 +201,11 @@ void MonitorView::Render(Core::VLCBasePlayer* player)
 
     ImGui::SameLine(0, 6);
     RenderQueue(queueW);
+}
+
+void MonitorView::RenderFloatingPreview(Core::MPVBasePlayer* player, float w, float h)
+{
+    RenderPreviewMonitor(player, w, h);
 }
 
 // ---------------------------------------------------------------------------

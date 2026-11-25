@@ -2,7 +2,6 @@
 #include "BroadcastPanel.h"
 #include "UIManager.h"
 #include "DesignSystem.h"
-#include "ui/framework/UIStrings.h"
 #include <algorithm>
 #include <imgui.h>
 
@@ -11,16 +10,15 @@ namespace ProyecThor::UI {
 void StreamingWorkspacePanel::Render()
 {
     bool visible = false;
-    std::string streamTitle = std::string(Loc("Transmisión", "Broadcast", "Transmissão")) + "###StreamingWorkspacePanel";
     if (m_UIManagerRef)
     {
-        visible = DS::BeginGlassPanel(streamTitle.c_str(), m_UIManagerRef->GetGlassRenderer(),
+        visible = DS::BeginGlassPanel(GetName().c_str(), m_UIManagerRef->GetGlassRenderer(),
                                       nullptr, 0, ImVec2(0.0f, 0.0f));
     }
     else
     {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
-        visible = ImGui::Begin(streamTitle.c_str());
+        visible = ImGui::Begin(GetName().c_str());
         ImGui::PopStyleVar();
     }
 

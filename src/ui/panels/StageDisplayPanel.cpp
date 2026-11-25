@@ -134,6 +134,7 @@ void StageDisplayPanel::RenderContent() {
 void StageDisplayPanel::RenderActivationCard() {
     auto& core = Core::PresentationCore::Get();
     auto& sd   = ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay;
+    const bool isPro = true;
 
     int monitorCount = 0;
     glfwGetMonitors(&monitorCount);
@@ -151,9 +152,17 @@ void StageDisplayPanel::RenderActivationCard() {
     const int  sel          = sd.useLAN ? lanItemIndex : stageMonitorIndex;
     const bool showLanPanel = sd.useLAN && stageActive;
 
-    BeginCard("StageActivationCard", showLanPanel ? 230.0f : (monitorCount > 1 ? 194.0f : 172.0f));
+    float cardH = showLanPanel ? 230.0f : (monitorCount > 1 ? 194.0f : 172.0f);
+    if (!isPro) cardH += 48.0f;
+    BeginCard("StageActivationCard", cardH);
 
     ImGui::TextUnformatted(stageActive ? "Stage activo" : "Stage inactivo");
+    if (!isPro) {
+        ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.75f, 0.20f, 1.0f));
+        ImGui::TextUnformatted("[PRO]");
+        ImGui::PopStyleColor();
+    }
     ImGui::TextDisabled("Monitor de confianza: ");
     ImGui::SameLine();
     if (sd.useLAN)
@@ -166,7 +175,8 @@ void StageDisplayPanel::RenderActivationCard() {
 
     MonitorSelector("stage", sel, -1, /*includeLAN*/true, currentAppMonitor,
         [this](int dir) { CycleStageMonitor(dir); },
-        [stageActive](int newSel) {
+        [stageActive, isPro](int newSel) {
+            if (!isPro) return;
             int mc = 0;
             glfwGetMonitors(&mc);
             const bool wantLAN = (newSel >= mc);
@@ -198,24 +208,47 @@ void StageDisplayPanel::RenderActivationCard() {
 
     if (!sd.useLAN && monitorCount > 1) {
         ImGui::Spacing();
-        ImGui::TextDisabled("Enviar tambien a estas pantallas (opcional):");
+        ImGui::TextDisabled("Enviar tambien a estas pantallas (Multi-salida Stage):");
+        if (!isPro) {
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.75f, 0.20f, 1.0f));
+            ImGui::TextUnformatted("[PRO]");
+            ImGui::PopStyleColor();
+        }
         for (int i = 0; i < monitorCount; i++) {
             if (i == stageMonitorIndex) continue;
 
             bool isExtra = std::find(sd.extraMonitors.begin(), sd.extraMonitors.end(), i)
                            != sd.extraMonitors.end();
             std::string label = "Pantalla " + std::to_string(i + 1) + "##stagemon" + std::to_string(i);
-            if (ImGui::Checkbox(label.c_str(), &isExtra)) {
-                if (isExtra) {
-                    sd.extraMonitors.push_back(i);
-                } else {
-                    sd.extraMonitors.erase(
-                        std::remove(sd.extraMonitors.begin(), sd.extraMonitors.end(), i),
-                        sd.extraMonitors.end());
+            if (!isPro) {
+                ImGui::BeginDisabled();
+                bool dummy = false;
+                ImGui::Checkbox(label.c_str(), &dummy);
+                ImGui::EndDisabled();
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                    ImGui::SetTooltip("Multi-salida de Stage requiere ProyecThor for Professionals.");
                 }
-                ProyecThor::Settings::SettingsManager::Get().Save();
+            } else {
+                if (ImGui::Checkbox(label.c_str(), &isExtra)) {
+                    if (isExtra) {
+                        sd.extraMonitors.push_back(i);
+                    } else {
+                        sd.extraMonitors.erase(
+                            std::remove(sd.extraMonitors.begin(), sd.extraMonitors.end(), i),
+                            sd.extraMonitors.end());
+                    }
+                    ProyecThor::Settings::SettingsManager::Get().Save();
+                }
             }
         }
+    }
+
+    if (!isPro) {
+        ImGui::Spacing();
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.75f, 0.25f, 1.0f));
+        ImGui::TextWrapped("El Monitor de Escenario (Stage Display) y la Multi-salida son funciones exclusivas de ProyecThor for Professionals. En la versión estándar puedes proyectar a 1 pantalla secundaria estándar.");
+        ImGui::PopStyleColor();
     }
 
     ImGui::Spacing();
@@ -250,16 +283,20 @@ void StageDisplayPanel::RenderActivationCard() {
         ImGui::Spacing();
     }
 
-    const char* buttonText = stageActive ? "DETENER STAGE" : "ACTIVAR STAGE";
-    ImVec4 btnColor    = stageActive ? ToVec4(ColA(DS::AccentColor, 217)) : ToVec4(DS::BtnDefaultFill);
+    const char* buttonText = stageActive ? "DETENER STAGE" : (isPro ? "ACTIVAR STAGE" : "ACTIVAR STAGE (REQUIERE PRO)");
+    ImVec4 btnColor    = stageActive ? ToVec4(ColA(DS::AccentColor, 217)) : (isPro ? ToVec4(DS::BtnDefaultFill) : ImVec4(0.35f, 0.28f, 0.12f, 0.85f));
     ImVec4 hoverColor  = Brighten(btnColor, 0.06f);
     ImVec4 activeColor = Brighten(btnColor, -0.06f);
-    ImVec4 tintCol     = stageActive ? ToVec4(DS::TextPrimary) : ToVec4(DS::TextHint);
+    ImVec4 tintCol     = stageActive ? ToVec4(DS::TextPrimary) : (isPro ? ToVec4(DS::TextHint) : ImVec4(0.95f, 0.80f, 0.30f, 1.0f));
     DrawIconFn icon    = sd.useLAN ? ControlIcons::DrawBroadcast : ControlIcons::DrawStageMonitor;
 
     if (IconLabelButton("stageToggle", buttonText, icon, ImVec2(-1.0f, 44.0f),
                         btnColor, hoverColor, activeColor, tintCol)) {
-        ToggleStageDisplay(!stageActive);
+        if (!isPro) {
+            std::cerr << "[StageDisplayPanel] El monitor de escenario requiere ProyecThor for Professionals.\n";
+        } else {
+            ToggleStageDisplay(!stageActive);
+        }
     }
 
     EndCard();

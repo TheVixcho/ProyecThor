@@ -1,7 +1,7 @@
 #include "MonitorView.h"
 #include "MonitorTheme.h"
 #include "core/PresentationCore.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <algorithm>
@@ -10,7 +10,6 @@
 #include "MonitorDesign.h"
 #include "MonitorUIHelpers.h"
 #include "ui/framework/UIManager.h"
-#include "ui/framework/UIStrings.h"
 
 // =============================================================================
 //  MonitorVideoPanels.cpp
@@ -68,7 +67,7 @@ static void DrawExpandIcon(ImDrawList* dl, ImVec2 center, float size, ImU32 col)
     dl->AddLine(br, { br.x - arm, br.y }, col, th); dl->AddLine(br, { br.x, br.y - arm }, col, th);
 }
 
-void MonitorView::RenderPreviewMonitor(Core::VLCBasePlayer* player, float w, float h)
+void MonitorView::RenderPreviewMonitor(Core::MPVBasePlayer* player, float w, float h)
 {
     auto  sel    = Core::PresentationCore::Get().PeekSelection();
     bool  hasTex = false;
@@ -107,7 +106,7 @@ void MonitorView::RenderPreviewMonitor(Core::VLCBasePlayer* player, float w, flo
         DrawSpinningDisc(dl, center, radius, m_DiscState, m_CurrentAudioArt);
         DrawPreviewBadge(wp, "PVW", MT::k_PrevAccent);
     } else {
-        DrawVideoFrame(player, w, h, Loc("SIN SEÑAL", "NO SIGNAL", "SEM SINAL"), "PVW", MT::k_PrevAccent, false);
+        DrawVideoFrame(player, w, h, "SIN SEÑAL", "PVW", MT::k_PrevAccent, false);
     }
 
     // ── Boton "pantalla completa" ────────────────────────────────────────
@@ -126,7 +125,7 @@ void MonitorView::RenderPreviewMonitor(Core::VLCBasePlayer* player, float w, flo
         DrawExpandIcon(dl, { btnPos.x + btnSz * 0.5f, btnPos.y + btnSz * 0.5f }, btnSz * 0.6f,
                       ImGui::ColorConvertFloat4ToU32(MT::k_PrevAccent));
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("%s", Loc("Ver en pantalla completa", "View full screen", "Ver em tela cheia"));
+            ImGui::SetTooltip("Ver en pantalla completa");
         ImGui::PopStyleVar();
         ImGui::PopStyleColor(3);
         if (clicked)
@@ -195,7 +194,7 @@ void MonitorView::RenderPreviewMonitor(Core::VLCBasePlayer* player, float w, flo
 //  "estilo reproductor" que YouTube/VLC fullscreen.
 // =============================================================================
 
-void MonitorView::RequestPreviewFullscreen(Core::VLCBasePlayer* player)
+void MonitorView::RequestPreviewFullscreen(Core::MPVBasePlayer* player)
 {
     if (!m_UIManagerRef) return;
 
@@ -227,7 +226,7 @@ void MonitorView::ExitPreviewFullscreen()
     }
 }
 
-void MonitorView::RenderFullscreenToolbar(Core::VLCBasePlayer* player, ImVec2 avail)
+void MonitorView::RenderFullscreenToolbar(Core::MPVBasePlayer* player, ImVec2 avail)
 {
     // ── Auto-ocultar con inactividad del mouse ───────────────────────────
     static float  idleTimer    = 0.0f;
@@ -269,7 +268,7 @@ void MonitorView::RenderFullscreenToolbar(Core::VLCBasePlayer* player, ImVec2 av
                       4.0f, MT::k_PrevAccent, m_PreviewPlaying);
         ImGui::SetCursorPosX(MT::k_PadLg + 18.0f);
         ImGui::PushStyleColor(ImGuiCol_Text, MT::k_PrevAccent);
-        ImGui::TextUnformatted(Loc("PREVIEW -- PANTALLA COMPLETA", "PREVIEW -- FULL SCREEN", "PREVIEW -- TELA CHEIA"));
+        ImGui::TextUnformatted("PREVIEW -- PANTALLA COMPLETA");
         ImGui::PopStyleColor();
 
         const float optBtnW = 100.0f, audioBtnW = 22.0f, closeBtnW = 22.0f, volSliderW = 90.0f;
@@ -285,23 +284,23 @@ void MonitorView::RenderFullscreenToolbar(Core::VLCBasePlayer* player, ImVec2 av
         ImGui::PushStyleColor(ImGuiCol_ButtonActive,  MT::k_NeutBtnAct);
         ImGui::PushStyleColor(ImGuiCol_Text,          MT::k_TextDim);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
-        if (ImGui::Button((std::string(Loc("Opciones", "Options", "Opções")) + "##mon_prev_fs_opts").c_str(), { optBtnW, audioBtnW }))
+        if (ImGui::Button("Opciones##mon_prev_fs_opts", { optBtnW, audioBtnW }))
             ImGui::OpenPopup("##mon_prev_fs_opts_popup");
         ImGui::PopStyleVar();
         ImGui::PopStyleColor(4);
 
         if (ImGui::BeginPopup("##mon_prev_fs_opts_popup")) {
             ImGui::PushStyleColor(ImGuiCol_Text, MT::k_PrevAccent);
-            ImGui::TextUnformatted(Loc("OPCIONES DE REPRODUCCION", "PLAYBACK OPTIONS", "OPÇÕES DE REPRODUÇÃO"));
+            ImGui::TextUnformatted("OPCIONES DE REPRODUCCION");
             ImGui::PopStyleColor();
             ImGui::Separator();
 
-            if (ImGui::Checkbox(Loc("Activar FSR para Preview", "Enable FSR for Preview", "Ativar FSR para Preview"), &m_PreviewFSREnabled))
+            if (ImGui::Checkbox("Activar FSR para Preview", &m_PreviewFSREnabled))
                 m_PreviewFSR.SetEnabled(m_PreviewFSREnabled);
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("%s", Loc("Reescala el video con FidelityFX Super Resolution (EASU+RCAS) al tamaño real de pantalla completa, en vez de estirarlo liso. Solo hace diferencia si el video fuente es mas chico que tu pantalla.",
-                                  "Upscales video with FidelityFX Super Resolution (EASU+RCAS) to actual full screen size instead of smooth stretching. Only makes a difference if source video is smaller than your screen.",
-                                  "Redimensiona o vídeo com FidelityFX Super Resolution (EASU+RCAS) para o tamanho real de tela cheia, em vez de esticamento suave. Só faz diferença se o vídeo fonte for menor que a sua tela."));
+                ImGui::SetTooltip("Reescala el video con FidelityFX Super Resolution (EASU+RCAS) "
+                                  "al tamaño real de pantalla completa, en vez de estirarlo liso. "
+                                  "Solo hace diferencia si el video fuente es mas chico que tu pantalla.");
 
             ImGui::EndPopup();
         }
@@ -331,7 +330,7 @@ void MonitorView::RenderFullscreenToolbar(Core::VLCBasePlayer* player, ImVec2 av
         if (ImGui::Button("X##mon_prev_fs_close", { closeBtnW, closeBtnW }))
             ExitPreviewFullscreen();
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("%s", Loc("Salir de pantalla completa (Esc)", "Exit full screen (Esc)", "Sair da tela cheia (Esc)"));
+            ImGui::SetTooltip("Salir de pantalla completa (Esc)");
         ImGui::PopStyleColor(4);
     }
 
@@ -344,7 +343,7 @@ void MonitorView::RenderFullscreenToolbar(Core::VLCBasePlayer* player, ImVec2 av
     ImGui::PopStyleVar();
 }
 
-void MonitorView::RenderPreviewFullscreenContent(Core::VLCBasePlayer* player)
+void MonitorView::RenderPreviewFullscreenContent(Core::MPVBasePlayer* player)
 {
     // Sin offset de railH: EnterFullscreenEditor(..., hideToolbar=true)
     // saca la toolbar de modos por completo (ver UIManager::RenderAll), asi
@@ -382,7 +381,7 @@ void MonitorView::RenderPreviewFullscreenContent(Core::VLCBasePlayer* player)
         // showBadge=false: el badge "PVW" sobra aca, el toolbar ya dice
         // "PREVIEW -- PANTALLA COMPLETA". FSR opt-in (ver "Opciones de
         // reproduccion" en RenderFullscreenToolbar / m_PreviewFSREnabled).
-        DrawVideoFrame(player, avail.x, avail.y, Loc("SIN SEÑAL", "NO SIGNAL", "SEM SINAL"), "PVW", MT::k_PrevAccent, false,
+        DrawVideoFrame(player, avail.x, avail.y, "SIN SEÑAL", "PVW", MT::k_PrevAccent, false,
                       /*showBadge=*/false, m_PreviewFSREnabled ? &m_PreviewFSR : nullptr);
     }
 

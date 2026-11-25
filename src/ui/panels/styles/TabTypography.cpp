@@ -2,6 +2,7 @@
 #include "core/AppPaths.h"
 #include "core/PresentationCore.h"
 #include "DesignSystem.h"
+#include "ui/framework/FilePicker.h"
 #include <imgui.h>
 #ifdef _WIN32
 #include <windows.h>
@@ -18,38 +19,6 @@
 namespace fs = std::filesystem;
 
 namespace ProyecThor::UI {
-
-#ifndef _WIN32
-// Selector de archivos para Linux/macOS via zenity/kdialog.
-static std::string OpenFontFileDialogUnix() {
-    const char* commands[] = {
-        "zenity --file-selection --title=\"Seleccionar fuente\" "
-        "--file-filter=\"Fuentes | *.ttf *.otf *.ttc\" 2>/dev/null",
-        "kdialog --getopenfilename . \"*.ttf *.otf *.ttc|Fuentes\" 2>/dev/null"
-    };
-
-    for (const char* cmd : commands) {
-        std::array<char, 1024> buffer{};
-        std::string result;
-
-        FILE* pipe = popen(cmd, "r");
-        if (!pipe) continue;
-
-        while (fgets(buffer.data(), (int)buffer.size(), pipe) != nullptr)
-            result += buffer.data();
-
-        int status = pclose(pipe);
-        if (status != 0) continue;
-
-        while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
-            result.pop_back();
-
-        if (!result.empty())
-            return result;
-    }
-    return {};
-}
-#endif
 
 TabTypography::TabTypography(std::vector<std::string>* fontList,
                              OnFontImportedCallback onFontImported)
@@ -196,24 +165,8 @@ void TabTypography::RenderAutoScaleCheckbox(Core::TextBoxStyle& box) {
 }
 
 void TabTypography::ImportFont() {
-    std::string selectedPath;
-
-#ifdef _WIN32
-    char filename[MAX_PATH] = {};
-    OPENFILENAMEA ofn       = {};
-    ofn.lStructSize         = sizeof(ofn);
-    ofn.hwndOwner           = NULL;
-    ofn.lpstrFilter         = "Fuentes\0*.ttf;*.otf;*.ttc\0Todos los archivos\0*.*\0";
-    ofn.lpstrFile           = filename;
-    ofn.nMaxFile            = MAX_PATH;
-    ofn.Flags               = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
-
-    if (!GetOpenFileNameA(&ofn)) return;
-    selectedPath = filename;
-#else
-    selectedPath = OpenFontFileDialogUnix();
+    std::string selectedPath = ProyecThor::UI::PickFontFile();
     if (selectedPath.empty()) return;
-#endif
 
     try {
         std::filesystem::path fontsDir =

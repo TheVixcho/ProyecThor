@@ -1,4 +1,5 @@
 #include "SettingsManager.h"
+#include "Version.h"
 #include "DesignSystem.h"
 #include "core/PresentationCore.h"
 #include <nlohmann/json.hpp>
@@ -100,11 +101,15 @@ void RestartApplication() {
     char exePath[MAX_PATH] = {};
     if (GetModuleFileNameA(nullptr, exePath, MAX_PATH) == 0) return;
 
+    std::filesystem::path p(exePath);
+    std::filesystem::path targetExe = p.parent_path() / "ProyecThor.exe";
+    std::string launchPath = std::filesystem::exists(targetExe) ? targetExe.string() : std::string(exePath);
+
     STARTUPINFOA        si = {};
     si.cb                  = sizeof(si);
     PROCESS_INFORMATION pi = {};
 
-    if (CreateProcessA(exePath, nullptr, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+    if (CreateProcessA(launchPath.c_str(), nullptr, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
         CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
     }
@@ -563,7 +568,7 @@ ThemeSettings MakeThemePreset(ThemePreset preset) {
         break;
     }
 
-    t.windowRounding = 3.0f;
+    t.windowRounding = 2.0f;
     t.frameRounding  = 2.0f;
     t.scrollbarSize  = 6.0f;
 
@@ -722,12 +727,11 @@ void SettingsManager::ApplyProjection() {
     core.SetZonedDistortionFeather(p.zonedDistortionFeather);
     core.SetFillBlurEnabled(p.fillBlurEnabled);
     core.SetFillBlurBrightness(p.fillBlurBrightness);
-#ifdef _WIN32
+    core.SetWindowFullscreen(p.windowFullscreen);
+    core.SetVLCNativeForFondos(p.vlcNativeForFondos);
     core.SetVideoRenderEngine(p.videoRenderEngine);
-#else
-    core.SetVideoRenderEngine(0);
-#endif
     core.SetVLCHardwareDecoder(p.vlcHardwareDecoder);
+    core.SetVLCVideoOutput(p.vlcVideoOutput);
     core.SetVLCDeinterlace(p.vlcDeinterlace);
 }
 
@@ -742,6 +746,10 @@ void SettingsManager::ApplyTheme() {
 
     auto V = [](const float* a, float alphaMul = 1.0f) {
         return ImVec4(a[0], a[1], a[2], a[3] * alphaMul);
+    };
+
+    auto WithAlpha = [](const float* a, float alpha) {
+        return ImVec4(a[0], a[1], a[2], alpha);
     };
 
     // Fondos de panel 100% opacos (pedido explicito: "quita las
@@ -775,11 +783,11 @@ void SettingsManager::ApplyTheme() {
     c[ImGuiCol_SliderGrabActive] = V(t.accentLight);
 
     c[ImGuiCol_Button]        = V(t.surface2);
-    c[ImGuiCol_ButtonHovered] = V(t.accentDim);
+    c[ImGuiCol_ButtonHovered] = V(t.surface3);
     c[ImGuiCol_ButtonActive]  = V(t.accent);
 
-    c[ImGuiCol_Header]        = V(t.accentFaint);
-    c[ImGuiCol_HeaderHovered] = V(t.accentDim);
+    c[ImGuiCol_Header]        = WithAlpha(t.accent, 0.22f);
+    c[ImGuiCol_HeaderHovered] = WithAlpha(t.accentLight, 0.35f);
     c[ImGuiCol_HeaderActive]  = V(t.accent);
 
     c[ImGuiCol_Separator]        = V(t.border, 0.6f);
@@ -791,10 +799,10 @@ void SettingsManager::ApplyTheme() {
     c[ImGuiCol_ResizeGripActive]  = V(t.accent);
 
     c[ImGuiCol_Tab]                = V(t.surface1);
-    c[ImGuiCol_TabHovered]         = V(t.accentDim);
-    c[ImGuiCol_TabActive]          = V(t.accent);
+    c[ImGuiCol_TabHovered]         = V(t.surface2);
+    c[ImGuiCol_TabActive]          = WithAlpha(t.accent, 0.30f);
     c[ImGuiCol_TabUnfocused]       = V(t.surface0);
-    c[ImGuiCol_TabUnfocusedActive] = V(t.surface2);
+    c[ImGuiCol_TabUnfocusedActive] = V(t.surface1);
 
     c[ImGuiCol_DockingPreview] = V(t.accent, 0.35f);
     c[ImGuiCol_DockingEmptyBg] = V(t.base);
@@ -820,14 +828,15 @@ void SettingsManager::ApplyTheme() {
     c[ImGuiCol_Text]         = V(t.textPrimary);
     c[ImGuiCol_TextDisabled] = V(t.textFaint);
 
-    s.WindowRounding    = std::clamp(t.windowRounding, 0.0f, 3.0f);
-    s.ChildRounding     = std::clamp(t.windowRounding * 0.75f, 0.0f, 2.0f);
-    s.FrameRounding     = std::clamp(t.frameRounding, 0.0f, 2.0f);
-    s.PopupRounding     = std::clamp(t.windowRounding * 0.9f, 0.0f, 3.0f);
-    s.ScrollbarRounding = std::clamp(t.windowRounding * 0.8f, 0.0f, 2.0f);
-    s.GrabRounding      = std::clamp(t.frameRounding * 0.7f, 0.0f, 2.0f);
-    s.TabRounding       = std::clamp(t.frameRounding, 0.0f, 3.0f);
-    s.ScrollbarSize     = 6.0f;
+    s.WindowRounding    = std::clamp(t.windowRounding, 0.0f, 10.0f);
+    s.ChildRounding     = std::clamp(t.windowRounding * 0.8f, 0.0f, 8.0f);
+    s.FrameRounding     = std::clamp(t.frameRounding, 0.0f, 7.0f);
+    s.PopupRounding     = std::clamp(t.windowRounding, 0.0f, 10.0f);
+    s.ScrollbarRounding = std::clamp(t.frameRounding, 0.0f, 6.0f);
+    s.GrabRounding      = std::clamp(t.frameRounding * 0.8f, 0.0f, 6.0f);
+    s.TabRounding       = std::clamp(t.frameRounding, 0.0f, 6.0f);
+    s.FrameBorderSize   = 1.0f;
+    s.ScrollbarSize     = 7.0f;
 
     // Con viewports, cada ventana OS debe quedar cuadrada y opaca.
     if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
@@ -870,10 +879,6 @@ void SettingsManager::SaveSettings() {
     j["projection"]["defaultBgB"]    = p.defaultBgB;
     j["projection"]["outputWidth"]        = p.outputWidth;
     j["projection"]["outputHeight"]       = p.outputHeight;
-    j["projection"]["windowFullscreen"]    = p.windowFullscreen;
-    j["projection"]["windowWidth"]         = p.windowWidth;
-    j["projection"]["windowHeight"]        = p.windowHeight;
-    j["projection"]["windowAutoDetectRes"] = p.windowAutoDetectRes;
     j["projection"]["targetFPS"]          = p.targetFPS;
     j["projection"]["outputQualityMode"]  = p.outputQualityMode;
     j["projection"]["outputPresetIndex"]  = p.outputPresetIndex;
@@ -951,8 +956,11 @@ void SettingsManager::SaveSettings() {
     j["projection"]["zonedDistortionFeather"]       = p.zonedDistortionFeather;
     j["projection"]["fillBlurEnabled"]      = p.fillBlurEnabled;
     j["projection"]["fillBlurBrightness"]   = p.fillBlurBrightness;
+    j["projection"]["windowFullscreen"]     = p.windowFullscreen;
+    j["projection"]["vlcNativeForFondos"]   = p.vlcNativeForFondos;
     j["projection"]["videoRenderEngine"]    = p.videoRenderEngine;
     j["projection"]["vlcHardwareDecoder"]   = p.vlcHardwareDecoder;
+    j["projection"]["vlcVideoOutput"]       = p.vlcVideoOutput;
     j["projection"]["vlcDeinterlace"]       = p.vlcDeinterlace;
 
     const auto& sd = m_Settings.stageDisplay;
@@ -970,6 +978,7 @@ void SettingsManager::SaveSettings() {
     j["librarySidebar"]["showWeb"]     = lsb.showWeb;
     j["librarySidebar"]["showModel3D"] = lsb.showModel3D;
     j["librarySidebar"]["showLab"]     = lsb.showLab;
+    j["librarySidebar"]["showPlugins"] = lsb.showPlugins;
 
     const auto& hsb = m_Settings.homeSidebar;
     for (int i = 0; i < 6; i++)
@@ -985,6 +994,12 @@ void SettingsManager::SaveSettings() {
     for (int i = 0; i < 6; i++)
         for (int c = 0; c < 4; c++)
             j["stylesHub"]["categoryColor"][i][c] = shs.categoryColor[i][c];
+    j["stylesHub"]["showOverlays"]      = shs.showOverlays;
+    j["stylesHub"]["showStyles"]        = shs.showStyles;
+    j["stylesHub"]["showShaders"]       = shs.showShaders;
+    j["stylesHub"]["showTransitions"]   = shs.showTransitions;
+    j["stylesHub"]["showAnnouncements"] = shs.showAnnouncements;
+    j["stylesHub"]["showCapture"]       = shs.showCapture;
 
     const auto& vts = m_Settings.viewTools;
     for (int i = 0; i < 4; i++)
@@ -1007,7 +1022,14 @@ void SettingsManager::SaveSettings() {
         const auto& p  = m_Settings.pads.pads[i];
         auto&       jp = j["pads"]["pads"][i];
         jp["assigned"]  = p.assigned;
+        jp["name"]      = p.name;
         jp["iconIndex"] = p.iconIndex;
+        for (int c = 0; c < 4; c++) jp["color"][c] = p.color[c];
+
+        jp["applyBackground"] = p.applyBackground;
+        jp["applyStyle"]      = p.applyStyle;
+        jp["applyText"]       = p.applyText;
+        jp["applyCapture"]    = p.applyCapture;
 
         jp["hasCapture"] = p.hasCapture;
         auto& jc = jp["capture"];
@@ -1028,9 +1050,16 @@ void SettingsManager::SaveSettings() {
         for (int c = 0; c < 4; c++) jp["styleMargins"][c] = p.styleMargins[c];
         jp["styleAutoScale"] = p.styleAutoScale;
         jp["styleFontName"]  = p.styleFontName;
-        jp["bgType"]    = p.bgType;
-        jp["bgPath"]    = p.bgPath;
+
+        jp["hasBackground"]  = p.hasBackground;
+        jp["bgType"]         = p.bgType;
+        jp["bgPath"]         = p.bgPath;
+        jp["bgFolderName"]   = p.bgFolderName;
         for (int c = 0; c < 3; c++) jp["bgColor"][c] = p.bgColor[c];
+
+        jp["hasText"]   = p.hasText;
+        jp["text"]      = p.text;
+        jp["textTitle"] = p.textTitle;
     }
 
     for (size_t i = 0; i < m_Settings.transitions.presets.size(); i++) {
@@ -1077,7 +1106,13 @@ void SettingsManager::SaveSettings() {
     j["ai"]["apiKey"]  = m_Settings.ai.apiKey;
     j["ai"]["model"]   = m_Settings.ai.model;
 
-    j["storage"]["customDataRoot"] = m_Settings.storage.customDataRoot;
+    j["storage"]["customDataRoot"]               = m_Settings.storage.customDataRoot;
+    j["storage"]["watchDownloadsFolder"]         = m_Settings.storage.watchDownloadsFolder;
+    j["storage"]["downloadsBaselineInitialized"] = m_Settings.storage.downloadsBaselineInitialized;
+    j["storage"]["externalMultimediaFiles"]      = m_Settings.storage.externalMultimediaFiles;
+    j["storage"]["externalBackgroundFiles"]      = m_Settings.storage.externalBackgroundFiles;
+    j["storage"]["knownWatchedFiles"]            = m_Settings.storage.knownWatchedFiles;
+    j["storage"]["watchedFolders"]               = nlohmann::json::array();
     for (size_t i = 0; i < m_Settings.storage.watchedFolders.size(); i++) {
         const auto& wf = m_Settings.storage.watchedFolders[i];
         auto& jwf = j["storage"]["watchedFolders"][i];
@@ -1085,6 +1120,12 @@ void SettingsManager::SaveSettings() {
         jwf["copyToDataDir"] = wf.copyToDataDir;
         jwf["enabled"]       = wf.enabled;
     }
+
+    j["performance"]["performanceMode"]     = m_Settings.performance.performanceMode;
+    j["performance"]["disableGlassBlur"]    = m_Settings.performance.disableGlassBlur;
+    j["performance"]["pauseBackgroundScan"] = m_Settings.performance.pauseBackgroundScan;
+    j["performance"]["targetFPS"]           = m_Settings.performance.targetFPS;
+    j["performance"]["lowMemoryMode"]       = m_Settings.performance.lowMemoryMode;
 
     std::string langStr = "es";
     if      (m_Settings.general.language == Language::English)    langStr = "en";
@@ -1099,6 +1140,7 @@ void SettingsManager::SaveSettings() {
     j["general"]["autoSaveIntervalSec"] = m_Settings.general.autoSaveIntervalSec;
     j["general"]["defaultBiblesFolder"] = m_Settings.general.defaultBiblesFolder;
     j["general"]["defaultMediaFolder"]  = m_Settings.general.defaultMediaFolder;
+    j["general"]["duplicateMediaFiles"] = m_Settings.general.duplicateMediaFiles;
     j["general"]["showRailLabels"]      = m_Settings.general.showRailLabels;
     j["general"]["showPerfPanel"]       = m_Settings.general.showPerfPanel;
     j["general"]["showViewQuickActions"]   = m_Settings.general.showViewQuickActions;
@@ -1106,6 +1148,8 @@ void SettingsManager::SaveSettings() {
     j["general"]["showAIAssistantToolbar"] = m_Settings.general.showAIAssistantToolbar;
     j["general"]["viewPanelDetached"]      = m_Settings.general.viewPanelDetached;
     j["general"]["quickNotesText"]         = m_Settings.general.quickNotesText;
+    j["general"]["bibleClassicListView"]   = m_Settings.general.bibleClassicListView;
+    j["general"]["bibleVerseCardZoom"]     = m_Settings.general.bibleVerseCardZoom;
 
     j["audio"]["masterVolume"] = m_Settings.audio.masterVolume;
     j["audio"]["muted"]        = m_Settings.audio.muted;
@@ -1116,6 +1160,7 @@ void SettingsManager::SaveSettings() {
     j["updates"]["autoDownload"]   = m_Settings.updates.autoDownload;
     j["updates"]["updateChannel"]  = m_Settings.updates.updateChannel;
     j["updates"]["lastChecked"]    = m_Settings.updates.lastChecked;
+    j["updates"]["cloudflareBaseUrl"] = m_Settings.updates.cloudflareBaseUrl;
 
     j["workspace"]["layoutPreset"] = WorkspaceLayoutPresetToKey(m_Settings.workspace.layoutPreset);
 
@@ -1182,10 +1227,6 @@ void SettingsManager::LoadSettings() {
             p.defaultBgB    = jp.value("defaultBgB",    0.0f);
             p.outputWidth        = jp.value("outputWidth",        0);
             p.outputHeight       = jp.value("outputHeight",       0);
-            p.windowFullscreen    = jp.value("windowFullscreen",    true);
-            p.windowWidth         = jp.value("windowWidth",         1920);
-            p.windowHeight        = jp.value("windowHeight",        1080);
-            p.windowAutoDetectRes = jp.value("windowAutoDetectRes", true);
             p.targetFPS          = jp.value("targetFPS",          60);
             p.outputQualityMode  = jp.value("outputQualityMode",  0);
             p.outputPresetIndex  = jp.value("outputPresetIndex",  3);
@@ -1263,13 +1304,12 @@ void SettingsManager::LoadSettings() {
             p.zonedDistortionFeather       = jp.value("zonedDistortionFeather",       0.35f);
             p.fillBlurEnabled       = jp.value("fillBlurEnabled",       false);
             p.fillBlurBrightness    = jp.value("fillBlurBrightness",    0.6f);
+            p.windowFullscreen      = jp.value("windowFullscreen",      true);
+            p.vlcNativeForFondos    = jp.value("vlcNativeForFondos",    false);
             p.videoRenderEngine     = jp.value("videoRenderEngine",     0);
-#ifdef _WIN32
             p.vlcHardwareDecoder    = jp.value("vlcHardwareDecoder",    "any");
-#else
-            p.vlcHardwareDecoder    = jp.value("vlcHardwareDecoder",    "none");
-#endif
-            p.vlcDeinterlace        = jp.value("vlcDeinterlace",        "disabled");
+            p.vlcVideoOutput        = jp.value("vlcVideoOutput",        "auto");
+            p.vlcDeinterlace        = jp.value("vlcDeinterlace",        "discard");
         }
 
         if (j.contains("stageDisplay")) {
@@ -1298,6 +1338,7 @@ void SettingsManager::LoadSettings() {
             if (jlsb.contains("showWeb"))     lsb.showWeb     = jlsb["showWeb"].get<bool>();
             if (jlsb.contains("showModel3D")) lsb.showModel3D = jlsb["showModel3D"].get<bool>();
             if (jlsb.contains("showLab"))     lsb.showLab     = jlsb["showLab"].get<bool>();
+            lsb.showPlugins = jlsb.value("showPlugins", false);
         }
 
         if (j.contains("homeSidebar")) {
@@ -1331,6 +1372,12 @@ void SettingsManager::LoadSettings() {
                     for (int c = 0; c < 4 && c < (int)arr[i].size(); c++)
                         shs.categoryColor[i][c] = arr[i][c].get<float>();
             }
+            shs.showOverlays      = jshs.value("showOverlays",      false);
+            shs.showStyles        = jshs.value("showStyles",        false);
+            shs.showShaders       = jshs.value("showShaders",       false);
+            shs.showTransitions   = jshs.value("showTransitions",   false);
+            shs.showAnnouncements = jshs.value("showAnnouncements", false);
+            shs.showCapture       = jshs.value("showCapture",       false);
         }
 
         if (j.contains("viewTools")) {
@@ -1433,7 +1480,16 @@ void SettingsManager::LoadSettings() {
                 const auto& jp = arr[i];
                 auto&       p  = m_Settings.pads.pads[i];
                 p.assigned  = jp.value("assigned",  false);
+                p.name      = jp.value("name",      "");
                 p.iconIndex = jp.value("iconIndex", 0);
+                if (jp.contains("color") && jp["color"].is_array()) {
+                    for (int c = 0; c < 4 && c < (int)jp["color"].size(); c++)
+                        p.color[c] = jp["color"][c].get<float>();
+                }
+                p.applyBackground = jp.value("applyBackground", true);
+                p.applyStyle      = jp.value("applyStyle",      true);
+                p.applyText       = jp.value("applyText",       false);
+                p.applyCapture    = jp.value("applyCapture",    false);
 
                 p.hasCapture = jp.value("hasCapture", false);
                 if (jp.contains("capture")) {
@@ -1464,13 +1520,20 @@ void SettingsManager::LoadSettings() {
                 }
                 p.styleAutoScale = jp.value("styleAutoScale", true);
                 p.styleFontName  = jp.value("styleFontName", "Predeterminada");
-                p.bgType    = jp.value("bgType",    0);
-                p.bgPath    = jp.value("bgPath",    "");
+
+                p.hasBackground = jp.value("hasBackground", p.bgType != 0 || !p.bgPath.empty());
+                p.bgType        = jp.value("bgType",        0);
+                p.bgPath        = jp.value("bgPath",        "");
+                p.bgFolderName  = jp.value("bgFolderName",  "");
                 if (jp.contains("bgColor") && jp["bgColor"].is_array()) {
                     const auto& bc = jp["bgColor"];
                     for (int c = 0; c < 3 && c < (int)bc.size(); c++)
                         p.bgColor[c] = bc[c].get<float>();
                 }
+
+                p.hasText   = jp.value("hasText",   false);
+                p.text      = jp.value("text",      "");
+                p.textTitle = jp.value("textTitle", "");
             }
         }
 
@@ -1489,13 +1552,16 @@ void SettingsManager::LoadSettings() {
             m_Settings.general.autoSaveIntervalSec  = jg.value("autoSaveIntervalSec", 120);
             m_Settings.general.defaultBiblesFolder  = jg.value("defaultBiblesFolder", "");
             m_Settings.general.defaultMediaFolder   = jg.value("defaultMediaFolder",  "");
+            m_Settings.general.duplicateMediaFiles  = jg.value("duplicateMediaFiles", false);
             m_Settings.general.showRailLabels       = jg.value("showRailLabels",      false);
             m_Settings.general.showPerfPanel        = jg.value("showPerfPanel",       false);
             m_Settings.general.showViewQuickActions   = jg.value("showViewQuickActions",   true);
-            m_Settings.general.openHubOnStartup       = jg.value("openHubOnStartup",       true);
+            m_Settings.general.openHubOnStartup       = jg.value("openHubOnStartup",       false);
             m_Settings.general.showAIAssistantToolbar = jg.value("showAIAssistantToolbar", false);
             m_Settings.general.viewPanelDetached      = jg.value("viewPanelDetached",      false);
             m_Settings.general.quickNotesText         = jg.value("quickNotesText",         "");
+            m_Settings.general.bibleClassicListView   = jg.value("bibleClassicListView",   false);
+            m_Settings.general.bibleVerseCardZoom     = jg.value("bibleVerseCardZoom",     1.0f);
         }
 
         if (j.contains("audio")) {
@@ -1512,7 +1578,12 @@ void SettingsManager::LoadSettings() {
             m_Settings.updates.autoDownload   = ju.value("autoDownload",   false);
             m_Settings.updates.updateChannel  = ju.value("updateChannel",  "stable");
             m_Settings.updates.lastChecked    = ju.value("lastChecked",    "");
+            m_Settings.updates.cloudflareBaseUrl = ju.value("cloudflareBaseUrl", "https://pub-4aad3f4e54404d6ab3c299176fa4fd65.r2.dev");
+            if (m_Settings.updates.cloudflareBaseUrl.empty()) {
+                m_Settings.updates.cloudflareBaseUrl = "https://pub-4aad3f4e54404d6ab3c299176fa4fd65.r2.dev";
+            }
         }
+        m_Settings.updates.currentVersion = PROYECTHOR_VERSION_STRING;
 
         if (j.contains("workspace")) {
             const auto& jw = j["workspace"];
@@ -1561,7 +1632,9 @@ void SettingsManager::LoadSettings() {
 
         if (j.contains("storage")) {
             const auto& js = j["storage"];
-            m_Settings.storage.customDataRoot = js.value("customDataRoot", "");
+            m_Settings.storage.customDataRoot               = js.value("customDataRoot", "");
+            m_Settings.storage.watchDownloadsFolder         = js.value("watchDownloadsFolder", true);
+            m_Settings.storage.downloadsBaselineInitialized = js.value("downloadsBaselineInitialized", false);
             m_Settings.storage.watchedFolders.clear();
             if (js.contains("watchedFolders") && js["watchedFolders"].is_array()) {
                 for (const auto& jw : js["watchedFolders"]) {
@@ -1573,6 +1646,29 @@ void SettingsManager::LoadSettings() {
                         m_Settings.storage.watchedFolders.push_back(wf);
                 }
             }
+            auto readStrVec = [&](const char* key, std::vector<std::string>& dst) {
+                dst.clear();
+                if (js.contains(key) && js[key].is_array()) {
+                    for (const auto& item : js[key]) {
+                        if (item.is_string()) {
+                            std::string s = item.get<std::string>();
+                            if (!s.empty()) dst.push_back(std::move(s));
+                        }
+                    }
+                }
+            };
+            readStrVec("externalMultimediaFiles", m_Settings.storage.externalMultimediaFiles);
+            readStrVec("externalBackgroundFiles", m_Settings.storage.externalBackgroundFiles);
+            readStrVec("knownWatchedFiles",       m_Settings.storage.knownWatchedFiles);
+        }
+
+        if (j.contains("performance")) {
+            const auto& jp = j["performance"];
+            m_Settings.performance.performanceMode     = jp.value("performanceMode", false);
+            m_Settings.performance.disableGlassBlur    = jp.value("disableGlassBlur", false);
+            m_Settings.performance.pauseBackgroundScan = jp.value("pauseBackgroundScan", true);
+            m_Settings.performance.targetFPS           = jp.value("targetFPS", 60);
+            m_Settings.performance.lowMemoryMode       = jp.value("lowMemoryMode", false);
         }
 
     } catch (const std::exception& e) {

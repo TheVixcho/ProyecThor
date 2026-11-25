@@ -6,7 +6,11 @@
 #include "core/PresentationCore.h"
 #include "core/FileDeletionManager.h"
 #include "core/AppPaths.h"
+#include "core/ThumbnailWorker.h"
+#include "core/settings/SettingsManager.h"
+#include "ui/framework/FilePicker.h"
 #include <imgui.h>
+#include <unordered_set>
 #ifdef _WIN32
 #include <windows.h>
 #include <shlobj.h>
@@ -88,72 +92,122 @@ static fs::path BgImagesRootDir() {
     return dir / "assets" / "backgrounds";
 }
 
-#ifndef _WIN32
-static std::string OpenImageFileDialogUnix() {
-    const char* commands[] = {
-        "zenity --file-selection --title=\"Seleccionar imagen\" "
-        "--file-filter=\"Imágenes | *.jpg *.jpeg *.png\" 2>/dev/null",
-        "kdialog --getopenfilename . \"*.jpg *.jpeg *.png|Imágenes\" 2>/dev/null"
-    };
-    for (const char* cmd : commands) {
-        std::string result;
-        char buffer[1024];
-        FILE* pipe = popen(cmd, "r");
-        if (!pipe) continue;
-        while (fgets(buffer, sizeof(buffer), pipe) != nullptr) result += buffer;
-        int status = pclose(pipe);
-        if (status != 0) continue;
-        while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
-            result.pop_back();
-        if (!result.empty()) return result;
-    }
-    return {};
-}
 
-static std::string OpenSvgFileDialogUnix() {
-    const char* commands[] = {
-        "zenity --file-selection --title=\"Seleccionar SVG\" "
-        "--file-filter=\"SVG | *.svg\" 2>/dev/null",
-        "kdialog --getopenfilename . \"*.svg|SVG\" 2>/dev/null"
-    };
-    for (const char* cmd : commands) {
-        std::string result;
-        char buffer[1024];
-        FILE* pipe = popen(cmd, "r");
-        if (!pipe) continue;
-        while (fgets(buffer, sizeof(buffer), pipe) != nullptr) result += buffer;
-        int status = pclose(pipe);
-        if (status != 0) continue;
-        while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
-            result.pop_back();
-        if (!result.empty()) return result;
-    }
-    return {};
-}
+
+static std::unordered_map<std::string, ImTextureID> s_SharedOverlayThumbs;
+
+static std::string NormalizeOverlayThumbKey(const std::string& path) {
+    if (path.empty()) return {};
+    std::error_code ec;
+    fs::path abs = fs::absolute(fs::path(path), ec).lexically_normal();
+    std::string key = abs.string();
+    std::replace(key.begin(), key.end(), '\\', '/');
+#ifdef _WIN32
+    std::transform(key.begin(), key.end(), key.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 #endif
+    return key;
+}
 
 static ImTextureID LoadImageThumb(const char* path) {
-    int w, h, n;
-    unsigned char* d = stbi_load(path, &w, &h, &n, 4);
-    if (!d) return 0;
-    GLuint tex; glGenTextures(1, &tex);
+    const auto& perf = ::ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+    const unsigned maxW = perf.lowMemoryMode ? 320u : (perf.performanceMode ? 426u : 640u);
+    const unsigned maxH = perf.lowMemoryMode ? 180u : (perf.performanceMode ? 240u : 360u);
+
+    std::vector<uint8_t> pixels;
+    unsigned w = 0, h = 0;
+    if (!Core::ThumbnailWorker::LoadThumbnailPixelsFromDisk(path ? path : "", pixels, w, h, maxW, maxH))
+        return 0;
+
+    GLuint tex = 0;
+    glGenTextures(1, &tex);
     glBindTexture(GL_TEXTURE_2D, tex);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, d);
-    stbi_image_free(d);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, static_cast<GLsizei>(w), static_cast<GLsizei>(h),
+                 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
     return (ImTextureID)(intptr_t)tex;
 }
 
-ImTextureID OverlayLibraryTab::GetThumbnail(const std::string& path) {
-    auto it = m_ThumbnailCache.find(path);
-    if (it != m_ThumbnailCache.end()) return it->second;
-    std::string abs = fs::absolute(fs::path(path)).string();
+ImTextureID OverlayLibraryTab::GetSharedThumbnail(const std::string& path) {
+    const std::string key = NormalizeOverlayThumbKey(path);
+    if (key.empty()) return 0;
+
+    auto it = s_SharedOverlayThumbs.find(key);
+    if (it != s_SharedOverlayThumbs.end())
+        return it->second;
+
+    std::error_code ec;
+    std::string abs = fs::absolute(fs::path(path), ec).string();
     ImTextureID t = LoadImageThumb(abs.c_str());
-    m_ThumbnailCache[path] = t;
+    s_SharedOverlayThumbs[key] = t;
     return t;
+}
+
+void OverlayLibraryTab::InvalidateSharedThumbnail(const std::string& path) {
+    const std::string key = NormalizeOverlayThumbKey(path);
+    auto it = s_SharedOverlayThumbs.find(key);
+    if (it != s_SharedOverlayThumbs.end()) {
+        if (it->second) {
+            GLuint tex = (GLuint)(intptr_t)it->second;
+            if (tex != 0) glDeleteTextures(1, &tex);
+        }
+        s_SharedOverlayThumbs.erase(it);
+    }
+}
+
+void OverlayLibraryTab::ClearSharedThumbnailCache() {
+    std::unordered_set<GLuint> uniqueTex;
+    for (const auto& kv : s_SharedOverlayThumbs) {
+        GLuint tex = static_cast<GLuint>(static_cast<uintptr_t>(kv.second));
+        if (tex != 0) uniqueTex.insert(tex);
+    }
+    for (GLuint tex : uniqueTex) {
+        glDeleteTextures(1, &tex);
+    }
+    s_SharedOverlayThumbs.clear();
+}
+
+void OverlayLibraryTab::PreloadAllThumbnails(
+    const std::function<void(int done, int total, const std::string& name)>& onProgress)
+{
+    struct PresetItem { std::string name; std::string pngPath; };
+    std::vector<PresetItem> items;
+
+    std::error_code ec;
+    fs::path dir = OverlaysDir();
+    if (fs::exists(dir, ec)) {
+        for (const auto& e : fs::directory_iterator(dir, ec)) {
+            if (ec) break;
+            if (!e.is_regular_file()) continue;
+            if (e.path().extension() != ".overlay") continue;
+            std::string name = e.path().stem().string();
+            fs::path png = dir / (name + ".png");
+            if (fs::exists(png, ec))
+                items.push_back({ name, png.string() });
+        }
+    }
+
+    std::sort(items.begin(), items.end(),
+              [](const PresetItem& a, const PresetItem& b) { return a.name < b.name; });
+
+    const int total = static_cast<int>(items.size());
+    if (total == 0) {
+        if (onProgress) onProgress(0, 0, "");
+        return;
+    }
+
+    for (int i = 0; i < total; ++i) {
+        if (onProgress) onProgress(i, total, items[i].name);
+        (void)GetSharedThumbnail(items[i].pngPath);
+        if (onProgress) onProgress(i + 1, total, items[i].name);
+    }
+}
+
+ImTextureID OverlayLibraryTab::GetThumbnail(const std::string& path) {
+    return GetSharedThumbnail(path);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -311,22 +365,8 @@ std::vector<std::string> OverlayLibraryTab::ListBgImages() {
 }
 
 std::string OverlayLibraryTab::ImportOverlayImage() {
-    std::string selectedPath;
-#ifdef _WIN32
-    char filename[MAX_PATH] = {};
-    OPENFILENAMEA ofn = {};
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner   = NULL;
-    ofn.lpstrFilter = "Imágenes\0*.jpg;*.jpeg;*.png\0Todos los archivos\0*.*\0";
-    ofn.lpstrFile   = filename;
-    ofn.nMaxFile    = MAX_PATH;
-    ofn.Flags       = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
-    if (!GetOpenFileNameA(&ofn)) return {};
-    selectedPath = filename;
-#else
-    selectedPath = OpenImageFileDialogUnix();
+    std::string selectedPath = ProyecThor::UI::PickImageFile();
     if (selectedPath.empty()) return {};
-#endif
 
     std::error_code ec;
     fs::path dstDir = OverlayImagesDir();
@@ -338,20 +378,7 @@ std::string OverlayLibraryTab::ImportOverlayImage() {
 }
 
 std::string OverlayLibraryTab::PickSvgFile() {
-#ifdef _WIN32
-    char filename[MAX_PATH] = {};
-    OPENFILENAMEA ofn = {};
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner   = NULL;
-    ofn.lpstrFilter = "Archivos SVG\0*.svg\0Todos los archivos\0*.*\0";
-    ofn.lpstrFile   = filename;
-    ofn.nMaxFile    = MAX_PATH;
-    ofn.Flags       = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
-    if (!GetOpenFileNameA(&ofn)) return {};
-    return filename;
-#else
-    return OpenSvgFileDialogUnix();
-#endif
+    return ProyecThor::UI::PickSvgFile();
 }
 
 std::vector<OverlayLayer> OverlayLibraryTab::ImportOverlaySvgAsLayers(int canvasW, int canvasH) {
@@ -374,7 +401,9 @@ OverlayLayer OverlayLibraryTab::ImportOverlaySvgSingle(int canvasW, int canvasH)
 bool OverlayLibraryTab::DeleteOverlay(const std::string& name) {
     Core::FileDeletionManager::ForceDeleteFile((OverlaysDir() / (name + ".overlay")).string());
     Core::FileDeletionManager::ForceDeleteFile((OverlaysDir() / (name + ".png")).string());
-    m_ThumbnailCache.erase(ResolvePngPath(name));
+    std::string pngPath = ResolvePngPath(name);
+    m_ThumbnailCache.erase(pngPath);
+    InvalidateSharedThumbnail(pngPath);
     return true;
 }
 
@@ -393,6 +422,7 @@ void OverlayLibraryTab::OpenEditorFullscreen(bool isNew, const std::string& name
                     if (ProyecThor::UI::SaveOverlayRecipe(OverlaysDir(), n, d)) {
                         std::string pngPath = ResolvePngPath(n);
                         m_ThumbnailCache.erase(pngPath);
+                        InvalidateSharedThumbnail(pngPath);
                         ReloadList();
 
                         // Si el overlay editado es el que ya esta en vivo,

@@ -1,5 +1,5 @@
 #include "PreviewLoadWorker.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include <future>
 #include <memory>
 #include <chrono>
@@ -25,24 +25,24 @@ void PreviewLoadWorker::Request(std::function<void()> action)
     if (!action) return;
     {
         std::lock_guard<std::mutex> lk(m_Mutex);
-        m_Pending = std::move(action);
+        m_Queue.push_back(std::move(action));
     }
     m_Cv.notify_one();
 }
 
-void PreviewLoadWorker::RequestLoad(VLCBasePlayer* player, const std::string& path, bool loop, bool startMuted)
+void PreviewLoadWorker::RequestLoad(MPVBasePlayer* player, const std::string& path, bool loop, bool startMuted)
 {
     if (!player) return;
     Request([player, path, loop, startMuted] { player->Play(path, loop, startMuted); });
 }
 
-void PreviewLoadWorker::RequestStop(VLCBasePlayer* player)
+void PreviewLoadWorker::RequestStop(MPVBasePlayer* player)
 {
     if (!player) return;
     Request([player] { player->Stop(); });
 }
 
-void PreviewLoadWorker::RequestStopSync(VLCBasePlayer* player, int timeoutMs)
+void PreviewLoadWorker::RequestStopSync(MPVBasePlayer* player, int timeoutMs)
 {
     if (!player) return;
     auto prom = std::make_shared<std::promise<void>>();
@@ -72,16 +72,19 @@ void PreviewLoadWorker::ThreadFunc()
         std::function<void()> action;
         {
             std::unique_lock<std::mutex> lk(m_Mutex);
-            m_Cv.wait(lk, [this] { return !m_Running.load() || m_Pending.has_value(); });
-            if (!m_Pending.has_value())
-                return; // solo puede pasar si nos pidieron parar y no quedo nada pendiente
-            action = std::move(*m_Pending);
-            m_Pending.reset();
+            m_Cv.wait(lk, [this] { return !m_Running.load() || !m_Queue.empty(); });
+            if (!m_Running.load() && m_Queue.empty())
+                return;
+            if (!m_Queue.empty()) {
+                action = std::move(m_Queue.front());
+                m_Queue.pop_front();
+            }
         }
 
-        action();
+        if (action)
+            action();
 
-        if (!m_Running.load())
+        if (!m_Running.load() && m_Queue.empty())
             return;
     }
 }

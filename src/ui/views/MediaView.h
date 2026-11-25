@@ -9,7 +9,7 @@
 #include "ImageView.h"
 
 namespace ProyecThor::Core {
-    class VLCBasePlayer;
+    class MPVBasePlayer;
 }
 
 namespace ProyecThor::UI {
@@ -19,7 +19,7 @@ namespace ProyecThor::UI {
         MediaView() = default;
         ~MediaView();
 
-        void Render(Core::VLCBasePlayer* previewPlayer);
+        void Render(Core::MPVBasePlayer* previewPlayer);
         std::string FormatTime(int64_t ms);
 
     private:

@@ -1,9 +1,12 @@
 #include "PanelPickerFullscreen.h"
 #include "LibraryPanel.h"
+#include "StylesHubPanel.h"
 #include "ui/framework/UIManager.h"
 #include "ui/framework/AppIcons.h"
 #include "ui/panels/biblio/LibraryIcons.h"
+#include "core/settings/SettingsManager.h"
 #include "core/PresentationCore.h"
+#include "ui/views/biblia/BibleTextUtils.h"
 
 #include <algorithm>
 #include <cctype>
@@ -99,7 +102,12 @@ void PanelPickerFullscreen::InitItems()
         IM_COL32(236, 72, 153, 255),
         AppIcons::DrawIcon_Swap,
         [this]() {
-            if (m_Library) m_Library->SelectSideMode(LibrarySideMode::Render);
+            auto& s = ProyecThor::Settings::SettingsManager::Get().GetSettings().librarySidebar;
+            s.showRender = true;
+            ProyecThor::Settings::SettingsManager::Get().Save();
+            if (m_UIManager && m_UIManager->GetStylesHubPanelRef()) {
+                m_UIManager->GetStylesHubPanelRef()->SelectSection(StylesSection::Render);
+            }
         },
         "render conversor video audio codec ffmpeg compresor exportar formato"
     });
@@ -113,7 +121,9 @@ void PanelPickerFullscreen::InitItems()
         IM_COL32(59, 130, 246, 255),
         AppIcons::DrawIcon_Overlay,
         [this]() {
-            if (m_Library) m_Library->SelectSideMode(LibrarySideMode::Overlay);
+            if (m_UIManager && m_UIManager->GetStylesHubPanelRef()) {
+                m_UIManager->GetStylesHubPanelRef()->SelectSection(StylesSection::Overlays);
+            }
         },
         "overlay capas zocalos lower thirds banners marquesina diseno graficos"
     });
@@ -127,7 +137,12 @@ void PanelPickerFullscreen::InitItems()
         IM_COL32(99, 102, 241, 255),
         AppIcons::DrawIcon_Globe,
         [this]() {
-            if (m_Library) m_Library->SelectSideMode(LibrarySideMode::Web);
+            auto& s = ProyecThor::Settings::SettingsManager::Get().GetSettings().librarySidebar;
+            s.showWeb = true;
+            ProyecThor::Settings::SettingsManager::Get().Save();
+            if (m_UIManager && m_UIManager->GetStylesHubPanelRef()) {
+                m_UIManager->GetStylesHubPanelRef()->SelectSection(StylesSection::Web);
+            }
         },
         "web html navegador url chrome browser offline local internet paginas"
     });
@@ -141,7 +156,12 @@ void PanelPickerFullscreen::InitItems()
         IM_COL32(139, 92, 246, 255),
         AppIcons::DrawIcon_Cube3D,
         [this]() {
-            if (m_Library) m_Library->SelectSideMode(LibrarySideMode::Model3D);
+            auto& s = ProyecThor::Settings::SettingsManager::Get().GetSettings().librarySidebar;
+            s.showModel3D = true;
+            ProyecThor::Settings::SettingsManager::Get().Save();
+            if (m_UIManager && m_UIManager->GetStylesHubPanelRef()) {
+                m_UIManager->GetStylesHubPanelRef()->SelectSection(StylesSection::Model3D);
+            }
         },
         "3d modelos mallas obj stl gltf glb wireframe render tridimensional"
     });
@@ -155,9 +175,33 @@ void PanelPickerFullscreen::InitItems()
         IM_COL32(168, 85, 247, 255),
         AppIcons::DrawIcon_Formula,
         [this]() {
-            if (m_Library) m_Library->SelectSideMode(LibrarySideMode::Lab);
+            auto& s = ProyecThor::Settings::SettingsManager::Get().GetSettings().librarySidebar;
+            s.showLab = true;
+            ProyecThor::Settings::SettingsManager::Get().Save();
+            if (m_UIManager && m_UIManager->GetStylesHubPanelRef()) {
+                m_UIManager->GetStylesHubPanelRef()->SelectSection(StylesSection::Lab);
+            }
         },
         "lab matematicas formulas funciones graficas calculo fx curvas"
+    });
+
+    m_Items.push_back({
+        "plugins",
+        "Plugins & Extensiones",
+        "Gestor de complementos externos, scripts de usuario y herramientas como yt-dlp",
+        "HERRAMIENTAS",
+        PickerCategory::Tools,
+        IM_COL32(245, 158, 11, 255),
+        AppIcons::DrawIcon_Plugin,
+        [this]() {
+            auto& s = ProyecThor::Settings::SettingsManager::Get().GetSettings().librarySidebar;
+            s.showPlugins = true;
+            ProyecThor::Settings::SettingsManager::Get().Save();
+            if (m_UIManager && m_UIManager->GetStylesHubPanelRef()) {
+                m_UIManager->GetStylesHubPanelRef()->SelectSection(StylesSection::Plugins);
+            }
+        },
+        "plugins extensiones scripts herramientas ytdlp youtube downloader modulos addons"
     });
 }
 
@@ -180,11 +224,11 @@ void PanelPickerFullscreen::Close()
 bool PanelPickerFullscreen::MatchesSearch(const PickerItem& item, const std::string& query) const
 {
     if (query.empty()) return true;
-    std::string q = ToLower(query);
-    if (ToLower(item.title).find(q) != std::string::npos) return true;
-    if (ToLower(item.subtitle).find(q) != std::string::npos) return true;
-    if (ToLower(item.categoryLabel).find(q) != std::string::npos) return true;
-    if (ToLower(item.keywords).find(q) != std::string::npos) return true;
+    std::string q = ProyecThor::UI::TextUtils::StripAccents(ProyecThor::UI::TextUtils::ToLowerUTF8(query));
+    if (ProyecThor::UI::TextUtils::StripAccents(ProyecThor::UI::TextUtils::ToLowerUTF8(item.title)).find(q) != std::string::npos) return true;
+    if (ProyecThor::UI::TextUtils::StripAccents(ProyecThor::UI::TextUtils::ToLowerUTF8(item.subtitle)).find(q) != std::string::npos) return true;
+    if (ProyecThor::UI::TextUtils::StripAccents(ProyecThor::UI::TextUtils::ToLowerUTF8(item.categoryLabel)).find(q) != std::string::npos) return true;
+    if (ProyecThor::UI::TextUtils::StripAccents(ProyecThor::UI::TextUtils::ToLowerUTF8(item.keywords)).find(q) != std::string::npos) return true;
     return false;
 }
 

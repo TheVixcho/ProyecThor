@@ -16,7 +16,7 @@
 #include "styles/CanvaStyleEditor.h"
 #include "core/PresentationCore.h"
 #include <imgui.h>
-#include <GL/gl.h>
+#include <GL/glew.h>
 #include "stb_image.h"
 #include "stb_image_write.h"
 

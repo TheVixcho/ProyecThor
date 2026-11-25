@@ -1,7 +1,7 @@
 #include "MonitorView.h"
 #include "MonitorTheme.h"
 #include "core/PresentationCore.h"
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include "core/AppPaths.h"
 #include <imgui.h>
 #include <algorithm>
@@ -9,7 +9,6 @@
 
 #include "MonitorDesign.h"
 #include "MonitorUIHelpers.h"
-#include "ui/framework/UIStrings.h"
 
 namespace ProyecThor::UI {
 
@@ -18,7 +17,7 @@ using namespace Design;
 using namespace Components;
 
 // Columna central: botones TRANSMITIR y LOOP.
-void MonitorView::RenderCenterColumn(float w, float h, Core::VLCBasePlayer* previewPlayer)
+void MonitorView::RenderCenterColumn(float w, float h, Core::MPVBasePlayer* previewPlayer)
 {
     float btnW   = std::max(w - 4.0f, 16.0f);
     float hPad   = (w - btnW) * 0.5f;
@@ -65,11 +64,12 @@ void MonitorView::RenderCenterColumn(float w, float h, Core::VLCBasePlayer* prev
             Core::PresentationCore::Get().SetLiveVolume(
                 m_LiveMuted ? 0 : static_cast<int>(m_LiveVolume * 100.0f));
 
-            Core::PresentationCore::Get().SetBackgroundMedia(finalPath, isVideo, allowAudio);
-            Core::PresentationCore::Get().SetProjecting(true);
+            auto& core = Core::PresentationCore::Get();
+            core.SetProjecting(true);
+            core.SetBackgroundMedia(finalPath, isVideo, allowAudio);
             m_LivePlaying = true;
 
-            Core::VLCBasePlayer* newBg = Core::PresentationCore::Get().GetBackgroundPlayer();
+            Core::MPVBasePlayer* newBg = Core::PresentationCore::Get().GetBackgroundPlayer();
             if (previewPlayer && previewPlayer != newBg) {
                 previewPlayer->SetPause(true);
                 m_PreviewPlaying = false;
@@ -78,7 +78,6 @@ void MonitorView::RenderCenterColumn(float w, float h, Core::VLCBasePlayer* prev
                 newBg->SetPause(false);
         }
     }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", Loc("Transmitir a En Vivo", "Send to Live", "Transmitir para Ao Vivo"));
     ImGui::PopID();
 
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + spacing);
@@ -94,7 +93,6 @@ void MonitorView::RenderCenterColumn(float w, float h, Core::VLCBasePlayer* prev
     {
         Core::PresentationCore::Get().SetLiveLoop(!loopEnabled);
     }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", loopEnabled ? Loc("Bucle activado", "Loop enabled", "Loop ativado") : Loc("Bucle desactivado", "Loop disabled", "Loop desativado"));
     ImGui::PopID();
 
     ImGui::EndChild();

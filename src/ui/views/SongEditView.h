@@ -62,6 +62,17 @@ private:
     int    m_DurationPopupValueMs     = 0;
 
     void RenderVerseDurationPopup(const std::vector<std::string>& slides);
+
+    // Asistente IA para Letras
+    bool        m_ShowAIModal          = false;
+    char        m_AIPromptBuf[512]     = "";
+    std::string m_AICorrectedLyrics;
+    std::string m_AIStatusFeedback;
+    bool        m_AIIsSuccess          = true;
+    bool        m_AIIsBusy             = false;
+    uint32_t    m_AILastTokensCost     = 0;
+
+    void RenderAIEditModal();
 };
 
 }

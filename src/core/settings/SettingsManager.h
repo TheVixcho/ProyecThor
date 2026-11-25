@@ -5,7 +5,6 @@
 #include <string>
 #include <vector>
 #include <imgui.h>
-#include "Version.h"
 #include "StageLayoutTemplates.h"
 
 namespace ProyecThor::Settings {
@@ -25,6 +24,7 @@ namespace ProyecThor::Settings {
     // ── Proyección ───────────────────────────────────────────────────────
     struct ProjectionSettings {
         int   targetMonitor   = -1;
+        bool  windowFullscreen = true; // true: Pantalla Completa (sin bordes), false: Modo Ventana (flotante con bordes)
 
         // Monitores de salida publica ADICIONALES (opcional) -- todos
         // muestran exactamente lo mismo que targetMonitor. Ver
@@ -33,12 +33,6 @@ namespace ProyecThor::Settings {
 
         int   outputWidth     = 0;
         int   outputHeight    = 0;
-
-        // ── Ventana de proyección (Linux & Multi-monitor) ───────────────
-        bool  windowFullscreen    = true;  // true = Pantalla completa (fullscreen), false = Modo ventana
-        int   windowWidth         = 1920;  // Ancho en píxeles (modo ventana o resolución personalizada)
-        int   windowHeight        = 1080;  // Alto en píxeles (modo ventana o resolución personalizada)
-        bool  windowAutoDetectRes = true;  // true = usar resolución nativa del monitor en fullscreen
         float contentScale    = 1.0f;
         float marginTop       = 50.0f;
         float marginBottom    = 50.0f;
@@ -195,19 +189,20 @@ namespace ProyecThor::Settings {
         float fillBlurBrightness    = 0.6f;
 
         // ── Motor de renderizado del fondo de video ──────────────────────
-        // 0 = OpenGL compuesto (fondo + overlays + texto en vivo juntos, compatible con Linux Wayland/X11 y Windows).
-        // 1 = VLC en ventana nativa (solo Windows). Default 0 (OpenGL).
+        // 0 = Compositor unificado OpenGL (ventana única con overlays de letras y versículos)
         int videoRenderEngine = 0;
 
         // ── Decodificador de hardware para libVLC ("any", "none", "vaapi", "vdpau", "d3d11va", "dxva2")
-#ifdef _WIN32
         std::string vlcHardwareDecoder = "any";
-#else
-        std::string vlcHardwareDecoder = "none";
-#endif
 
-        // ── Desentrelazado para libVLC ("disabled", "yadif", "yadif2x", "blend", "bob", "linear", "discard")
-        std::string vlcDeinterlace = "disabled";
+        // ── Salida de video para libVLC (VOut: "auto", "xcb_xv", "gl", "wl_shm", "xcb_x11", "vdpau", "d3d11", "direct3d9", "wingdi")
+        std::string vlcVideoOutput = "auto";
+
+        // ── Filtro de desentrelazado para libVLC ("discard", "auto", "yadif", "yadif2x", "blend", "linear", "bob")
+        std::string vlcDeinterlace = "discard";
+
+        // ── Usar ventana nativa VLC también para fondos de bucle (sin overlays de texto)
+        bool vlcNativeForFondos = false;
     };
 
     // ── Audio ────────────────────────────────────────────────────────────
@@ -231,10 +226,10 @@ namespace ProyecThor::Settings {
         int         autoSaveIntervalSec = 120;
         std::string defaultBiblesFolder = "";
         std::string defaultMediaFolder  = "";
+        bool        duplicateMediaFiles = false;
         Language    language            = Language::Spanish;
         std::string dismissedChangelog  = "";
-        // Titulos bajo los iconos de los 4 rails (Biblioteca/Home/Control/Diseño).
-        // Apagarlo los deja solo-icono para ocupar menos espacio en pantalla.
+        // Titulos bajo los iconos de los rails y la toolbar. Desactivado por defecto para diseño limpio compacto.
         bool        showRailLabels      = false;
         // Panel opcional de diagnostico (CPU/RAM/FPS/GPU), activable desde
         // el menu Vista. Apagado por default: es una herramienta puntual,
@@ -246,7 +241,7 @@ namespace ProyecThor::Settings {
         // ancho para el video.
         bool        showViewQuickActions = true;
         // Si es false, se inicia directo en modo Proyector tras la pantalla de carga (omite el Hub)
-        bool        openHubOnStartup     = true;
+        bool        openHubOnStartup     = false;
         // Boton opcional del Asistente de IA en la barra de herramientas inferior (toolbar).
         // Apagado por defecto para ahorrar espacio y botones innecesarios; activable en Espacio de trabajo > Ventanas.
         bool        showAIAssistantToolbar = false;
@@ -258,6 +253,8 @@ namespace ProyecThor::Settings {
         // cerrar la ventana, para que nunca se pierda lo que iba tipeando
         // aunque cierre la app sin borrarlo a mano.
         std::string quickNotesText = "";
+        bool        bibleClassicListView = false;
+        float       bibleVerseCardZoom   = 1.0f;
     };
 
     // ── Tema ─────────────────────────────────────────────────────────────
@@ -299,9 +296,9 @@ namespace ProyecThor::Settings {
         float danger[4]      = { 0.940f, 0.350f, 0.390f, 1.0f };
         float success[4]     = { 0.320f, 0.880f, 0.630f, 1.0f };
 
-        float windowRounding = 14.0f;
-        float frameRounding  =  9.0f;
-        float scrollbarSize  =  8.0f;
+        float windowRounding = 2.0f;
+        float frameRounding  = 2.0f;
+        float scrollbarSize  = 6.0f;
 
         // Ruta absoluta a un .ttf/.otf elegido por el usuario para la
         // interfaz de la app (ver CategoryTheme.cpp, seccion "Fuente de la
@@ -356,11 +353,12 @@ namespace ProyecThor::Settings {
 
     // ── Actualizaciones ──────────────────────────────────────────────────
     struct UpdatesSettings {
-        std::string currentVersion = PROYECTHOR_VERSION_STRING;
+        std::string currentVersion = "1.2.0";
         std::string lastChecked    = "";
         std::string updateChannel  = "beta";
         bool        checkOnStartup = true;
         bool        autoDownload   = false;
+        std::string cloudflareBaseUrl = "https://pub-4aad3f4e54404d6ab3c299176fa4fd65.r2.dev";
     };
 
     // ── Stage Display (monitor de control) ──────────────────────────────
@@ -421,6 +419,7 @@ namespace ProyecThor::Settings {
         bool showWeb     = false;
         bool showModel3D = false;
         bool showLab     = false;
+        bool showPlugins = false;
     };
 
     // ── Sidebar de Home (Home/Reloj/Anuncios/Notas/Captura/Transmision) ──
@@ -456,6 +455,12 @@ namespace ProyecThor::Settings {
             { 0.45f, 0.60f, 1.00f, 1.0f }, // Anuncios
             { 0.90f, 0.35f, 0.45f, 1.0f }, // Captura
         };
+        bool showOverlays       = false;
+        bool showStyles         = false;
+        bool showShaders        = false;
+        bool showTransitions    = false;
+        bool showAnnouncements  = false;
+        bool showCapture        = false;
     };
 
     // ── Sidebar de Herramientas (debajo de Vista en Vivo): Control
@@ -493,22 +498,28 @@ namespace ProyecThor::Settings {
         CaptureSceneSettings scenes[kCaptureSceneCount];
     };
 
-    // ── Pads de ViewTools ─────────────────────────────────────────────────
-    // 8 botones tipo pad MIDI: cada uno guarda, de forma independiente,
-    // una disposicion de Captura (mismos campos que CaptureSceneSettings —
-    // ver CapturePanel::SnapshotCurrentCapture/ApplyCaptureScene) y un
-    // snapshot directo del estilo+fondo que esta en pantalla en ese momento
-    // (no una referencia por nombre a un estilo guardado). hasCapture/
-    // hasStyle pueden faltar -- un pad no tiene por que tocar las dos cosas
-    // a la vez. Nunca guarda la letra/texto en pantalla.
+    // ── Pads de Escena (ViewPanel > Pads) ─────────────────────────────────
+    // Botones de escena rápida: guardan de forma modular o combinada
+    // fondo (video, imagen, color o carpeta de videos en bucle), letra /
+    // texto / palabra fija, estilo tipográfico y captura de video/cámara.
     struct PadSettings {
-        bool assigned  = false;
-        int  iconIndex = 0; // indice en la tabla fija de iconos, ver ViewToolsPanel.cpp
+        bool        assigned   = false;
+        std::string name;             // Nombre personalizado (ej. "Bienvenida", "Alabanza 1")
+        int         iconIndex  = 0;
+        float       color[4]   = { 0.25f, 0.45f, 0.90f, 1.0f }; // Color acento del Pad
 
+        // Componentes activos en esta escena (modulares: opcional o todos juntos)
+        bool        applyBackground = true;
+        bool        applyStyle      = true;
+        bool        applyText       = false;
+        bool        applyCapture    = false;
+
+        // Captura
         bool                  hasCapture = false;
         CaptureSceneSettings  capture;
 
-        bool        hasStyle = false;
+        // Estilo tipográfico
+        bool        hasStyle        = false;
         float       styleSize       = 60.0f;
         float       styleColor[4]   = { 1.0f, 1.0f, 1.0f, 1.0f };
         int         styleHAlign     = 1;
@@ -516,9 +527,18 @@ namespace ProyecThor::Settings {
         float       styleMargins[4] = { 50.0f, 50.0f, 50.0f, 50.0f };
         bool        styleAutoScale  = true;
         std::string styleFontName   = "Predeterminada";
-        int         bgType = 0; // espeja PresentationCore::PresentationState::BackgroundType
-        std::string bgPath;
-        float       bgColor[3] = { 0.0f, 0.0f, 0.0f };
+
+        // Fondo (Video, Imagen, Color sólido, Carpeta de videos)
+        bool        hasBackground   = false;
+        int         bgType          = 0; // 0=SolidColor, 1=Video, 2=Audio, 3=Image, 4=VideoFolder
+        std::string bgPath;              // Ruta de archivo o ruta de carpeta
+        std::string bgFolderName;        // Nombre de carpeta si es de la biblioteca
+        float       bgColor[3]      = { 0.0f, 0.0f, 0.0f };
+
+        // Letra / Texto / Palabra fija
+        bool        hasText         = false;
+        std::string text;                // Texto o palabra fija (ej. "BIENVENIDOS")
+        std::string textTitle;           // Título referencial de la canción/versículo
     };
     static constexpr int kPadCount = 8;
     struct PadsSettings {
@@ -624,7 +644,20 @@ namespace ProyecThor::Settings {
 
     struct StorageSettings {
         std::string                customDataRoot = "";
+        bool                       watchDownloadsFolder = true;
+        bool                       downloadsBaselineInitialized = false;
         std::vector<WatchedFolder> watchedFolders;
+        std::vector<std::string>   externalMultimediaFiles;
+        std::vector<std::string>   externalBackgroundFiles;
+        std::vector<std::string>   knownWatchedFiles;
+    };
+
+    struct PerformanceSettings {
+        bool performanceMode     = false; // Modo Rendimiento: bajo consumo para Pentium, Celeron, 8GB RAM
+        bool disableGlassBlur    = false; // Desactivar desenfoque Glass / Gaussian blur en GPU
+        bool pauseBackgroundScan = true;  // Limitar escaneo periódico en segundo plano
+        int  targetFPS           = 60;    // 30, 60, o 0 (sin límite)
+        bool lowMemoryMode       = false; // Modo ahorro de memoria
     };
 
     struct AppSettings {
@@ -648,6 +681,7 @@ namespace ProyecThor::Settings {
         TransitionSettings     transitions;
         AISettings             ai;
         StorageSettings        storage;
+        PerformanceSettings    performance;
     };
 
     class SettingsManager {

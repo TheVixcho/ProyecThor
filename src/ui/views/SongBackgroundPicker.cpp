@@ -1,8 +1,12 @@
 #include "SongBackgroundPicker.h"
+#include "SettingsManager.h"
+#include "core/MediaImportManager.h"
+#include "ui/panels/biblio/LibraryHelpers.h"
 #include <filesystem>
 #include <algorithm>
 #include <cstdlib>
 #include <cctype>
+#include <unordered_set>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -34,43 +38,77 @@ static std::filesystem::path SongBgRootDir()
 std::vector<SongBgEntry> ListSongBackgrounds()
 {
     auto isMedia = [](const std::string& ext) {
-        return ext == ".mp4" || ext == ".mkv" || ext == ".avi" || ext == ".mov"
-            || ext == ".jpg" || ext == ".jpeg" || ext == ".png";
+        return ext == ".mp4" || ext == ".mkv" || ext == ".avi" || ext == ".mov" || ext == ".webm" || ext == ".m4v"
+            || ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp" || ext == ".webp";
     };
     auto isImageExt = [](const std::string& ext) {
-        return ext == ".jpg" || ext == ".jpeg" || ext == ".png";
+        return ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp" || ext == ".webp";
     };
-    auto addFile = [&](const std::filesystem::directory_entry& f, const std::string& folder,
-                        std::vector<SongBgEntry>& out) {
-        std::string ext = f.path().extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+    std::unordered_set<std::string> seenPaths;
+    std::unordered_set<std::string> seenNames;
+    std::vector<SongBgEntry> out;
+
+    auto addPath = [&](const std::filesystem::path& p, const std::string& folder) {
+        std::string ext = p.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(),
+                       [](unsigned char c) { return (char)std::tolower(c); });
         if (!isMedia(ext)) return;
+
+        std::string fullUtf8 = Library::PathToUtf8(p);
+        std::string fnameUtf8 = Library::PathToUtf8(p.filename());
+        std::string stemUtf8  = Library::PathToUtf8(p.stem());
+
+        std::string pathKey = Core::MediaImportManager::NormalizePathKey(fullUtf8);
+        std::string nameKey = Core::MediaImportManager::NormalizeFilenameKey(fnameUtf8);
+        if (nameKey.empty()) return;
+        if (!pathKey.empty() && seenPaths.count(pathKey) > 0) return;
+        if (seenNames.count(nameKey) > 0) return;
+
+        if (!pathKey.empty()) seenPaths.insert(pathKey);
+        seenNames.insert(nameKey);
+
         SongBgEntry entry;
-        entry.fullPath = f.path().string();
-        entry.label    = folder.empty() ? f.path().stem().string() : (folder + "/" + f.path().stem().string());
+        entry.fullPath = fullUtf8;
+        entry.label    = folder.empty() ? stemUtf8 : (folder + "/" + stemUtf8);
         entry.isImage  = isImageExt(ext);
         out.push_back(std::move(entry));
     };
 
-    std::vector<SongBgEntry> out;
     std::error_code ec;
     std::filesystem::path root = SongBgRootDir();
-    if (!std::filesystem::exists(root, ec)) return out;
-
-    for (const auto& e : std::filesystem::directory_iterator(root, ec))
+    if (std::filesystem::exists(root, ec))
     {
-        if (e.is_directory())
+        for (const auto& e : std::filesystem::directory_iterator(root, ec))
         {
-            std::string folder = e.path().filename().string();
-            std::error_code subEc;
-            for (const auto& sub : std::filesystem::directory_iterator(e.path(), subEc))
-                if (sub.is_regular_file()) addFile(sub, folder, out);
-        }
-        else if (e.is_regular_file())
-        {
-            addFile(e, "", out);
+            if (e.is_directory())
+            {
+                std::string folder = Library::PathToUtf8(e.path().filename());
+                std::error_code subEc;
+                for (const auto& sub : std::filesystem::directory_iterator(e.path(), subEc))
+                    if (sub.is_regular_file()) addPath(sub.path(), folder);
+            }
+            else if (e.is_regular_file())
+            {
+                addPath(e.path(), "");
+            }
         }
     }
+
+    const auto& extBgs = ProyecThor::Settings::SettingsManager::Get().GetSettings().storage.externalBackgroundFiles;
+    for (const auto& rawEntry : extBgs)
+    {
+        std::string folder, extPath;
+        Core::MediaImportManager::ParseExternalBgEntry(rawEntry, folder, extPath);
+        if (extPath.empty()) continue;
+        std::error_code extEc;
+        std::filesystem::path p = Library::U8Path(extPath);
+        if (std::filesystem::exists(p, extEc) && std::filesystem::is_regular_file(p, extEc))
+        {
+            addPath(p, folder);
+        }
+    }
+
     std::sort(out.begin(), out.end(), [](const SongBgEntry& a, const SongBgEntry& b) { return a.label < b.label; });
     return out;
 }

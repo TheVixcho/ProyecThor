@@ -16,7 +16,10 @@
 #include "WebBrowserPanel.h"
 #include "model3d/Model3DPanel.h"
 #include "lab/LabPanel.h"
+#include "PluginsPanel.h"
 #include <memory>
+#include <atomic>
+#include <thread>
 
 namespace ProyecThor::UI { class UIManager; class MonitorView; class PanelPickerFullscreen; }
 enum class ActiveLeftPanel;
@@ -44,14 +47,8 @@ enum class LibraryCategory {
 // LibraryCategory/m_CurrentCategory -- es un modo de vista independiente.
 enum class LibrarySideMode {
     Categories = 0,
-    // Red y Mobile se mudaron a Ajustes > Conexiones (ver
-    // CategoryConnections.cpp), junto con Streaming (RTMP) y OSC -- una
-    // sola página para "todo lo que conecta ProyecThor con el exterior",
-    // en vez de repartido entre aca y el rail de Conexiones (retirado).
-    // "Reloj" (antes indice 2) se saco de aca -- ya vive en el toolbar
-    // inline de ViewPanel (ver ViewPanel::InlineTool::Clock), duplicaba
-    // el acceso.
-    Render     = 3, // "Render" — conversor de formato (ver MediaConverter.h),
+    Clock      = 2, // "Reloj" — reloj y temporizadores en vivo (ver OClock)
+    Render     = 3, // "Render" — conversor de formato (ver MediaConverter.h)
                      // mudado desde la sección "Biblioteca" del workspace
                      // (LibraryManagerPanel, retirada del todo).
     Overlay    = 4, // "Overlay" — galeria + editor de overlays PNG (ver
@@ -63,6 +60,9 @@ enum class LibrarySideMode {
     Model3D    = 6, // "3D" — visor y catálogo de modelos y recursos 3D (OBJ, STL, PLY, GLTF, GLB)
     Lab        = 7, // "Lab" — laboratorio matemático de fórmulas y graficador de funciones en vivo
     Picker     = 8,
+    Plugins    = 9, // "Plugins" — gestor de complementos y utilidades externas
+    Canva      = 10, // "Canva" — integración oficial Canva Connect
+    Capture    = 11, // "Captura" — cámara, ventana o monitor en vivo
 };
 
 class LibraryPanel : public IPanel {
@@ -78,6 +78,22 @@ public:
 
     void SelectCategory(LibraryCategory cat);
     void SelectSideMode(LibrarySideMode mode);
+    LibraryCategory GetCategory() const { return m_CurrentCategory; }
+    LibrarySideMode GetSideMode() const { return m_SideMode; }
+    void SetShowPlaylists(bool show) {
+        m_ShowPlaylistsTab = show;
+        if (show) {
+            m_CurrentCategory = LibraryCategory::Songs;
+            m_SideMode = LibrarySideMode::Categories;
+        }
+    }
+    bool IsShowingPlaylists() const {
+        return m_CurrentCategory == LibraryCategory::Songs && m_SideMode == LibrarySideMode::Categories && m_ShowPlaylistsTab;
+    }
+    WebBrowserPanel* GetWebBrowserPanel() { return m_WebBrowserPanel.get(); }
+    Model3DPanel*    GetModel3DPanel()    { return m_Model3DPanel.get(); }
+    LabPanel*        GetLabPanel()        { return m_LabPanel.get(); }
+    PluginsPanel* GetPluginsPanel() { return m_PluginsPanel.get(); }
     void OpenPanelPickerFullscreen();
 
     // Preset de workspace "Biblioteca" (ver Settings::WorkspaceLayoutPreset::
@@ -112,6 +128,7 @@ private:
     Library::LibraryContext BuildContext();
 
     void RefreshList();
+    void ApplyCategoryLayoutAndSelection();
     void CreateNewSong();
     void SaveSong(const std::string& title, const std::string& content, const std::string& author);
     void ImportFile();
@@ -127,8 +144,8 @@ private:
     // RenderConverterSection() ahora es publico, ver mas arriba.
     void RefreshConvertibleItems();
 
-    LibraryCategory          m_CurrentCategory     = LibraryCategory::Multimedia;
-    LibraryCategory          m_PrevCategory        = LibraryCategory::Multimedia;
+    LibraryCategory          m_CurrentCategory     = LibraryCategory::Songs;
+    LibraryCategory          m_PrevCategory        = LibraryCategory::Songs;
     bool                     m_MediaOnlyMode       = false;
     bool                     m_RenderOnlyMode      = false;
     Library::MultimediaFilter m_MultimediaFilter   = Library::MultimediaFilter::All;
@@ -140,6 +157,9 @@ private:
     int                      m_SelectedIndex       = -1;
     char                     m_SearchBuffer[256]{};
 
+    std::atomic<bool>        m_ImportRunning{false};
+    std::atomic<bool>        m_NeedsRefreshList{false};
+
     UIManager*               m_UIManagerRef        = nullptr;
     MonitorView*             m_MonitorRef          = nullptr;
     AudioPanel               m_AudioPanel;
@@ -149,7 +169,8 @@ private:
     // ── Grupo "Reloj" del sidebar (ver LibrarySideMode) ───────────────────
     // Mudado desde ViewToolsPanel: la propiedad de OClock (y el registro en
     // PresentationCore::SetOClockRef) se movio junto con el boton.
-    LibrarySideMode  m_SideMode = LibrarySideMode::Categories;
+    LibrarySideMode  m_SideMode     = LibrarySideMode::Categories;
+    LibrarySideMode  m_PrevSideMode = LibrarySideMode::Categories;
     OClock           m_OClock;
 
     // ── Grupo "Overlay" del sidebar (ver LibrarySideMode) ─────────────────
@@ -164,6 +185,7 @@ private:
     // ── Grupo "Lab" del sidebar (ver LibrarySideMode::Lab) ────────────────
     std::unique_ptr<LabPanel>         m_LabPanel;
     std::unique_ptr<PanelPickerFullscreen> m_PanelPicker;
+    std::unique_ptr<PluginsPanel>     m_PluginsPanel;
 
     // ── Render (conversor de formato) ─────────────────────────────────────
     struct ConvertibleItem { std::string filename; bool isVideo; };

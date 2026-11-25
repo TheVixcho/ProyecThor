@@ -4,7 +4,11 @@
 #include "ui/framework/bin/StyleGeneralApp.h"
 #include "core/PresentationCore.h"
 #include "core/FileDeletionManager.h"
+#include "core/MediaCollections.h"
+#include "core/settings/SettingsManager.h"
+#include "ui/panels/biblio/LibraryMultimedia.h"
 #include "ui/panels/monitor/MonitorTheme.h"
+#include "ui/framework/FilePicker.h"
 
 namespace { namespace MT = ProyecThor::UI::MonitorTheme; }
 
@@ -322,37 +326,7 @@ static void DrawTextCenteredFree(ImDrawList* dl, ImFont* font, float fontSize,
                 color, text);
 }
 
-#ifndef _WIN32
-static std::string OpenAudioFileDialogUnix() {
-    const char* commands[] = {
-        "zenity --file-selection --title=\"Seleccionar audio\" "
-        "--file-filter=\"Audio | *.mp3 *.flac *.wav *.ogg *.aac *.m4a *.wma *.opus *.aiff\" 2>/dev/null",
-        "kdialog --getopenfilename . "
-        "\"*.mp3 *.flac *.wav *.ogg *.aac *.m4a *.wma *.opus *.aiff|Audio\" 2>/dev/null"
-    };
 
-    for (const char* cmd : commands) {
-        std::array<char, 1024> buffer{};
-        std::string result;
-
-        FILE* pipe = popen(cmd, "r");
-        if (!pipe) continue;
-
-        while (fgets(buffer.data(), (int)buffer.size(), pipe) != nullptr)
-            result += buffer.data();
-
-        int status = pclose(pipe);
-        if (status != 0) continue;
-
-        while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
-            result.pop_back();
-
-        if (!result.empty())
-            return result;
-    }
-    return {};
-}
-#endif
 
 }
 
@@ -409,6 +383,7 @@ static bool s_AudioHookRegistered = []() {
 
 AudioPanel::AudioPanel() {
     s_ActiveAudioPanel = this;
+    Core::PresentationCore::Get().SetAudioPanelRef(this);
     try {
         fs::create_directories(ProyecThor::Audio::GetAudioPath());
     } catch (const std::exception& e) {
@@ -428,6 +403,8 @@ AudioPanel::~AudioPanel()
 {
     if (s_ActiveAudioPanel == this)
         s_ActiveAudioPanel = nullptr;
+    if (Core::PresentationCore::Get().GetAudioPanelRef() == this)
+        Core::PresentationCore::Get().SetAudioPanelRef(nullptr);
 
     if (m_LyricsImportThread.joinable())
         m_LyricsImportThread.join();
@@ -501,7 +478,17 @@ void AudioPanel::ComputeTrackAccent(AudioTrack& track) {
 }
 
 void AudioPanel::Play(int trackIndex) {
+    // Reproduccion directa desde la biblioteca: sale de la cola propia
+    // (PlayQueueIndex usa PlayInternal para conservar el indice de cola).
+    m_QueueCurrentIndex = -1;
+    PlayInternal(trackIndex);
+}
+
+void AudioPanel::PlayInternal(int trackIndex) {
     if (trackIndex < 0 || trackIndex >= static_cast<int>(m_Tracks.size())) return;
+
+    // Detener inmediatamente cualquier pista previa para cortar la reproducción anterior
+    m_VlcPlayer.Stop();
 
     m_CurrentTrack = trackIndex;
     const std::string& path = m_Tracks[trackIndex].fullPath;
@@ -513,7 +500,8 @@ void AudioPanel::Play(int trackIndex) {
     sel.contentData = { m_Tracks[trackIndex].fullPath };
     Core::PresentationCore::Get().SetSelection(sel);
 
-    m_VlcPlayer.Play(path, false, false);
+    m_VlcPlayer.Play(path);
+    m_VlcPlayer.SetMute(m_Muted);
     m_VlcPlayer.SetVolume(ComputeEffectiveVolume());
     ApplyEqualizerToPlayer();
 
@@ -536,10 +524,10 @@ void AudioPanel::PlayCurrent() {
     Play(m_CurrentTrack);
 }
 
-bool AudioPanel::PlayFileLive(const std::string& filename) {
+bool AudioPanel::PlayFile(const std::string& filename, bool live) {
     auto findIndex = [this, &filename]() -> int {
         for (int i = 0; i < static_cast<int>(m_Tracks.size()); i++)
-            if (m_Tracks[i].filename == filename) return i;
+            if (m_Tracks[i].filename == filename || m_Tracks[i].fullPath == filename) return i;
         return -1;
     };
 
@@ -548,26 +536,105 @@ bool AudioPanel::PlayFileLive(const std::string& filename) {
         RefreshLibrary();
         idx = findIndex();
     }
+    if (idx < 0) {
+        std::string fullPath = filename;
+        std::error_code ec;
+#ifdef _WIN32
+        fs::path checkP(ProyecThor::Audio::Utf8ToWide(fullPath));
+#else
+        fs::path checkP(fullPath);
+#endif
+        if (!fs::exists(checkP, ec)) {
+            // Buscar en listas escaneadas de Multimedia (para archivos externos como FLAC)
+            for (const auto& it : Library::GetAudioList()) {
+                if (it.filename == filename || Library::GetMMItemFullPath(it) == filename) {
+                    fullPath = Library::GetMMItemFullPath(it);
+                    break;
+                }
+            }
+#ifdef _WIN32
+            checkP = fs::path(ProyecThor::Audio::Utf8ToWide(fullPath));
+#else
+            checkP = fs::path(fullPath);
+#endif
+        }
+        if (!fs::exists(checkP, ec)) {
+            fullPath = ProyecThor::Audio::GetAudioPath() + "/" + filename;
+#ifdef _WIN32
+            checkP = fs::path(ProyecThor::Audio::Utf8ToWide(fullPath));
+#else
+            checkP = fs::path(fullPath);
+#endif
+        }
+        if (fs::exists(checkP, ec)) {
+            AudioTrack track;
+            track.fullPath    = fullPath;
+#ifdef _WIN32
+            track.filename    = ProyecThor::Audio::WideToUtf8(checkP.filename().wstring());
+            track.displayName = ProyecThor::Audio::WideToUtf8(checkP.stem().wstring());
+#else
+            track.filename    = checkP.filename().string();
+            track.displayName = checkP.stem().string();
+#endif
+            ComputeTrackAccent(track);
+            LoadTrackLyricsSidecar(track);
+            m_Tracks.push_back(std::move(track));
+            idx = static_cast<int>(m_Tracks.size()) - 1;
+        }
+    }
     if (idx < 0) return false;
 
     Play(idx);
 
-    auto& core = Core::PresentationCore::Get();
-    core.SetBackgroundAudio();
-    core.SetProjecting(true);
-    SetLiveBackground(true);
+    if (live) {
+        auto& core = Core::PresentationCore::Get();
+        core.SetBackgroundAudio();
+        core.SetProjecting(true);
+        SetLiveBackground(true);
+    }
     return true;
 }
 
-void AudioPanel::Stop() {
+bool AudioPanel::PlayFileLive(const std::string& filename) {
+    return PlayFile(filename, /*live=*/true);
+}
+
+void AudioPanel::StopMusicOnly() {
     m_VlcPlayer.Stop();
     m_IsPlaying     = false;
     m_IsPaused      = false;
     m_Progress      = 0.0f;
     m_CurrentTimeMs = 0;
+    m_TotalTimeMs   = 0;
 
     m_Disc.targetSpeed  = 0.0f;
     m_Disc.needleLifted = true;
+
+    if (m_IsLiveBackground) {
+        SetLiveBackground(false);
+    }
+}
+
+void AudioPanel::SetMusicMuted(bool mute) {
+    if (mute == m_Muted) return;
+    if (mute) {
+        m_VolumeBeforeMute = m_Volume;
+        m_Muted = true;
+        m_VlcPlayer.SetMute(true);
+    } else {
+        m_Muted = false;
+        m_VlcPlayer.SetMute(false);
+        m_VlcPlayer.SetVolume(ComputeEffectiveVolume());
+    }
+}
+
+void AudioPanel::Stop() {
+    StopMusicOnly();
+
+    auto& core = Core::PresentationCore::Get();
+    if (core.GetState().bgType == Core::PresentationState::BackgroundType::Audio) {
+        core.StopBackgroundMedia();
+    }
 }
 
 void AudioPanel::Pause() {
@@ -592,10 +659,23 @@ void AudioPanel::TogglePlayPause() {
     }
 }
 
+bool AudioPanel::UsingPanelQueue() const {
+    return !m_AudioQueue.empty() && m_QueueCurrentIndex >= 0 &&
+           m_QueueCurrentIndex < static_cast<int>(m_AudioQueue.size());
+}
+
 void AudioPanel::Next() {
+    // Cola de coleccion (Multimedia > "Reproducir en cola"): ella decide la siguiente.
+    {
+        auto& coll = Core::MediaCollectionManager::Get();
+        if (coll.IsQueuePlaying() && coll.GetQueueType() == Core::CollectionMediaType::Audio) {
+            coll.Next();
+            return;
+        }
+    }
     if (m_Tracks.empty()) return;
 
-    if (m_ViewQueueTab && !m_AudioQueue.empty()) {
+    if (UsingPanelQueue()) {
         int nextQueue = m_QueueCurrentIndex + 1;
         if (nextQueue >= static_cast<int>(m_AudioQueue.size())) {
             if (m_RepeatMode == AudioRepeatMode::All) nextQueue = 0;
@@ -625,11 +705,19 @@ void AudioPanel::Next() {
 }
 
 void AudioPanel::Previous() {
-    if (m_CurrentTimeMs > 3000 && m_CurrentTrack >= 0) {
+    // Estilo Spotify: pasados 3 s "anterior" reinicia la pista actual.
+    if (m_IsPlaying && m_CurrentTimeMs > 3000 && m_CurrentTrack >= 0) {
         SeekTo(0.0f);
         return;
     }
-    if (m_ViewQueueTab && !m_AudioQueue.empty()) {
+    {
+        auto& coll = Core::MediaCollectionManager::Get();
+        if (coll.IsQueuePlaying() && coll.GetQueueType() == Core::CollectionMediaType::Audio) {
+            coll.Previous();
+            return;
+        }
+    }
+    if (UsingPanelQueue()) {
         int prevQueue = m_QueueCurrentIndex - 1;
         if (prevQueue < 0) {
             prevQueue = (m_RepeatMode == AudioRepeatMode::All)
@@ -688,13 +776,11 @@ void AudioPanel::PlayQueueIndex(int queueIdx) {
     m_QueueCurrentIndex = queueIdx;
     const std::string& path = m_AudioQueue[queueIdx];
     int tIdx = FindTrackIndexByPath(path);
-    if (tIdx >= 0) {
-        Play(tIdx);
-    } else {
+    if (tIdx < 0) {
         RefreshLibrary();
         tIdx = FindTrackIndexByPath(path);
-        if (tIdx >= 0) Play(tIdx);
     }
+    if (tIdx >= 0) PlayInternal(tIdx);
 }
 
 void AudioPanel::RemoveFromQueue(int queueIdx) {
@@ -800,6 +886,50 @@ void AudioPanel::RefreshLibrary()
             LoadTrackLyricsSidecar(track);
             m_Tracks.push_back(std::move(track));
         }
+
+        // 2. Escaneo de archivos externos vinculados (FLAC, MP3, etc. en otras carpetas)
+        const auto& extFiles = ProyecThor::Settings::SettingsManager::Get().GetSettings().storage.externalMultimediaFiles;
+        for (const auto& rawPath : extFiles) {
+            if (rawPath.empty()) continue;
+            std::error_code ec;
+#ifdef _WIN32
+            fs::path p(ProyecThor::Audio::Utf8ToWide(rawPath));
+#else
+            fs::path p(rawPath);
+#endif
+            if (!fs::exists(p, ec) || !fs::is_regular_file(p, ec)) continue;
+
+#ifdef _WIN32
+            std::string ext = ProyecThor::Audio::WideToUtf8(p.extension().wstring());
+#else
+            std::string ext = p.extension().string();
+#endif
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+            bool supported = false;
+            for (const auto& e : kAudioExts)
+                if (ext == e) { supported = true; break; }
+            if (!supported) continue;
+
+            bool alreadyExists = false;
+            for (const auto& t : m_Tracks) {
+                if (t.fullPath == rawPath) { alreadyExists = true; break; }
+            }
+            if (alreadyExists) continue;
+
+            AudioTrack track;
+            track.fullPath = rawPath;
+#ifdef _WIN32
+            track.filename    = ProyecThor::Audio::WideToUtf8(p.filename().wstring());
+            track.displayName = ProyecThor::Audio::WideToUtf8(p.stem().wstring());
+#else
+            track.filename    = p.filename().string();
+            track.displayName = p.stem().string();
+#endif
+            ComputeTrackAccent(track);
+            LoadTrackLyricsSidecar(track);
+            m_Tracks.push_back(std::move(track));
+        }
     } catch (const std::exception& e) {
         std::cerr << "[AudioPanel] RefreshLibrary error: " << e.what() << '\n';
     }
@@ -895,34 +1025,7 @@ void AudioPanel::RequestLyricsImport(const std::string& url) {
 }
 
 void AudioPanel::ImportAudioFile() {
-#ifdef _WIN32
-    wchar_t filename[MAX_PATH] = {};
-    OPENFILENAMEW ofn;
-    ZeroMemory(&ofn, sizeof(ofn));
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner   = nullptr;
-    ofn.lpstrFilter =
-        L"Audio\0*.mp3;*.flac;*.wav;*.ogg;*.aac;*.m4a;*.wma;*.opus;*.aiff\0"
-        L"Todos\0*.*\0";
-    ofn.lpstrFile = filename;
-    ofn.nMaxFile  = MAX_PATH;
-    ofn.Flags     = OFN_EXPLORER | OFN_FILEMUSTEXIST |
-                    OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
-
-    if (GetOpenFileNameW(&ofn)) {
-        try {
-            fs::path src{std::wstring(filename)};
-            fs::path destDir{ProyecThor::Audio::Utf8ToWide(ProyecThor::Audio::GetAudioPath())};
-            fs::path dest = destDir / src.filename();
-            fs::create_directories(destDir);
-            fs::copy(src, dest, fs::copy_options::overwrite_existing);
-            RefreshLibrary();
-        } catch (const std::exception& e) {
-            std::cerr << "[AudioPanel] Import error: " << e.what() << '\n';
-        }
-    }
-#else
-    std::string selected = OpenAudioFileDialogUnix();
+    std::string selected = ProyecThor::UI::PickAudioFile();
     if (selected.empty()) return;
 
     try {
@@ -935,8 +1038,10 @@ void AudioPanel::ImportAudioFile() {
     } catch (const std::exception& e) {
         std::cerr << "[AudioPanel] Import error: " << e.what() << '\n';
     }
-#endif
 }
+
+// Pistas ilegibles seguidas (se reinicia en cuanto una suena mas de 1 s)
+static int g_AudioErrStreak = 0;
 
 void AudioPanel::Update() {
     float now = static_cast<float>(ImGui::GetTime());
@@ -944,55 +1049,35 @@ void AudioPanel::Update() {
     if (dt > 0.1f) dt = 0.1f;
     m_LastTime = now;
 
-    {
-        auto sel = Core::PresentationCore::Get().PeekSelection();
-        if (sel.type == Core::ItemType::Audio && !sel.title.empty() &&
-            sel.title != "Audio" && sel.title != m_LastExternalSelection)
-        {
-            m_LastExternalSelection = sel.title;
-
-            int idx = -1;
-            for (int i = 0; i < static_cast<int>(m_Tracks.size()); i++) {
-                if (m_Tracks[i].filename == sel.title || m_Tracks[i].fullPath == sel.title) {
-                    idx = i;
-                    break;
-                }
-            }
-            if (idx < 0) {
-                RefreshLibrary();
-                for (int i = 0; i < static_cast<int>(m_Tracks.size()); i++) {
-                    if (m_Tracks[i].filename == sel.title || m_Tracks[i].fullPath == sel.title) {
-                        idx = i;
-                        break;
-                    }
-                }
-            }
-            if (idx >= 0 && idx != m_CurrentTrack) Play(idx);
-        }
-    }
-
     if (m_IsPlaying && !m_IsSeeking) {
         m_CurrentTimeMs = m_VlcPlayer.GetTime();
         m_TotalTimeMs   = m_VlcPlayer.GetLength();
+        if (m_CurrentTimeMs > 1000) g_AudioErrStreak = 0;
         m_Progress      = (m_TotalTimeMs > 0)
             ? std::clamp(static_cast<float>(m_CurrentTimeMs) / static_cast<float>(m_TotalTimeMs), 0.0f, 1.0f)
             : 0.0f;
     }
 
+    if (m_VlcPlayer.ConsumeHadError()) {
+        // Archivo ilegible: no dejar el panel "reproduciendo" en silencio; se salta
+        // a la siguiente pista (el fin de pista asociado se descarta).
+        std::cerr << "[AudioPanel] No se pudo reproducir la pista actual, se omite.\n";
+        m_VlcPlayer.ConsumeEndReached();
+        if (++g_AudioErrStreak > 5) { g_AudioErrStreak = 0; Stop(); return; }   // evita bucle con todas ilegibles
+        if (m_IsPlaying) Next();
+        return;
+    }
+
     if (m_VlcPlayer.ConsumeEndReached()) {
+        if (Core::MediaCollectionManager::Get().IsQueuePlaying() &&
+            Core::MediaCollectionManager::Get().GetQueueType() == Core::CollectionMediaType::Audio) {
+            Core::MediaCollectionManager::Get().Next();
+            return;
+        }
         if (m_RepeatMode == AudioRepeatMode::One) {
             PlayCurrent();
-        } else if (!m_AudioQueue.empty() && m_QueueCurrentIndex >= 0) {
-            int nextQueue = m_QueueCurrentIndex + 1;
-            if (nextQueue < static_cast<int>(m_AudioQueue.size())) {
-                PlayQueueIndex(nextQueue);
-            } else if (m_RepeatMode == AudioRepeatMode::All) {
-                PlayQueueIndex(0);
-            } else {
-                Stop();
-            }
         } else {
-            Next();
+            Next();   // Next() ya resuelve cola propia / biblioteca / aleatorio
         }
     }
 

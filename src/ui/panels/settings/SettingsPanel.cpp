@@ -1,7 +1,9 @@
 #include "SettingsPanel.h"
 #include "SettingsManager.h"
 #include "core/PresentationCore.h"
-#include "ui/framework/UIStrings.h"
+#include "ui/framework/DesignSystem.h"
+#include "ui/framework/AppIcons.h"
+#include "ui/framework/PatchNotesRenderer.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <GLFW/glfw3.h>
@@ -23,7 +25,7 @@ namespace ProyecThor::UI::Settings {
 
 // Icono mínimo por categoría, dibujado a mano con primitivas de ImDrawList
 // (sin depender de ningún PNG/asset externo) -- ver DrawCategoryIcon.
-enum class CatIcon { Palette, Sliders, Monitor, Cast, Speaker, MusicNote, Keyboard, Globe, Download, Storage };
+enum class CatIcon { Palette, Sliders, Monitor, Cast, Speaker, MusicNote, Keyboard, Globe, Download, Storage, Account, Performance, Document };
 
 struct Category {
     const char* tag;
@@ -33,42 +35,22 @@ struct Category {
     ImU32        color; // color de identidad de la categoría (icono + acento del ítem)
 };
 
-static Category GetCategory(int i) {
-    switch (i) {
-        case 0: return { "UI",  Loc("Apariencia", "Appearance", "Aparência"),
-                               Loc("Colores, fuentes y efectos visuales", "Colors, fonts and visual effects", "Cores, fontes e efeitos visuais"),
-                               CatIcon::Palette,   IM_COL32(185, 130, 245, 255) };
-        case 1: return { "PRY", Loc("Proyección", "Projection", "Projeção"),
-                               Loc("Monitor, texto y márgenes", "Monitor, text and margins", "Monitor, texto e margens"),
-                               CatIcon::Monitor,   IM_COL32( 70, 195, 220, 255) };
-        case 2: return { "CNX", Loc("Conexiones", "Connections", "Conexões"),
-                               Loc("Red, app móvil, streaming y OSC", "Network, mobile app, streaming and OSC", "Rede, app móvel, streaming e OSC"),
-                               CatIcon::Cast,      IM_COL32(120, 160, 235, 255) };
-        case 3: return { "STG", Loc("Pantallas", "Screens", "Telas"),
-                               Loc("Ventana de proyección y monitor de confianza", "Projection window and stage display", "Janela de projeção e monitor de retorno"),
-                               CatIcon::Monitor,   IM_COL32( 80, 205, 165, 255) };
-        case 4: return { "SOU", Loc("Audio", "Audio", "Áudio"),
-                               Loc("Volumen, dispositivo y fade", "Volume, device and fade", "Volume, dispositivo e fade"),
-                               CatIcon::Speaker,   IM_COL32(245, 165,  75, 255) };
-        case 5: return { "SNG", Loc("Canciones", "Songs", "Músicas"),
-                               Loc("Etiquetas y opciones de canciones", "Tags and song options", "Etiquetas e opções de músicas"),
-                               CatIcon::MusicNote, IM_COL32(235, 105, 165, 255) };
-        case 6: return { "KEY", Loc("Teclas rápidas", "Shortcuts", "Atalhos"),
-                               Loc("Atajos de teclado disponibles", "Available keyboard shortcuts", "Atalhos de teclado disponíveis"),
-                               CatIcon::Keyboard,  IM_COL32(230, 190,  70, 255) };
-        case 7: return { "LNG", Loc("Idioma", "Language", "Idioma"),
-                               Loc("Idioma de la interfaz", "Interface language", "Idioma da interface"),
-                               CatIcon::Globe,     IM_COL32(100, 205, 110, 255) };
-        case 8: return { "UPD", Loc("Actualizaciones", "Updates", "Atualizações"),
-                               Loc("Versión instalada y canales", "Installed version and channels", "Versão instalada e canais"),
-                               CatIcon::Download,  IM_COL32(230, 100,  95, 255) };
-        case 9: return { "DAT", Loc("Datos", "Data", "Dados"),
-                               Loc("Ubicación de archivos y carpetas vinculadas", "File location and linked folders", "Local dos arquivos e pastas vinculadas"),
-                               CatIcon::Storage,   IM_COL32(245, 185,  65, 255) };
-        default: return { "", "", "", CatIcon::Palette, 0 };
-    }
-}
-static constexpr int k_CategoryCount = 10;
+static const Category k_Categories[] = {
+    { "UI",  "Apariencia",            "Colores, fuentes y efectos visuales",            CatIcon::Palette,     IM_COL32(185, 130, 245, 255) }, // 0
+    { "PRY", "Proyección",            "Monitor, texto y márgenes",                      CatIcon::Monitor,     IM_COL32( 70, 195, 220, 255) }, // 1
+    { "CNX", "Conexiones",            "Red, app móvil, streaming, OSC y reloj",         CatIcon::Cast,        IM_COL32(120, 160, 235, 255) }, // 2
+    { "STG", "Pantallas",             "Monitor de confianza para el equipo",            CatIcon::Sliders,     IM_COL32( 80, 205, 165, 255) }, // 3
+    { "SOU", "Audio",                 "Volumen, dispositivo y fade",                    CatIcon::Speaker,     IM_COL32(245, 165,  75, 255) }, // 4
+    { "SNG", "Canciones",             "Etiquetas y opciones de canciones",              CatIcon::MusicNote,   IM_COL32(235, 105, 165, 255) }, // 5
+    { "KEY", "Teclas rápidas",        "Atajos de teclado disponibles",                  CatIcon::Keyboard,    IM_COL32(230, 190,  70, 255) }, // 6
+    { "LNG", "Idioma",                "Idioma de la interfaz",                          CatIcon::Globe,       IM_COL32(100, 205, 110, 255) }, // 7
+    { "UPD", "Actualizaciones",       "Comprobar e instalar actualizaciones",           CatIcon::Download,    IM_COL32(230, 100,  95, 255) }, // 8
+    { "DAT", "Datos",                 "Ubicación de archivos y carpetas vinculadas",    CatIcon::Storage,     IM_COL32(245, 185,  65, 255) }, // 9
+    { "ACC", "Cuenta y Suscripción",  "Inicio de sesión, suscripción Pro y licencias",  CatIcon::Account,     IM_COL32(245, 180,  50, 255) }, // 10
+    { "PRF", "Ahorro de energía",     "Modo ahorro de energía y memoria mínima",        CatIcon::Performance, IM_COL32( 50, 205, 140, 255) }, // 11
+    { "NOT", "Notas de versión",      "Historial completo de novedades y mejoras",      CatIcon::Document,    IM_COL32( 56, 189, 248, 255) }, // 12
+};
+static constexpr int k_CategoryCount = 13;
 
 // Dibuja un glifo simple y reconocible para 'icon', centrado en 'c', con
 // radio aproximado 'r' -- pensado para verse bien a ~8-9px de radio (18px
@@ -173,23 +155,158 @@ static void DrawCategoryIcon(ImDrawList* dl, CatIcon icon, ImVec2 c, float r, Im
             }
             break;
         }
+        case CatIcon::Account: {
+            dl->AddCircleFilled(ImVec2(c.x, c.y - r * 0.30f), r * 0.32f, color);
+            dl->PathClear();
+            dl->PathArcTo(ImVec2(c.x, c.y + r * 0.80f), r * 0.65f, -IM_PI * 0.85f, -IM_PI * 0.15f, 12);
+            dl->PathStroke(color, false, 1.4f);
+            break;
+        }
+        case CatIcon::Performance: {
+            dl->PathClear();
+            dl->PathArcTo(c, r * 0.80f, -IM_PI * 0.80f, IM_PI * 0.20f, 12);
+            dl->PathStroke(color, false, 1.4f);
+            dl->AddCircleFilled(c, r * 0.22f, color);
+            float angle = -IM_PI * 0.30f;
+            ImVec2 tip(c.x + cosf(angle) * r * 0.75f, c.y + sinf(angle) * r * 0.75f);
+            dl->AddLine(c, tip, color, 1.6f);
+            break;
+        }
+        case CatIcon::Document: {
+            ImVec2 mn(c.x - r * 0.65f, c.y - r * 0.80f), mx(c.x + r * 0.65f, c.y + r * 0.80f);
+            dl->AddRect(mn, mx, color, 2.0f, 0, 1.3f);
+            float ly1 = c.y - r * 0.35f;
+            float ly2 = c.y;
+            float ly3 = c.y + r * 0.35f;
+            dl->AddLine(ImVec2(mn.x + r * 0.28f, ly1), ImVec2(mx.x - r * 0.28f, ly1), color, 1.2f);
+            dl->AddLine(ImVec2(mn.x + r * 0.28f, ly2), ImVec2(mx.x - r * 0.28f, ly2), color, 1.2f);
+            dl->AddLine(ImVec2(mn.x + r * 0.28f, ly3), ImVec2(mx.x - r * 0.45f, ly3), color, 1.2f);
+            break;
+        }
     }
 }
 
 // Orden y agrupación visual del sidebar (por índice real de k_Categories).
-// Reagrupa temas relacionados (p.ej. Stage/Canciones junto a Proyección)
-// sin tocar los índices reales, así ningún QuickBtn/m_ActiveTab se rompe.
-struct NavGroup { const char* label; const int items[4]; int count; };
-static NavGroup GetNavGroup(int g) {
-    switch (g) {
-        case 0: return { Loc("APARIENCIA", "APPEARANCE", "APARÊNCIA"),      { 0,          }, 1 };
-        case 1: return { Loc("PANTALLAS", "SCREENS", "TELAS"),              { 1, 2, 3     }, 3 };
-        case 2: return { Loc("AUDIO", "AUDIO", "ÁUDIO"),                    { 4, 5        }, 2 };
-        case 3: return { Loc("SISTEMA Y DATOS", "SYSTEM & DATA", "SISTEMA E DADOS"), { 6, 7, 8, 9  }, 4 };
-        default: return { "", {0}, 0 };
-    }
-}
+struct NavGroup { const char* label; const int items[6]; int count; };
+static const NavGroup k_NavGroups[] = {
+    { "SISTEMA Y DATOS", { 7, 8, 12, 9, 11, 6 }, 6 }, // Idioma + Actualizaciones + Notas de versión + Datos + Rendimiento + Teclas
+    { "APARIENCIA",      { 0                  }, 1 },
+    { "PANTALLAS",       { 1, 2, 3            }, 3 }, // Proyección + Conexiones + Pantallas (Stage)
+    { "AUDIO",           { 4, 5               }, 2 },
+};
 static constexpr int k_NavGroupCount = 4;
+
+// Soporte completo de idioma para la barra lateral y descripciones de Ajustes
+static inline bool IsEnglishActive() {
+    return ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language == ProyecThor::Settings::Language::English;
+}
+static inline bool IsPortugueseActive() {
+    return ProyecThor::Settings::SettingsManager::Get().GetSettings().general.language == ProyecThor::Settings::Language::Portuguese;
+}
+static inline const char* Tr(const char* es, const char* en, const char* pt) {
+    if (IsEnglishActive()) return en;
+    if (IsPortugueseActive()) return pt;
+    return es;
+}
+
+static const char* GetCatLabel(int idx) {
+    if (IsEnglishActive()) {
+        switch (idx) {
+            case 0:  return "Appearance";
+            case 1:  return "Projection";
+            case 2:  return "Connections";
+            case 3:  return "Stage Display";
+            case 4:  return "Audio";
+            case 5:  return "Songs";
+            case 6:  return "Shortcuts";
+            case 7:  return "Language";
+            case 8:  return "Updates";
+            case 9:  return "Data & Storage";
+            case 10: return "Account & License";
+            case 11: return "Energy Saver";
+            case 12: return "Release Notes";
+            default: return k_Categories[idx].label;
+        }
+    } else if (IsPortugueseActive()) {
+        switch (idx) {
+            case 0:  return "Aparência";
+            case 1:  return "Projeção";
+            case 2:  return "Conexões";
+            case 3:  return "Ecrã de Palco";
+            case 4:  return "Áudio";
+            case 5:  return "Canções";
+            case 6:  return "Teclas de Atalho";
+            case 7:  return "Idioma";
+            case 8:  return "Atualizações";
+            case 9:  return "Dados e Armazenamento";
+            case 10: return "Conta e Licenças";
+            case 11: return "Poupança de Energia";
+            case 12: return "Notas de Versão";
+            default: return k_Categories[idx].label;
+        }
+    }
+    return k_Categories[idx].label;
+}
+
+static const char* GetCatDesc(int idx) {
+    if (IsEnglishActive()) {
+        switch (idx) {
+            case 0:  return "Colors, fonts and visual theme";
+            case 1:  return "Monitor, text alignment and margins";
+            case 2:  return "Network, mobile app, streaming and OSC";
+            case 3:  return "Confidence monitor for the team";
+            case 4:  return "Volume, device and fade effects";
+            case 5:  return "Tags and song library options";
+            case 6:  return "Available keyboard shortcuts";
+            case 7:  return "User interface language";
+            case 8:  return "Check and install updates";
+            case 9:  return "File locations and linked folders";
+            case 10: return "Sign in, Pro subscription and licenses";
+            case 11: return "Energy saver and memory optimization";
+            case 12: return "Full changelog and feature history";
+            default: return k_Categories[idx].description;
+        }
+    } else if (IsPortugueseActive()) {
+        switch (idx) {
+            case 0:  return "Cores, fontes e temas visuais";
+            case 1:  return "Monitor, alinhamento de texto e margens";
+            case 2:  return "Rede, aplicação móvel, transmissão e OSC";
+            case 3:  return "Monitor de retorno para a equipa";
+            case 4:  return "Volume, dispositivo e efeitos de transição";
+            case 5:  return "Etiquetas e opções do repertório";
+            case 6:  return "Atalhos de teclado disponíveis";
+            case 7:  return "Idioma da interface";
+            case 8:  return "Verificar e instalar atualizações";
+            case 9:  return "Localização de ficheiros e pastas vinculadas";
+            case 10: return "Iniciar sessão, subscrição Pro e licenças";
+            case 11: return "Modo de poupança de energia e memória";
+            case 12: return "Histórico completo de novidades e melhorias";
+            default: return k_Categories[idx].description;
+        }
+    }
+    return k_Categories[idx].description;
+}
+
+static const char* GetNavGroupTitle(int gIdx) {
+    if (IsEnglishActive()) {
+        switch (gIdx) {
+            case 0:  return "SYSTEM & DATA";
+            case 1:  return "APPEARANCE";
+            case 2:  return "DISPLAYS";
+            case 3:  return "AUDIO";
+            default: return k_NavGroups[gIdx].label;
+        }
+    } else if (IsPortugueseActive()) {
+        switch (gIdx) {
+            case 0:  return "SISTEMA E DADOS";
+            case 1:  return "APARÊNCIA";
+            case 2:  return "ECRÃS";
+            case 3:  return "ÁUDIO";
+            default: return k_NavGroups[gIdx].label;
+        }
+    }
+    return k_NavGroups[gIdx].label;
+}
 
 // Pequeño helper local: convierte un token de color del tema (float[4]) en
 // ImVec4, con un multiplicador opcional de alpha.
@@ -203,15 +320,15 @@ static inline ImVec4 ThemeCol(const float* a, float alphaMul = 1.0f) {
 // de un shader de blur real. Da la sensación de "isla flotante" a cada
 // panel (separada del resto de la ventana).
 static inline void DrawFloatingIslandShadow(ImDrawList* dl, ImVec2 pos, ImVec2 size, float rounding) {
-    const int   layers    = 5;
-    const float maxOffset = 16.0f;
+    const int   layers    = 6;
+    const float maxOffset = 20.0f;
     for (int i = layers; i >= 1; --i) {
         float  t      = (float)i / (float)layers;
         float  offset = maxOffset * t;
-        int    alpha  = (int)(30.0f * (1.0f - t * 0.6f));
-        ImVec2 p0(pos.x - offset * 0.2f,          pos.y + offset * 0.3f);
-        ImVec2 p1(pos.x + size.x + offset * 0.2f, pos.y + size.y + offset * 0.55f);
-        dl->AddRectFilled(p0, p1, IM_COL32(0, 0, 0, alpha), rounding + offset * 0.25f);
+        int    alpha  = (int)(44.0f * (1.0f - t * 0.5f));
+        ImVec2 p0(pos.x - offset * 0.25f,         pos.y + offset * 0.25f);
+        ImVec2 p1(pos.x + size.x + offset * 0.25f, pos.y + size.y + offset * 0.60f);
+        dl->AddRectFilled(p0, p1, IM_COL32(0, 0, 0, alpha), rounding + offset * 0.20f);
     }
 }
 
@@ -220,7 +337,7 @@ static inline void DrawFloatingIslandShadow(ImDrawList* dl, ImVec2 pos, ImVec2 s
 // ─────────────────────────────────────────────────────────────────────────────
 
 SettingsPanel::SettingsPanel()
-    : m_SelectedCategory(0), m_PrevCategory(-1),
+    : m_SelectedCategory(7), m_PrevCategory(-1),
       m_SaveTimer(0.0f), m_CheckingAnim(0.0f) {}
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -228,6 +345,7 @@ SettingsPanel::SettingsPanel()
 // ─────────────────────────────────────────────────────────────────────────────
 
 void SettingsPanel::Render(bool* isOpen) {
+    m_IsOpenRef = isOpen;
     if (!*isOpen) { m_WasOpenLastFrame = false; return; }
 
     auto&       mgr   = ProyecThor::Settings::SettingsManager::Get();
@@ -242,87 +360,35 @@ void SettingsPanel::Render(bool* isOpen) {
     const bool justOpened = !m_WasOpenLastFrame;
     m_WasOpenLastFrame = true;
 
-    // Ancho base subido de 900 a 1040: algunas subcategorias (Conexiones >
-    // Red/Mobile/Streaming) embeben tarjetas en grilla (selector de modo a
-    // 3 columnas, contenedor de resolucion, QR) pensadas para un panel
-    // ancho -- con 900px + sidebar de 240 + padding quedaban aplastadas
-    // contra el borde. 1040 les da un ancho de contenido util de ~670px.
-    const ImVec2 baseSize(1040.0f, 700.0f);
-
+    // Pantalla completa sobre el viewport principal
     ImGuiViewport* vp = ImGui::GetMainViewport();
-    ImVec2 workCenter(vp->WorkPos.x + vp->WorkSize.x * 0.5f,
-                       vp->WorkPos.y + vp->WorkSize.y * 0.5f);
+    ImGui::SetNextWindowPos(vp->Pos);
+    ImGui::SetNextWindowSize(vp->Size);
+    ImGui::SetNextWindowViewport(vp->ID);
 
-    // Centrada y a tamaño fijo desde el primer frame -- sin animar el
-    // tamaño de la ventana (un "pop-in" de escala hacía que las dos islas
-    // se vieran reacomodándose/estirándose durante la apertura). La única
-    // animación de apertura es el fade de alpha de más abajo.
-    // Esto también evita depender de cualquier posición/tamaño guardado
-    // previamente en el .ini (que es lo que hacía que la ventana apareciera
-    // en una esquina, a veces fuera de la pantalla, al reabrir el panel).
-    if (justOpened) {
-        ImGui::SetNextWindowPos(workCenter, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-        ImGui::SetNextWindowSize(baseSize, ImGuiCond_Always);
-    }
-
-    ImGui::SetNextWindowSizeConstraints(ImVec2(820, 560), ImVec2(FLT_MAX, FLT_MAX));
-
-    // Este panel es una utilidad flotante independiente: nunca debe poder
-    // acoplarse (dock) a otras ventanas ni aceptar que otras se acoplen a
-    // él. DockingAllowUnclassed=false + ImGuiWindowFlags_NoDocking en el
-    // Begin() de abajo son cinturón-y-tirantes para el mismo objetivo.
-    // Nota: NO forzar ViewportFlagsOverrideSet=TopMost aquí -- con
-    // multi-viewport activo eso entra en conflicto con el auto-merge de
-    // ImGui (la ventana intenta fusionarse/separarse del viewport principal
-    // cada frame) y se ve como un parpadeo/"intento de acople". El "siempre
-    // adelante" ya lo cubre BringWindowToDisplayFront más abajo.
     ImGuiWindowClass floatingClass;
     floatingClass.DockingAllowUnclassed = false;
     ImGui::SetNextWindowClass(&floatingClass);
 
-    // El "chrome" de la ventana (barra de título + botón de cerrar) sigue
-    // siendo la ventana ImGui real -- eso es lo que se puede arrastrar y
-    // cerrar -- pero su cuerpo queda solo levemente traslúcido (no 100%
-    // transparente): el margen alrededor de las islas se ve como un marco
-    // tenue en vez de un hueco vacío, mientras el fondo principal lo siguen
-    // pintando las dos "islas" (sidebar / contenido) más abajo.
-    ImGui::PushStyleColor(ImGuiCol_WindowBg,      ThemeCol(theme.base, 0.85f));
-    ImGui::PushStyleColor(ImGuiCol_TitleBg,       ThemeCol(theme.surface0));
-    ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ThemeCol(theme.surface1));
+    // Fondo opaco y limpio para la ventana contenedora completa
+    ImGui::PushStyleColor(ImGuiCol_WindowBg,      ThemeCol(theme.base, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_TitleBg,       ThemeCol(theme.surface0, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ThemeCol(theme.surface1, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_Border,        ImVec4(0, 0, 0, 0));
 
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,   ImVec2(0.0f, 0.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,  theme.windowRounding);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,    ImVec2(0.0f, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,   0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 
-    // NoSavedSettings: no persistimos pos/tamaño en el .ini, así el panel
-    // siempre vuelve a nacer centrado la próxima vez que se abra, sin
-    // arrastrar coordenadas obsoletas de una resolución/monitor distinto.
-    // NoDocking: ver comentario de floatingClass arriba.
-    bool open = ImGui::Begin(Loc("Configuraciones###SettingsPanel", "Settings###SettingsPanel", "Configurações###SettingsPanel"), isOpen,
-        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar |
-        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking);
+    bool open = ImGui::Begin("##ConfiguracionesFullscreen", isOpen,
+        ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoCollapse |
+        ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoDocking);
 
-    // Comodidad para el usuario: este panel siempre queda por delante de la
-    // ventana principal, sin depender de tener el foco (p.ej. si el usuario
-    // hace clic en un panel detrás mientras Ajustes sigue abierto, Ajustes
-    // no debe quedar tapado).
-    //
-    // OJO: NO hacer esto mientras un popup NUESTRO esté abierto (combo,
-    // color picker, el modal de reiniciar, etc.) -- reordenar la ventana
-    // dueña de un popup en pleno vuelo rompe el chequeo interno de ImGui de
-    // "sigue siendo la misma ventana en el mismo orden" y el popup se
-    // cierra solo en el mismo frame en que se abre (bug real: el combo de
-    // fuentes se abría y se cerraba de inmediato).
-    //
-    // La condición ANTERIOR (bloquear si HABÍA CUALQUIER popup abierto en
-    // TODA la app) era demasiado amplia: cualquier tooltip/combo de OTRO
-    // panel detrás también nos hacía saltar el reordenamiento ese frame, y
-    // por eso el panel "se iba para atrás" o parpadeaba de forma
-    // intermitente incluso sin tocar Ajustes. Ahora solo se salta si el
-    // popup abierto es nuestro (Ajustes tiene foco/hover, en sí misma o en
-    // una ventana hija/popup) -- un popup de cualquier OTRA parte de la app
-    // no nos debe frenar de volver al frente.
     bool ownPopupOpen = ImGui::GetCurrentContext()->OpenPopupStack.Size > 0 &&
         (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) ||
          ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByPopup));
@@ -334,25 +400,128 @@ void SettingsPanel::Render(bool* isOpen) {
 
     if (!open) { ImGui::End(); return; }
 
-    ImVec2 avail  = ImGui::GetContentRegionAvail();
-    const float margin  = 14.0f;  // aire entre el borde de la ventana y las islas
-    const float gap     = 12.0f;  // "división al medio muy pequeña" entre ambas islas
-    const float sideW   = 240.0f;
+    // Soporte para cerrar con tecla ESC
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape) && !ownPopupOpen) {
+        *isOpen = false;
+        ImGui::End();
+        return;
+    }
+
+    ImVec2 avail = ImGui::GetContentRegionAvail();
+    ImDrawList* winDl = ImGui::GetWindowDrawList();
+
+    // ── Barra Superior de Cabecera (Header Bar) ─────────────────────────────
+    const float topBarH = 62.0f;
+    ImVec2 topBarMin = ImGui::GetCursorScreenPos();
+    ImVec2 topBarMax = ImVec2(topBarMin.x + avail.x, topBarMin.y + topBarH);
+
+    // Fondo y borde inferior sutil de la barra superior
+    winDl->AddRectFilled(topBarMin, topBarMax, ImGui::ColorConvertFloat4ToU32(ThemeCol(theme.surface0, 0.98f)));
+    winDl->AddLine(ImVec2(topBarMin.x, topBarMax.y), topBarMax,
+                   ImGui::ColorConvertFloat4ToU32(ThemeCol(theme.border, 0.65f)), 1.2f);
+
+    // 1. Icono + Título "Configuraciones" a la izquierda
+    {
+        float iconSz = 20.0f;
+        ImVec2 iconPos(topBarMin.x + 24.0f, topBarMin.y + (topBarH - iconSz) * 0.5f);
+        ImU32 accentCol = ImGui::ColorConvertFloat4ToU32(ThemeCol(theme.accent));
+        AppIcons::DrawIcon_Settings(winDl, iconPos, iconSz, accentCol);
+
+        float textX = iconPos.x + iconSz + 12.0f;
+        float textY = topBarMin.y + (topBarH - ImGui::GetFontSize() * 1.30f) * 0.5f - 1.0f;
+        ImGui::SetCursorScreenPos(ImVec2(textX, textY));
+        ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textPrimary));
+        ImGui::SetWindowFontScale(1.30f);
+        ImGui::TextUnformatted("Configuraciones");
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopStyleColor();
+    }
+
+    // Separador vertical sutil entre título y buscador
+    float divX = topBarMin.x + 235.0f;
+    winDl->AddLine(ImVec2(divX, topBarMin.y + 16.0f), ImVec2(divX, topBarMin.y + topBarH - 16.0f),
+                   ImGui::ColorConvertFloat4ToU32(ThemeCol(theme.border, 0.50f)), 1.0f);
+
+    // 2. Barra de búsqueda arriba junto a "Configuraciones"
+    {
+        float searchX = divX + 20.0f;
+        float searchW = std::clamp(avail.x * 0.32f, 260.0f, 440.0f);
+        float searchH = 34.0f;
+        float searchY = topBarMin.y + (topBarH - searchH) * 0.5f;
+
+        ImGui::SetCursorScreenPos(ImVec2(searchX, searchY));
+        ImGui::PushStyleColor(ImGuiCol_FrameBg,        ThemeCol(theme.surface2, 0.55f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ThemeCol(theme.surface2, 0.80f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  ThemeCol(theme.surface3, 0.90f));
+        ImGui::PushStyleColor(ImGuiCol_Text,           ThemeCol(theme.textPrimary));
+        ImGui::PushStyleColor(ImGuiCol_Border,         ThemeCol(theme.border, 0.65f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,   theme.frameRounding);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,    ImVec2(34.0f, 7.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+
+        ImGui::SetNextItemWidth(searchW);
+        ImGui::InputTextWithHint("##settingsSearchTop", Tr("Buscar en configuraciones...", "Search settings...", "Pesquisar nas definições..."), m_SearchBuffer, sizeof(m_SearchBuffer));
+        ImVec2 fMin = ImGui::GetItemRectMin();
+        ImVec2 fMax = ImGui::GetItemRectMax();
+
+        ImGui::PopStyleVar(3);
+        ImGui::PopStyleColor(5);
+
+        // Lupa dibujada a mano
+        ImU32 glassCol = ImGui::ColorConvertFloat4ToU32(ThemeCol(theme.textFaint));
+        ImVec2 gC(fMin.x + 16.0f, (fMin.y + fMax.y) * 0.5f);
+        winDl->AddCircle(gC, 5.2f, glassCol, 12, 1.4f);
+        ImVec2 hDir(0.71f, 0.71f);
+        winDl->AddLine(ImVec2(gC.x + 5.2f * hDir.x,       gC.y + 5.2f * hDir.y),
+                       ImVec2(gC.x + 5.2f * hDir.x * 1.85f, gC.y + 5.2f * hDir.y * 1.85f),
+                       glassCol, 1.6f);
+
+        // Botón "x" para limpiar búsqueda si hay texto
+        if (m_SearchBuffer[0] != '\0') {
+            ImVec2 xC(fMax.x - 18.0f, (fMin.y + fMax.y) * 0.5f);
+            ImGui::SetCursorScreenPos(ImVec2(xC.x - 10.0f, xC.y - 10.0f));
+            if (ImGui::InvisibleButton("##settingsSearchClearTop", ImVec2(20.0f, 20.0f)))
+                m_SearchBuffer[0] = '\0';
+            ImU32 xCol = ImGui::ColorConvertFloat4ToU32(
+                ThemeCol(theme.textFaint, ImGui::IsItemHovered() ? 1.0f : 0.7f));
+            winDl->AddLine(ImVec2(xC.x - 4.0f, xC.y - 4.0f), ImVec2(xC.x + 4.0f, xC.y + 4.0f), xCol, 1.6f);
+            winDl->AddLine(ImVec2(xC.x - 4.0f, xC.y + 4.0f), ImVec2(xC.x + 4.0f, xC.y - 4.0f), xCol, 1.6f);
+        }
+    }
+
+    // 3. Botón "✕ Cerrar" a la derecha
+    {
+        float closeBtnW = 105.0f;
+        float closeBtnH = 34.0f;
+        float closeBtnX = topBarMin.x + avail.x - closeBtnW - 24.0f;
+        float closeBtnY = topBarMin.y + (topBarH - closeBtnH) * 0.5f;
+
+        ImGui::SetCursorScreenPos(ImVec2(closeBtnX, closeBtnY));
+        if (ProyecThor::UI::DS::GlassButton(Tr("✕ Cerrar", "✕ Close", "✕ Fechar"), ImVec2(closeBtnW, closeBtnH))) {
+            *isOpen = false;
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("%s", Tr("Cerrar configuraciones (Esc)", "Close settings (Esc)", "Fechar definições (Esc)"));
+        }
+    }
+
+    // ── Cuerpo: Islas flotantes (Sidebar + Contenido) ───────────────────────
+    const float bodyY = topBarMin.y + topBarH;
+    const float bodyH = avail.y - topBarH;
+    const float margin  = 16.0f;
+    const float gap     = 14.0f;
+    const float sideW   = 260.0f;
     const float footerH = 70.0f;
-    const float islandH  = avail.y - margin * 2.0f;
+    const float islandH  = bodyH - margin * 2.0f;
     const float contentW = avail.x - margin * 2.0f - sideW - gap;
 
-    ImVec2 origin(ImGui::GetCursorScreenPos().x + margin, ImGui::GetCursorScreenPos().y + margin);
-    ImVec2 sideOrigin(origin.x, origin.y);
-    ImVec2 contentOrigin(origin.x + sideW + gap, origin.y);
+    ImVec2 sideOrigin(topBarMin.x + margin, bodyY + margin);
+    ImVec2 contentOrigin(sideOrigin.x + sideW + gap, sideOrigin.y);
 
-    ImDrawList* winDl = ImGui::GetWindowDrawList();
     DrawFloatingIslandShadow(winDl, sideOrigin,    ImVec2(sideW,    islandH), theme.windowRounding);
     DrawFloatingIslandShadow(winDl, contentOrigin, ImVec2(contentW, islandH), theme.windowRounding);
 
-    // Pequeño conector central: una línea sutil a media altura del hueco,
-    // que refuerza la lectura de "dos piezas unidas" sin partir la ventana
-    // en dos de verdad.
+    // Conector central entre islas
     {
         float midX = sideOrigin.x + sideW + gap * 0.5f;
         float y0   = sideOrigin.y + islandH * 0.30f;
@@ -368,8 +537,8 @@ void SettingsPanel::Render(bool* isOpen) {
     // primero, mostraría la lista de subcategorías de la categoría anterior
     // durante un frame cada vez que se cambia de categoría.
     ImGui::SetCursorScreenPos(contentOrigin);
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ThemeCol(theme.base, 0.94f));
-    ImGui::PushStyleColor(ImGuiCol_Border,  ThemeCol(theme.border, 0.85f));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ThemeCol(theme.surface0, 0.98f));
+    ImGui::PushStyleColor(ImGuiCol_Border,  ThemeCol(theme.border, 0.92f));
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding,   theme.windowRounding);
     ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.5f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,   ImVec2(0.0f, 0.0f));
@@ -397,8 +566,8 @@ void SettingsPanel::Render(bool* isOpen) {
 
     // ── Isla izquierda: navegación (usa m_SectionAnchors ya frescos) ─────────
     ImGui::SetCursorScreenPos(sideOrigin);
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ThemeCol(theme.surface0, 0.92f));
-    ImGui::PushStyleColor(ImGuiCol_Border,  ThemeCol(theme.border, 0.85f));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ThemeCol(theme.base, 0.98f));
+    ImGui::PushStyleColor(ImGuiCol_Border,  ThemeCol(theme.border, 0.92f));
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding,   theme.windowRounding);
     ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.5f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,   ImVec2(0.0f, 25.0f));
@@ -440,68 +609,17 @@ void SettingsPanel::RenderSidebar() {
 
     ImGui::SetCursorPosX(25.0f);
     ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textPrimary));
-    ImGui::SetWindowFontScale(1.2f);
+    ImGui::SetWindowFontScale(1.15f);
     ImGui::TextUnformatted("ProyecThor");
     ImGui::SetWindowFontScale(1.0f);
     ImGui::PopStyleColor();
 
     ImGui::SetCursorPosX(25.0f);
     ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textDim));
-    char verBuf[64];
-    snprintf(verBuf, sizeof(verBuf), Loc("Versión %s", "Version %s", "Versão %s"), mgr.GetSettings().updates.currentVersion.c_str());
-    ImGui::TextUnformatted(verBuf);
+    ImGui::Text("Versión %s", mgr.GetSettings().updates.currentVersion.c_str());
     ImGui::PopStyleColor();
 
-    ImGui::Dummy(ImVec2(0.0f, 18.0f));
-
-    // ── Buscador de configuraciones ─────────────────────────────────────
-    // Filtra por etiqueta o descripción (ver k_Categories) -- pedido
-    // explícito para no tener que escanear visualmente toda la lista
-    // agrupada cuando el usuario ya sabe qué palabra busca.
-    const float searchW = ImGui::GetContentRegionAvail().x - 20.0f;
-    ImGui::SetCursorPosX(10.0f);
-    {
-        ImGui::PushStyleColor(ImGuiCol_FrameBg,        ThemeCol(theme.surface2, 0.55f));
-        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ThemeCol(theme.surface2, 0.80f));
-        ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  ThemeCol(theme.surface3, 0.90f));
-        ImGui::PushStyleColor(ImGuiCol_Text,           ThemeCol(theme.textPrimary));
-        ImGui::PushStyleColor(ImGuiCol_Border,         ThemeCol(theme.border, 0.6f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,   9.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,    ImVec2(30.0f, 8.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
-
-        ImGui::SetNextItemWidth(searchW);
-        ImGui::InputTextWithHint("##settingsSearch", Loc("Buscar ajustes...", "Search settings...", "Pesquisar configurações..."), m_SearchBuffer, sizeof(m_SearchBuffer));
-        ImVec2 fMin = ImGui::GetItemRectMin();
-        ImVec2 fMax = ImGui::GetItemRectMax();
-
-        ImGui::PopStyleVar(3);
-        ImGui::PopStyleColor(5);
-
-        // Lupa dibujada a mano (mismo criterio que el resto de iconos de
-        // este archivo, DrawCategoryIcon) -- circulo + mango diagonal.
-        ImU32 glassCol = ImGui::ColorConvertFloat4ToU32(ThemeCol(theme.textFaint));
-        ImVec2 gC(fMin.x + 15.0f, (fMin.y + fMax.y) * 0.5f);
-        dl->AddCircle(gC, 5.2f, glassCol, 12, 1.4f);
-        ImVec2 hDir(0.71f, 0.71f);
-        dl->AddLine(ImVec2(gC.x + 5.2f * hDir.x,       gC.y + 5.2f * hDir.y),
-                    ImVec2(gC.x + 5.2f * hDir.x * 1.85f, gC.y + 5.2f * hDir.y * 1.85f),
-                    glassCol, 1.6f);
-
-        // Boton "x" para limpiar, solo si hay texto.
-        if (m_SearchBuffer[0] != '\0') {
-            ImVec2 xC(fMax.x - 16.0f, (fMin.y + fMax.y) * 0.5f);
-            ImGui::SetCursorScreenPos(ImVec2(xC.x - 9.0f, xC.y - 9.0f));
-            if (ImGui::InvisibleButton("##settingsSearchClear", ImVec2(18.0f, 18.0f)))
-                m_SearchBuffer[0] = '\0';
-            ImU32 xCol = ImGui::ColorConvertFloat4ToU32(
-                ThemeCol(theme.textFaint, ImGui::IsItemHovered() ? 1.0f : 0.7f));
-            dl->AddLine(ImVec2(xC.x - 3.5f, xC.y - 3.5f), ImVec2(xC.x + 3.5f, xC.y + 3.5f), xCol, 1.5f);
-            dl->AddLine(ImVec2(xC.x - 3.5f, xC.y + 3.5f), ImVec2(xC.x + 3.5f, xC.y - 3.5f), xCol, 1.5f);
-        }
-    }
-
-    ImGui::Dummy(ImVec2(0.0f, 14.0f));
+    ImGui::Dummy(ImVec2(0.0f, 12.0f));
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 6.0f));
 
@@ -555,8 +673,7 @@ void SettingsPanel::RenderSidebar() {
         // Insignia circular detrás del icono (look "chip de color", estilo
         // Windows 11/macOS Ajustes) -- antes el icono flotaba solo contra
         // el fondo de la fila, se veía plano/aburrido.
-        Category cat = GetCategory(i);
-        ImVec4 iconColV = ImGui::ColorConvertU32ToFloat4(cat.color);
+        ImVec4 iconColV = ImGui::ColorConvertU32ToFloat4(k_Categories[i].color);
         ImVec2 badgeC(p.x + 22.0f, p.y + itemH * 0.5f);
         ImVec4 badgeFillV = iconColV;
         badgeFillV.w = selected ? 0.24f : (hovered ? 0.16f : 0.10f);
@@ -566,13 +683,13 @@ void SettingsPanel::RenderSidebar() {
             dl->AddCircle(badgeC, 13.5f, ImGui::ColorConvertFloat4ToU32(badgeRingV), 20, 1.2f);
         }
         iconColV.w *= selected ? 1.0f : (hovered ? 0.90f : 0.62f);
-        DrawCategoryIcon(dl, cat.icon, badgeC, 8.5f,
+        DrawCategoryIcon(dl, k_Categories[i].icon, badgeC, 8.5f,
             ImGui::ColorConvertFloat4ToU32(iconColV));
 
         float labelY = p.y + (itemH - ImGui::GetTextLineHeight()) * 0.5f;
         float labelX = p.x + 42.0f;
         ImVec4 labelColV = selected ? ThemeCol(theme.textPrimary) : ThemeCol(theme.textDim, hovered ? 1.0f : 0.85f);
-        dl->AddText(ImVec2(labelX, labelY), ImGui::ColorConvertFloat4ToU32(labelColV), cat.label);
+        dl->AddText(ImVec2(labelX, labelY), ImGui::ColorConvertFloat4ToU32(labelColV), GetCatLabel(i));
 
         ImGui::PopStyleColor(3);
 
@@ -607,17 +724,19 @@ void SettingsPanel::RenderSidebar() {
         }
     };
 
+    if (m_SelectedCategory == 10) {
+        m_SelectedCategory = 0;
+    }
+
     const bool searching = m_SearchBuffer[0] != '\0';
 
     if (searching) {
-        // Lista plana de resultados, sin encabezados de grupo -- el usuario
-        // ya escribió lo que busca, agrupar por tema solo estorbaría.
         std::string query = ToLowerAscii(m_SearchBuffer);
         int matches = 0;
         for (int i = 0; i < k_CategoryCount; i++) {
-            Category cat = GetCategory(i);
-            std::string label = ToLowerAscii(cat.label);
-            std::string desc  = ToLowerAscii(cat.description);
+            if (i == 10) continue;
+            std::string label = ToLowerAscii(GetCatLabel(i));
+            std::string desc  = ToLowerAscii(GetCatDesc(i));
             if (label.find(query) == std::string::npos && desc.find(query) == std::string::npos)
                 continue;
             matches++;
@@ -626,28 +745,26 @@ void SettingsPanel::RenderSidebar() {
         if (matches == 0) {
             ImGui::SetCursorPosX(25.0f);
             ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textFaint));
-            ImGui::TextUnformatted(Loc("Sin resultados.", "No results.", "Sem resultados."));
+            ImGui::TextUnformatted(Tr("Sin resultados.", "No results found.", "Sem resultados."));
             ImGui::PopStyleColor();
         }
     } else {
-        // Navegación agrupada por tema (ver k_NavGroups): en vez de una lista
-        // plana de categorías, se muestran en bloques con un encabezado
-        // pequeño ("GENERAL", "PANTALLAS", "AUDIO", "SISTEMA", "CONEXIONES"),
-        // más fácil de escanear visualmente.
         for (int g = 0; g < k_NavGroupCount; g++) {
-            const NavGroup group = GetNavGroup(g);
+            const NavGroup& group = k_NavGroups[g];
 
             if (g > 0) ImGui::Dummy(ImVec2(0.0f, 16.0f));
             ImGui::SetCursorPosX(25.0f);
             ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textFaint));
             ImGui::SetWindowFontScale(0.82f);
-            ImGui::TextUnformatted(group.label);
+            ImGui::TextUnformatted(GetNavGroupTitle(g));
             ImGui::SetWindowFontScale(1.0f);
             ImGui::PopStyleColor();
             ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
-            for (int gi = 0; gi < group.count; gi++)
-                RenderCategoryRow(group.items[gi]);
+            for (int gi = 0; gi < group.count; gi++) {
+                int catIdx = group.items[gi];
+                RenderCategoryRow(catIdx);
+            }
         }
     }
 
@@ -710,7 +827,7 @@ void SettingsPanel::RenderContent() {
     // sidebar ya dicen dónde está parado el usuario).
     ImGui::PushStyleColor(ImGuiCol_Text, ThemeCol(theme.textPrimary));
     ImGui::SetWindowFontScale(1.6f);
-    ImGui::TextUnformatted(GetCategory(m_SelectedCategory).label);
+    ImGui::TextUnformatted(GetCatLabel(m_SelectedCategory));
     ImGui::SetWindowFontScale(1.0f);
     ImGui::PopStyleColor();
 
@@ -739,7 +856,9 @@ void SettingsPanel::RenderContent() {
         case 7: RenderCategoryLanguage();    break;
         case 8: RenderCategoryUpdates();     break;
         case 9: RenderCategoryData();        break;
-        default: ImGui::TextDisabled("Categoría no implementada."); break;
+        case 11: RenderCategoryPerformance(); break;
+        case 12: RenderCategoryPatchNotes();  break;
+        default: ImGui::TextDisabled("%s", Tr("Categoría no implementada.", "Category not implemented.", "Categoria não implementada.")); break;
     }
 
     ImGui::PopStyleVar(2);
@@ -776,7 +895,7 @@ void SettingsPanel::RenderSaveBar() {
     float btnY   = winSize.y - barH + (barH - 36.0f) * 0.5f;
     float rightX = winSize.x - 30.0f;
 
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 18.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, theme.frameRounding);
 
     // Botón Guardar — usa el color de acento del tema activo
     ImGui::SetCursorPos(ImVec2(rightX - 160.0f, btnY));
@@ -785,11 +904,11 @@ void SettingsPanel::RenderSaveBar() {
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ThemeCol(theme.accentDim));
     ImGui::PushStyleColor(ImGuiCol_Text,          ThemeCol(theme.textPrimary));
 
-    if (ImGui::Button(Loc("Guardar ajustes", "Save settings", "Salvar configurações"), ImVec2(160.0f, 36.0f))) {
+    if (ImGui::Button(Tr("Guardar ajustes", "Save settings", "Guardar definições"), ImVec2(160.0f, 36.0f))) {
         mgr.SaveSettings();
         mgr.ApplyTheme();
         mgr.ApplyProjection();
-        m_SaveStatusMsg = Loc("Cambios guardados", "Changes saved", "Alterações salvas");
+        m_SaveStatusMsg = Tr("Cambios guardados", "Changes saved", "Alterações guardadas");
         m_SaveTimer     = 3.0f;
     }
     ImGui::PopStyleColor(4);
@@ -801,9 +920,9 @@ void SettingsPanel::RenderSaveBar() {
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ThemeCol(theme.surface1, 0.8f));
     ImGui::PushStyleColor(ImGuiCol_Text,          ThemeCol(theme.textDim));
 
-    if (ImGui::Button(Loc("Restablecer", "Reset", "Redefinir"), ImVec2(130.0f, 36.0f))) {
+    if (ImGui::Button(Tr("Restablecer", "Reset defaults", "Repor predefinições"), ImVec2(130.0f, 36.0f))) {
         mgr.ResetToDefaults();
-        m_SaveStatusMsg = Loc("Ajustes restablecidos", "Settings reset", "Configurações redefinidas");
+        m_SaveStatusMsg = Tr("Ajustes restablecidos", "Settings reset to defaults", "Definições repostas");
         m_SaveTimer     = 3.0f;
     }
     ImGui::PopStyleColor(4);
@@ -986,6 +1105,27 @@ void SettingsPanel::HelpTooltip(const char* desc) {
 
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor(2);
+    }
+}
+
+void SettingsPanel::RenderCategoryPatchNotes() {
+    if (SectionTitle(Tr("Historial de cambios", "Changelog", "Histórico de alterações"),
+                     Tr("Notas de versión", "Release Notes", "Notas de versão"))) {
+        PatchNotesStyleConfig cfg;
+        auto& mgr = ProyecThor::Settings::SettingsManager::Get();
+        const auto& theme = mgr.GetSettings().theme;
+        cfg.accent        = ThemeCol(theme.accent);
+        cfg.accentLight   = ThemeCol(theme.accentLight);
+        cfg.textPrimary   = ThemeCol(theme.textPrimary);
+        cfg.textSecondary = ThemeCol(theme.textDim);
+        cfg.cardBg        = ThemeCol(theme.surface1, 0.65f);
+        cfg.cardBorder    = ThemeCol(theme.border, 0.45f);
+        cfg.windowBg      = ThemeCol(theme.base);
+        cfg.border        = ThemeCol(theme.border);
+        cfg.scale         = 1.0f;
+
+        static PatchNotesViewState s_SettingsNotesState;
+        RenderPatchNotesViewContent(s_SettingsNotesState, cfg, 0.0f);
     }
 }
 

@@ -50,7 +50,9 @@ src/notes.txt
 text.txt
 
 # ── IDEs / editores ───────────────────────────────────────────────────────────
-.vscode/
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
 .idea/
 .claude/
 *.user
@@ -58,7 +60,6 @@ text.txt
 # ── Herramientas externas (cache local, nunca va a git) ──────────────────────
 .firebase/
 .cache/
-.flatpak-builder/
 
 # ── Archivos del sistema operativo ───────────────────────────────────────────
 .DS_Store
@@ -75,3 +76,22 @@ brace_out.txt
 # via CI (build-linux) o compilando local, no hace falta trackearlos.
 packaging/Linux/
 
+
+packaging/windows/dist/
+packaging/windows/Output/
+
+# ── Binarios pesados de SDKs (superan el límite de 100 MB de GitHub) ─────────
+src/vendor/sdk/mpv/libmpv-2.dll
+src/vendor/sdk/mpv-arm64/
+src/vendor/sdk/slint-linux/
+src/vendor/sdk/slint-win/
+src/vendor/sdk/slint-win-arm64/
+src/vendor/sdk/slint-macos/
+dist-macos/
+dist-linux/
+build-macos*/
+build-win-arm64/
+*.dwo
+
+# Web vive en la rama 'web'
+web/

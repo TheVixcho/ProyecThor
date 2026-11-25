@@ -38,7 +38,7 @@ private:
     std::vector<std::string> m_AvailableFonts;
 
     bool  m_GridMode  = true;
-    float m_ThumbZoom = 1.0f; // 0.65 .. 1.8 — tamano de las tarjetas de tema
+    float m_ThumbZoom = 0.65f; // 0.65 .. 1.8 — tamano de las tarjetas de tema (mínimo por defecto)
 
     std::unique_ptr<CanvaStyleEditor> m_StyleEditor;
     UIManager* m_UIManager = nullptr;

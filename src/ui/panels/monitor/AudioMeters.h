@@ -1,5 +1,5 @@
 #pragma once
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include <imgui.h>
 
 namespace ProyecThor::UI {
@@ -8,7 +8,7 @@ class AudioMeters {
 public:
     AudioMeters() = default;
 
-    void Update(Core::VLCBasePlayer* player, bool isLive, bool isPlaying, bool isMuted, float currentVolume);
+    void Update(Core::MPVBasePlayer* player, bool isLive, bool isPlaying, bool isMuted, float currentVolume);
     void Render(float w, float h);
 
     // Version compacta: barras verticales, pensada para dibujarse pegada al

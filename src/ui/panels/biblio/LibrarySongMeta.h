@@ -53,4 +53,7 @@ void     SetSongMeta(const std::string& filename, const SongMeta& meta);
 // "pierde" Nota/Derechos de autor/lineas-por-diapositiva/tempo al renombrarla.
 void RenameSongMeta(const std::string& oldFilename, const std::string& newFilename);
 
+// Limpia la caché en RAM de metadatos de canciones
+void ClearSongMetaCache();
+
 } // namespace ProyecThor::Library

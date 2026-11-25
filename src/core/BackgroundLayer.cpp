@@ -1,10 +1,20 @@
 #include "BackgroundLayer.h"
 #include "ui/windowing/SecondaryOutputWindow.h"
+#include "core/PresentationCore.h"
+#include "core/ThumbnailWorker.h"
+#include "core/MediaImportManager.h"
+#include "core/settings/SettingsManager.h"
 #include "stb_image.h"
 #include <iostream>
 #include <chrono>
+#include <cstdlib>
+#include <filesystem>
 #include <GL/glew.h>
 #include <unordered_map>
+#ifdef _WIN32
+#include <windows.h>
+#include <shlobj.h>
+#endif
 
 namespace ProyecThor::Core {
 
@@ -138,14 +148,35 @@ void main() {
             return (ext == ".jpg" || ext == ".jpeg" || ext == ".png" ||
                     ext == ".bmp" || ext == ".webp" || ext == ".tga");
         }
+
+        static std::filesystem::path GetThumbCacheDir()
+        {
+#ifdef _WIN32
+            wchar_t buf[MAX_PATH] = {};
+            SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, buf);
+            return std::filesystem::path(buf) / "ProyecThor" / "thumbnails";
+#else
+            const char* xdgConfig = std::getenv("XDG_CONFIG_HOME");
+            if (xdgConfig && *xdgConfig)
+                return std::filesystem::path(xdgConfig) / "ProyecThor" / "thumbnails";
+            const char* home = std::getenv("HOME");
+            return std::filesystem::path(home ? home : ".") / ".config" / "ProyecThor" / "thumbnails";
+#endif
+        }
+
+        static std::string BuildThumbCacheCandidate(const std::string& absKey, uintmax_t fileSize)
+        {
+            const size_t h = std::hash<std::string>{}(absKey + "|" + std::to_string(fileSize));
+            return (GetThumbCacheDir() / (std::to_string(h) + ".png")).u8string();
+        }
     } // anonymous namespace
 
-    // useHardwareDecode=false: el parametro de VLCBasePlayer existe
+    // useHardwareDecode=false: el parametro de MPVBasePlayer existe
     // justamente para diagnosticar "contencion de sesiones de decode de
-    // hardware" (ver el comentario en VLCBasePlayer.h) — muchas GPU de
+    // hardware" (ver el comentario en MPVBasePlayer.h) — muchas GPU de
     // consumo (tipico en NVIDIA GeForce) limitan cuantas sesiones NVDEC/
     // VAAPI concurrentes se pueden abrir a la vez. Esta app abre varios
-    // VLCBasePlayer en simultaneo (Active+Standby de Fondos/Overlays/Cola
+    // MPVBasePlayer en simultaneo (Active+Standby de Fondos/Overlays/Cola
     // del Monitor, mas preview, mas overlay), y pedirle decode por
     // hardware a todos a la vez puede pasarse de ese limite: el sintoma es
     // exactamente "no aparece ningun frame nuevo" o glitches visuales al
@@ -163,18 +194,36 @@ void main() {
     BackgroundLayer::~BackgroundLayer()
     {
         ClearStaticImage();
+        ClearPoster();
     }
 
     bool BackgroundLayer::LoadStaticImage(const std::string& path)
     {
         ClearStaticImage();
-        int w = 0, h = 0, ch = 0;
-        unsigned char* data = stbi_load(path.c_str(), &w, &h, &ch, 4);
-        if (!data)
+        ClearPoster();
+
+        if (glfwGetCurrentContext() == nullptr)
+        {
+            m_StaticImagePath = path;
+            m_IsStaticImage = true;
+            return true;
+        }
+
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        const unsigned maxImgW = perf.lowMemoryMode ? 1280u : (perf.performanceMode ? 1920u : 0u);
+        const unsigned maxImgH = perf.lowMemoryMode ? 720u  : (perf.performanceMode ? 1080u : 0u);
+
+        std::vector<uint8_t> pixels;
+        unsigned uw = 0, uh = 0;
+        if (!ThumbnailWorker::LoadThumbnailPixelsFromDisk(path, pixels, uw, uh, maxImgW, maxImgH) ||
+            uw == 0 || uh == 0)
         {
             std::cerr << "[BackgroundLayer] Fallo al cargar imagen estatica: " << path << "\n";
             return false;
         }
+
+        const int w = static_cast<int>(uw);
+        const int h = static_cast<int>(uh);
 
         glGenTextures(1, &m_StaticImageTex);
         glBindTexture(GL_TEXTURE_2D, m_StaticImageTex);
@@ -182,9 +231,8 @@ void main() {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
         glBindTexture(GL_TEXTURE_2D, 0);
-        stbi_image_free(data);
 
         m_StaticImageW = w;
         m_StaticImageH = h;
@@ -198,7 +246,8 @@ void main() {
     {
         if (m_StaticImageTex != 0)
         {
-            glDeleteTextures(1, &m_StaticImageTex);
+            if (glfwGetCurrentContext() != nullptr)
+                glDeleteTextures(1, &m_StaticImageTex);
             m_StaticImageTex = 0;
         }
         m_StaticImageW = 0;
@@ -207,15 +256,79 @@ void main() {
         m_StaticImagePath.clear();
     }
 
-    VLCBasePlayer& BackgroundLayer::Active()  { return m_ActiveIsA ? m_PlayerA : m_PlayerB; }
-    VLCBasePlayer& BackgroundLayer::Standby() { return m_ActiveIsA ? m_PlayerB : m_PlayerA; }
+    bool BackgroundLayer::LoadPosterForVideo(const std::string& path)
+    {
+        ClearPoster();
+        if (path.empty() || glfwGetCurrentContext() == nullptr) return false;
+
+        std::error_code ec;
+        std::filesystem::path resolved = std::filesystem::u8path(path);
+        if (!std::filesystem::exists(resolved, ec)) {
+            ec.clear();
+            resolved = std::filesystem::path(path);
+            if (!std::filesystem::exists(resolved, ec))
+                return false;
+        }
+
+        const uintmax_t sz = std::filesystem::file_size(resolved, ec);
+        if (ec) return false;
+
+        const std::filesystem::path absPath = std::filesystem::absolute(resolved, ec);
+        if (ec) return false;
+
+        std::vector<std::string> candidates;
+        candidates.push_back(BuildThumbCacheCandidate(absPath.string(), sz));
+        const std::string absUtf8 = absPath.u8string();
+        if (absUtf8 != absPath.string())
+            candidates.push_back(BuildThumbCacheCandidate(absUtf8, sz));
+
+        std::vector<uint8_t> pixels;
+        unsigned uw = 0, uh = 0;
+        bool loaded = false;
+        for (const auto& cand : candidates) {
+            if (ThumbnailWorker::LoadThumbnailPixelsFromDisk(cand, pixels, uw, uh, 0, 0) && uw > 0 && uh > 0) {
+                loaded = true;
+                break;
+            }
+        }
+        if (!loaded) return false;
+
+        glGenTextures(1, &m_PosterTex);
+        glBindTexture(GL_TEXTURE_2D, m_PosterTex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, static_cast<GLsizei>(uw), static_cast<GLsizei>(uh),
+                     0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        m_PosterW = static_cast<int>(uw);
+        m_PosterH = static_cast<int>(uh);
+        return true;
+    }
+
+    void BackgroundLayer::ClearPoster()
+    {
+        if (m_PosterTex != 0)
+        {
+            if (glfwGetCurrentContext() != nullptr)
+                glDeleteTextures(1, &m_PosterTex);
+            m_PosterTex = 0;
+        }
+        m_PosterW = 0;
+        m_PosterH = 0;
+    }
+
+    MPVBasePlayer& BackgroundLayer::Active()  { return m_ActiveIsA ? m_PlayerA : m_PlayerB; }
+    MPVBasePlayer& BackgroundLayer::Standby() { return m_ActiveIsA ? m_PlayerB : m_PlayerA; }
 
     void BackgroundLayer::Update()
     {
         // Destruye los NativePlayback retirados (ver RetireActiveNative())
         // una vez que paso tiempo de sobra para que su detach+stop
         // encolado en m_NativeLoader haya terminado — recien AHI es seguro
-        // destruir su ventana (hilo principal, GLFW) y su VLCBasePlayer
+        // destruir su ventana (hilo principal, GLFW) y su MPVBasePlayer
         // (cuyo destructor llama Stop() de nuevo, inofensivo si ya esta
         // parado). Corre siempre, sin importar el motor actual.
         if (!m_RetiringNative.empty())
@@ -234,42 +347,29 @@ void main() {
         // el .h. Corre siempre, sin importar el motor actual.
         PollNativeReveal();
 
-        // Contenido activo por motor nativo: Active() reproduce el mismo video
-        // en silencio para mantener su textura OpenGL actualizada y alimentar
-        // la Vista en Vivo (ViewPanel).
+        // Contenido activo por motor nativo: el reproductor nativo maneja
+        // su propia ventana y audio. Retornar inmediatamente para evitar
+        // decodificación redundante y llamadas continuas a PulseAudio/PipeWire.
         if (m_ActiveIsNative)
         {
-            Active().UpdateTexture();
-            Active().SetAudioActive(false);
-            Active().SetMute(true);
-            Active().SetVolume(0);
-
-            if (m_ActiveNative)
-            {
-                bool nativePaused = m_ActiveNative->player.IsPaused();
-                if (Active().IsPaused() != nativePaused)
-                    Active().SetPause(nativePaused);
-
-                double now = NowSeconds();
-                if (now - m_LastNativeSyncTime > 1.5)
-                {
-                    m_LastNativeSyncTime = now;
-                    int64_t nativeTime = m_ActiveNative->player.GetTime();
-                    int64_t activeTime = Active().GetTime();
-                    int64_t len = m_ActiveNative->player.GetLength();
-                    if (len > 0 && std::abs(nativeTime - activeTime) > 1500)
-                    {
-                        Active().SetPosition(static_cast<float>(nativeTime) / static_cast<float>(len));
-                    }
-                }
-            }
             return;
         }
 
         if (m_IsStaticImage)
+        {
+            if (m_StaticImageTex == 0 && !m_StaticImagePath.empty() && glfwGetCurrentContext() != nullptr)
+            {
+                std::string pendingPath = m_StaticImagePath;
+                m_StaticImagePath.clear();
+                m_IsStaticImage = false;
+                LoadStaticImage(pendingPath);
+            }
             return;
+        }
 
         Active().UpdateTexture();
+        if (m_PosterTex != 0 && Active().HasVideoFrame())
+            ClearPoster();
         Active().EnforceSilenceIfNeeded();
         Standby().EnforceSilenceIfNeeded();
 
@@ -310,7 +410,7 @@ void main() {
             if (!Standby().IsPaused())
             {
                 if (m_PrefetchReadyAt == 0.0 &&
-                    Standby().GetLoadState() == VLCBasePlayer::LoadState::Ready)
+                    Standby().GetLoadState() == MPVBasePlayer::LoadState::Ready)
                 {
                     m_PrefetchReadyAt = NowSeconds();
                 }
@@ -330,17 +430,17 @@ void main() {
 
         if (m_SwapPending)
         {
-            VLCBasePlayer& standby = Standby();
+            MPVBasePlayer& standby = Standby();
             auto standbyState = standby.GetLoadState();
 
-            bool ready   = standbyState == VLCBasePlayer::LoadState::Ready;
+            bool ready   = standbyState == MPVBasePlayer::LoadState::Ready;
             // Un error real (codec no soportado, archivo corrupto, ruta rota)
             // nunca va a convertirse en Ready por mas que se espere — swapear
             // de inmediato hace visible el fin-de-clip/error ya seteado en
             // este player (ver OnVlcEvent), asi MonitorQueueEngine::Update()
             // lo detecta y salta al siguiente item en el mismo frame, en vez
             // de quedar pegado.
-            bool errored = standbyState == VLCBasePlayer::LoadState::Error;
+            bool errored = standbyState == MPVBasePlayer::LoadState::Error;
             double now   = NowSeconds();
 
             if (errored)
@@ -428,7 +528,7 @@ void main() {
         // aca tambien.
         if (m_PingPongEnabled && m_IsVideo && !m_ContentAllowsAudio && !m_SwapPending)
         {
-            VLCBasePlayer& active = Active();
+            MPVBasePlayer& active = Active();
             double now = NowSeconds();
 
             if (!m_PingPongReverse)
@@ -520,13 +620,15 @@ void main() {
         }
 
         GLuint finalTex = rawTex;
+        const bool usingColdPoster = (m_IsVideo && !Active().HasVideoFrame() && m_PosterTex != 0);
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        const bool skipUpscaler = perf.performanceMode || perf.lowMemoryMode;
 
-        if (m_FSREnabled) {
-            bool needReinit = (!m_FSR.IsInitialized() ||
-                               m_FSR.GetOutputW() != viewW ||
-                               m_FSR.GetOutputH() != viewH);
-
-            if (needReinit) {
+        if (skipUpscaler) {
+            if (m_FSR.IsInitialized()) m_FSR.Destroy();
+            if (m_NIS.IsInitialized()) m_NIS.Destroy();
+        } else if (!usingColdPoster && m_FSREnabled) {
+            if (!m_FSR.IsInitialized()) {
                 bool ok = m_FSR.Init(viewW, viewH);
                 if (ok) {
                     m_FSR.SetSharpness(m_FSRSharpness);
@@ -535,6 +637,8 @@ void main() {
                     m_FSREnabled = false;
                     std::cout << "[BG] FSR no disponible, usando blit directo.\n";
                 }
+            } else if (m_FSR.GetOutputW() != viewW || m_FSR.GetOutputH() != viewH) {
+                m_FSR.Resize(viewW, viewH);
             }
 
             if (m_FSREnabled && m_FSR.IsInitialized() && (srcW < viewW || srcH < viewH)) {
@@ -542,12 +646,8 @@ void main() {
                 if (upscaled != 0)
                     finalTex = upscaled;
             }
-        } else if (m_NISEnabled) {
-            bool needReinit = (!m_NIS.IsInitialized() ||
-                               m_NIS.GetOutputW() != viewW ||
-                               m_NIS.GetOutputH() != viewH);
-
-            if (needReinit) {
+        } else if (!usingColdPoster && m_NISEnabled) {
+            if (!m_NIS.IsInitialized()) {
                 bool ok = m_NIS.Init(viewW, viewH);
                 if (ok) {
                     m_NIS.SetSharpness(m_NISSharpness);
@@ -556,6 +656,8 @@ void main() {
                     m_NISEnabled = false;
                     std::cout << "[BG] NIS no disponible, usando blit directo.\n";
                 }
+            } else if (m_NIS.GetOutputW() != viewW || m_NIS.GetOutputH() != viewH) {
+                m_NIS.Resize(viewW, viewH);
             }
 
             if (m_NISEnabled && m_NIS.IsInitialized() && (srcW < viewW || srcH < viewH)) {
@@ -697,11 +799,42 @@ void main() {
         return m_NISSharpness;
     }
 
+    void BackgroundLayer::WarmupGraphics(int outputW, int outputH)
+    {
+        EnsureBlitResources();
+        if (outputW <= 0 || outputH <= 0) return;
+
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        if (perf.performanceMode || perf.lowMemoryMode) return;
+
+        if (m_FSREnabled && !m_FSR.IsInitialized()) {
+            if (m_FSR.Init(outputW, outputH)) {
+                m_FSR.SetSharpness(m_FSRSharpness);
+                m_FSR.SetEnabled(true);
+            } else {
+                m_FSREnabled = false;
+            }
+        } else if (m_NISEnabled && !m_NIS.IsInitialized()) {
+            if (m_NIS.Init(outputW, outputH)) {
+                m_NIS.SetSharpness(m_NISSharpness);
+                m_NIS.SetEnabled(true);
+            } else {
+                m_NISEnabled = false;
+            }
+        }
+    }
+
     void* BackgroundLayer::GetTextureID()
     {
         if (m_IsStaticImage && m_StaticImageTex != 0)
             return (void*)(uintptr_t)m_StaticImageTex;
-        return Active().GetTextureID();
+        if (!m_IsVideo)
+            return nullptr;
+        if (Active().HasVideoFrame())
+            return Active().GetTextureID();
+        if (m_PosterTex != 0)
+            return (void*)(uintptr_t)m_PosterTex;
+        return nullptr;
     }
 
     void* BackgroundLayer::GetStandbyTextureID()
@@ -714,7 +847,7 @@ void main() {
         return Standby().HasVideoFrame();
     }
 
-    VLCBasePlayer* BackgroundLayer::GetPlayer()
+    MPVBasePlayer* BackgroundLayer::GetPlayer()
     {
         // Punto unico usado por la cola del Monitor (MonitorQueueEngine::
         // Update -> ConsumeEndReached/ConsumeHadError, sin lo cual la cola
@@ -759,6 +892,19 @@ void main() {
             if (width > 0 && height > 0) return;
         }
 
+        if (m_IsVideo && Active().HasVideoFrame())
+        {
+            Active().GetVideoSize(width, height);
+            if (width > 0 && height > 0) return;
+        }
+
+        if (m_IsVideo && m_PosterTex != 0 && m_PosterW > 0 && m_PosterH > 0)
+        {
+            width  = m_PosterW;
+            height = m_PosterH;
+            return;
+        }
+
         Active().GetVideoSize(width, height);
         if ((width <= 0 || height <= 0) && Standby().HasVideoFrame())
         {
@@ -775,7 +921,8 @@ void main() {
         std::transform(normPath.begin(), normPath.end(), normPath.begin(),
                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         if (normPath.find("/backgrounds/") != std::string::npos ||
-            normPath.find("assets/backgrounds") != std::string::npos)
+            normPath.find("assets/backgrounds") != std::string::npos ||
+            MediaImportManager::Get().IsExternalBackgroundPath(path))
         {
             allowAudio = false;
         }
@@ -826,29 +973,48 @@ void main() {
             return;
         }
 
-        ClearStaticImage();
-
-        // El motor nativo aplica SOLO a video real (allowAudio=true —
-        // Videos/cola del Monitor): Fondos/imagenes (allowAudio=false)
-        // siempre necesitan overlays/texto encima, asi que siempre van
-        // por OpenGL sin importar este ajuste (ver comentario del
-        // miembro m_UseNativeEngine en el .h).
-        if (m_UseNativeEngine && allowAudio)
+        const bool wasShowingStaticImage = (m_IsStaticImage && m_StaticImageTex != 0);
+        if (wasShowingStaticImage)
         {
+            // Mantener la imagen estática anterior en m_PosterTex durante los pocos ms
+            // en que el nuevo video abre su primer frame real (evita parpadeo a negro).
+            ClearPoster();
+            m_PosterTex = m_StaticImageTex;
+            m_PosterW   = m_StaticImageW;
+            m_PosterH   = m_StaticImageH;
+            m_StaticImageTex = 0;
+        }
+        ClearStaticImage();
+        m_CurrentVideoPath = path;
+
+        // El motor nativo aplica SOLO si estamos proyectando en vivo al público (m_IsLiveToPublic)
+        // y el motor nativo está activo. Si NO estamos proyectando en vivo, el motor nativo NO debe
+        // crearse ni intentar reproducir (evita que VLC abra ventanas "VLC media player" sobre la UI).
+        if (m_UseNativeEngine && m_IsLiveToPublic && (allowAudio || m_VLCNativeForFondos))
+        {
+            ClearPoster();
+            if (m_ActiveNative && m_ActiveNative->player.GetCurrentPath() == path && !m_PendingRetireNative)
+            {
+                // El mismo video ya se encuentra reproduciendo en la ventana nativa:
+                // no recrear ventana ni matar el proceso de VLC para evitar parpadeos y congelamientos.
+                m_ActiveNative->player.SetPause(false);
+                bool live       = m_IsLiveToPublic.load(std::memory_order_relaxed);
+                bool muted      = m_TargetMuted.load(std::memory_order_relaxed);
+                int  volume     = m_TargetVolume.load(std::memory_order_relaxed);
+                bool wantActive = live && allowAudio;
+                m_ActiveNative->player.SetAudioActive(wantActive);
+                m_ActiveNative->player.SetMute(muted || !wantActive);
+                m_ActiveNative->player.SetVolume((wantActive && !muted) ? volume : 0);
+                return;
+            }
+
             // Sin crossfade/standby en este motor: corte directo.
             m_IsVideo             = true;
             m_ActiveIsNative      = true;
 
-            // Reproducir el video en Active() (OpenGL) en modo 100% silencioso
-            // para proveer la textura en tiempo real a ViewPanel (Vista en Vivo).
-            Active().Play(path, /*loop=*/false, /*startMuted=*/true);
-            Active().SetAudioActive(false);
-            Active().SetMute(true);
-            Active().SetVolume(0);
-
-            Standby().SetAudioActive(false);
-            Standby().SetMute(true);
-            Standby().SetVolume(0);
+            // Detener reproductores OpenGL: el motor nativo de VLC toma control exclusivo
+            // de video y audio. Elimina decodificación dual en paralelo y conflictos de PulseAudio.
+            Active().Stop();
             Standby().Stop();
 
             m_SwapPending        = false;
@@ -877,47 +1043,39 @@ void main() {
             if (!m_AudioDeviceId.empty())
                 fresh->player.SetAudioDevice(m_AudioDeviceId);
 
-            void* handle = m_IsLiveToPublic ? fresh->window.CreateHidden(m_LastKnownMonitorIndex) : nullptr;
-            if (!handle)
-            {
-                // Sin ventana nativa disponible (ej. no está en vivo o falló creación):
-                // no usar el reproductor nativo (evita abrir ventana externa flotante de VLC).
-                // Continuar por el camino estándar de OpenGL.
-                RetireActiveNative();
-                m_ActiveIsNative = false;
+            if (m_LastKnownMonitorIndex < 0) {
+                m_LastKnownMonitorIndex = PresentationCore::Get().GetState().targetMonitorIndex;
             }
-            else
-            {
-                VLCBasePlayer* newPlayerPtr = &fresh->player;
 
-                // Adjuntar la ventana tiene que pasar ANTES de Play() (la doc
-                // de libVLC dice que set_hwnd/set_xwindow "toma efecto cuando
-                // arranca la reproduccion").
-                bool allowAudioCopy = allowAudio;
-                m_NativeLoader.Request([this, newPlayerPtr, path, handle, allowAudioCopy]() {
-                    newPlayerPtr->AttachNativeWindow(handle);
-                    // Los fondos (allowAudio=false) siempre deben repetirse en
-                    // loop; los videos reales (allowAudio=true, cola del
-                    // Monitor) NO -- MonitorQueueEngine::Update() depende de
-                    // que ConsumeEndReached() dispare de verdad al terminar
-                    // para avanzar la cola, cosa que nunca pasaria si loopean.
-                    newPlayerPtr->Play(path, /*loop=*/!allowAudioCopy, /*startMuted=*/true);
+            // Mapear y mostrar la ventana en negro inmediatamente:
+            // en Linux X11 libVLC requiere que la ventana este mapeada para inicializar
+            // XVideo/GLX sin errores de BadDrawable/XvBadPort.
+            void* handle = m_IsLiveToPublic ? fresh->window.Show(m_LastKnownMonitorIndex) : nullptr;
+            MPVBasePlayer* newPlayerPtr = &fresh->player;
 
-                    bool live       = m_IsLiveToPublic.load(std::memory_order_relaxed);
-                    bool muted      = m_TargetMuted.load(std::memory_order_relaxed);
-                    int  volume     = m_TargetVolume.load(std::memory_order_relaxed);
-                    bool wantActive = live && allowAudioCopy;
-                    newPlayerPtr->SetAudioActive(wantActive);
-                    newPlayerPtr->SetMute(muted || !wantActive);
-                    newPlayerPtr->SetVolume((wantActive && !muted) ? volume : 0);
-                });
+            // Adjuntar la ventana tiene que pasar ANTES de Play() (la doc
+            // de libVLC dice que set_hwnd/set_xwindow "toma efecto cuando
+            // arranca la reproduccion").
+            bool allowAudioCopy = allowAudio;
+            m_NativeLoader.Request([this, newPlayerPtr, path, handle, allowAudioCopy]() {
+                if (handle) newPlayerPtr->AttachNativeWindow(handle);
+                bool live       = m_IsLiveToPublic.load(std::memory_order_relaxed);
+                bool muted      = m_TargetMuted.load(std::memory_order_relaxed);
+                int  volume     = m_TargetVolume.load(std::memory_order_relaxed);
+                bool wantActive = live && allowAudioCopy;
+                bool startMuted = !wantActive || muted;
 
-                m_NativeRevealPending = true;
-                m_NativeRevealStart   = NowSeconds();
+                newPlayerPtr->Play(path, /*loop=*/!allowAudioCopy, startMuted);
+                newPlayerPtr->SetAudioActive(wantActive);
+                newPlayerPtr->SetMute(muted || !wantActive);
+                newPlayerPtr->SetVolume((wantActive && !muted) ? volume : 0);
+            });
 
-                m_ActiveNative = std::move(fresh);
-                return;
-            }
+            m_NativeRevealPending = true;
+            m_NativeRevealStart   = NowSeconds();
+
+            m_ActiveNative = std::move(fresh);
+            return;
         }
 
         // Esto va por OpenGL: si el contenido activo ANTERIOR era nativo,
@@ -930,23 +1088,41 @@ void main() {
             RetireActiveNative();
         }
 
-        // FIX (freeze/flash en clicks repetidos): si esto es EXACTAMENTE lo
-        // que ya se esta mostrando (nada en swap, misma ruta ya activa), es
-        // un pedido redundante — ignorarlo evita reiniciar innecesariamente
-        // el clip y evita el ping-pong entre Active/Standby que un guard a
-        // nivel VLCBasePlayer por si solo no cubre (cada swap deja al
-        // player saliente con la ruta limpiada por su propio Stop()).
-        if (!m_SwapPending && GetTextureID() != nullptr && path == Active().GetCurrentPath())
-            return;
+        bool wantNativeLoop = !allowAudio && !m_PingPongEnabled;
 
+        // FIX (freeze/flash en clicks repetidos): si esto es EXACTAMENTE lo
+        // que ya se esta mostrando o abriendo en Active() (sin swap pendiente),
+        // o lo que ya se esta precargando en Standby() (con swap pendiente),
+        // es un pedido redundante — ignorarlo evita reiniciar innecesariamente
+        // el clip (o abortar una apertura en frio en progreso) y evita el
+        // ping-pong entre Active/Standby.
+        if (!m_SwapPending && m_IsVideo && path == Active().GetCurrentPath())
+        {
+            if (Active().GetPosition() >= 0.95f || !Active().IsPlaying() ||
+                Active().GetLoadState() != MPVBasePlayer::LoadState::Ready)
+            {
+                Active().Stop();
+                Active().Play(path, wantNativeLoop, !allowAudio);
+                Active().SetAudioActive(allowAudio);
+                Active().SetMute(!allowAudio || m_TargetMuted.load());
+                Active().SetVolume((allowAudio && !m_TargetMuted.load()) ? m_TargetVolume.load() : 0);
+                Active().ConsumeEndReached();
+            }
+            else
+            {
+                Active().SetPosition(0.0f);
+                Active().SetPause(false);
+            }
+            return;
+        }
+        if (m_SwapPending && path == Standby().GetCurrentPath())
+        {
+            return;
+        }
+
+        const bool hasRunningVideo = (m_IsVideo && Active().HasVideoFrame());
         m_IsVideo = true;
 
-        // Fondos con ping-pong activo NO deben loopear via libVLC
-        // (input-repeat): necesitamos que llegue un EndReached real al
-        // terminar el pase hacia adelante para poder arrancar la fase de
-        // reversa manual (ver Update()). Videos reales (allowAudio=true)
-        // nunca loopean de todos modos, con o sin ping-pong.
-        bool wantNativeLoop = !allowAudio && !m_PingPongEnabled;
         m_PingPongReverse    = false;
         m_PingPongLastStepAt = 0.0;
 
@@ -957,7 +1133,40 @@ void main() {
         m_PrefetchArmed = false;
         m_PrefetchedPath.clear();
 
-        if (m_SwapPending || GetTextureID() != nullptr)
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        if (perf.lowMemoryMode)
+        {
+            // En modo RAM mínima evitamos tener dos decodificadores y búferes de video simultáneos:
+            // liberamos Standby y el clip previo antes de abrir el nuevo en Active().
+            m_SwapPending        = false;
+            m_SwapReadyAt        = 0.0;
+            m_SwapSettledAt      = 0.0;
+            m_TransitionProgress = 1.0f;
+            Standby().SetAudioActive(false);
+            Standby().SetMute(true);
+            Standby().SetVolume(0);
+            Standby().Stop();
+            Active().Stop();
+            ClearPoster();
+
+            Active().Play(path, /*loop=*/wantNativeLoop, /*startMuted=*/true);
+            if (!m_IsLiveToPublic || !allowAudio)
+            {
+                Active().SetAudioActive(false);
+                Active().SetMute(true);
+                Active().SetVolume(0);
+            }
+            else
+            {
+                Active().SetAudioActive(true);
+                Active().SetMute(m_TargetMuted);
+                Active().SetVolume(m_TargetMuted ? 0 : m_TargetVolume.load());
+                ReapplyLiveEqualizer(Active());
+            }
+            return;
+        }
+
+        if (m_SwapPending || hasRunningVideo)
         {
             // Ver comentario de wantNativeLoop arriba: los fondos
             // (allowAudio=false) loopean via libVLC salvo que ping-pong
@@ -974,6 +1183,11 @@ void main() {
         }
         else
         {
+            if (!wasShowingStaticImage)
+            {
+                LoadPosterForVideo(path);
+            }
+
             Active().Play(path, /*loop=*/wantNativeLoop, /*startMuted=*/true);
             if (!m_IsLiveToPublic || !allowAudio)
             {
@@ -1001,12 +1215,16 @@ void main() {
 
     void BackgroundLayer::Prefetch(const std::string& path, bool allowAudio)
     {
+        if (ProyecThor::Settings::SettingsManager::Get().GetSettings().performance.lowMemoryMode)
+            return;
+
         std::string normPath = path;
         std::replace(normPath.begin(), normPath.end(), '\\', '/');
         std::transform(normPath.begin(), normPath.end(), normPath.begin(),
                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         if (normPath.find("/backgrounds/") != std::string::npos ||
-            normPath.find("assets/backgrounds") != std::string::npos)
+            normPath.find("assets/backgrounds") != std::string::npos ||
+            MediaImportManager::Get().IsExternalBackgroundPath(path))
         {
             allowAudio = false;
         }
@@ -1052,7 +1270,8 @@ void main() {
         std::transform(normPath.begin(), normPath.end(), normPath.begin(),
                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         if (normPath.find("/backgrounds/") != std::string::npos ||
-            normPath.find("assets/backgrounds") != std::string::npos)
+            normPath.find("assets/backgrounds") != std::string::npos ||
+            MediaImportManager::Get().IsExternalBackgroundPath(path))
         {
             allowAudio = false;
         }
@@ -1075,7 +1294,7 @@ void main() {
 
         // Sin prefetch en el motor nativo (ver Prefetch()): cae directo a
         // un corte simple, igual que si nunca se hubiera precargado nada.
-        if (m_UseNativeEngine && allowAudio) { SetVideo(path, allowAudio); return; }
+        if (m_UseNativeEngine && m_IsLiveToPublic && (allowAudio || m_VLCNativeForFondos)) { SetVideo(path, allowAudio); return; }
 
         // Esto va por OpenGL: mismo apagado del nativo que en SetVideo(),
         // por si el contenido activo anterior venia de ahi.
@@ -1116,9 +1335,9 @@ void main() {
 
     void BackgroundLayer::PerformSwap()
     {
-        VLCBasePlayer& oldActive = Active();
+        MPVBasePlayer& oldActive = Active();
         m_ActiveIsA = !m_ActiveIsA;
-        VLCBasePlayer& newActive = Active();
+        MPVBasePlayer& newActive = Active();
 
         // Ahora el swap respeta el permiso asociado al contenido que se esta
         // por mostrar, no solo el estado global "al aire".
@@ -1154,6 +1373,7 @@ void main() {
     void BackgroundLayer::SetSolidColor(float r, float g, float b)
     {
         ClearStaticImage();
+        ClearPoster();
         m_ContentAllowsAudio = false;
         m_IsVideo    = false;
         m_BgColor[0] = r;
@@ -1190,6 +1410,16 @@ void main() {
         if (rawTex == 0 || targetW <= 0 || targetH <= 0)
             return nullptr;
 
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        if (perf.performanceMode || perf.lowMemoryMode) {
+            if (m_FSR.IsInitialized()) m_FSR.Destroy();
+            if (m_NIS.IsInitialized()) m_NIS.Destroy();
+            return (void*)(uintptr_t)rawTex;
+        }
+
+        if (m_IsVideo && !Active().HasVideoFrame() && m_PosterTex != 0)
+            return (void*)(uintptr_t)rawTex;
+
         if (!m_FSREnabled && !m_NISEnabled)
             return (void*)(uintptr_t)rawTex;
 
@@ -1200,11 +1430,7 @@ void main() {
             return (void*)(uintptr_t)rawTex;
 
         if (m_FSREnabled) {
-            bool needReinit = (!m_FSR.IsInitialized() ||
-                               m_FSR.GetOutputW() != targetW ||
-                               m_FSR.GetOutputH() != targetH);
-
-            if (needReinit) {
+            if (!m_FSR.IsInitialized()) {
                 if (m_FSR.Init(targetW, targetH)) {
                     m_FSR.SetSharpness(m_FSRSharpness);
                     m_FSR.SetEnabled(true);
@@ -1212,6 +1438,8 @@ void main() {
                     m_FSREnabled = false;
                     return (void*)(uintptr_t)rawTex;
                 }
+            } else if (m_FSR.GetOutputW() != targetW || m_FSR.GetOutputH() != targetH) {
+                m_FSR.Resize(targetW, targetH);
             }
 
             GLuint upscaled = m_FSR.Process(rawTex, srcW, srcH);
@@ -1219,11 +1447,7 @@ void main() {
         }
 
         // m_NISEnabled
-        bool needReinit = (!m_NIS.IsInitialized() ||
-                           m_NIS.GetOutputW() != targetW ||
-                           m_NIS.GetOutputH() != targetH);
-
-        if (needReinit) {
+        if (!m_NIS.IsInitialized()) {
             if (m_NIS.Init(targetW, targetH)) {
                 m_NIS.SetSharpness(m_NISSharpness);
                 m_NIS.SetEnabled(true);
@@ -1231,6 +1455,8 @@ void main() {
                 m_NISEnabled = false;
                 return (void*)(uintptr_t)rawTex;
             }
+        } else if (m_NIS.GetOutputW() != targetW || m_NIS.GetOutputH() != targetH) {
+            m_NIS.Resize(targetW, targetH);
         }
 
         GLuint upscaled = m_NIS.Process(rawTex, srcW, srcH);
@@ -1238,7 +1464,12 @@ void main() {
     }
 
     void* BackgroundLayer::GetBlurredFillTexture(int workW, int workH) {
-        if (!m_FillBlurEnabled) return nullptr;
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        if (perf.performanceMode || perf.lowMemoryMode || !m_FillBlurEnabled) {
+            if (m_FillBlur.IsInitialized() && (perf.performanceMode || perf.lowMemoryMode))
+                m_FillBlur.Destroy();
+            return nullptr;
+        }
 
         GLuint rawTex = static_cast<GLuint>(reinterpret_cast<uintptr_t>(GetTextureID()));
         if (rawTex == 0 || workW <= 0 || workH <= 0) return nullptr;
@@ -1262,7 +1493,7 @@ void main() {
     {
         if (!np) return;
 
-        VLCBasePlayer* p = &np->player;
+        MPVBasePlayer* p = &np->player;
         p->SetAudioActive(false);
         p->SetMute(true);
         p->SetVolume(0);
@@ -1293,15 +1524,34 @@ void main() {
     {
         if (!m_NativeRevealPending || !m_ActiveNative) return;
 
-        bool ready = m_ActiveNative->player.GetLoadState() == VLCBasePlayer::LoadState::Ready;
-        bool timedOut = (NowSeconds() - m_NativeRevealStart) > kNativeRevealGiveUpSeconds;
+        auto loadState = m_ActiveNative->player.GetLoadState();
+        bool ready     = (loadState == MPVBasePlayer::LoadState::Ready);
+        bool errored   = (loadState == MPVBasePlayer::LoadState::Error);
+        bool timedOut  = (NowSeconds() - m_NativeRevealStart) > kNativeRevealGiveUpSeconds;
+
+        if (errored)
+        {
+            m_NativeRevealPending = false;
+            if (m_PendingRetireNative) RetireNativePlayback(std::move(m_PendingRetireNative));
+            return;
+        }
+
         if (!ready && !timedOut) return;
 
         // Listo (o se agoto el tiempo de gracia): revelar el nuevo YA —
         // recien ahora, nunca antes, para no exponer el instante de
         // inicializacion del modulo de video de VLC (ver comentario largo
         // de m_NativeRevealPending en el .h).
-        if (m_IsLiveToPublic) m_ActiveNative->window.Reveal();
+        if (m_IsLiveToPublic)
+        {
+            m_ActiveNative->window.Reveal();
+            bool active = m_ContentAllowsAudio.load(std::memory_order_relaxed);
+            bool muted  = m_TargetMuted.load(std::memory_order_relaxed);
+            int  volume = m_TargetVolume.load(std::memory_order_relaxed);
+            m_ActiveNative->player.SetAudioActive(active);
+            m_ActiveNative->player.SetMute(muted || !active);
+            m_ActiveNative->player.SetVolume((active && !muted) ? volume : 0);
+        }
         m_NativeRevealPending = false;
 
         // El anterior seguia visible (mudo) tapando la transicion — recien
@@ -1332,7 +1582,7 @@ void main() {
             void* handle = m_NativeRevealPending
                 ? m_ActiveNative->window.CreateHidden(m_LastKnownMonitorIndex)
                 : m_ActiveNative->window.Show(m_LastKnownMonitorIndex);
-            VLCBasePlayer* p = &m_ActiveNative->player;
+            MPVBasePlayer* p = &m_ActiveNative->player;
 
             // Gate de audio recalculado ADENTRO del lambda con valores
             // frescos (atomics) al momento de ejecutar, no capturados de
@@ -1340,7 +1590,7 @@ void main() {
             // largo: evita que un SetLiveMute()/ApplyAV() posterior quede
             // pisado por un valor viejo).
             m_NativeLoader.Request([this, p, handle]() {
-                if (handle) p->AttachNativeWindow(handle);
+                if (handle && p->GetNativeWindowHandle() != handle) p->AttachNativeWindow(handle);
                 bool active = m_ContentAllowsAudio.load(std::memory_order_relaxed);
                 bool muted  = m_TargetMuted.load(std::memory_order_relaxed);
                 int  volume = m_TargetVolume.load(std::memory_order_relaxed);
@@ -1352,11 +1602,10 @@ void main() {
         else
         {
             m_ActiveNative->window.Hide();
-            VLCBasePlayer* p = &m_ActiveNative->player;
+            MPVBasePlayer* p = &m_ActiveNative->player;
 
             m_NativeLoader.Request([p]() {
                 p->SetAudioActive(false);
-                p->SetPause(true);
                 p->DetachNativeWindow();
             });
         }
@@ -1366,6 +1615,18 @@ void main() {
     {
         m_IsLiveToPublic = live;
         if (monitorIndex >= 0) m_LastKnownMonitorIndex = monitorIndex;
+
+        if (live && m_UseNativeEngine && (m_ContentAllowsAudio.load(std::memory_order_relaxed) || m_VLCNativeForFondos))
+        {
+            if (!m_ActiveNative && m_IsVideo && !m_CurrentVideoPath.empty())
+            {
+                SetVideo(m_CurrentVideoPath, m_ContentAllowsAudio.load(std::memory_order_relaxed));
+            }
+        }
+        else if (!live && m_ActiveNative)
+        {
+            RetireActiveNative();
+        }
 
         // Independiente de si lo activo AHORA es nativo o no: sincroniza
         // la ventana nativa (la esconde si live paso a false, o si lo
@@ -1381,12 +1642,23 @@ void main() {
             // SetLiveVolume/SetLiveMute). Sin embargo, si el contenido
             // actualmente cargado no permite audio, debe permanecer mudo.
             bool activeAudioAllowed = m_ContentAllowsAudio.load(std::memory_order_relaxed);
-            Active().SetAudioActive(activeAudioAllowed);
-            Active().SetMute(m_TargetMuted || !activeAudioAllowed);
-            Active().SetVolume(activeAudioAllowed && !m_TargetMuted ? m_TargetVolume.load() : 0);
-            Standby().SetAudioActive(false);
-            Standby().SetMute(true);
-            Standby().SetVolume(0);
+            bool muted = m_TargetMuted.load(std::memory_order_relaxed);
+            int volume = m_TargetVolume.load(std::memory_order_relaxed);
+            if (!m_ActiveIsNative)
+            {
+                Active().SetAudioActive(activeAudioAllowed);
+                Active().SetMute(muted || !activeAudioAllowed);
+                Active().SetVolume(activeAudioAllowed && !muted ? volume : 0);
+                Standby().SetAudioActive(false);
+                Standby().SetMute(true);
+                Standby().SetVolume(0);
+            }
+            else if (m_ActiveNative)
+            {
+                m_ActiveNative->player.SetAudioActive(activeAudioAllowed);
+                m_ActiveNative->player.SetMute(muted || !activeAudioAllowed);
+                m_ActiveNative->player.SetVolume(activeAudioAllowed && !muted ? volume : 0);
+            }
         }
         else
         {
@@ -1425,7 +1697,7 @@ void main() {
         if (!m_IsLiveToPublic) return;
 
         bool allow = m_ContentAllowsAudio.load(std::memory_order_relaxed);
-        VLCBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
+        MPVBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
         target.SetAudioActive(allow && !mute);
         target.SetMute(mute || !allow);
         target.SetVolume((allow && !mute) ? m_TargetVolume.load() : 0);
@@ -1433,10 +1705,10 @@ void main() {
 
     // ── Ecualizador en vivo ──────────────────────────────────────────────
 
-    void BackgroundLayer::ReapplyLiveEqualizer(VLCBasePlayer& target)
+    void BackgroundLayer::ReapplyLiveEqualizer(MPVBasePlayer& target)
     {
         target.SetEqualizerPreamp(m_TargetEqPreamp);
-        for (int b = 0; b < VLCBasePlayer::kEqualizerBands; b++)
+        for (int b = 0; b < MPVBasePlayer::kEqualizerBands; b++)
             target.SetEqualizerBand(b, m_TargetEqBands[b]);
         target.SetEqualizerEnabled(m_TargetEqEnabled);
     }
@@ -1445,7 +1717,7 @@ void main() {
     {
         m_TargetEqEnabled = enabled;
         if (!m_IsLiveToPublic) return;
-        VLCBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
+        MPVBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
         target.SetEqualizerEnabled(enabled);
     }
 
@@ -1453,22 +1725,22 @@ void main() {
     {
         m_TargetEqPreamp = preampDb;
         if (!m_IsLiveToPublic) return;
-        VLCBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
+        MPVBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
         target.SetEqualizerPreamp(preampDb);
     }
 
     void BackgroundLayer::SetLiveEqualizerBand(int index, float ampDb)
     {
-        if (index < 0 || index >= VLCBasePlayer::kEqualizerBands) return;
+        if (index < 0 || index >= MPVBasePlayer::kEqualizerBands) return;
         m_TargetEqBands[index] = ampDb;
         if (!m_IsLiveToPublic) return;
-        VLCBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
+        MPVBasePlayer& target = (m_ActiveIsNative && m_ActiveNative) ? m_ActiveNative->player : Active();
         target.SetEqualizerBand(index, ampDb);
     }
 
     // ── Dispositivo de salida de audio ──────────────────────────────────
 
-    std::vector<VLCBasePlayer::AudioDevice> BackgroundLayer::GetAvailableAudioDevices()
+    std::vector<MPVBasePlayer::AudioDevice> BackgroundLayer::GetAvailableAudioDevices()
     {
         // Cualquiera de los dos players sirve para enumerar: ambos corren
         // en el mismo proceso y ven los mismos dispositivos del sistema.
@@ -1502,18 +1774,34 @@ void main() {
         m_PlayerB.UnblockPath();
     }
 
-    void BackgroundLayer::SetDeinterlace(const std::string& mode)
+    void BackgroundLayer::ReloadPlayers()
     {
-        VLCBasePlayer::SetDefaultDeinterlace(mode);
-        m_PlayerA.SetDeinterlace(mode);
-        m_PlayerB.SetDeinterlace(mode);
-        if (m_ActiveNative)
-            m_ActiveNative->player.SetDeinterlace(mode);
+        m_PlayerA.Reinit();
+        m_PlayerB.Reinit();
+        if (m_ActiveNative && m_IsLiveToPublic) {
+            m_ActiveNative->player.ApplyDeinterlace(MPVBasePlayer::GetDefaultDeinterlace());
+        }
     }
 
-    std::string BackgroundLayer::GetDeinterlace() const
+    void BackgroundLayer::PurgeIdleResources()
     {
-        return VLCBasePlayer::GetDefaultDeinterlace();
+        if (!m_SwapPending && !m_PrefetchArmed)
+            Standby().ReleaseIdleResources();
+        if (!m_IsVideo)
+            Active().ReleaseIdleResources();
+        if (!m_IsVideo || Active().HasVideoFrame())
+            ClearPoster();
+
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        if (perf.performanceMode || perf.lowMemoryMode || !m_FSREnabled) {
+            if (m_FSR.IsInitialized()) m_FSR.Destroy();
+        }
+        if (perf.performanceMode || perf.lowMemoryMode || !m_NISEnabled) {
+            if (m_NIS.IsInitialized()) m_NIS.Destroy();
+        }
+        if (perf.performanceMode || perf.lowMemoryMode || !m_FillBlurEnabled) {
+            if (m_FillBlur.IsInitialized()) m_FillBlur.Destroy();
+        }
     }
 
 } // namespace ProyecThor::Core

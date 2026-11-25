@@ -6,6 +6,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <functional>
 
 namespace ProyecThor::UI { class UIManager; }
 
@@ -26,6 +27,13 @@ public:
     ~OverlayLibraryTab() = default;
 
     void Render();
+
+    // Caché compartido de miniaturas de Props / Overlays entre todas las
+    // instancias (LibraryPanel, StylesHubPanel, VideoEditorPanel y ViewPanel).
+    static ImTextureID GetSharedThumbnail(const std::string& path);
+    static void        InvalidateSharedThumbnail(const std::string& path);
+    static void        ClearSharedThumbnailCache();
+    static void        PreloadAllThumbnails(const std::function<void(int done, int total, const std::string& name)>& onProgress = nullptr);
 
 private:
     struct OverlayEntry {
@@ -62,7 +70,7 @@ private:
     std::unordered_map<std::string, ImTextureID> m_ThumbnailCache;
 
     bool  m_GridMode  = true;
-    float m_ThumbZoom = 1.0f;
+    float m_ThumbZoom = 0.65f;
 
     std::unique_ptr<OverlayCanvasEditor> m_Editor;
 };

@@ -13,7 +13,7 @@ namespace ProyecThor::Core {
 // ── ThumbnailWorker ───────────────────────────────────────────────────────
 // Genera miniaturas de video en un hilo dedicado — decodifica el primer
 // frame real via libVLC en modo callback puro (mismo mecanismo que usa
-// VLCBasePlayer para el video en vivo), asi que NUNCA abre una ventana
+// MPVBasePlayer para el video en vivo), asi que NUNCA abre una ventana
 // propia (a diferencia de pedirle a libVLC un snapshot con salida de video
 // por defecto). Tambien saca el trabajo lento (abrir+decodificar el
 // archivo) del hilo de UI, para que la biblioteca no se trabe generando
@@ -56,6 +56,26 @@ public:
     // Cuantos pedidos quedan sin terminar (para mostrar "Generando
     // miniaturas... (N)" en la UI).
     size_t PendingCount() const;
+
+    // Limpia el historial de claves vistas para permitir regenerar/recargar tras liberar RAM.
+    void ResetSeen();
+
+    // Precalienta el motor libmpv usado para miniaturas.
+    static void WarmupMediaEngine();
+
+    // Reduce en CPU una imagen RGBA si supera maxW x maxH usando promedio de
+    // area ponderado por alpha (preserva bordes limpios tanto en videos/fotos
+    // opacos como en Overlays/Props PNG con transparencia).
+    static void DownscaleRGBAIfNeeded(std::vector<uint8_t>& pixels,
+                                      unsigned& width, unsigned& height,
+                                      unsigned maxW = 512, unsigned maxH = 288);
+
+    // Decodifica una imagen desde disco (compatible con rutas UTF-8 y ACP) y
+    // la escala a tamaño de miniatura en CPU antes de subirla a OpenGL.
+    static bool LoadThumbnailPixelsFromDisk(const std::string& path,
+                                            std::vector<uint8_t>& outPixels,
+                                            unsigned& outW, unsigned& outH,
+                                            unsigned maxW = 512, unsigned maxH = 288);
 
 private:
     struct PendingItem {

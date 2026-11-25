@@ -29,42 +29,17 @@ namespace ProyecThor::Core {
 
    class PresentationCoreImpl {
     public:
-        // background: layer de fondo/decorativo. Por requisito de
-        // producto NUNCA debe emitir audio real, sin importar el estado
-        // de m_IsLiveToPublic, m_TargetMuted, ni ninguna llamada a
-        // SetLiveVolume/SetLiveMute. Se construye forceSilent=true por la
-        // misma razon que preview: es una garantia estructural dentro de
-        // VLCBasePlayer (ver m_ForceSilent), no una convencion que
-        // dependa de que el resto del codigo se comporte bien.
+
         BackgroundLayer background{ false };
 
-        // preview: instancia separada usada por los paneles de biblioteca
-        // para scrubbing/preview. Se construye forceSilentAudio=true, asi
-        // que estructuralmente NUNCA puede sonar, sin importar que boton
-        // de UI la toque (ver VLCBasePlayer::m_ForceSilent).
         BackgroundLayer preview{ true };
 
-        // Ver PreviewLoadWorker.h: saca el Play()/Stop() del Preview del
-        // hilo principal, para que una carga lenta ahi nunca le robe
-        // tiempo al hilo que actualiza/dibuja el video en vivo al publico.
         PreviewLoadWorker previewLoader;
 
-        // Post-proceso del composite completo de "ProjectorLive" (CRT/
-        // Grano/FXAA) — ver CompositePostChain.h. Vive aca (no dentro de
-        // background) porque corre en un punto distinto del pipeline (sobre
-        // el ImDrawData ya compuesto, no sobre una textura de fondo).
         Shaders::CompositePostChain compositeFX;
 
-        // Una instancia INDEPENDIENTE de post-FX por cada viewport de
-        // monitor extra activo (ver PresentationCore::RegisterExtra
-        // ProjectorViewport) -- compositeFX de arriba sigue siendo la unica
-        // instancia del monitor PRIMARIO, sin cambios.
         std::unordered_map<ImGuiID, std::unique_ptr<Shaders::CompositePostChain>> extraCompositeFX;
 
-        // Overlay (ver SetOverlayMedia/ClearOverlay) -- un PNG estatico con
-        // transparencia, no necesita nada del aparato de BackgroundLayer
-        // (VLC/crossfade/audio): se carga una vez con stb_image, se sube a
-        // una sola textura GL y listo.
         GLuint overlayTex  = 0;
         int    overlayTexW = 0;
         int    overlayTexH = 0;
@@ -93,17 +68,13 @@ LibrarySelection PresentationCore::GetSelection() {
         return m_CurrentSelection;
     }
 
-void PresentationCore::SetLiveQuickNote(const std::string& text, const float* /*colorOverride*/) {
+void PresentationCore::SetLiveQuickNote(const std::string& text, const float* ) {
     std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     m_State.currentText   = text;
     m_State.showText      = !text.empty();
     m_State.showQuickNote = true;
     m_State.isProjecting  = true;
-    // FIX: esto muta currentText (el mismo campo que las letras/Layer2), asi
-    // que dispara textTransitionTrigger, no transitionTrigger (ese es solo
-    // para fondo/video — ver PresentationState). Antes compartian un unico
-    // contador y un cambio de fondo animaba el texto sin que este hubiera
-    // cambiado, y viceversa.
+
     ++m_State.textTransitionTrigger;
     ++m_StreamVersion;
 }
@@ -166,7 +137,7 @@ bool PresentationCore::GetGlobalMute() const {
         return m_Impl ? m_Impl->preview.GetTextureID() : nullptr;
     }
 
-    VLCBasePlayer* PresentationCore::GetPreviewPlayer() {
+    MPVBasePlayer* PresentationCore::GetPreviewPlayer() {
         return m_Impl ? m_Impl->preview.GetPlayer() : nullptr;
     }
 
@@ -212,10 +183,8 @@ bool PresentationCore::GetGlobalMute() const {
         std::transform(normTarget.begin(), normTarget.end(), normTarget.begin(),
                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
-        // 1. Detener preview sincronicamente
         StopPreviewSync();
 
-        // 2. Comprobar si la seleccion actual contiene la ruta o nombre del archivo
         bool clearSel = false;
         {
             std::lock_guard<std::recursive_mutex> lock(m_Mutex);
@@ -232,7 +201,6 @@ bool PresentationCore::GetGlobalMute() const {
             ClearSelection();
         }
 
-        // 3. Comprobar si el fondo en vivo esta reproduciendo este archivo
         bool stopBg = false;
         {
             std::lock_guard<std::recursive_mutex> lock(m_Mutex);
@@ -250,18 +218,47 @@ bool PresentationCore::GetGlobalMute() const {
         }
     }
 
+    void* PresentationCore::GetBackgroundTexture() {
+        return m_Impl ? m_Impl->background.GetTextureID() : nullptr;
+    }
+
     void* PresentationCore::GetProcessedBackgroundTexture(int targetW, int targetH) {
         return m_Impl ? m_Impl->background.GetProcessedTexture(targetW, targetH) : nullptr;
     }
 
+    void PresentationCore::WarmupGraphics(int outputW, int outputH) {
+        if (m_Impl) m_Impl->background.WarmupGraphics(outputW, outputH);
+    }
+
     void* PresentationCore::GetPreviewBackgroundTexture(int targetW, int targetH) {
         if (!m_Impl) return nullptr;
-        void* rawTex = m_Impl->background.GetProcessedTexture(targetW, targetH);
+        void* rawTex = m_Impl->background.GetTextureID();
         if (!rawTex) return nullptr;
+
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        if (perf.performanceMode || perf.lowMemoryMode)
+            return rawTex;
 
         GLuint raw = static_cast<GLuint>(reinterpret_cast<uintptr_t>(rawTex));
         GLuint processed = m_Impl->compositeFX.ProcessBackgroundForPreview(raw, targetW, targetH);
         return (void*)(uintptr_t)processed;
+    }
+
+    bool PresentationCore::IsBackgroundStaticImage() const {
+        return m_Impl ? m_Impl->background.IsStaticImage() : false;
+    }
+
+    void PresentationCore::PurgeMemoryCaches() {
+        if (!m_Impl) return;
+        m_Impl->background.PurgeIdleResources();
+        m_Impl->preview.PurgeIdleResources();
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        if (perf.performanceMode || perf.lowMemoryMode) {
+            m_Impl->compositeFX.DestroyPreviewOnly();
+        }
+        if (!IsStreamingNet()) {
+            DestroyFBO();
+        }
     }
 
     void* PresentationCore::GetBackgroundFillTexture(int workW, int workH) {
@@ -291,8 +288,7 @@ bool PresentationCore::GetGlobalMute() const {
     void PresentationCore::SetFSREnabled(bool enabled) {
         if (!m_Impl) return;
         m_Impl->background.SetFSREnabled(enabled);
-        // Mutua exclusion: los dos son upscalers de la misma etapa, no
-        // tiene sentido correr ambos (ver PostProcessorNIS.h).
+
         if (enabled) m_Impl->background.SetNISEnabled(false);
     }
 
@@ -330,7 +326,7 @@ bool PresentationCore::GetGlobalMute() const {
 #ifdef _WIN32
         if (m_Impl) m_Impl->background.SetUseNativeEngine(engine != 0);
 #else
-        (void)engine;
+
         if (m_Impl) m_Impl->background.SetUseNativeEngine(false);
 #endif
     }
@@ -339,29 +335,52 @@ bool PresentationCore::GetGlobalMute() const {
     }
 
     void PresentationCore::SetVLCHardwareDecoder(const std::string& dec) {
-        VLCBasePlayer::SetDefaultHwDecoder(dec);
+        MPVBasePlayer::SetDefaultHwDecoder(dec);
     }
     std::string PresentationCore::GetVLCHardwareDecoder() const {
-        return VLCBasePlayer::GetDefaultHwDecoder();
+        return MPVBasePlayer::GetDefaultHwDecoder();
     }
 
-    void PresentationCore::SetVLCDeinterlace(const std::string& mode) {
-        if (m_Impl) {
-            m_Impl->background.SetDeinterlace(mode);
-        } else {
-            VLCBasePlayer::SetDefaultDeinterlace(mode);
-        }
+    void PresentationCore::SetVLCVideoOutput(const std::string& vout) {
+        MPVBasePlayer::SetDefaultVideoOutput(vout);
+    }
+    std::string PresentationCore::GetVLCVideoOutput() const {
+        return MPVBasePlayer::GetDefaultVideoOutput();
+    }
+
+    void PresentationCore::SetVLCDeinterlace(const std::string& deint) {
+        MPVBasePlayer::SetDefaultDeinterlace(deint);
     }
     std::string PresentationCore::GetVLCDeinterlace() const {
-        return VLCBasePlayer::GetDefaultDeinterlace();
+        return MPVBasePlayer::GetDefaultDeinterlace();
     }
 
-    // NOTA multi-monitor: cada setter de aca abajo, ademas de aplicar al
-    // primario (compositeFX), tambien aplica el mismo valor a CADA instancia
-    // de m_Impl->extraCompositeFX (monitores de salida extra) -- asi un
-    // cambio en Ajustes > Proyeccion se refleja igual en todos los
-    // monitores (ver RegisterExtraProjectorViewport, que siembra cada
-    // instancia nueva con los valores actuales).
+    bool PresentationCore::IsActiveNativeVideo() const {
+        return m_Impl ? m_Impl->background.IsActiveNative() : false;
+    }
+
+    void PresentationCore::SetWindowFullscreen(bool fullscreen) {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        m_State.windowFullscreen = fullscreen;
+    }
+    bool PresentationCore::GetWindowFullscreen() const {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        return m_State.windowFullscreen;
+    }
+
+    void PresentationCore::SetVLCNativeForFondos(bool enable) {
+        if (m_Impl) m_Impl->background.SetVLCNativeForFondos(enable);
+    }
+    bool PresentationCore::GetVLCNativeForFondos() const {
+        return m_Impl ? m_Impl->background.GetVLCNativeForFondos() : false;
+    }
+
+    void PresentationCore::ReloadVLCPlayers() {
+        if (m_Impl) {
+            m_Impl->background.ReloadPlayers();
+        }
+    }
+
     void PresentationCore::SetCRTEnabled(bool enabled) {
         if (!m_Impl) return;
         m_Impl->compositeFX.SetCRTEnabled(enabled);
@@ -800,7 +819,6 @@ bool PresentationCore::GetGlobalMute() const {
         return m_Impl ? m_Impl->compositeFX.GetHalftoneMode() : 0;
     }
 
-    // ── Volumetric Fog ──
     void PresentationCore::SetVolumetricFogEnabled(bool enabled) {
         if (!m_Impl) return;
         m_Impl->compositeFX.SetVolumetricFogEnabled(enabled);
@@ -842,7 +860,6 @@ bool PresentationCore::GetGlobalMute() const {
         return m_Impl ? m_Impl->compositeFX.GetVolumetricFogColorMode() : 0;
     }
 
-    // ── Volumetric Clouds ──
     void PresentationCore::SetVolumetricCloudsEnabled(bool enabled) {
         if (!m_Impl) return;
         m_Impl->compositeFX.SetVolumetricCloudsEnabled(enabled);
@@ -884,7 +901,6 @@ bool PresentationCore::GetGlobalMute() const {
         return m_Impl ? m_Impl->compositeFX.GetVolumetricCloudsSunIntensity() : 0.65f;
     }
 
-    // ── Zoned Distortion ──
     void PresentationCore::SetZonedDistortionEnabled(bool enabled) {
         if (!m_Impl) return;
         m_Impl->compositeFX.SetZonedDistortionEnabled(enabled);
@@ -939,12 +955,6 @@ bool PresentationCore::GetGlobalMute() const {
         ImGuiViewport* vp = ImGui::FindViewportByID(m_ProjectorPostFXViewportID);
         if (!vp) return nullptr;
 
-        // El backend multi-viewport de esta app es GLFW (ver imgui_impl_glfw),
-        // no el backend nativo Win32 -- PlatformHandleRaw puede quedar en
-        // null segun la version; PlatformHandle SI es siempre el GLFWwindow*
-        // real (eso es lo que crea/gestiona el backend GLFW), asi que se
-        // resuelve el HWND desde ahi, mismo mecanismo que AIWebViewPanel::
-        // NavigateTo usa para la ventana principal.
         if (vp->PlatformHandleRaw) return vp->PlatformHandleRaw;
         if (vp->PlatformHandle)
             return (void*)glfwGetWin32Window(static_cast<GLFWwindow*>(vp->PlatformHandle));
@@ -956,6 +966,12 @@ bool PresentationCore::GetGlobalMute() const {
     void PresentationCore::RenderProjectorViewportPostFX(ImGuiViewport* viewport,
                                                          void (*defaultRenderFn)(ImGuiViewport*, void*))
     {
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        if (perf.performanceMode || perf.lowMemoryMode) {
+            if (m_Impl) m_Impl->compositeFX.DestroyViewportOnly();
+            if (defaultRenderFn) defaultRenderFn(viewport, nullptr);
+            return;
+        }
         if (m_Impl) m_Impl->compositeFX.RenderViewport(viewport, defaultRenderFn);
         else if (defaultRenderFn) defaultRenderFn(viewport, nullptr);
     }
@@ -1045,7 +1061,16 @@ bool PresentationCore::GetGlobalMute() const {
     void PresentationCore::RenderExtraProjectorViewportPostFX(ImGuiID id, ImGuiViewport* viewport,
                                                                 void (*defaultRenderFn)(ImGuiViewport*, void*))
     {
-        if (!m_Impl) { if (defaultRenderFn) defaultRenderFn(viewport, nullptr); return; }
+        const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+        if (!m_Impl || perf.performanceMode || perf.lowMemoryMode) {
+            if (m_Impl) {
+                auto it = m_Impl->extraCompositeFX.find(id);
+                if (it != m_Impl->extraCompositeFX.end())
+                    it->second->DestroyViewportOnly();
+            }
+            if (defaultRenderFn) defaultRenderFn(viewport, nullptr);
+            return;
+        }
         auto it = m_Impl->extraCompositeFX.find(id);
         if (it != m_Impl->extraCompositeFX.end())
             it->second->RenderViewport(viewport, defaultRenderFn);
@@ -1088,9 +1113,7 @@ bool PresentationCore::GetGlobalMute() const {
     void PresentationCore::RenderProjectorWindow() {
     if (m_Impl) {
         if (ShouldShowLoadingScreen()) {
-            // Pantalla de carga: se muestra el logo en vez del fondo mientras
-            // algo esta cargando, para que el publico nunca vea un frame
-            // entrecortado o desactualizado (ver Ajustes > Proyeccion > Logo).
+
             m_Impl->background.RenderLogo(
                 static_cast<unsigned int>(reinterpret_cast<uintptr_t>(GetLoadingLogoTexture())),
                 m_LoadingLogoW, m_LoadingLogoH, m_ProjectorWidth, m_ProjectorHeight);
@@ -1099,12 +1122,10 @@ bool PresentationCore::GetGlobalMute() const {
         }
     }
 }
-    // ── Ventanas secundarias, API generica ──────────────────────────────
+
     bool PresentationCore::CreateSecondaryWindow(const std::string& id, int monitorIndex,
                                                   const std::string& title,
-                                                  SecondaryOutputWindow::RenderFn renderFn,
-                                                  bool fullscreen,
-                                                  int customW, int customH)
+                                                  SecondaryOutputWindow::RenderFn renderFn)
     {
         if (!m_MainWindow) {
             std::cerr << "[PresentationCore] CreateSecondaryWindow('" << id
@@ -1114,8 +1135,8 @@ bool PresentationCore::GetGlobalMute() const {
 
         std::lock_guard<std::mutex> lock(m_SecondaryWindowsMutex);
 
-        SecondaryOutput& out = m_SecondaryWindows[id]; // crea si no existe
-        if (!out.window.Create(m_MainWindow, monitorIndex, title, fullscreen, customW, customH))
+        SecondaryOutput& out = m_SecondaryWindows[id];
+        if (!out.window.Create(m_MainWindow, monitorIndex, title))
         {
             m_SecondaryWindows.erase(id);
             return false;
@@ -1127,7 +1148,7 @@ bool PresentationCore::GetGlobalMute() const {
     void PresentationCore::DestroySecondaryWindow(const std::string& id)
     {
         std::lock_guard<std::mutex> lock(m_SecondaryWindowsMutex);
-        m_SecondaryWindows.erase(id); // el destructor de SecondaryOutputWindow limpia la ventana
+        m_SecondaryWindows.erase(id);
     }
 
     void PresentationCore::DestroyAllSecondaryWindows()
@@ -1145,9 +1166,7 @@ bool PresentationCore::GetGlobalMute() const {
 
     void PresentationCore::RenderAllSecondaryWindows()
     {
-        // Copia de punteros bajo lock, render fuera del lock: RenderFrame
-        // hace MakeContextCurrent + swap, no queremos tener el mutex
-        // tomado durante llamadas GL potencialmente bloqueantes (vsync).
+
         std::vector<SecondaryOutput*> active;
         {
             std::lock_guard<std::mutex> lock(m_SecondaryWindowsMutex);
@@ -1161,45 +1180,19 @@ bool PresentationCore::GetGlobalMute() const {
             out->window.RenderFrame(out->renderFn);
     }
 
-    // ── Atajos con nombre fijo: Proyector ────────────────────────────────
-    bool PresentationCore::CreateProjectorWindow(int monitorIndex, int fullscreenOverride, int customW, int customH)
+    bool PresentationCore::CreateProjectorWindow(int monitorIndex)
     {
 #ifdef _WIN32
-        // En Windows se usa el pipeline multi-viewport nativo de ImGui (RenderProjectorOutput).
-        // No se crea ventana GLFW secundaria extra.
+
         std::lock_guard<std::recursive_mutex> lock(m_Mutex);
-        if (monitorIndex >= 0) m_State.targetMonitorIndex = monitorIndex;
+        m_State.targetMonitorIndex = monitorIndex;
         return false;
 #else
-        auto& settings = Settings::SettingsManager::Get().GetSettings();
-        if (monitorIndex < 0) {
-            monitorIndex = settings.projection.targetMonitor;
-        }
-
         int monitorCount = 0;
         GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
-        if (monitorCount > 0) {
-            monitorIndex = std::clamp(monitorIndex < 0 ? (monitorCount > 1 ? 1 : 0) : monitorIndex, 0, monitorCount - 1);
-        } else {
-            monitorIndex = 0;
-        }
-
-        bool fs = (fullscreenOverride >= 0) ? (fullscreenOverride != 0) : settings.projection.windowFullscreen;
-        int winW = customW;
-        int winH = customH;
-
-        if (winW <= 0 || winH <= 0) {
-            winW = settings.projection.windowWidth;
-            winH = settings.projection.windowHeight;
-        }
-
-        if (monitors && monitorIndex >= 0 && monitorIndex < monitorCount) {
+        if (monitorIndex >= 0 && monitorIndex < monitorCount) {
             if (const GLFWvidmode* vm = glfwGetVideoMode(monitors[monitorIndex])) {
-                if (fs && (customW <= 0 || customH <= 0) && settings.projection.windowAutoDetectRes) {
-                    winW = vm->width;
-                    winH = vm->height;
-                }
-                SetProjectorSize(winW > 0 ? winW : vm->width, winH > 0 ? winH : vm->height);
+                SetProjectorSize(vm->width, vm->height);
             }
         }
 
@@ -1211,7 +1204,7 @@ bool PresentationCore::GetGlobalMute() const {
                 } else {
                     RenderProjectorWindow();
                 }
-            }, fs, winW, winH);
+            });
 
         if (ok) {
             std::lock_guard<std::recursive_mutex> lock(m_Mutex);
@@ -1241,8 +1234,7 @@ bool PresentationCore::GetGlobalMute() const {
     bool PresentationCore::CreateStageWindow(int monitorIndex)
     {
 #ifdef _WIN32
-        // En Windows se usa el pipeline multi-viewport nativo de ImGui (RenderStageOutput).
-        // No se crea ventana GLFW secundaria extra.
+
         std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_State.stageMonitorIndex = monitorIndex;
         return false;
@@ -1297,24 +1289,25 @@ bool PresentationCore::GetGlobalMute() const {
         m_StageAlertMessage.clear();
     }
 
-// Unico lugar que escribe m_State.bgType — ver comentario en el header.
 void PresentationCore::SetBgTypeLocked(PresentationState::BackgroundType newType)
 {
     if (m_State.bgType == PresentationState::BackgroundType::Audio &&
         newType != PresentationState::BackgroundType::Audio &&
         m_AudioPanelRef)
     {
-        m_AudioPanelRef->SetLiveBackground(false);
+        // El fondo en vivo deja de ser audio: la musica se detiene tambien
+        // (si no, seguiria sonando sin disco y sin forma de controlarla).
+        m_AudioPanelRef->StopMusicOnly();
     }
     m_State.bgType = newType;
 }
 
-void PresentationCore::SetBackgroundMedia(const std::string& path, bool /*isVideo*/, bool allowAudio) {
+void PresentationCore::SetBackgroundMedia(const std::string& path, bool , bool allowAudio) {
     {
         std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_State.bgPath = path;
         SetBgTypeLocked(PresentationState::BackgroundType::Video);
-        ++m_State.transitionTrigger;   // NUEVO
+        ++m_State.transitionTrigger;
         ++m_StreamVersion;
     }
     if (m_Impl)
@@ -1333,13 +1326,16 @@ void PresentationCore::StopBackgroundMedia() {
         m_State.bgPath     = "";
         SetBgTypeLocked(PresentationState::BackgroundType::SolidColor);
         m_State.bgColor[0] = 0.0f; m_State.bgColor[1] = 0.0f; m_State.bgColor[2] = 0.0f;
-        ++m_State.transitionTrigger;   // NUEVO
+        if (!m_State.currentText.empty()) {
+            m_State.showText = true;
+            m_State.isProjecting = true;
+        }
+        ++m_State.transitionTrigger;
         ++m_StreamVersion;
     }
     if (m_Impl) m_Impl->background.SetSolidColor(0.0f, 0.0f, 0.0f);
 }
 
-// Ver comentario en el header (junto a la declaracion) para el porque.
 void PresentationCore::SetBackgroundAudio() {
     {
         std::lock_guard<std::recursive_mutex> lock(m_Mutex);
@@ -1348,8 +1344,7 @@ void PresentationCore::SetBackgroundAudio() {
         ++m_State.transitionTrigger;
         ++m_StreamVersion;
     }
-    // Mismo criterio que StopBackgroundMedia: un video de fondo previo no
-    // debe seguir sonando por debajo del audio que se acaba de mandar en vivo.
+
     if (m_Impl) m_Impl->background.SetSolidColor(0.0f, 0.0f, 0.0f);
 }
 
@@ -1383,6 +1378,7 @@ void PresentationCore::SetBackgroundAudio() {
         std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_OverlayPath = pngPath;
         m_HasOverlay  = true;
+        ++m_StreamVersion;
     }
 
     void PresentationCore::ClearOverlay() {
@@ -1396,6 +1392,14 @@ void PresentationCore::SetBackgroundAudio() {
         std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_OverlayPath.clear();
         m_HasOverlay = false;
+        m_HasOverlayClockLayer = false;
+        m_OverlayClockLayer = {};
+        m_OverlayClockCanvasW = 0;
+        m_OverlayClockCanvasH = 0;
+        m_LiveOverlayClockText.clear();
+        m_HasLiveOverlayClockColorOverride = false;
+        for (int i = 0; i < 4; i++) m_LiveOverlayClockColorOverride[i] = 1.0f;
+        ++m_StreamVersion;
     }
 
     bool PresentationCore::HasOverlay() const {
@@ -1409,7 +1413,8 @@ void PresentationCore::SetBackgroundAudio() {
     }
 
     void* PresentationCore::GetOverlayTexture() {
-        if (!m_Impl || !m_Impl->overlayTex) return nullptr;
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        if (!m_HasOverlay || !m_Impl || !m_Impl->overlayTex) return nullptr;
         return (void*)(intptr_t)m_Impl->overlayTex;
     }
 
@@ -1420,6 +1425,7 @@ void PresentationCore::SetBackgroundAudio() {
         m_OverlayClockLayer    = layer;
         m_OverlayClockCanvasW  = canvasW;
         m_OverlayClockCanvasH  = canvasH;
+        ++m_StreamVersion;
     }
 
     bool PresentationCore::HasOverlayClockLayer() const {
@@ -1467,13 +1473,11 @@ void PresentationCore::SetBackgroundAudio() {
     }
 
     void PresentationCore::PreloadNextBackgroundMedia(const std::string& path, bool allowAudio) {
-        // A proposito NO toca m_State/transitionTrigger: este preload debe
-        // ser invisible para el operador y para TransitionPanel — solo
-        // adelanta la carga en standby (ver BackgroundLayer::Prefetch).
+
         if (m_Impl) m_Impl->background.Prefetch(path, allowAudio);
     }
 
-    void PresentationCore::CommitNextBackgroundMedia(const std::string& path, bool /*isVideo*/, bool allowAudio) {
+    void PresentationCore::CommitNextBackgroundMedia(const std::string& path, bool , bool allowAudio) {
         {
             std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             m_State.bgPath = path;
@@ -1521,7 +1525,7 @@ void PresentationCore::SetBackgroundAudio() {
     }
 
     void PresentationCore::SetLoadingLogoPath(const std::string& path) {
-        if (path == m_LoadingLogoPath) return; // sin cambios, no recargar cada frame
+        if (path == m_LoadingLogoPath) return;
 
         if (m_LoadingLogoTex != 0) {
             GLuint old = m_LoadingLogoTex;
@@ -1593,11 +1597,7 @@ void PresentationCore::SetBackgroundAudio() {
     }
 
     bool PresentationCore::ShouldShowLoadingScreen() const {
-        // Se elimino el logo/pantalla de carga: sumado al preflight de la
-        // cola, era una fuente constante de cortes y arranques lentos —
-        // BackgroundLayer::Render() ya sigue mostrando el frame actual de
-        // Active() mientras un swap esta en curso (asi funciona el
-        // crossfade), asi que nunca hace falta tapar la salida con un logo.
+
         return false;
     }
 
@@ -1615,7 +1615,7 @@ void PresentationCore::SetLayer0_Color(float r, float g, float b) {
         m_State.bgColor[0] = r; m_State.bgColor[1] = g; m_State.bgColor[2] = b;
         SetBgTypeLocked(PresentationState::BackgroundType::SolidColor);
         m_State.bgPath     = "";
-        ++m_State.transitionTrigger;   // NUEVO
+        ++m_State.transitionTrigger;
         ++m_StreamVersion;
     }
     if (m_Impl) m_Impl->background.SetSolidColor(r, g, b);
@@ -1627,10 +1627,6 @@ void PresentationCore::SetBackgroundBlendDuration(float seconds) {
     if (m_Impl) m_Impl->background.SetBlendSeconds(seconds);
 }
 
-    // Definida mas abajo en este archivo (junto a ApplySavedStyleToState);
-    // espeja una caja de Letras hacia los campos planos legacy de
-    // PresentationState. Forward-declarada aca porque UpdateLyricsBoxStyle
-    // la necesita antes en el archivo.
     static void ApplyLyricsBoxToState(const TextBoxStyle& box, PresentationState& state,
                                        std::string& activeFontName);
 
@@ -1650,6 +1646,16 @@ void PresentationCore::SetBackgroundBlendDuration(float seconds) {
     void PresentationCore::SetCurrentRef(const std::string& ref) {
         std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_State.currentRef = ref;
+        if (m_State.tiles.enabled) {
+            if (m_State.tiles.continuityMode == TileContinuityMode::PreviousOnTile2 ||
+                m_State.tiles.continuityMode == TileContinuityMode::NextOnTile2) {
+                m_State.tiles.slots[0].ref = ref;
+            } else if (m_State.tiles.continuityMode == TileContinuityMode::PreviousOnTile1) {
+                m_State.tiles.slots[1].ref = ref;
+            } else if (m_LastAssignedTileSlot >= 0 && m_LastAssignedTileSlot < 4) {
+                m_State.tiles.slots[m_LastAssignedTileSlot].ref = ref;
+            }
+        }
         ++m_StreamVersion;
     }
 
@@ -1662,10 +1668,68 @@ void PresentationCore::SetLayer2_Text(const std::string& text, int slideIndex, b
     std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     m_State.currentText = text;
     m_State.showText    = !text.empty();
-    // Limpia la referencia biblica: solo BibleView/SyncServer la vuelven a
-    // poner (con SetCurrentRef) justo despues de llamar esto para un
-    // versiculo -- para cualquier otro contenido (canciones, media, notas)
-    // no debe quedar una referencia vieja pegada en pantalla.
+
+    if (m_State.tiles.enabled) {
+        if (m_State.tiles.continuityMode == TileContinuityMode::PreviousOnTile2) {
+            // Pantalla 1 = Actual (slot 0)
+            // Pantalla 2 = Lo que salía anteriormente en Pantalla 1 (o m_State.prevText si slot 0 estaba vacío)
+            if (!m_State.tiles.slots[0].text.empty() && m_State.tiles.slots[0].text != text) {
+                m_State.tiles.slots[1].text = m_State.tiles.slots[0].text;
+                m_State.tiles.slots[1].ref  = m_State.tiles.slots[0].ref;
+                m_State.tiles.slots[1].visible = true;
+            } else if (!m_State.prevText.empty()) {
+                m_State.tiles.slots[1].text = m_State.prevText;
+                m_State.tiles.slots[1].ref  = m_State.prevRef;
+                m_State.tiles.slots[1].visible = true;
+            }
+            m_State.tiles.slots[0].text = text;
+            m_State.tiles.slots[0].ref.clear();
+            m_State.tiles.slots[0].visible = true;
+            m_LastAssignedTileSlot = 0;
+        }
+        else if (m_State.tiles.continuityMode == TileContinuityMode::NextOnTile2) {
+            // Pantalla 1 = Actual (slot 0)
+            // Pantalla 2 = Siguiente / Continuación (slot 1) estilo Stage
+            m_State.tiles.slots[0].text = text;
+            m_State.tiles.slots[0].ref.clear();
+            m_State.tiles.slots[0].visible = true;
+
+            m_State.tiles.slots[1].text = m_State.nextText;
+            m_State.tiles.slots[1].ref  = m_State.nextRef;
+            m_State.tiles.slots[1].visible = !m_State.nextText.empty();
+            m_LastAssignedTileSlot = 0;
+        }
+        else if (m_State.tiles.continuityMode == TileContinuityMode::PreviousOnTile1) {
+            // Pantalla 1 = Anterior (slot 0)
+            // Pantalla 2 = Actual (slot 1)
+            if (!m_State.tiles.slots[1].text.empty() && m_State.tiles.slots[1].text != text) {
+                m_State.tiles.slots[0].text = m_State.tiles.slots[1].text;
+                m_State.tiles.slots[0].ref  = m_State.tiles.slots[1].ref;
+                m_State.tiles.slots[0].visible = true;
+            } else if (!m_State.prevText.empty()) {
+                m_State.tiles.slots[0].text = m_State.prevText;
+                m_State.tiles.slots[0].ref  = m_State.prevRef;
+                m_State.tiles.slots[0].visible = true;
+            }
+            m_State.tiles.slots[1].text = text;
+            m_State.tiles.slots[1].ref.clear();
+            m_State.tiles.slots[1].visible = true;
+            m_LastAssignedTileSlot = 1;
+        }
+        else {
+            int maxSlots = (m_State.tiles.layout == TileLayout::QuadGrid) ? 4 : 2;
+            int targetSlot = std::clamp(m_State.tiles.activeTileIndex, 0, maxSlots - 1);
+            m_LastAssignedTileSlot = targetSlot;
+            m_State.tiles.slots[targetSlot].text = text;
+            m_State.tiles.slots[targetSlot].ref.clear();
+            m_State.tiles.slots[targetSlot].visible = true;
+
+            if (m_State.tiles.autoAdvance) {
+                m_State.tiles.activeTileIndex = (targetSlot + 1) % maxSlots;
+            }
+        }
+    }
+
     m_State.currentRef.clear();
     if (slideIndex >= 0) {
         m_ActiveSlideIndex = slideIndex;
@@ -1689,10 +1753,296 @@ void PresentationCore::ClearLayer2() {
     m_State.currentRef  = "";
     m_State.showText    = false;
     m_State.nextText    = "";
+    m_State.nextRef     = "";
+    m_State.prevText    = "";
+    m_State.prevRef     = "";
     m_ActiveSlideIndex  = -1;
+    if (m_State.tiles.enabled) {
+        for (auto& s : m_State.tiles.slots) {
+            s.text.clear();
+            s.ref.clear();
+        }
+    }
     ++m_State.textTransitionTrigger;
     ++m_StreamVersion;
 }
+
+    TilesConfig PresentationCore::GetTilesConfig() const {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        return m_State.tiles;
+    }
+
+    void PresentationCore::SetTilesConfig(const TilesConfig& config) {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        m_State.tiles = config;
+        ++m_State.textTransitionTrigger;
+        ++m_StreamVersion;
+    }
+
+    void PresentationCore::SetTilesEnabled(bool enabled) {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        m_State.tiles.enabled = enabled;
+        if (enabled) {
+            if (m_State.tiles.continuityMode == TileContinuityMode::NextOnTile2) {
+                m_State.tiles.slots[0].text = m_State.currentText;
+                m_State.tiles.slots[0].ref  = m_State.currentRef;
+                m_State.tiles.slots[0].visible = !m_State.currentText.empty();
+                m_State.tiles.slots[1].text = m_State.nextText;
+                m_State.tiles.slots[1].ref  = m_State.nextRef;
+                m_State.tiles.slots[1].visible = !m_State.nextText.empty();
+            } else if (m_State.tiles.continuityMode == TileContinuityMode::PreviousOnTile2) {
+                m_State.tiles.slots[0].text = m_State.currentText;
+                m_State.tiles.slots[0].ref  = m_State.currentRef;
+                m_State.tiles.slots[0].visible = !m_State.currentText.empty();
+                if (!m_State.prevText.empty()) {
+                    m_State.tiles.slots[1].text = m_State.prevText;
+                    m_State.tiles.slots[1].ref  = m_State.prevRef;
+                    m_State.tiles.slots[1].visible = true;
+                }
+            } else if (m_State.tiles.continuityMode == TileContinuityMode::PreviousOnTile1) {
+                m_State.tiles.slots[1].text = m_State.currentText;
+                m_State.tiles.slots[1].ref  = m_State.currentRef;
+                m_State.tiles.slots[1].visible = !m_State.currentText.empty();
+                if (!m_State.prevText.empty()) {
+                    m_State.tiles.slots[0].text = m_State.prevText;
+                    m_State.tiles.slots[0].ref  = m_State.prevRef;
+                    m_State.tiles.slots[0].visible = true;
+                }
+            } else {
+                if (m_State.tiles.slots[0].text.empty() && !m_State.currentText.empty()) {
+                    m_State.tiles.slots[0].text = m_State.currentText;
+                    m_State.tiles.slots[0].ref  = m_State.currentRef;
+                    m_State.tiles.slots[0].visible = true;
+                }
+            }
+        }
+        ++m_State.textTransitionTrigger;
+        ++m_StreamVersion;
+    }
+
+    void PresentationCore::SetTileLayout(TileLayout layout) {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        m_State.tiles.layout = layout;
+        int maxSlots = (layout == TileLayout::QuadGrid) ? 4 : 2;
+        if (m_State.tiles.activeTileIndex >= maxSlots) {
+            m_State.tiles.activeTileIndex = 0;
+        }
+        ++m_State.textTransitionTrigger;
+        ++m_StreamVersion;
+    }
+
+    void PresentationCore::SetActiveTileIndex(int index) {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        int maxSlots = (m_State.tiles.layout == TileLayout::QuadGrid) ? 4 : 2;
+        m_State.tiles.activeTileIndex = std::clamp(index, 0, maxSlots - 1);
+        m_LastAssignedTileSlot = m_State.tiles.activeTileIndex;
+        ++m_StreamVersion;
+    }
+
+    void PresentationCore::SetTileAutoAdvance(bool autoAdvance) {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        m_State.tiles.autoAdvance = autoAdvance;
+    }
+
+    void PresentationCore::SetTileShowDividers(bool showDividers) {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        m_State.tiles.showDividers = showDividers;
+        ++m_State.textTransitionTrigger;
+        ++m_StreamVersion;
+    }
+
+    void PresentationCore::SetTileContinuityMode(TileContinuityMode mode) {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        m_State.tiles.continuityMode = mode;
+        if (m_State.tiles.enabled) {
+            if (mode == TileContinuityMode::NextOnTile2) {
+                m_State.tiles.slots[0].text = m_State.currentText;
+                m_State.tiles.slots[0].ref  = m_State.currentRef;
+                m_State.tiles.slots[0].visible = !m_State.currentText.empty();
+
+                m_State.tiles.slots[1].text = m_State.nextText;
+                m_State.tiles.slots[1].ref  = m_State.nextRef;
+                m_State.tiles.slots[1].visible = !m_State.nextText.empty();
+            } else if (mode == TileContinuityMode::PreviousOnTile2) {
+                m_State.tiles.slots[0].text = m_State.currentText;
+                m_State.tiles.slots[0].ref  = m_State.currentRef;
+                m_State.tiles.slots[0].visible = !m_State.currentText.empty();
+
+                if (!m_State.prevText.empty()) {
+                    m_State.tiles.slots[1].text = m_State.prevText;
+                    m_State.tiles.slots[1].ref  = m_State.prevRef;
+                    m_State.tiles.slots[1].visible = true;
+                }
+            } else if (mode == TileContinuityMode::PreviousOnTile1) {
+                m_State.tiles.slots[1].text = m_State.currentText;
+                m_State.tiles.slots[1].ref  = m_State.currentRef;
+                m_State.tiles.slots[1].visible = !m_State.currentText.empty();
+
+                if (!m_State.prevText.empty()) {
+                    m_State.tiles.slots[0].text = m_State.prevText;
+                    m_State.tiles.slots[0].ref  = m_State.prevRef;
+                    m_State.tiles.slots[0].visible = true;
+                }
+            }
+        }
+        ++m_State.textTransitionTrigger;
+        ++m_StreamVersion;
+    }
+
+    TileContinuityMode PresentationCore::GetTileContinuityMode() const {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        return m_State.tiles.continuityMode;
+    }
+
+    void PresentationCore::SetTileText(int slotIndex, const std::string& text, const std::string& ref) {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        if (slotIndex >= 0 && slotIndex < 4) {
+            m_State.tiles.slots[slotIndex].text = text;
+            if (!ref.empty()) {
+                m_State.tiles.slots[slotIndex].ref = ref;
+            }
+            m_State.tiles.slots[slotIndex].visible = true;
+            if (!text.empty()) {
+                m_State.showText = true;
+                m_State.isProjecting = true;
+            }
+            ++m_State.textTransitionTrigger;
+            ++m_StreamVersion;
+        }
+    }
+
+    void PresentationCore::ClearTileSlot(int slotIndex) {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        if (slotIndex >= 0 && slotIndex < 4) {
+            m_State.tiles.slots[slotIndex].text.clear();
+            m_State.tiles.slots[slotIndex].ref.clear();
+            ++m_State.textTransitionTrigger;
+            ++m_StreamVersion;
+        }
+    }
+
+    void PresentationCore::ClearAllTiles() {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        for (auto& s : m_State.tiles.slots) {
+            s.text.clear();
+            s.ref.clear();
+        }
+        ++m_State.textTransitionTrigger;
+        ++m_StreamVersion;
+    }
+
+    void PresentationCore::SwapTileSlots(int slotA, int slotB) {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        if (slotA >= 0 && slotA < 4 && slotB >= 0 && slotB < 4 && slotA != slotB) {
+            std::swap(m_State.tiles.slots[slotA].text,    m_State.tiles.slots[slotB].text);
+            std::swap(m_State.tiles.slots[slotA].ref,     m_State.tiles.slots[slotB].ref);
+            std::swap(m_State.tiles.slots[slotA].visible, m_State.tiles.slots[slotB].visible);
+            if ((slotA == 0 && slotB == 1) || (slotA == 1 && slotB == 0)) {
+                if (m_State.tiles.continuityMode == TileContinuityMode::PreviousOnTile2) {
+                    m_State.tiles.continuityMode = TileContinuityMode::PreviousOnTile1;
+                } else if (m_State.tiles.continuityMode == TileContinuityMode::PreviousOnTile1) {
+                    m_State.tiles.continuityMode = TileContinuityMode::PreviousOnTile2;
+                }
+            }
+            ++m_State.textTransitionTrigger;
+            ++m_StreamVersion;
+        }
+    }
+
+    void PresentationCore::SetTileSlotSavedStyle(int slotIndex, const std::string& styleName) {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        if (slotIndex < 0 || slotIndex >= 4) return;
+        auto& slot = m_State.tiles.slots[slotIndex];
+        if (styleName.empty() || styleName == "[Predeterminado (Global)]" || styleName == "default") {
+            slot.hasCustomStyle = false;
+            slot.styleName.clear();
+        } else {
+            SavedStyle saved;
+            if (GetSavedStyle(styleName, saved)) {
+                slot.hasCustomStyle = true;
+                slot.styleName      = styleName;
+                slot.lyricsBox      = saved.lyrics;
+                slot.indexBox       = saved.index;
+                slot.indexEnabled   = saved.indexEnabled;
+            }
+        }
+        ++m_State.textTransitionTrigger;
+        ++m_StreamVersion;
+    }
+
+    void PresentationCore::SetTileSlotCustom(int slotIndex, bool custom) {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        if (slotIndex < 0 || slotIndex >= 4) return;
+        auto& slot = m_State.tiles.slots[slotIndex];
+        if (custom) {
+            if (!slot.hasCustomStyle) {
+                slot.lyricsBox      = m_State.lyricsBox;
+                slot.indexBox       = m_State.indexBox;
+                slot.indexEnabled   = m_State.indexEnabled;
+                slot.hasCustomStyle = true;
+                slot.styleName.clear();
+            }
+        } else {
+            slot.hasCustomStyle = false;
+            slot.styleName.clear();
+        }
+        ++m_State.textTransitionTrigger;
+        ++m_StreamVersion;
+    }
+
+    void PresentationCore::SetTileSlotTextColor(int slotIndex, const float col[4]) {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        if (slotIndex < 0 || slotIndex >= 4 || !col) return;
+        auto& slot = m_State.tiles.slots[slotIndex];
+        if (!slot.hasCustomStyle) {
+            slot.lyricsBox      = m_State.lyricsBox;
+            slot.indexBox       = m_State.indexBox;
+            slot.indexEnabled   = m_State.indexEnabled;
+            slot.hasCustomStyle = true;
+        }
+        for (int i = 0; i < 4; i++) slot.lyricsBox.color[i] = col[i];
+        ++m_State.textTransitionTrigger;
+        ++m_StreamVersion;
+    }
+
+    void PresentationCore::SetTileSlotTextSize(int slotIndex, float size) {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        if (slotIndex < 0 || slotIndex >= 4) return;
+        auto& slot = m_State.tiles.slots[slotIndex];
+        if (!slot.hasCustomStyle) {
+            slot.lyricsBox      = m_State.lyricsBox;
+            slot.indexBox       = m_State.indexBox;
+            slot.indexEnabled   = m_State.indexEnabled;
+            slot.hasCustomStyle = true;
+        }
+        slot.lyricsBox.textSize = size;
+        ++m_State.textTransitionTrigger;
+        ++m_StreamVersion;
+    }
+
+    void PresentationCore::ResetTileSlotStyle(int slotIndex) {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        if (slotIndex < 0 || slotIndex >= 4) return;
+        auto& slot = m_State.tiles.slots[slotIndex];
+        slot.hasCustomStyle = false;
+        slot.styleName.clear();
+        ++m_State.textTransitionTrigger;
+        ++m_StreamVersion;
+    }
+
+    void PresentationCore::CopyTileSlotStyle(int srcSlot, int dstSlot) {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        if (srcSlot < 0 || srcSlot >= 4 || dstSlot < 0 || dstSlot >= 4 || srcSlot == dstSlot) return;
+        const auto& src = m_State.tiles.slots[srcSlot];
+        auto& dst       = m_State.tiles.slots[dstSlot];
+        dst.hasCustomStyle = src.hasCustomStyle;
+        dst.styleName      = src.styleName;
+        dst.lyricsBox      = src.lyricsBox;
+        dst.indexBox       = src.indexBox;
+        dst.indexEnabled   = src.indexEnabled;
+        ++m_State.textTransitionTrigger;
+        ++m_StreamVersion;
+    }
 
 int PresentationCore::GetActiveSlideIndex() const {
     std::lock_guard<std::recursive_mutex> lock(m_Mutex);
@@ -1757,9 +2107,69 @@ bool PresentationCore::ConsumeSongEditorOpenRequest(std::string& outFilename) {
     return true;
 }
 
+void PresentationCore::RequestBibleJump(int bookNum, int chapterNum, int verseNum) {
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+    m_PendingBibleJump = true;
+    m_JumpBookNum      = bookNum;
+    m_JumpChapterNum   = chapterNum;
+    m_JumpVerseNum     = verseNum;
+}
+
+bool PresentationCore::ConsumeBibleJump(int& outBookNum, int& outChapterNum, int& outVerseNum) {
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+    if (!m_PendingBibleJump) return false;
+    outBookNum         = m_JumpBookNum;
+    outChapterNum      = m_JumpChapterNum;
+    outVerseNum        = m_JumpVerseNum;
+    m_PendingBibleJump = false;
+    return true;
+}
+
 void PresentationCore::SetNextText(const std::string& text) {
     std::lock_guard<std::recursive_mutex> lock(m_Mutex);
     m_State.nextText = text;
+    if (m_State.tiles.enabled && m_State.tiles.continuityMode == TileContinuityMode::NextOnTile2) {
+        m_State.tiles.slots[1].text = text;
+        m_State.tiles.slots[1].visible = !text.empty();
+        ++m_State.textTransitionTrigger;
+    }
+    ++m_StreamVersion;
+}
+
+void PresentationCore::SetNextContent(const std::string& text, const std::string& ref) {
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+    m_State.nextText = text;
+    m_State.nextRef  = ref;
+    if (m_State.tiles.enabled && m_State.tiles.continuityMode == TileContinuityMode::NextOnTile2) {
+        m_State.tiles.slots[1].text = text;
+        m_State.tiles.slots[1].ref  = ref;
+        m_State.tiles.slots[1].visible = !text.empty() || !ref.empty();
+        ++m_State.textTransitionTrigger;
+    }
+    ++m_StreamVersion;
+}
+
+void PresentationCore::SetPrevContent(const std::string& text, const std::string& ref) {
+    std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+    m_State.prevText = text;
+    m_State.prevRef  = ref;
+    if (m_State.tiles.enabled) {
+        if (m_State.tiles.continuityMode == TileContinuityMode::PreviousOnTile2) {
+            if (m_State.tiles.slots[1].text.empty() && !text.empty()) {
+                m_State.tiles.slots[1].text = text;
+                m_State.tiles.slots[1].ref  = ref;
+                m_State.tiles.slots[1].visible = true;
+                ++m_State.textTransitionTrigger;
+            }
+        } else if (m_State.tiles.continuityMode == TileContinuityMode::PreviousOnTile1) {
+            if (m_State.tiles.slots[0].text.empty() && !text.empty()) {
+                m_State.tiles.slots[0].text = text;
+                m_State.tiles.slots[0].ref  = ref;
+                m_State.tiles.slots[0].visible = true;
+                ++m_State.textTransitionTrigger;
+            }
+        }
+    }
     ++m_StreamVersion;
 }
 
@@ -1772,12 +2182,6 @@ void PresentationCore::SetNextText(const std::string& text) {
             monitorIndex = m_State.targetMonitorIndex;
         }
 
-        // Unico punto que habilita/corta el audio real hacia el publico
-        // (y, con el motor "VLC ventana nativa", tambien la ventana de
-        // video en si — ver BackgroundLayer::SetPubliclyLive). Fuera del
-        // lock: BackgroundLayer solo toca atomicos de los players (mas la
-        // ventana nativa, que vive en el hilo principal igual que esto),
-        // no hace falta serializarlo con m_State.
         if (m_Impl)
             m_Impl->background.SetPubliclyLive(projecting, monitorIndex);
     }
@@ -1788,14 +2192,17 @@ void PresentationCore::SetNextText(const std::string& text) {
     }
 
     void PresentationCore::SetTargetMonitor(int index) {
-        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
-        m_State.targetMonitorIndex = index;
-        // Refresca los monitores adicionales desde Settings en el mismo
-        // golpe -- este es el unico punto donde arranca la proyeccion
-        // publica, asi que no hace falta que cada llamador (ToggleAudience,
-        // MonitorQueueEngine) se acuerde de hacerlo por su cuenta.
-        m_State.extraTargetMonitors =
-            ProyecThor::Settings::SettingsManager::Get().GetSettings().projection.extraMonitors;
+        bool projecting = false;
+        {
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+            m_State.targetMonitorIndex = index;
+            m_State.extraTargetMonitors =
+                ProyecThor::Settings::SettingsManager::Get().GetSettings().projection.extraMonitors;
+            projecting = m_State.isProjecting;
+        }
+        if (m_Impl) {
+            m_Impl->background.SetPubliclyLive(projecting, index);
+        }
     }
 
     void PresentationCore::SetStaging(bool active, int monitorIndex) {
@@ -1803,9 +2210,10 @@ void PresentationCore::SetNextText(const std::string& text) {
         m_State.isStaging = active;
         if (monitorIndex >= 0)
             m_State.stageMonitorIndex = monitorIndex;
-        if (active)
+        if (active) {
             m_State.extraStageMonitors =
                 ProyecThor::Settings::SettingsManager::Get().GetSettings().stageDisplay.extraMonitors;
+        }
         ++m_StreamVersion;
     }
 
@@ -1819,7 +2227,7 @@ void PresentationCore::SetNextText(const std::string& text) {
         m_ProjectorHeight = h;
     }
 
-    VLCBasePlayer* PresentationCore::GetBackgroundPlayer() {
+    MPVBasePlayer* PresentationCore::GetBackgroundPlayer() {
         return m_Impl ? m_Impl->background.GetPlayer() : nullptr;
     }
 
@@ -1841,7 +2249,7 @@ void PresentationCore::SetNextText(const std::string& text) {
             m_State.livePosition = pos;
         }
         if (m_Impl) {
-            VLCBasePlayer* player = m_Impl->background.GetPlayer();
+            MPVBasePlayer* player = m_Impl->background.GetPlayer();
             if (player) player->SetPosition(pos);
             m_Impl->background.SeekSync(pos);
         }
@@ -1905,23 +2313,23 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
     m_State.transitionDuration = std::max(0.05f, durationSeconds);
 }
     static const ImWchar kProjectionGlyphRanges[] = {
-        0x0020, 0x00FF, // Basic Latin + Latin Supplement
-        0x0100, 0x024F, // Latin Extended-A & B
-        0x0370, 0x03FF, // Greek
-        0x0400, 0x052F, // Cyrillic
-        0x2000, 0x206F, // General Punctuation
-        0x20A0, 0x20CF, // Currency Symbols
-        0x2100, 0x214F, // Letterlike Symbols
-        0x2190, 0x21FF, // Arrows
-        0x2200, 0x22FF, // Math Operators
-        0x25A0, 0x25FF, // Geometric Shapes
-        0x2600, 0x26FF, // Misc Symbols
-        0x2700, 0x27BF, // Dingbats
-        0x2B00, 0x2BFF, // Misc Symbols and Arrows
-        0x1F300, 0x1F5FF, // Pictographs
-        0x1F600, 0x1F64F, // Emoticons
-        0x1F680, 0x1F6FF, // Transport
-        0x1F900, 0x1F9FF, // Supplemental
+        0x0020, 0x00FF,
+        0x0100, 0x024F,
+        0x0370, 0x03FF,
+        0x0400, 0x052F,
+        0x2000, 0x206F,
+        0x20A0, 0x20CF,
+        0x2100, 0x214F,
+        0x2190, 0x21FF,
+        0x2200, 0x22FF,
+        0x25A0, 0x25FF,
+        0x2600, 0x26FF,
+        0x2700, 0x27BF,
+        0x2B00, 0x2BFF,
+        0x1F300, 0x1F5FF,
+        0x1F600, 0x1F64F,
+        0x1F680, 0x1F6FF,
+        0x1F900, 0x1F9FF,
         0
     };
 
@@ -1970,12 +2378,6 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
             m_ImGuiFonts[fontName] = font;
     }
 
-    // -------------------------------------------------------------------------
-    //  ThemesDirPath — multiplataforma.
-    //  En Windows usa la carpeta AppData del usuario (via SHGetFolderPathW).
-    //  En Linux sigue la convencion XDG: usa $XDG_CONFIG_HOME si esta definida,
-    //  o $HOME/.config en caso contrario.
-    // -------------------------------------------------------------------------
     static std::string ThemesDirPath()
     {
         std::filesystem::path dir;
@@ -2004,16 +2406,6 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         return dir.string();
     }
 
-    // Empaqueta/desempaqueta TextEffectsData como una sola linea CSV en el
-    // archivo .theme -- evita 7 bloques de bool/color/intensidad repetidos
-    // (uno por efecto) en el formato "key=value" de este archivo. Orden fijo:
-    // bg(enabled,r,g,b,a) border(enabled,r,g,b,a,width) shadow(enabled,r,g,b,a,intensity)
-    // chromaticAberration(enabled,intensity) glow(enabled,r,g,b,a,intensity)
-    // neon(enabled,r,g,b,a,intensity) underline(enabled,r,g,b,a,thickness)
-    // text3d(enabled,r,g,b,a,depth) gradient(enabled,Ar,Ag,Ab,Aa,Br,Bg,Bb,Ba,angle)
-    // opacityGradient(enabled,angle,strength) -- los ultimos 3 bloques se
-    // agregaron despues; UnpackTextEffects los trata como opcionales para
-    // que un .theme viejo (37 floats) siga cargando el resto sin resetear.
     std::string PackTextEffects(const TextEffectsData& e)
     {
         std::ostringstream ss;
@@ -2061,7 +2453,7 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         while (std::getline(ss, tok, ',')) {
             if (!tok.empty()) f.push_back(std::stof(tok));
         }
-        if (f.size() < 37) return; // linea corrupta/vieja -- deja los defaults
+        if (f.size() < 37) return;
 
         size_t i = 0;
         e.bgEnabled = f[i++] != 0.0f;
@@ -2084,9 +2476,6 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         for (float& c : e.underlineColor) c = f[i++];
         e.underlineThickness = f[i++];
 
-        // Campos nuevos (3D + degradados), opcionales -- ver comentario de
-        // PackTextEffects. Si el archivo es viejo (solo 37 floats) se dejan
-        // los defaults de TextEffectsData en vez de fallar.
         if (f.size() >= i + 19) {
             e.text3dEnabled = f[i++] != 0.0f;
             for (float& c : e.text3dColor) c = f[i++];
@@ -2103,10 +2492,6 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         }
     }
 
-    // Convierte margenes planos (L,T,R,B en px @1920x1080) al rect
-    // centro-relativo normalizado de TextBoxStyle -- inversa exacta de
-    // ApplyLyricsBoxToState. Usada solo como fallback de migracion al leer
-    // un .theme guardado antes de la reforma a cajas.
     static void BoxFromLegacyMargins(const float margins[4], TextBoxStyle& box)
     {
         box.sizeW = std::max(0.02f, (1920.0f - margins[0] - margins[2]) / 1920.0f);
@@ -2157,8 +2542,6 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
             std::string k = line.substr(0, sep);
             std::string v = line.substr(sep + 1);
 
-            // Claves legacy (planas) -- se conservan solo por compatibilidad
-            // hacia atras / fallback de migracion, ver abajo.
             if      (k == "textSize")   out.size      = std::stof(v);
             else if (k == "textAlign")  out.hAlign    = std::stoi(v);
             else if (k == "vAlign")     out.vAlign    = std::stoi(v);
@@ -2173,7 +2556,6 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
                        &out.margins[0], &out.margins[1],
                        &out.margins[2], &out.margins[3]);
 
-            // Claves nuevas (cajas independientes Letras/Indice).
             else if (k == "lyricsPosX")    { out.lyrics.posX  = std::stof(v); hasLyricsBoxKeys = true; }
             else if (k == "lyricsPosY")    out.lyrics.posY    = std::stof(v);
             else if (k == "lyricsSizeW")   out.lyrics.sizeW   = std::stof(v);
@@ -2213,11 +2595,6 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
                 UnpackTextEffects(v, out.effects);
         }
 
-        // Fallback de migracion: un .theme guardado antes de la reforma a
-        // cajas no tiene las claves "lyrics*"/"index*" -- se deriva una caja
-        // inicial desde los campos legacy ya leidos arriba, para no
-        // resetear estilos guardados por el usuario. El indice arranca
-        // deshabilitado (los estilos viejos no tenian este concepto).
         if (!hasLyricsBoxKeys) {
             out.lyrics.fontName  = out.fontName;
             out.lyrics.textSize  = out.size;
@@ -2239,9 +2616,6 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         std::ofstream f(std::filesystem::path(dir) / (style.name + ".theme"));
         if (!f.is_open()) return;
 
-        // Claves legacy -- se derivan de la caja de Letras para que un
-        // .theme guardado con el editor nuevo siga siendo legible por
-        // codigo viejo/externo que solo conozca el formato plano.
         f << "textColor="  << style.lyrics.color[0] << "," << style.lyrics.color[1] << ","
                             << style.lyrics.color[2] << "," << style.lyrics.color[3] << "\n";
         f << "textSize="   << style.lyrics.textSize << "\n";
@@ -2308,10 +2682,6 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         return ProyecThor::GetAssetsPath() + "/../category_styles.ini";
     }
 
-    // Compartido entre PresentationCore::UpdateLyricsBoxStyle (que llama a
-    // esto ya con el mutex tomado) y ApplySavedStyleToState -- centraliza el
-    // espejo hacia los campos planos legacy de PresentationState (ver
-    // comentario en PresentationState::lyricsBox, PresentationCore.h).
     static void ApplyLyricsBoxToState(const TextBoxStyle& box, PresentationState& state,
                                        std::string& activeFontName)
     {
@@ -2410,7 +2780,7 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         return m_ActiveFontName;
     }
 
-    ImFont* PresentationCore::GetImGuiFont(const std::string& fontName, float /*size*/) {
+    ImFont* PresentationCore::GetImGuiFont(const std::string& fontName, float ) {
         auto it = m_ImGuiFonts.find(fontName);
         if (it != m_ImGuiFonts.end())
             return it->second;
@@ -2494,9 +2864,6 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
         ++m_StreamVersion;
     }
 
-    // Arma los providers de un NetworkStreamServer recien creado. Lo llaman
-    // tanto ToggleNetworkStream como ToggleChatServer cuando les toca ser
-    // los que crean el server compartido (el primero de los dos en pedirlo).
     void PresentationCore::WireNetworkServerProviders(NetworkStreamServer& srv)
     {
         srv.SetSnapshotProvider([this]() -> StreamSnapshot
@@ -2504,11 +2871,7 @@ void PresentationCore::SetTransitionConfig(int type, float durationSeconds) {
             PresentationState st = GetState();
 
             StreamSnapshot snap;
-            // El cliente web usa "isProjecting" solo para decidir si oculta el overlay
-// de idle y muestra el texto. No debe confundirse con el "isProjecting"
-// real que controla el proyector principal y el audio publico — por eso
-// aqui se OR-ea con showLanQuickNote: si hay una nota SOLO-LAN activa,
-// el cliente de red debe mostrarla aunque la pantalla principal este idle.
+
 snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
 
             if (st.showLanQuickNote) {
@@ -2519,10 +2882,6 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
                 snap.showText    = st.showText;
             }
 
-            // OutputContentMode de LAN (ver ViewPanel::RenderContent, pestaña
-            // "Inalambrica") -- pisa lo de arriba SI el operador clavo esta
-            // salida en "Solo reloj"/"En blanco", independiente de que este
-            // en vivo Publico/Stage en este momento.
             switch (GetLanContentMode()) {
                 case OutputContentMode::ClockOnly: {
                     std::time_t now = std::time(nullptr);
@@ -2653,21 +3012,21 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
         });
     }
 
-    void PresentationCore::ToggleNetworkStream(bool enable, int port)
+    bool PresentationCore::ToggleNetworkStream(bool enable, int port, const StreamConfig* config)
     {
         if (enable)
         {
             if (m_NetworkServer && m_NetworkServer->IsRunning())
             {
-                // Ya esta corriendo (lo pudo haber arrancado el Chat) —
-                // Streaming solo se "suma" como usuario, no reinicia nada.
+                if (config) m_NetworkServer->SetConfig(*config);
                 std::lock_guard<std::recursive_mutex> lk(m_Mutex);
                 m_State.isStreamingNet = true;
                 m_State.networkURL     = m_NetworkServer->GetBaseURL();
-                return;
+                return true;
             }
 
             m_NetworkServer = std::make_unique<NetworkStreamServer>();
+            if (config) m_NetworkServer->SetConfig(*config);
             m_NetworkServer->SetChatStore(&m_ChatMessageStore);
             WireNetworkServerProviders(*m_NetworkServer);
 
@@ -2675,12 +3034,13 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
             {
                 m_NetworkServer.reset();
                 std::cerr << "[NetworkStream] No se pudo iniciar en puerto " << port << ".\n";
-                return;
+                return false;
             }
 
             std::lock_guard<std::recursive_mutex> lk(m_Mutex);
             m_State.isStreamingNet = true;
             m_State.networkURL     = m_NetworkServer->GetBaseURL();
+            return true;
         }
         else
         {
@@ -2696,15 +3056,12 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
                 m_LatestFrame.clear();
             }
 
-            // El server entero solo se apaga si Chat tampoco lo esta usando
-            // — si esta activo, se queda arriba para el (sin video: dejamos
-            // de pushear frames arriba, asi que /frame y /stream vuelven a
-            // quedar "vacios" para quien mire el video por LAN).
             if (m_NetworkServer && !IsChatRunning())
             {
                 m_NetworkServer->Stop();
                 m_NetworkServer.reset();
             }
+            return true;
         }
     }
 
@@ -2720,8 +3077,7 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
         {
             if (m_NetworkServer && m_NetworkServer->IsRunning())
             {
-                // Ya esta corriendo (lo pudo haber arrancado Streaming) —
-                // solo conectamos el store de mensajes si todavia no estaba.
+
                 m_NetworkServer->SetChatStore(&m_ChatMessageStore);
                 std::lock_guard<std::recursive_mutex> lk(m_Mutex);
                 m_State.isChatRunning = true;
@@ -2752,8 +3108,6 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
                 m_State.chatURL.clear();
             }
 
-            // Igual que del otro lado: el server entero solo se apaga si
-            // Streaming tampoco lo esta usando.
             if (m_NetworkServer && !IsStreamingNet())
             {
                 m_NetworkServer->Stop();
@@ -2850,23 +3204,16 @@ snap.isProjecting  = st.isProjecting || st.showLanQuickNote;
 
         glBindFramebuffer(GL_FRAMEBUFFER, m_FBO);
         glViewport(0, 0, w, h);
-outRGB.resize(static_cast<size_t>(w) * h * 3);
-    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        outRGB.resize(static_cast<size_t>(w) * h * 3);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
         {
             std::lock_guard<std::recursive_mutex> lk(m_Mutex);
             glClearColor(m_State.bgColor[0], m_State.bgColor[1], m_State.bgColor[2], 1.0f);
         }
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // OutputContentMode de LAN (ver SetLanContentMode): "Solo reloj"/"En
-        // blanco" no deben dejar pasar el fondo real (video/imagen en vivo)
-        // -- ya se limpio a negro arriba, alcanza con NO pintar nada mas; el
-        // texto del reloj lo agrega el cliente web (ver snap.currentText en
-        // WireNetworkServerProviders), este FBO solo aporta los pixeles de fondo.
         if (GetLanContentMode() == OutputContentMode::Live)
         {
-            // Mismo criterio que RenderProjectorWindow(): el stream de red
-            // tampoco debe mostrar un frame entrecortado mientras algo carga.
             if (ShouldShowLoadingScreen()) {
                 m_Impl->background.RenderLogo(
                     static_cast<unsigned int>(reinterpret_cast<uintptr_t>(GetLoadingLogoTexture())),
@@ -2876,31 +3223,25 @@ outRGB.resize(static_cast<size_t>(w) * h * 3);
             }
         }
 
-        outRGB.resize(static_cast<size_t>(w) * h * 3);
-        glPixelStorei(GL_PACK_ALIGNMENT, 1);
-
         int nextIndex = (m_PBOIndex + 1) % 2;
 
         glBindBuffer(GL_PIXEL_PACK_BUFFER, m_PBO[m_PBOIndex]);
         glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, 0);
 
         glBindBuffer(GL_PIXEL_PACK_BUFFER, m_PBO[nextIndex]);
-GLubyte* ptr = static_cast<GLubyte*>(
-    glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
-if (ptr)
-{
-    // glReadPixels entrega fila 0 = abajo de la pantalla. JPEG/PNG
-    // esperan fila 0 = arriba. Invertimos filas aca, una sola vez,
-    // antes de que el buffer salga hacia el compresor JPEG.
-    const size_t rowBytes = static_cast<size_t>(w) * 3;
-    for (int row = 0; row < h; ++row)
-    {
-        const GLubyte* srcRow = ptr + static_cast<size_t>(row) * rowBytes;
-        uint8_t* dstRow = outRGB.data() + static_cast<size_t>(h - 1 - row) * rowBytes;
-        std::memcpy(dstRow, srcRow, rowBytes);
-    }
-    glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
-}
+        GLubyte* ptr = static_cast<GLubyte*>(
+            glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY));
+        if (ptr)
+        {
+            // El quad de BackgroundLayer ya proyecta la textura con fila 0 = arriba
+            // en la base del FBO (NDC Y = -1), por lo que glReadPixels lee la fila 0
+            // del buffer directamente como la parte superior de la imagen (orden estándar
+            // top-to-bottom y left-to-right de JPEG/stbi). Copiar directamente evita
+            // invertir verticalmente la imagen al transmitir por LAN.
+            const size_t totalBytes = static_cast<size_t>(w) * h * 3;
+            std::memcpy(outRGB.data(), ptr, totalBytes);
+            glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+        }
 
         m_PBOIndex = nextIndex;
 
@@ -2955,4 +3296,4 @@ if (ptr)
         return m_PendingNavigateDelta.exchange(0);
     }
 
-} // namespace ProyecThor::Core
+}

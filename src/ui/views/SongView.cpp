@@ -3,7 +3,9 @@
 #include "UIStrings.h"
 #include "LibrarySongs.h"
 #include "LibrarySongMeta.h"
+#include "ui/panels/biblio/LibraryHelpers.h"
 #include "SongBackgroundPicker.h"
+#include "ui/views/biblia/BibleTextUtils.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <algorithm>
@@ -14,6 +16,7 @@
 #include "ui/framework/bin/StyleGeneralApp.h"
 #include "ui/framework/SongPlayStats.h"
 #include "ui/framework/DesignSystem.h"
+#include "ui/panels/layers/LayersTheme.h"
 
 namespace ProyecThor::UI {
 
@@ -48,10 +51,10 @@ void SongView::RenderSettingsCard(const std::string& songFilename, ImVec2 p_min,
     ImVec2 cardSize = { p_max.x - p_min.x, p_max.y - p_min.y };
     float barH = std::clamp(cardSize.y * 0.20f, 16.0f, 26.0f);
 
-    dl->AddRectFilled(p_min, p_max, IM_COL32(54, 48, 30, 255), 10.0f);
+    dl->AddRectFilled(p_min, p_max, LPU32(LP::Surface1), DS::RadiusCard);
     if (isHovered)
-        dl->AddRectFilled(p_min, p_max, IM_COL32(255, 255, 255, 14), 10.0f);
-    dl->AddRect(p_min, p_max, IM_COL32(255, 255, 255, 24), 10.0f, 0, 1.0f);
+        dl->AddRectFilled(p_min, p_max, DS::RowHoverFill, DS::RadiusCard);
+    dl->AddRect(p_min, p_max, isHovered ? LPU32(LP::BorderHov) : LPU32(LP::Border), DS::RadiusCard, 0, 1.0f);
 
     std::string style = ProyecThor::Library::GetSongStyle(songFilename);
     ProyecThor::Library::SongBackground bg = ProyecThor::Library::GetSongBackground(songFilename);
@@ -64,24 +67,24 @@ void SongView::RenderSettingsCard(const std::string& songFilename, ImVec2 p_min,
     float  midY    = p_min.y + (cardSize.y - barH) * 0.5f;
 
     std::string styleLine = style.empty() ? "Estilo: (ninguno)" : ("Estilo: " + style);
-    std::string bgLine    = bg.path.empty() ? "Fondo: (ninguno)" : ("Fondo: " + std::filesystem::path(bg.path).filename().string());
+    std::string bgLine    = bg.path.empty() ? "Fondo: (ninguno)" : ("Fondo: " + ProyecThor::Library::PathToUtf8(std::filesystem::path(bg.path).filename()));
     ImVec2 s1 = ImGui::CalcTextSize(styleLine.c_str());
     ImVec2 s2 = ImGui::CalcTextSize(bgLine.c_str());
 
     float blockH = titleSz.y + 6.0f + s1.y + 2.0f + s2.y;
     float y0 = midY - blockH * 0.5f;
 
-    dl->AddText({ p_min.x + (cardSize.x - titleSz.x) * 0.5f, y0 }, IM_COL32(232, 226, 198, 255), title);
-    dl->AddText({ p_min.x + (cardSize.x - s1.x) * 0.5f, y0 + titleSz.y + 6.0f }, IM_COL32(200, 195, 170, 190), styleLine.c_str());
-    dl->AddText({ p_min.x + (cardSize.x - s2.x) * 0.5f, y0 + titleSz.y + 6.0f + s1.y + 2.0f }, IM_COL32(200, 195, 170, 190), bgLine.c_str());
+    dl->AddText({ p_min.x + (cardSize.x - titleSz.x) * 0.5f, y0 }, DS::TextPrimary, title);
+    dl->AddText({ p_min.x + (cardSize.x - s1.x) * 0.5f, y0 + titleSz.y + 6.0f }, DS::TextSecondary, styleLine.c_str());
+    dl->AddText({ p_min.x + (cardSize.x - s2.x) * 0.5f, y0 + titleSz.y + 6.0f + s1.y + 2.0f }, DS::TextSecondary, bgLine.c_str());
 
     dl->PopClipRect();
 
     ImVec2 barMin = { p_min.x, p_max.y - barH };
-    dl->AddRectFilled(barMin, p_max, IM_COL32(168, 148, 44, 255), 10.0f, ImDrawFlags_RoundCornersBottom);
+    dl->AddRectFilled(barMin, p_max, LPU32(LP::Surface2), DS::RadiusCard, ImDrawFlags_RoundCornersBottom);
     const char* barLabel = "Inicio";
     ImVec2 barLabelSz = ImGui::CalcTextSize(barLabel);
-    dl->AddText({ p_min.x + 8.0f, barMin.y + (barH - barLabelSz.y) * 0.5f }, IM_COL32(32, 27, 10, 255), barLabel);
+    dl->AddText({ p_min.x + 8.0f, barMin.y + (barH - barLabelSz.y) * 0.5f }, DS::TextPrimary, barLabel);
 }
 
 void SongView::RenderSongSettingsPopup(const std::string& songFilename)
@@ -130,7 +133,7 @@ void SongView::RenderSongSettingsPopup(const std::string& songFilename)
 
         ImGui::TextUnformatted("Fondo:");
         ImGui::SetNextItemWidth(240.0f);
-        std::string bgPreview = bg.path.empty() ? "(ninguno)" : std::filesystem::path(bg.path).filename().string();
+        std::string bgPreview = bg.path.empty() ? "(ninguno)" : ProyecThor::Library::PathToUtf8(std::filesystem::path(bg.path).filename());
         if (ImGui::BeginCombo("##songBgCombo", bgPreview.c_str()))
         {
             if (ImGui::Selectable("(ninguno)", bg.path.empty()))
@@ -274,10 +277,16 @@ void SongView::RenderBrowseGrid()
 
     auto GoToStanza = [&](int idx) {
         m_ActiveStanzaIndex = idx;
+        std::string nextText = (idx + 1 < (int)selection.contentData.size()) ? selection.contentData[idx + 1] : "";
+        std::string prevText = (idx - 1 >= 0) ? selection.contentData[idx - 1] : "";
+        std::string nextRef  = (!nextText.empty()) ? ("Estrofa " + std::to_string(idx + 2)) : "";
+        std::string prevRef  = (!prevText.empty()) ? ("Estrofa " + std::to_string(idx)) : "";
+
+        core.SetNextContent(nextText, nextRef);
+        core.SetPrevContent(prevText, prevRef);
         core.SetLayer2_Text(selection.contentData[idx], idx);
         PushNextStanzaText(idx);
-        if (core.IsProjecting())
-            core.SetProjecting(true);
+        core.SetProjecting(true);
         TryRecordProjection(true);
         if (m_AutoAdvancePlaying)
             m_AutoAdvanceDeadline = ImGui::GetTime() + ComputeVerseDurationSeconds(selection.contentData[idx], idx);
@@ -452,8 +461,7 @@ void SongView::RenderBrowseGrid()
         }
 
         std::string searchQuery = core.GetSongSearchQuery();
-        std::string searchLo    = searchQuery;
-        std::transform(searchLo.begin(), searchLo.end(), searchLo.begin(), [](unsigned char c){ return (char)::tolower(c); });
+        std::string searchNorm  = ProyecThor::UI::TextUtils::StripAccents(ProyecThor::UI::TextUtils::ToLowerUTF8(searchQuery));
 
         for (size_t i = 0; i < selection.contentData.size(); ++i)
         {
@@ -463,10 +471,9 @@ void SongView::RenderBrowseGrid()
             bool               isSelected = (m_ActiveStanzaIndex == static_cast<int>(i));
 
             bool stanzaMatchesSearch = false;
-            if (!searchLo.empty()) {
-                std::string stanzaLo = stanza;
-                std::transform(stanzaLo.begin(), stanzaLo.end(), stanzaLo.begin(), [](unsigned char c){ return (char)::tolower(c); });
-                stanzaMatchesSearch = (stanzaLo.find(searchLo) != std::string::npos);
+            if (!searchNorm.empty()) {
+                std::string stanzaNorm = ProyecThor::UI::TextUtils::StripAccents(ProyecThor::UI::TextUtils::ToLowerUTF8(stanza));
+                stanzaMatchesSearch = (stanzaNorm.find(searchNorm) != std::string::npos);
             }
 
             ImGui::PushID((int)i);
@@ -513,17 +520,17 @@ void SongView::RenderBrowseGrid()
             }
 
             if (isSelected)
-                drawList->AddRectFilled(p_min, p_max, IM_COL32(110, 130, 255, 60), 10.0f);
+                drawList->AddRectFilled(p_min, p_max, DS::AccentColorDim, DS::RadiusCard);
             else if (stanzaMatchesSearch)
-                drawList->AddRectFilled(p_min, p_max, IM_COL32(245, 180, 40, 35), 10.0f);
+                drawList->AddRectFilled(p_min, p_max, LPU32(LP::GoldDim), DS::RadiusCard);
             else if (isHovered)
-                drawList->AddRectFilled(p_min, p_max, IM_COL32(255, 255, 255, 16), 10.0f);
+                drawList->AddRectFilled(p_min, p_max, DS::RowHoverFill, DS::RadiusCard);
 
             ImU32 borderColor = isSelected
-                ? IM_COL32(180, 182, 190, 200)
-                : (stanzaMatchesSearch ? IM_COL32(245, 180, 50, 220) : IM_COL32(255, 255, 255, 22));
-            float borderSize = isSelected ? 1.5f : (stanzaMatchesSearch ? 1.5f : 1.0f);
-            drawList->AddRect(p_min, p_max, borderColor, 10.0f, 0, borderSize);
+                ? DS::AccentLight
+                : (stanzaMatchesSearch ? LPU32(LP::Gold) : (isHovered ? LPU32(LP::BorderHov) : LPU32(LP::Border)));
+            float borderSize = isSelected ? 2.0f : (stanzaMatchesSearch ? 1.5f : 1.0f);
+            drawList->AddRect(p_min, p_max, borderColor, DS::RadiusCard, 0, borderSize);
 
             ImVec2 textAreaMax = { p_max.x, p_max.y - barH };
             drawList->PushClipRect(p_min, textAreaMax, true);
@@ -549,10 +556,9 @@ for (const auto& line : lines)
         float localX = std::max(padL, (cardSize.x - lineSz.x) * 0.5f);
 
         bool lineMatches = false;
-        if (!searchLo.empty()) {
-            std::string lineLo = line;
-            std::transform(lineLo.begin(), lineLo.end(), lineLo.begin(), [](unsigned char c){ return (char)::tolower(c); });
-            lineMatches = (lineLo.find(searchLo) != std::string::npos);
+        if (!searchNorm.empty()) {
+            std::string lineNorm = ProyecThor::UI::TextUtils::StripAccents(ProyecThor::UI::TextUtils::ToLowerUTF8(line));
+            lineMatches = (lineNorm.find(searchNorm) != std::string::npos);
         }
 
         if (lineMatches) {

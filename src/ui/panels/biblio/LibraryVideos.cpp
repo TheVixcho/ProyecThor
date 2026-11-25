@@ -1,4 +1,5 @@
 #include "LibraryVideos.h"
+#include "LibraryMultimedia.h"
 #include "LibraryIcons.h"
 #include "LibraryStyles.h"
 #include "LibraryHelpers.h"
@@ -6,7 +7,11 @@
 #include "ui/framework/DesignSystem.h"
 #include "ui/framework/bin/StyleGeneralApp.h"
 #include "ui/panels/layers/LayersTheme.h"
+#include "ui/panels/layers/LayersBgTab.h"
 #include "core/ThumbnailWorker.h"
+#include "core/MediaImportManager.h"
+#include "core/settings/SettingsManager.h"
+#include "ui/framework/FilePicker.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -16,6 +21,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <algorithm>
 #include <cstring>
 #include <cmath>
@@ -111,17 +117,24 @@ static std::string ThumbCachePathFor(const std::string& absVideoPath) {
 }
 
 static ImTextureID LoadImageThumb(const char* path) {
-    int w, h, n;
-    unsigned char* d = stbi_load(path, &w, &h, &n, 4);
-    if (!d) return 0;
-    GLuint tex; glGenTextures(1, &tex);
+    const auto& perf = ProyecThor::Settings::SettingsManager::Get().GetSettings().performance;
+    const unsigned maxW = perf.lowMemoryMode ? 256u : (perf.performanceMode ? 320u : 512u);
+    const unsigned maxH = perf.lowMemoryMode ? 144u : (perf.performanceMode ? 180u : 288u);
+
+    std::vector<uint8_t> pixels;
+    unsigned w = 0, h = 0;
+    if (!ProyecThor::Core::ThumbnailWorker::LoadThumbnailPixelsFromDisk(path ? path : "", pixels, w, h, maxW, maxH))
+        return 0;
+
+    GLuint tex = 0;
+    glGenTextures(1, &tex);
     glBindTexture(GL_TEXTURE_2D, tex);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, d);
-    stbi_image_free(d);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, static_cast<GLsizei>(w), static_cast<GLsizei>(h),
+                 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
     return (ImTextureID)(intptr_t)tex;
 }
 
@@ -130,7 +143,28 @@ static ProyecThor::Core::ThumbnailWorker            s_ThumbWorker;
 static bool  s_GridMode  = true;
 static float s_ThumbZoom = 1.0f;
 
+void ClearLocalVideoThumbnailCache() {
+    std::unordered_set<GLuint> uniqueTex;
+    for (const auto& kv : s_ThumbnailCache) {
+        if (!kv.second) continue;
+        // No eliminar texturas compartidas que pertenecen a LibraryMultimedia
+        if (QuerySharedVideoThumbnail(kv.first) == kv.second) continue;
+        GLuint tex = static_cast<GLuint>(static_cast<uintptr_t>(kv.second));
+        if (tex != 0) uniqueTex.insert(tex);
+    }
+    for (GLuint tex : uniqueTex) {
+        glDeleteTextures(1, &tex);
+    }
+    s_ThumbnailCache.clear();
+    s_ThumbWorker.ResetSeen();
+}
+
 static ImTextureID GetVideoThumbnail(const std::string& path) {
+    if (ImTextureID shared = QuerySharedVideoThumbnail(path)) {
+        s_ThumbnailCache[path] = shared;
+        return shared;
+    }
+
     auto it = s_ThumbnailCache.find(path);
     if (it != s_ThumbnailCache.end()) return it->second;
 
@@ -179,7 +213,7 @@ static void DrainVideoThumbnails() {
 
 static std::string VideoFullPath(const std::string& filename) {
     if (std::filesystem::path(filename).is_absolute()) return filename;
-    return GetAssetsPath() + "/videos/" + filename;
+    return GetVideoLibraryPath() + "/" + filename;
 }
 
 // =============================================================================
@@ -196,31 +230,47 @@ static bool RenderVideoContextMenu(LibraryContext& ctx, const std::string& filen
         // FIX: no forzar un Stop() (corte a negro) antes de
         // SetBackgroundMedia() — SetVideo() ya maneja tanto la carga en
         // frio como el crossfade sobre lo que esta al aire.
-        Core::PresentationCore::Get().SetBackgroundMedia(fp, true, /*allowAudio=*/true);
-        Core::PresentationCore::Get().SetProjecting(true);
+        auto& core = Core::PresentationCore::Get();
+        core.SetProjecting(true);
+        core.SetBackgroundMedia(fp, true, /*allowAudio=*/true);
     }
     if (ImGui::MenuItem("Ver en pantalla completa") && origIdx >= 0) {
         OpenVideoPreview(ctx, origIdx);
     }
     ImGui::Separator();
     if (ImGui::MenuItem("Mover a Fondos (Backgrounds)")) {
-        std::error_code ec;
         std::string srcPath = VideoFullPath(filename);
-        fs::path src(srcPath);
-        std::string targetDir = GetAssetsPath() + "/backgrounds";
-        fs::create_directories(targetDir, ec);
-        fs::path dst = fs::path(targetDir) / src.filename();
-        fs::rename(src, dst, ec);
+        if (Core::MediaImportManager::Get().IsExternalMultimediaPath(srcPath)) {
+            Core::MediaImportManager::Get().MoveExternalToBackground(srcPath);
+        } else {
+            std::error_code ec;
+            fs::path src = U8Path(srcPath);
+            if (!Core::MediaImportManager::Get().ExistsInBackgroundByName(filename)) {
+                std::string targetDir = GetAssetsPath() + "/backgrounds";
+                fs::create_directories(U8Path(targetDir), ec);
+                fs::path dst = U8Path(targetDir) / src.filename();
+                fs::rename(src, dst, ec);
+            } else {
+                fs::remove(src, ec);
+            }
+            UI::BumpBackgroundsListRevision();
+        }
         ctx.refreshList();
     }
     if (ImGui::MenuItem("Copiar a Fondos (Backgrounds)")) {
-        std::error_code ec;
         std::string srcPath = VideoFullPath(filename);
-        fs::path src(srcPath);
-        std::string targetDir = GetAssetsPath() + "/backgrounds";
-        fs::create_directories(targetDir, ec);
-        fs::path dst = fs::path(targetDir) / src.filename();
-        fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+        if (Core::MediaImportManager::Get().IsExternalMultimediaPath(srcPath)) {
+            Core::MediaImportManager::Get().LinkSingleExternalFileDirect(
+                srcPath, Core::MediaImportDest::Background);
+        } else if (!Core::MediaImportManager::Get().ExistsInBackgroundByName(filename)) {
+            std::error_code ec;
+            fs::path src = U8Path(srcPath);
+            std::string targetDir = GetAssetsPath() + "/backgrounds";
+            fs::create_directories(U8Path(targetDir), ec);
+            fs::path dst = U8Path(targetDir) / src.filename();
+            fs::copy_file(src, dst, fs::copy_options::skip_existing, ec);
+            UI::BumpBackgroundsListRevision();
+        }
     }
     ImGui::Separator();
     if (ImGui::MenuItem("Renombrar")) {
@@ -464,7 +514,7 @@ void RenderLocalVideoList(LibraryContext& ctx)
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill));
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  ImGui::ColorConvertU32ToFloat4(DS::AccentColorDim));
     ImGui::PushStyleColor(ImGuiCol_Border,         ImVec4(1.00f, 1.00f, 1.00f, 0.12f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(10.f, 7.f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
     ImGui::SetNextItemWidth(-1.f);
@@ -481,7 +531,7 @@ void RenderLocalVideoList(LibraryContext& ctx)
         const float btnSz = 26.0f;
         const float zoomW = 76.0f;
         const float gap   = 4.0f;
-        const float rowW  = zoomW + gap + btnSz*2.0f + gap*2.0f;
+        const float rowW  = zoomW + gap + btnSz*3.0f + gap*3.0f;
         const float avail = ImGui::GetWindowContentRegionMax().x;
         ImGui::SameLine(std::max(ImGui::GetCursorPosX(), avail - rowW));
 
@@ -499,6 +549,17 @@ void RenderLocalVideoList(LibraryContext& ctx)
         ImGui::SameLine(0, gap);
         if (UI::LPCornerIconBtn("##listm", UI::LPDrawList, "Vista en lista", {btnSz, btnSz}, !s_GridMode))
             s_GridMode = false;
+        ImGui::SameLine(0, gap);
+        if (UI::LPCornerIconBtn("##chfolder", UI::LPDrawFolderGlyph, "Asignar carpeta de videos...", {btnSz, btnSz}, false)) {
+            std::string picked = ProyecThor::UI::PickFolder("Seleccionar carpeta de videos");
+            if (!picked.empty()) {
+                auto& settings = ProyecThor::Settings::SettingsManager::Get().GetSettings();
+                settings.general.defaultMediaFolder = picked;
+                ProyecThor::Settings::SettingsManager::Get().SaveSettings();
+                ctx.refreshList();
+                ForceListUpdate() = true;
+            }
+        }
         ImGui::PopID();
     }
 
@@ -592,12 +653,10 @@ void RenderLocalVideoList(LibraryContext& ctx)
             auto HandleDrop = [&](const ImGuiPayload* payload) {
                 const char* droppedPath = (const char*)payload->Data;
                 if (droppedPath && *droppedPath) {
-                    std::error_code ec;
-                    fs::path src(droppedPath);
-                    std::string targetDir = GetAssetsPath() + "/videos";
-                    fs::create_directories(targetDir, ec);
-                    fs::path dst = fs::path(targetDir) / src.filename();
-                    fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+                    // Nunca secuestrar defaultMediaFolder ni duplicar en disco:
+                    // vincular limpiamente evitando duplicados de nombre.
+                    Core::MediaImportManager::Get().LinkSingleExternalFileDirect(
+                        droppedPath, Core::MediaImportDest::Multimedia);
                     ctx.refreshList();
                 }
             };
@@ -659,7 +718,7 @@ void RenderStreamURLSection(LibraryContext& ctx)
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill));
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive,  ImGui::ColorConvertU32ToFloat4(DS::AccentColorDim));
     ImGui::PushStyleColor(ImGuiCol_Border,         ImVec4(1.00f, 1.00f, 1.00f, 0.12f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, DS::RadiusMedium);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(10.f, 7.f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
     ImGui::SetNextItemWidth(-1.f);
@@ -744,12 +803,8 @@ void RenderStreamURLSection(LibraryContext& ctx)
                 Core::PresentationCore::Get().SetSelection(s);
 
                 if (ImGui::IsMouseDoubleClicked(0)) {
-                    // FIX: sin Stop() previo (corte a negro) — SetVideo()
-                    // ya maneja carga en frio o crossfade, y el guard de
-                    // reentrancia en Play() necesita que no se le limpie
-                    // la ruta actual en cada click repetido.
-                    Core::PresentationCore::Get().SetBackgroundMedia(ctx.streamURLs[i], true, /*allowAudio=*/true);
-                    Core::PresentationCore::Get().SetProjecting(true);
+                    auto& core = Core::PresentationCore::Get();
+                    core.RequestPreviewLoad(ctx.streamURLs[i], /*loop=*/false, /*startMuted=*/false);
                 }
             }
 
@@ -766,8 +821,9 @@ void RenderStreamURLSection(LibraryContext& ctx)
             if (ImGui::BeginPopupContextItem(("##ctx_url" + std::to_string(i)).c_str()))
             {
                 if (ImGui::MenuItem("Enviar al monitor")) {
-                    Core::PresentationCore::Get().SetBackgroundMedia(ctx.streamURLs[i], true, /*allowAudio=*/true);
-                    Core::PresentationCore::Get().SetProjecting(true);
+                    auto& core = Core::PresentationCore::Get();
+                    core.SetProjecting(true);
+                    core.SetBackgroundMedia(ctx.streamURLs[i], true, /*allowAudio=*/true);
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Renombrar / Editar URL")) {

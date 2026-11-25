@@ -2,6 +2,8 @@
 
 #include <string>
 #include <vector>
+#include <atomic>
+#include <mutex>
 #include <imgui.h>
 #include "biblia/BibleTypes.h"
 #include "biblia/BibleQuickNav.h"
@@ -11,10 +13,15 @@ namespace ProyecThor::UI {
 
 class BibleView {
 public:
-    BibleView()  = default;
+    BibleView();
     ~BibleView() = default;
 
     void Render();
+    bool IsSearchOrOverlayActive() const {
+        return m_SearchFocused || m_QuickNav.IsOpen() || m_WordSearch.IsOpen() ||
+               m_JumpMode != JumpKind::None || m_ShowEditModal ||
+               m_ShowVersionPicker || m_ShowHistory || m_ShowFavorites;
+    }
 
 private:
     void LoadXMLBible(const std::string& path);
@@ -23,13 +30,21 @@ private:
     void ReprojectInCurrentBible();
     void NavigateVerse(int delta);
     std::string PeekNextVerseText(int bookIdx, int chapIdx, int verseIdx) const;
+    bool        PeekNextVerse(int bookIdx, int chapIdx, int verseIdx, std::string& outBody, std::string& outRef) const;
+    bool        PeekPrevVerse(int bookIdx, int chapIdx, int verseIdx, std::string& outBody, std::string& outRef) const;
 
     void RenderTopBar();
+    void RenderVersionPopup();
+    void RefreshAvailableBibles();
+    void ImportBibleFiles();
+    bool DeleteBibleFile(const std::string& filename);
     void RenderHistoryPopup();
     void RenderFavoritesPopup();
     void RenderBookGrid();
     void RenderChapterGrid();
     void RenderVerseList();
+    void RenderClassicVerseList(const BookData& book, const ChapterData& chap, float r, float g, float bv, float marginH);
+    void RenderPreviewVerseGrid(const BookData& book, const ChapterData& chap, float r, float g, float bv, float marginH);
     void RenderEditModal();
 
     void JumpToFavorite(const std::string& bible, int bookNum, int chapterNum, int verseNum);
@@ -103,6 +118,21 @@ bool   m_AltComboFired  = false;
     std::string m_EditStatus;
 
     int m_ScrollToVerse = -1;
+
+    bool  m_ClassicListView = false;
+    float m_VerseCardZoom   = 1.0f;
+
+    bool                     m_ShowVersionPicker    = false;
+    bool                     m_DeleteBibleMode      = false;
+    bool                     m_TriedAutoSelectBible = false;
+    std::string              m_ConfirmDeleteBible;
+    std::atomic<bool>        m_BibleImportRunning{false};
+    std::atomic<bool>        m_NeedsRefreshBibles{false};
+    std::mutex               m_ImportedBibleMutex;
+    std::string              m_LastImportedBibleFile;
+    ImVec2                   m_VersionBtnPos     = {};
+    ImVec2                   m_VersionBtnSize    = {};
+    std::vector<std::string> m_AvailableBibleFiles;
 };
 
 }

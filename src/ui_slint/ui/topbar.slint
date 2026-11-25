@@ -1,0 +1,384 @@
+import { Theme } from "theme.slint";
+import { ToolbarIsland, CircleIslandButton } from "components.slint";
+
+export component TopBar inherits Rectangle {
+    in-out property <int> active-tab: 13;
+    in-out property <int> design-subtab: 0;
+    in-out property <int> net-subtab: 0;
+    in property <string> app-version: "1.2.0";
+    in property <image> logo-image;
+    in property <bool> has-logo: false;
+    in property <bool> audience-live: false;
+    in property <bool> stage-live: false;
+    in property <bool> audience-frozen: false;
+    in-out property <bool> scale-menu-open: false;
+    in-out property <bool> library-menu-open: false;
+    in-out property <bool> design-menu-open: false;
+    in-out property <bool> net-menu-open: false;
+    in property <int> bg-scale-mode: 0; // 0=Recortar/Llenar, 1=Estirar, 2=Original
+
+    property <string> hover-tip: "";
+
+    callback toggle-audience();
+    callback toggle-stage();
+    callback toggle-freeze();
+    callback clear-all();
+    callback scan-libraries();
+    callback open-kofi-donations();
+
+    height: 54px;
+    background: Theme.bg-glass;
+
+    // Specular glass rim at top & soft divider at bottom
+    Rectangle {
+        y: 0px;
+        width: 100%;
+        height: 1px;
+        background: Theme.glass-rim-top;
+    }
+    Rectangle {
+        y: parent.height - 1px;
+        width: 100%;
+        height: 1px;
+        background: Theme.border-subtle;
+    }
+
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        spacing: 10px;
+
+        // ── Left Floating Islands (clearly spaced by category: Biblioteca | Diseño | Red y Sistema) ──
+        HorizontalLayout {
+            horizontal-stretch: 0;
+            spacing: 14px;
+            alignment: start;
+
+            // Isla 1: Biblioteca Directa (todos los botones de acceso en 1 clic, sin menú extra) + Capturadora
+            ToolbarIsland {
+                y: (parent.height - self.height) / 2;
+                HorizontalLayout {
+                    padding: 3px;
+                    spacing: 4px;
+
+                    CircleIslandButton {
+                        icon: @image-url("icons/folder.svg");
+                        tooltip: "Biblioteca (Resumen General)";
+                        accent-color: #38bdf8;
+                        active: root.active-tab == 13;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.scale-menu-open = false;
+                            root.active-tab = 13;
+                        }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/music.svg");
+                        tooltip: "Canciones y Letras";
+                        accent-color: #38bdf8;
+                        active: root.active-tab == 0;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.scale-menu-open = false;
+                            root.active-tab = 0;
+                        }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/book.svg");
+                        tooltip: "Biblia";
+                        accent-color: #fbbf24;
+                        active: root.active-tab == 1;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.scale-menu-open = false;
+                            root.active-tab = 1;
+                        }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/film.svg");
+                        tooltip: "Multimedia (Videos e Imágenes)";
+                        accent-color: #ec4899;
+                        active: root.active-tab == 2;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.scale-menu-open = false;
+                            root.active-tab = 2;
+                        }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/headphones.svg");
+                        tooltip: "Música y Audio";
+                        accent-color: #22c55e;
+                        active: root.active-tab == 9;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.scale-menu-open = false;
+                            root.active-tab = 9;
+                        }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/file_text.svg");
+                        tooltip: "Documentos (PDF e Imágenes)";
+                        accent-color: #a78bfa;
+                        active: root.active-tab == 10;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.scale-menu-open = false;
+                            root.active-tab = 10;
+                        }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/camera.svg");
+                        tooltip: "Capturadora HDMI / Cámara";
+                        accent-color: #f97316;
+                        active: root.active-tab == 8;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.scale-menu-open = false;
+                            root.active-tab = 8;
+                        }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                }
+            }
+
+            // Separador visual entre Biblioteca y Diseño
+            Rectangle {
+                width: 1px;
+                height: 22px;
+                y: (parent.height - self.height) / 2;
+                background: Theme.border-subtle;
+            }
+
+            // Isla 2: Estilos y Diseño (menú desplegable unificado) + Tiles (aparte)
+            ToolbarIsland {
+                y: (parent.height - self.height) / 2;
+                HorizontalLayout {
+                    padding: 3px;
+                    spacing: 4px;
+
+                    CircleIslandButton {
+                        icon: @image-url("icons/palette.svg");
+                        tooltip: "Estilos, Shaders, Transiciones y Pads";
+                        accent-color: #a855f7;
+                        active: root.design-menu-open || (root.active-tab == 4 && root.design-subtab != 3) || root.active-tab == 6;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.net-menu-open = false;
+                            root.scale-menu-open = false;
+                            root.design-menu-open = !root.design-menu-open;
+                        }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/columns.svg");
+                        tooltip: "Tiles (Pantalla Dividida)";
+                        accent-color: #3b82f6;
+                        active: root.active-tab == 4 && root.design-subtab == 3;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.active-tab = 4;
+                            root.design-subtab = 3;
+                        }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                }
+            }
+
+            // Separador visual entre Diseño y Red / Sistema
+            Rectangle {
+                width: 1px;
+                height: 22px;
+                y: (parent.height - self.height) / 2;
+                background: Theme.border-subtle;
+            }
+
+            // Isla 3: Redes (menú desplegable unificado), Escanear, Ajustes, Ayuda/Novedades, Debug
+            ToolbarIsland {
+                y: (parent.height - self.height) / 2;
+                HorizontalLayout {
+                    padding: 3px;
+                    spacing: 4px;
+
+                    CircleIslandButton {
+                        icon: @image-url("icons/wifi.svg");
+                        tooltip: "Centro de Redes (LAN, Smart TV, Chat, Celular, Reloj, OSC)";
+                        accent-color: #10b981;
+                        active: root.net-menu-open || root.active-tab == 5;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.scale-menu-open = false;
+                            root.net-menu-open = !root.net-menu-open;
+                        }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/refresh.svg");
+                        tooltip: "Escanear Bibliotecas (Actualización Manual)";
+                        accent-color: #2dd4bf;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.scan-libraries();
+                        }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/settings.svg");
+                        tooltip: "Ajustes y Temas";
+                        accent-color: Theme.accent-strong;
+                        active: root.active-tab == 7;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.active-tab = 7;
+                        }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/help.svg");
+                        tooltip: "Ayuda, Soporte y Comunidad";
+                        accent-color: #60a5fa;
+                        active: root.active-tab == 11;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.active-tab = 11;
+                        }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/terminal.svg");
+                        tooltip: "Consola Debug y Diagnóstico";
+                        accent-color: #f87171;
+                        active: root.active-tab == 12;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.active-tab = 12;
+                        }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                    CircleIslandButton {
+                        icon: @image-url("icons/coffee.svg");
+                        tooltip: "Donar en Ko-fi (ko-fi.com/vixcho)";
+                        accent-color: #ff5e5b;
+                        clicked => {
+                            root.library-menu-open = false;
+                            root.design-menu-open = false;
+                            root.net-menu-open = false;
+                            root.open-kofi-donations();
+                        }
+                        hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                    }
+                }
+            }
+        }
+
+        // Fixed-flex spacer holding the hover label — NEVER changes layout geometry
+        Rectangle {
+            horizontal-stretch: 1;
+            min-width: 0px;
+            clip: true;
+
+            if root.hover-tip != "" : Text {
+                width: 100%;
+                height: 100%;
+                text: root.hover-tip;
+                color: Theme.text-secondary;
+                font-size: 11.5px;
+                font-weight: 600;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+
+        // ── Isla 4 (Derecha): Matriz Multi-Pantalla, Escalado/FSR, Freeze, Público, Stage, Borrar Todo ──
+        ToolbarIsland {
+            horizontal-stretch: 0;
+            y: (parent.height - self.height) / 2;
+            HorizontalLayout {
+                padding: 3px;
+                spacing: 4px;
+
+                CircleIslandButton {
+                    icon: @image-url("icons/layers.svg");
+                    tooltip: "Matriz Multi-Pantalla y Salas (Público, LAN, Stage, Salas)";
+                    accent-color: #38bdf8;
+                    active: root.active-tab == 14;
+                    clicked => { root.library-menu-open = false; root.active-tab = 14; }
+                    hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                }
+                CircleIslandButton {
+                    icon: @image-url("icons/maximize.svg");
+                    tooltip: root.bg-scale-mode == 1 ? "Escalado: Estirar (FSR)"
+                           : root.bg-scale-mode == 2 ? "Escalado: Original (FSR)"
+                           : "Escalado: Recortar / Llenar (FSR)";
+                    accent-color: #c084fc;
+                    active: root.scale-menu-open || root.bg-scale-mode != 0;
+                    clicked => { root.scale-menu-open = !root.scale-menu-open; }
+                    hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                }
+                CircleIslandButton {
+                    icon: @image-url("icons/snowflake.svg");
+                    tooltip: root.audience-frozen ? "CONGELADO (Clic para descongelar salida)" : "Congelar Ventana Secundaria (Freeze)";
+                    accent-color: #38bdf8;
+                    active: root.audience-frozen;
+                    clicked => { root.toggle-freeze(); }
+                    hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                }
+                CircleIslandButton {
+                    icon: @image-url("icons/tv.svg");
+                    tooltip: root.audience-live ? "Público EN VIVO" : "Activar Salida Público";
+                    accent-color: Theme.live-green;
+                    active: root.audience-live;
+                    clicked => { root.toggle-audience(); }
+                    hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                }
+                CircleIslandButton {
+                    icon: @image-url("icons/monitor.svg");
+                    tooltip: root.stage-live ? "Stage Display ON" : "Activar Stage Display";
+                    accent-color: Theme.stage-amber;
+                    active: root.stage-live;
+                    clicked => { root.toggle-stage(); }
+                    hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                }
+                CircleIslandButton {
+                    icon: @image-url("icons/trash.svg");
+                    tooltip: "Borrar Todo";
+                    accent-color: Theme.danger;
+                    clicked => { root.clear-all(); }
+                    hovered-changed(h, t) => { if (h) { root.hover-tip = t; } else if (root.hover-tip == t) { root.hover-tip = ""; } }
+                }
+            }
+        }
+    }
+}

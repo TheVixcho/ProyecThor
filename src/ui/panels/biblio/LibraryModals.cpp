@@ -4,7 +4,6 @@
 #include "LibraryHelpers.h"
 #include "LibrarySongs.h"
 #include "ui/framework/DesignSystem.h"
-#include "ui/framework/UIStrings.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -21,7 +20,6 @@ static constexpr int kCat_Videos = 1;
 static constexpr int kCat_Bibles = 3;
 
 namespace DS = ProyecThor::UI::DS;
-using ProyecThor::UI::Loc;
 
 namespace ProyecThor::Library {
 
@@ -48,18 +46,18 @@ void RenderRenameModal(LibraryContext& ctx)
                                ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextPrimary));
-        ImGui::TextUnformatted(ctx.renameIsURL ? Loc("Editar URL", "Edit URL", "Editar URL") : Loc("Renombrar archivo", "Rename file", "Renomear arquivo"));
+        ImGui::TextUnformatted(ctx.renameIsURL ? "Editar URL" : "Renombrar archivo");
         ImGui::PopStyleColor();
 
         AccentSep(ImGui::ColorConvertU32ToFloat4(DS::AccentColorDim));
         ImGui::Spacing();
 
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
-        ImGui::Text("%s: %s", Loc("Original", "Original", "Original"), ctx.renameOldName.c_str());
+        ImGui::Text("Original: %s", ctx.renameOldName.c_str());
         ImGui::PopStyleColor();
         ImGui::Spacing();
 
-        ImGui::TextUnformatted(Loc("Nuevo nombre:", "New name:", "Novo nome:"));
+        ImGui::TextUnformatted("Nuevo nombre:");
         ImGui::SetNextItemWidth(-1.f);
         if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
 
@@ -94,11 +92,11 @@ void RenderRenameModal(LibraryContext& ctx)
             const float bw2   = std::floor((avail - sp) * 0.5f);
 
             bool doRename = pressEnter ||
-                PillButton(Loc("Aceptar", "Accept", "Aceitar"),  { bw2, 36.f },
+                PillButton("Aceptar",  { bw2, 36.f },
                            k_BtnGreen,   k_BtnGreenH,   k_BtnGreenA,   k_BtnGreenT);
             ImGui::SameLine();
             bool doCancel =
-                PillButton(Loc("Cancelar", "Cancel", "Cancelar"), { bw2, 36.f },
+                PillButton("Cancelar", { bw2, 36.f },
                            k_BtnNeutral, k_BtnNeutralH, k_BtnNeutralA, k_BtnNeutralT) ||
                 ImGui::IsKeyPressed(ImGuiKey_Escape);
 
@@ -128,7 +126,7 @@ void RenderRenameModal(LibraryContext& ctx)
                         std::string folder;
                         switch (ctx.currentCategoryInt) {
                             case kCat_Songs:     folder = base + "/songs/";     break;
-                            case kCat_Videos:    folder = base + "/videos/";    break;
+                            case kCat_Videos:    folder = GetVideoLibraryPath() + "/"; break;
                             case 2:              folder = base + "/images/";    break;
                             case kCat_Bibles:    folder = base + "/bibles/";    break;
                             case 4:              folder = base + "/documents/"; break;
@@ -194,12 +192,16 @@ void RenderDefaultStyleCombo(LibraryContext& ctx, float trailingReserve)
     std::vector<std::string> names =
         Core::PresentationCore::Get().GetSavedStyleNames();
 
+    const float totalRowW = ImGui::GetContentRegionAvail().x;
+    if (totalRowW >= 230.0f)
+        ImGui::AlignTextToFramePadding();
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
-    ImGui::TextUnformatted(Loc("Estilo por defecto:", "Default style:", "Estilo padrão:"));
+    ImGui::TextUnformatted("Estilo por defecto:");
     ImGui::PopStyleColor();
-    ImGui::SameLine(0.f, 8.f);
+    if (totalRowW >= 230.0f)
+        ImGui::SameLine(0.f, 8.f);
 
-    const char* preview = current.empty() ? Loc("(ninguno)", "(none)", "(nenhum)") : current.c_str();
+    const char* preview = current.empty() ? "(ninguno)" : current.c_str();
 
     ImGui::PushStyleColor(ImGuiCol_FrameBg,        ImGui::ColorConvertU32ToFloat4(DS::BtnDefaultFill));
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImGui::ColorConvertU32ToFloat4(DS::BtnHoverFill));
@@ -216,7 +218,7 @@ void RenderDefaultStyleCombo(LibraryContext& ctx, float trailingReserve)
         ImGui::PushStyleColor(ImGuiCol_Text,
             noneSelected ? ImGui::ColorConvertU32ToFloat4(DS::AccentLight)
                          : ImGui::ColorConvertU32ToFloat4(DS::TextSecondary));
-        if (ImGui::Selectable(Loc("(ninguno)", "(none)", "(nenhum)"), noneSelected))
+        if (ImGui::Selectable("(ninguno)", noneSelected))
             Core::PresentationCore::Get().SetCategoryDefaultStyle(itemType, "");
         ImGui::PopStyleColor();
 
@@ -224,7 +226,7 @@ void RenderDefaultStyleCombo(LibraryContext& ctx, float trailingReserve)
 
         if (names.empty()) {
             ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(DS::TextHint));
-            ImGui::TextUnformatted(Loc("  Sin estilos guardados", "  No saved styles", "  Sem estilos salvos"));
+            ImGui::TextUnformatted("  Sin estilos guardados");
             ImGui::PopStyleColor();
         }
 

@@ -1,7 +1,7 @@
 # Third-Party Licenses and Attributions
 
-ProyecThor is open-source software licensed under the **MIT License**.
-This document provides attribution and licensing information for third-party libraries, SDKs, fonts, and assets incorporated into or distributed with ProyecThor.
+ProyecThor is proprietary closed-source software (All rights reserved).
+This document provides attribution and compliance information for third-party libraries, SDKs, fonts, and assets incorporated into or distributed with ProyecThor.
 
 ---
 

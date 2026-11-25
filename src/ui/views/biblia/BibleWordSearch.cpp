@@ -122,6 +122,12 @@ bool BibleWordSearch::Render(const BibleData& bible, ImVec2 anchorPos, ImVec2 an
 {
     if (!m_Open) return false;
 
+    ImGui::SetNextFrameWantCaptureKeyboard(true);
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+        m_Open = false;
+        return false;
+    }
+
     ImVec2 winPos = ImVec2(anchorPos.x, anchorPos.y + anchorSize.y + 4.0f);
 
     ImGui::SetNextWindowPos(winPos, ImGuiCond_Always);

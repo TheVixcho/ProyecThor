@@ -1,6 +1,6 @@
 #pragma once
 #include <GL/glew.h>
-#include "media/player/VLCBasePlayer.h"
+#include "media/player/MPVBasePlayer.h"
 #include "graphics/shaders/PostProcessorFSR.h"
 #include "graphics/shaders/PostProcessorNIS.h"
 #include "graphics/shaders/BackgroundFillBlur.h"
@@ -17,8 +17,8 @@ namespace ProyecThor::Core {
 
     class BackgroundLayer {
     private:
-        VLCBasePlayer m_PlayerA;
-        VLCBasePlayer m_PlayerB;
+        MPVBasePlayer m_PlayerA;
+        MPVBasePlayer m_PlayerB;
         bool          m_ActiveIsA = true;
 
         bool   m_SwapPending      = false;
@@ -48,7 +48,7 @@ namespace ProyecThor::Core {
         // margen tambien se usa antes de PAUSAR el prefetch (ver Update()),
         // asi que cuando llega a esta parte el standby ya viene de un
         // frame confirmado estable, no solo del primero que aparecio.
-        static constexpr double kSwapSettleSeconds = 0.3;
+        static constexpr double kSwapSettleSeconds = 0.08;
 
         // Duracion del crossfade real (ya no es fija): configurable desde
         // Diseño > Transiciones cuando un preset tiene "Afecta a Fondos"
@@ -93,13 +93,13 @@ namespace ProyecThor::Core {
         // terminara, quedaba pisado por el valor viejo (bug real: video
         // quedaba mudo pese a haberse desmuteado).
         std::atomic<int>  m_TargetVolume{100};
-        std::atomic<bool> m_TargetMuted{true};
+        std::atomic<bool> m_TargetMuted{false};
 
         // ── Ecualizador en vivo (ver SetLiveEqualizer*) ──────────────────
         bool  m_TargetEqEnabled = false;
         float m_TargetEqPreamp  = 0.0f;
-        float m_TargetEqBands[VLCBasePlayer::kEqualizerBands] = { 0.0f };
-        void  ReapplyLiveEqualizer(VLCBasePlayer& target);
+        float m_TargetEqBands[MPVBasePlayer::kEqualizerBands] = { 0.0f };
+        void  ReapplyLiveEqualizer(MPVBasePlayer& target);
         float m_TransitionProgress = 1.0f;
 
         // Gate real de audio al publico. Solo cuando esta en true el
@@ -124,11 +124,7 @@ namespace ProyecThor::Core {
         // un swap: el audio siempre sale por este dispositivo.
         std::string m_AudioDeviceId;
 
-#ifdef _WIN32
-    bool m_FlipVideoY = false;
-#else
-    bool m_FlipVideoY = true;  // default: VAAPI en Linux suele invertir
-#endif
+        bool m_FlipVideoY = false;
         bool  m_IsVideo = false;
         float m_BgColor[3] = { 0.0f, 0.0f, 0.0f };
 
@@ -199,18 +195,19 @@ namespace ProyecThor::Core {
         // m_RetiringNative/kNativeRetireSeconds en Update()), nunca
         // reutilizado ni vuelto a reproducir.
         struct NativePlayback {
-            VLCBasePlayer           player;
+            MPVBasePlayer           player;
             NativeVideoOutputWindow window;
             double                  retiredAt = 0.0; // 0 = todavia activo, no retirado
 
             explicit NativePlayback(bool forceSilentAudio)
-                : player(2, false, forceSilentAudio, /*nativeWindowOutput=*/true) {}
+                : player(2, /*useHardwareDecode=*/true, forceSilentAudio, /*nativeWindowOutput=*/true) {}
         };
 
         bool m_UseNativeEngine = false;
         bool m_ActiveIsNative  = false;
         int  m_LastKnownMonitorIndex = -1;
         bool m_ForceSilentAudio = false; // recordado para poder crear NativePlayback mas adelante
+        bool m_VLCNativeForFondos = false;
 
         // El par en uso ahora mismo (nullptr si nunca se cargo nada por
         // este motor todavia). Los que ya se retiraron (ver arriba) viven
@@ -223,8 +220,17 @@ namespace ProyecThor::Core {
         int         m_StaticImageH     = 0;
         bool        m_IsStaticImage    = false;
         std::string m_StaticImagePath;
+        std::string m_CurrentVideoPath;
         bool LoadStaticImage(const std::string& path);
         void ClearStaticImage();
+
+        // Póster instantáneo para arranque en frío del primer fondo de video
+        // (muestra al instante la miniatura precargada mientras libVLC abre el primer fotograma real)
+        GLuint m_PosterTex = 0;
+        int    m_PosterW   = 0;
+        int    m_PosterH   = 0;
+        bool LoadPosterForVideo(const std::string& path);
+        void ClearPoster();
 
         static constexpr double kNativeRetireSeconds = 2.0;
 
@@ -285,13 +291,13 @@ namespace ProyecThor::Core {
         // cambiar cualquiera de esos dos). No-op si m_ActiveNative es null.
         void SyncNativeWindowVisibility();
 
-        VLCBasePlayer& Active();
-        VLCBasePlayer& Standby();
+        MPVBasePlayer& Active();
+        MPVBasePlayer& Standby();
         void PerformSwap();
 
     public:
         // forceSilentAudio=true construye ambos players internos como
-        // permanentemente mudos (ver VLCBasePlayer::m_ForceSilent). Se usa
+        // permanentemente mudos (ver MPVBasePlayer::m_ForceSilent). Se usa
         // para la instancia de preview de biblioteca, que por requisito
         // de producto NUNCA debe emitir audio, sin importar que boton la
         // toque.
@@ -303,6 +309,7 @@ namespace ProyecThor::Core {
 
         void Update();
         void Render(int outputW, int outputH);
+        void WarmupGraphics(int outputW = 1920, int outputH = 1080);
 
         // Dibuja una imagen (el logo de pantalla de carga, ver
         // PresentationCore::ShouldShowLoadingScreen) letterboxeada dentro
@@ -355,12 +362,14 @@ namespace ProyecThor::Core {
         // reproduciendose no tiene efecto instantaneo (asi lo documenta
         // libVLC) — recien se aplica en el proximo SetVideo()/
         // CommitPrefetch() real.
-#ifdef _WIN32
         void SetUseNativeEngine(bool useNative) { m_UseNativeEngine = useNative; }
-#else
-        void SetUseNativeEngine(bool /*useNative*/) { m_UseNativeEngine = false; }
-#endif
         bool GetUseNativeEngine() const { return m_UseNativeEngine; }
+        void SetVLCNativeForFondos(bool enable) { m_VLCNativeForFondos = enable; }
+        bool GetVLCNativeForFondos() const { return m_VLCNativeForFondos; }
+        void ReloadPlayers();
+        bool IsStaticImage() const { return m_IsStaticImage; }
+        void PurgeIdleResources();
+        bool IsActiveNative() const { return m_ActiveIsNative && m_IsLiveToPublic && !m_NativeRevealPending; }
         void* GetProcessedTexture(int targetW, int targetH);
         void* GetTextureID();
 
@@ -379,7 +388,7 @@ namespace ProyecThor::Core {
         // Este es el punto que usan la cola del Monitor y los controles de
         // transporte para llegar al reproductor correcto sin importar el
         // motor.
-        VLCBasePlayer* GetPlayer();
+        MPVBasePlayer* GetPlayer();
         void SeekSync(float pos);
         void GetActiveVideoSize(int& width, int& height);
 
@@ -428,7 +437,7 @@ namespace ProyecThor::Core {
         void SetLiveMute(bool mute);
 
         // Ecualizador de 10 bandas sobre el audio en vivo (ver
-        // VLCBasePlayer::SetEqualizer*). Mismo criterio que SetLiveVolume/
+        // MPVBasePlayer::SetEqualizer*). Mismo criterio que SetLiveVolume/
         // SetLiveMute: se guarda como "target" y se reaplica en cada swap
         // del doble buffer para sobrevivir al crossfade.
         void SetLiveEqualizerEnabled(bool enabled);
@@ -439,7 +448,7 @@ namespace ProyecThor::Core {
         // Enumera los dispositivos de audio disponibles en el sistema
         // (altavoces, HDMI, interfaces USB, etc.) para mostrarlos en un
         // combo/selector de UI.
-        std::vector<VLCBasePlayer::AudioDevice> GetAvailableAudioDevices();
+        std::vector<MPVBasePlayer::AudioDevice> GetAvailableAudioDevices();
 
         // Selecciona el dispositivo por el que debe salir el audio del
         // fondo. deviceId vacio o "default" usa el dispositivo
@@ -451,9 +460,6 @@ namespace ProyecThor::Core {
 
         void BlockPath(const std::string& path);
         void UnblockPath();
-
-        void SetDeinterlace(const std::string& mode);
-        std::string GetDeinterlace() const;
     };
 
 } // namespace ProyecThor::Core

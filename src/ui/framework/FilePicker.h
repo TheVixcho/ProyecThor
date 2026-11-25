@@ -1,43 +1,52 @@
 #pragma once
 #include <string>
+#include <vector>
 
 namespace ProyecThor::UI {
 
-// Selector nativo de archivo (imagen o video): IFileOpenDialog en Windows,
-// zenity/kdialog en Linux (fallback en cadena, igual que Audio.cpp y
-// LayersBgTab.cpp). Devuelve "" si el usuario cancela o no hay ninguna
-// herramienta disponible.
-std::string PickImageOrVideoFile();
+// Elemento de filtro para selectores de archivos
+struct FileFilterItem {
+    std::string name;                   // Nombre visible, ej. "Videos" o "Imágenes"
+    std::vector<std::string> patterns;  // Patrones glob, ej. {"*.mp4", "*.mkv"} o {"*.jpg", "*.png"}
+};
 
-// Mismo patron, pero solo imagenes (jpg/jpeg/png) — usado para el Logo de
-// pantalla de carga (Ajustes > Proyeccion), donde un video no tendria
-// sentido.
-std::string PickImageFile();
-std::string PickHtmlFile();
+// -----------------------------------------------------------------------------
+// Selectores Genéricos Nativos / Portal XDG Desktop (Flatpak & Linux / Windows)
+// -----------------------------------------------------------------------------
 
-// Elegir una CARPETA (no un archivo) -- usado para fijar una carpeta de
-// salida fija en el conversor de Render (ver LibraryPanel::
-// RenderConverterSection). IFileOpenDialog + FOS_PICKFOLDERS en Windows,
-// zenity --file-selection --directory / kdialog --getexistingdirectory en
-// Linux -- funcionan igual bajo X11 o Wayland, son apps GTK/Qt propias que
-// no dependen del compositor. Devuelve "" si el usuario cancela.
+// Abre un selector para UN archivo existente.
+// En Linux: usa el Portal XDG FileChooser (máxima compatibilidad con sandbox Flatpak/Flathub),
+// con fallback a zenity/kdialog si el portal no está disponible.
+// En Windows: usa IFileOpenDialog.
+std::string PickFile(const std::string& title,
+                     const std::vector<FileFilterItem>& filters);
+
+// Abre un selector para MÚLTIPLES archivos existentes.
+std::vector<std::string> PickMultipleFiles(const std::string& title,
+                                           const std::vector<FileFilterItem>& filters);
+
+// Selector de guardado ("Guardar archivo como")
+std::string PickSaveFile(const std::string& title,
+                         const std::string& defaultPath,
+                         const std::vector<FileFilterItem>& filters);
+
+// Selector de carpetas (directorio)
 std::string PickFolder(const std::string& title = "Elegir carpeta");
 
-// Elegir DONDE GUARDAR un archivo nuevo (a diferencia de los Pick* de
-// arriba, que abren uno YA existente) -- usado por "Guardar como" del
-// conversor de Render. IFileSaveDialog en Windows, zenity --file-selection
-// --save / kdialog --getsavefilename en Linux (Wayland incluido, mismo
-// motivo que PickFolder). `defaultPath` sugiere carpeta+nombre inicial
-// (con extensión). Devuelve "" si cancela.
-std::string PickSaveVideoPath(const std::string& defaultPath);
+// -----------------------------------------------------------------------------
+// Funciones de conveniencia (mantienen 100% retrocompatibilidad con la app)
+// -----------------------------------------------------------------------------
+std::string PickImageOrVideoFile();
+std::string PickImageFile();
+std::string PickHtmlFile();
+std::string PickAudioFile();
+std::string PickFontFile();
+std::string PickSvgFile();
 
-// Mismo patron que PickSaveVideoPath pero filtrado a texto plano (.txt) --
-// usado por "Descargar subtitulos" del Hub (ver SubtitleImporter.h),
-// donde el resultado es un .txt suelto y no una cancion de Biblioteca.
+std::string PickSaveVideoPath(const std::string& defaultPath);
 std::string PickSaveTextPath(const std::string& defaultPath);
 
-// Extension-sniffing simple para decidir si un path va por el pipeline de
-// video o de imagen (mismo criterio que BackgroundLayer).
+// Extension-sniffing simple para decidir si un path va por el pipeline de video o imagen
 bool LooksLikeVideoPath(const std::string& path);
 
 } // namespace ProyecThor::UI

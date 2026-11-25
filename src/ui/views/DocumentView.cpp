@@ -157,7 +157,9 @@ namespace ProyecThor::UI {
         ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.8f, 0.3f, 1.0f));
         if (ImGui::Button(str.docProject, ImVec2(-1, 40))) {
-            Core::PresentationCore::Get().SetBackgroundMedia(pages[m_CurrentPage], false);
+            auto& core = Core::PresentationCore::Get();
+            core.SetProjecting(true);
+            core.SetBackgroundMedia(pages[m_CurrentPage], false);
         }
         ImGui::PopStyleColor(2);
 

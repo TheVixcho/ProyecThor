@@ -1,4 +1,5 @@
 #include "ImageView.h"
+#include "core/ThumbnailWorker.h"
 #include <imgui.h>
 #include "stb_image.h"
 #include <iostream>
@@ -228,9 +229,13 @@ void ImageView::Clear() {
 
 bool ImageView::LoadImageFromFile(const std::string& path) {
     Clear();
-    int channels = 0;
-    unsigned char* data = stbi_load(path.c_str(), &m_Width, &m_Height, &channels, 4);
-    if (!data) return false;
+    std::vector<uint8_t> pixels;
+    unsigned uw = 0, uh = 0;
+    if (!Core::ThumbnailWorker::LoadThumbnailPixelsFromDisk(path, pixels, uw, uh, 0, 0) || pixels.empty()) {
+        return false;
+    }
+    m_Width  = static_cast<int>(uw);
+    m_Height = static_cast<int>(uh);
 
     glGenTextures(1, &m_TextureID);
     glBindTexture(GL_TEXTURE_2D, m_TextureID);
@@ -239,8 +244,7 @@ bool ImageView::LoadImageFromFile(const std::string& path) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                 m_Width, m_Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-    stbi_image_free(data);
+                 m_Width, m_Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
 
     return true;
 }
