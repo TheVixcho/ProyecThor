@@ -1,6 +1,7 @@
 #include "SlintMobileServer.h"
 
 #include "qrcodegen.hpp"
+#include "stb_image_write.h"
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 
@@ -8,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <vector>
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -47,6 +49,41 @@ slint::Image GenerateQrImage(const std::string& text, int scale, int border) {
         }
     }
     return slint::Image(buf);
+}
+
+bool SaveQrPng(const std::string& text, const std::string& outPath, int scale, int border) {
+    using qrcodegen::QrCode;
+    if (text.empty()) return false;
+
+    try {
+        QrCode qr   = QrCode::encodeText(text.c_str(), QrCode::Ecc::MEDIUM);
+        int    size = qr.getSize();
+        int    dim  = (size + border * 2) * scale;
+
+        std::vector<unsigned char> img(static_cast<size_t>(dim) * dim * 3, 255);
+        for (int y = 0; y < size; ++y) {
+            for (int x = 0; x < size; ++x) {
+                if (!qr.getModule(x, y)) continue;
+                int px0 = (x + border) * scale;
+                int py0 = (y + border) * scale;
+                for (int dy = 0; dy < scale; ++dy) {
+                    for (int dx = 0; dx < scale; ++dx) {
+                        size_t idx = (static_cast<size_t>(py0 + dy) * dim + (px0 + dx)) * 3;
+                        img[idx + 0] = 14;
+                        img[idx + 1] = 14;
+                        img[idx + 2] = 14;
+                    }
+                }
+            }
+        }
+
+        fs::path p(outPath);
+        std::error_code ec;
+        fs::create_directories(p.parent_path(), ec);
+        return stbi_write_png(outPath.c_str(), dim, dim, 3, img.data(), dim * 3) != 0;
+    } catch (...) {
+        return false;
+    }
 }
 
 std::string DetectLanIPv4() {

@@ -606,6 +606,14 @@ export component MainWindow inherits Window {
     in property <string> doc-status: "Coloca archivos .pdf o imágenes en assets/documents o pulsa Importar.";
     in-out property <int> active-doc-page-idx: -1;
 
+    // QR desde texto (enlace o cualquier texto) — modal dentro de Documentos.
+    in-out property <bool>   qr-modal-open: false;
+    in-out property <string> qr-text-input: "";
+    in-out property <string> qr-name-input: "";
+    in property <image>      qr-preview-image;
+    in property <bool>       has-qr-preview: false;
+    in property <string>     qr-status: "";
+
     // Tab 11: Ayuda y Novedades (Changelog)
     in-out property <int> help-subtab: 0; // 0=Guía y Atajos, 1=Novedades / Changelog
     in-out property <bool> tutorial-modal-open: true;
@@ -658,6 +666,13 @@ export component MainWindow inherits Window {
     in-out property <bool> smooth-motion-60: false; // Interpolación 24/30 -> 60 FPS
     in-out property <bool> performance-mode: false;
     in-out property <bool> fullscreen-output: true;
+
+    // Selector de pantalla física para la ventana de proyección (Público).
+    // monitor-names: etiquetas listas para mostrar ("Pantalla 1 — 1920×1080", …).
+    // projection-monitor-idx: índice elegido; por defecto el backend prioriza
+    // la pantalla secundaria para que la ventana no se abra en la equivocada.
+    in property <[string]> monitor-names: [];
+    in-out property <int> projection-monitor-idx: 0;
     in-out property <bool> enable-glass-translucency: true;
     in-out property <bool> enable-glass-sheen: true;
     in-out property <bool> enable-ambient-bg: true;
@@ -764,6 +779,9 @@ export component MainWindow inherits Window {
     callback doc-prev-page();
     callback doc-next-page();
     callback import-document-clicked();
+    // QR desde texto: previsualizar (actualiza qr-preview-image) y guardar en Documentos.
+    callback qr-text-changed(string);
+    callback qr-save-clicked(string, string);
 
     // Debug (Tab 12) & Firewall
     callback debug-clear-log();
@@ -877,6 +895,8 @@ export component MainWindow inherits Window {
     callback purge-ram-cache();
     callback performance-mode-changed(bool);
     callback fullscreen-changed(bool);
+    // El usuario eligió en qué pantalla física abrir la proyección.
+    callback projection-monitor-changed(int);
     callback visual-effects-changed();
     callback check-github-updates();
     callback open-kofi-donations();
@@ -2482,9 +2502,12 @@ export component MainWindow inherits Window {
                                             Text { text: "Color Fondo:"; color: Theme.text-secondary; font-size: 11px; vertical-alignment: center; width: 76px; }
                                             Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #09090b; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-bg-color(9, 9, 11); } } }
                                             Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #0c4a6e; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-bg-color(12, 74, 110); } } }
+                                            Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #1d4ed8; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-bg-color(29, 78, 216); } } }
                                             Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #7f1d1d; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-bg-color(127, 29, 29); } } }
                                             Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #064e3b; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-bg-color(6, 78, 59); } } }
                                             Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #4c1d95; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-bg-color(76, 29, 149); } } }
+                                            Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #831843; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-bg-color(131, 24, 67); } } }
+                                            Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #78350f; border-width: 1px; border-color: #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-bg-color(120, 53, 15); } } }
                                             Rectangle { width: 22px; height: 22px; border-radius: 5px; background: #ffffff; border-width: 1px; border-color: #ffffff66; TouchArea { mouse-cursor: pointer; clicked => { root.ov-editor-select-bg-color(255, 255, 255); } } }
                                             Text { text: "Opacidad: " + Math.round(root.ov-ed-bg-opacity * 100) + "%"; color: Theme.text-secondary; font-size: 10.5px; vertical-alignment: center; }
                                             Slider { horizontal-stretch: 1; minimum: 0.0; maximum: 1.0; value <=> root.ov-ed-bg-opacity; changed => { root.ov-editor-props-changed(); } }
@@ -2504,6 +2527,15 @@ export component MainWindow inherits Window {
                                                 Text { text: "Bordes: " + Math.round(root.ov-ed-radius) + "px"; color: Theme.text-secondary; font-size: 11px; vertical-alignment: center; width: 78px; }
                                                 Slider { horizontal-stretch: 1; minimum: 0.0; maximum: 48.0; value <=> root.ov-ed-radius; changed => { root.ov-editor-props-changed(); } }
                                             }
+                                        }
+
+                                        // Formas rápidas — presets de esquina que dan forma a la caja de 1 clic.
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            Text { text: "Forma:"; color: Theme.text-secondary; font-size: 11px; vertical-alignment: center; width: 76px; }
+                                            GlassButton { label: "Rectángulo"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-radius <= 2.0; clicked => { root.ov-ed-radius = 0.0; root.ov-editor-props-changed(); } }
+                                            GlassButton { label: "Redondeado"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-radius > 2.0 && root.ov-ed-radius < 40.0; clicked => { root.ov-ed-radius = 16.0; root.ov-editor-props-changed(); } }
+                                            GlassButton { label: "Pastilla"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-radius >= 40.0; clicked => { root.ov-ed-radius = 48.0; root.ov-editor-props-changed(); } }
                                         }
 
                                         HorizontalLayout {
@@ -3826,10 +3858,29 @@ export component MainWindow inherits Window {
                                                 HorizontalLayout {
                                                     spacing: 6px;
                                                     Rectangle { width: 28px; height: 28px; border-radius: 6px; background: root.text-color; border-width: 1px; border-color: Theme.border-medium; }
-                                                    GlassButton { label: "Blanco";   compact: true; horizontal-stretch: 1; clicked => { root.text-color-selected(0); } }
-                                                    GlassButton { label: "Crema";    compact: true; horizontal-stretch: 1; clicked => { root.text-color-selected(1); } }
-                                                    GlassButton { label: "Dorado";   compact: true; horizontal-stretch: 1; clicked => { root.text-color-selected(3); } }
-                                                    GlassButton { label: "Amarillo"; compact: true; horizontal-stretch: 1; clicked => { root.text-color-selected(4); } }
+                                                    Text { text: "Paleta rápida"; color: Theme.text-muted; font-size: 11px; vertical-alignment: center; horizontal-stretch: 1; }
+                                                }
+                                                // Paleta Canva — swatches de 1 clic. Fila 1
+                                                HorizontalLayout {
+                                                    spacing: 5px;
+                                                    Rectangle { width: 24px; height: 24px; border-radius: 5px; background: #ffffff; border-width: root.text-color-idx == 0 ? 2px : 1px; border-color: root.text-color-idx == 0 ? Theme.accent-strong : #ffffff66; TouchArea { mouse-cursor: pointer; clicked => { root.text-color-selected(0); } } }
+                                                    Rectangle { width: 24px; height: 24px; border-radius: 5px; background: #fef3c7; border-width: root.text-color-idx == 1 ? 2px : 1px; border-color: root.text-color-idx == 1 ? Theme.accent-strong : #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.text-color-selected(1); } } }
+                                                    Rectangle { width: 24px; height: 24px; border-radius: 5px; background: #d4d4d8; border-width: root.text-color-idx == 2 ? 2px : 1px; border-color: root.text-color-idx == 2 ? Theme.accent-strong : #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.text-color-selected(2); } } }
+                                                    Rectangle { width: 24px; height: 24px; border-radius: 5px; background: #f5c451; border-width: root.text-color-idx == 3 ? 2px : 1px; border-color: root.text-color-idx == 3 ? Theme.accent-strong : #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.text-color-selected(3); } } }
+                                                    Rectangle { width: 24px; height: 24px; border-radius: 5px; background: #facc15; border-width: root.text-color-idx == 4 ? 2px : 1px; border-color: root.text-color-idx == 4 ? Theme.accent-strong : #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.text-color-selected(4); } } }
+                                                    Rectangle { width: 24px; height: 24px; border-radius: 5px; background: #38bdf8; border-width: root.text-color-idx == 5 ? 2px : 1px; border-color: root.text-color-idx == 5 ? Theme.accent-strong : #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.text-color-selected(5); } } }
+                                                    Rectangle { width: 24px; height: 24px; border-radius: 5px; background: #3b82f6; border-width: root.text-color-idx == 6 ? 2px : 1px; border-color: root.text-color-idx == 6 ? Theme.accent-strong : #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.text-color-selected(6); } } }
+                                                }
+                                                // Paleta Canva — Fila 2
+                                                HorizontalLayout {
+                                                    spacing: 5px;
+                                                    Rectangle { width: 24px; height: 24px; border-radius: 5px; background: #4ade80; border-width: root.text-color-idx == 7 ? 2px : 1px; border-color: root.text-color-idx == 7 ? Theme.accent-strong : #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.text-color-selected(7); } } }
+                                                    Rectangle { width: 24px; height: 24px; border-radius: 5px; background: #f87171; border-width: root.text-color-idx == 8 ? 2px : 1px; border-color: root.text-color-idx == 8 ? Theme.accent-strong : #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.text-color-selected(8); } } }
+                                                    Rectangle { width: 24px; height: 24px; border-radius: 5px; background: #ec4899; border-width: root.text-color-idx == 9 ? 2px : 1px; border-color: root.text-color-idx == 9 ? Theme.accent-strong : #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.text-color-selected(9); } } }
+                                                    Rectangle { width: 24px; height: 24px; border-radius: 5px; background: #c084fc; border-width: root.text-color-idx == 10 ? 2px : 1px; border-color: root.text-color-idx == 10 ? Theme.accent-strong : #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.text-color-selected(10); } } }
+                                                    Rectangle { width: 24px; height: 24px; border-radius: 5px; background: #fb923c; border-width: root.text-color-idx == 11 ? 2px : 1px; border-color: root.text-color-idx == 11 ? Theme.accent-strong : #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.text-color-selected(11); } } }
+                                                    Rectangle { width: 24px; height: 24px; border-radius: 5px; background: #2dd4bf; border-width: root.text-color-idx == 12 ? 2px : 1px; border-color: root.text-color-idx == 12 ? Theme.accent-strong : #ffffff44; TouchArea { mouse-cursor: pointer; clicked => { root.text-color-selected(12); } } }
+                                                    Rectangle { width: 24px; height: 24px; border-radius: 5px; background: #09090b; border-width: root.text-color-idx == 13 ? 2px : 1px; border-color: root.text-color-idx == 13 ? Theme.accent-strong : #ffffff66; TouchArea { mouse-cursor: pointer; clicked => { root.text-color-selected(13); } } }
                                                 }
                                                 HorizontalLayout { alignment: space-between; Text { text: "R"; color: #f87171; font-size: 11px; width: 16px; } Slider { horizontal-stretch: 1; minimum: 0; maximum: 255; value <=> root.text-color-r; changed(v) => { root.text-color-rgb-changed(root.text-color-r, root.text-color-g, root.text-color-b); } } Text { text: Math.round(root.text-color-r); color: Theme.text-muted; font-size: 11px; width: 28px; } }
                                                 HorizontalLayout { alignment: space-between; Text { text: "G"; color: #4ade80; font-size: 11px; width: 16px; } Slider { horizontal-stretch: 1; minimum: 0; maximum: 255; value <=> root.text-color-g; changed(v) => { root.text-color-rgb-changed(root.text-color-r, root.text-color-g, root.text-color-b); } } Text { text: Math.round(root.text-color-g); color: Theme.text-muted; font-size: 11px; width: 28px; } }
@@ -5780,6 +5831,18 @@ export component MainWindow inherits Window {
                                 IconButton { icon: @image-url("icons/prev.svg"); clicked => { root.doc-prev-page(); } }
                                 IconButton { icon: @image-url("icons/next.svg"); clicked => { root.doc-next-page(); } }
                                 GlassButton {
+                                    label: "Texto a QR";
+                                    icon: @image-url("icons/qr.svg");
+                                    has-icon: true;
+                                    compact: true;
+                                    clicked => {
+                                        root.qr-text-input = "";
+                                        root.qr-name-input = "";
+                                        root.qr-text-changed("");
+                                        root.qr-modal-open = true;
+                                    }
+                                }
+                                GlassButton {
                                     label: "Importar PDF";
                                     icon: @image-url("icons/upload.svg");
                                     has-icon: true;
@@ -6324,6 +6387,28 @@ export component MainWindow inherits Window {
 
                                             HorizontalLayout {
                                                 spacing: 6px;
+                                                // Selector de pantalla física — solo en el Público (la ventana
+                                                // real de proyección). Evita que la salida se abra en el monitor
+                                                // equivocado; por defecto prioriza la pantalla secundaria.
+                                                if scr.id == 0 && root.monitor-names.length > 1 : HorizontalLayout {
+                                                    spacing: 4px;
+                                                    Text {
+                                                        text: "Pantalla:";
+                                                        color: Theme.text-muted;
+                                                        font-size: 10.5px;
+                                                        font-weight: 700;
+                                                        vertical-alignment: center;
+                                                    }
+                                                    for mon[midx] in root.monitor-names : GlassButton {
+                                                        label: "Pantalla " + (midx + 1);
+                                                        compact: true;
+                                                        primary: root.projection-monitor-idx == midx;
+                                                        clicked => {
+                                                            root.projection-monitor-idx = midx;
+                                                            root.projection-monitor-changed(midx);
+                                                        }
+                                                    }
+                                                }
                                                 GlassButton {
                                                     label: scr.is-targeted ? "Destino Activo" : "Enviar Solo Aquí";
                                                     compact: true;
@@ -9299,6 +9384,137 @@ export component MainWindow inherits Window {
                             clicked => {
                                 root.item-action-delete(root.item-modal-kind, root.item-modal-path);
                                 root.item-modal-open = false;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  MODAL: TEXTO A CÓDIGO QR (enlace o cualquier texto -> imagen QR)
+    // ═════════════════════════════════════════════════════════════════════════
+    if root.qr-modal-open : Rectangle {
+        x: 0; y: 0; width: 100%; height: 100%;
+        background: #000000b8;
+        z: 115;
+
+        TouchArea {
+            clicked => { root.qr-modal-open = false; }
+        }
+
+        Rectangle {
+            width: min(440px, parent.width - 40px);
+            height: min(600px, parent.height - 40px);
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: Theme.radius-lg;
+            background: Theme.bg-surface-0;
+            border-width: 1.5px;
+            border-color: Theme.accent.transparentize(0.45);
+            drop-shadow-blur: 32px;
+            drop-shadow-color: #000000bb;
+            drop-shadow-offset-y: 8px;
+            clip: true;
+
+            TouchArea {} // absorb inner clicks
+
+            VerticalLayout {
+                padding: 20px;
+                spacing: 12px;
+
+                HorizontalLayout {
+                    alignment: space-between;
+                    spacing: 8px;
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        spacing: 2px;
+                        Text {
+                            text: "Texto a código QR";
+                            color: Theme.text-primary;
+                            font-size: 15px;
+                            font-weight: 800;
+                        }
+                        Text {
+                            text: "Escribe un enlace o cualquier texto.";
+                            color: Theme.text-muted;
+                            font-size: 11.5px;
+                            wrap: word-wrap;
+                        }
+                    }
+                    GlassButton {
+                        label: "✕";
+                        compact: true;
+                        clicked => { root.qr-modal-open = false; }
+                    }
+                }
+
+                Rectangle { height: 1px; background: Theme.border-subtle; }
+
+                Text { text: "Contenido"; color: Theme.text-secondary; font-size: 11.5px; font-weight: 700; }
+                qr-input := TextEdit {
+                    height: 70px;
+                    wrap: word-wrap;
+                    text <=> root.qr-text-input;
+                    edited(txt) => { root.qr-text-changed(txt); }
+                }
+
+                // Previsualización del QR
+                Rectangle {
+                    height: 180px;
+                    border-radius: Theme.radius-md;
+                    background: root.has-qr-preview ? #ffffff : Theme.bg-surface-1;
+                    border-width: 1px;
+                    border-color: Theme.border-subtle;
+                    if root.has-qr-preview : Image {
+                        source: root.qr-preview-image;
+                        image-fit: contain;
+                        width: 160px;
+                        height: 160px;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                    }
+                    if !root.has-qr-preview : Text {
+                        text: "Escribe algo para ver el QR aquí.";
+                        color: Theme.text-muted;
+                        font-size: 12px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        wrap: word-wrap;
+                    }
+                }
+
+                Text { text: "Nombre del archivo"; color: Theme.text-secondary; font-size: 11.5px; font-weight: 700; }
+                LineEdit {
+                    placeholder-text: "qr";
+                    text <=> root.qr-name-input;
+                }
+
+                if root.qr-status != "" : Text {
+                    text: root.qr-status;
+                    color: Theme.text-muted;
+                    font-size: 11px;
+                    wrap: word-wrap;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    GlassButton {
+                        label: "Cerrar";
+                        compact: true;
+                        clicked => { root.qr-modal-open = false; }
+                    }
+                    GlassButton {
+                        label: "Guardar en Documentos";
+                        icon: @image-url("icons/save.svg");
+                        has-icon: true;
+                        compact: true;
+                        primary: true;
+                        clicked => {
+                            if (root.qr-text-input != "") {
+                                root.qr-save-clicked(root.qr-text-input, root.qr-name-input);
                             }
                         }
                     }

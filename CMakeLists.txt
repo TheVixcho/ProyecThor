@@ -274,6 +274,7 @@ if(PROYECTHOR_BUILD_SLINT)
                 src/ui_slint/SlintApp.cpp
                 src/ui_slint/SlintVideoPlayer.cpp
                 src/ui_slint/SlintMobileServer.cpp
+                src/ui_slint/MonitorInfo.cpp
                 src/core/io/BibleXmlIO.cpp
                 src/core/NetworkStreamServer.cpp
                 src/core/FrameEncodeWorker.cpp
@@ -291,6 +292,7 @@ if(PROYECTHOR_BUILD_SLINT)
                 src/ui_slint/SlintApp.cpp
                 src/ui_slint/SlintVideoPlayer.cpp
                 src/ui_slint/SlintMobileServer.cpp
+                src/ui_slint/MonitorInfo.cpp
                 src/core/io/BibleXmlIO.cpp
                 src/core/NetworkStreamServer.cpp
                 src/core/FrameEncodeWorker.cpp

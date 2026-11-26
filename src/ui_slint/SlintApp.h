@@ -10,6 +10,7 @@
 #include "main_window.h"
 #include "SlintVideoPlayer.h"
 #include "SlintMobileServer.h"
+#include "MonitorInfo.h"
 #include "NetworkStreamServer.h"
 #include "FrameEncodeWorker.h"
 #include "SmartTvCaster.h"
@@ -460,6 +461,12 @@ private:
     bool m_ProjectorVisible = false;
     bool m_StageVisible     = false;
     bool m_AudienceFrozen   = false;
+
+    // Monitores físicos detectados y pantalla elegida para la proyección.
+    std::vector<MonitorInfo> m_Monitors;
+    int                      m_ProjectionMonitorIdx = 0;
+    void RefreshMonitorList();
+    void PositionProjectorOnSelectedMonitor();
     int  m_BgScaleMode      = 0;
     int  m_OutputResPreset  = 1; // 0=720p, 1=1080p, 2=16:10, 3=4:3, 4=2160p
     int  m_TargetFps        = 60; // 30, 60, 120

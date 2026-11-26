@@ -13,6 +13,9 @@ namespace ProyecThor::SlintUI {
 // Generates a crisp black-on-white QR code image for any URL or pairing URI.
 slint::Image GenerateQrImage(const std::string& text, int scale = 6, int border = 2);
 
+// Rasterizes a QR of `text` to a square PNG at `outPath`. Returns true on success.
+bool SaveQrPng(const std::string& text, const std::string& outPath, int scale = 12, int border = 4);
+
 // Detects local LAN IPv4 address (e.g. 192.168.x.x).
 std::string DetectLanIPv4();
 

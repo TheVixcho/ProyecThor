@@ -293,9 +293,17 @@ SlintApp::SlintApp()
     });
 
     InitMultiScreens();
+    RefreshMonitorList();
     BindCallbacks();
     ScanSystemFonts();
     LoadPersistedState();
+    // Revalida la pantalla de proyección cargada contra los monitores reales
+    // (si el índice guardado no es válido, vuelve a la secundaria por defecto).
+    if (m_ProjectionMonitorIdx < 0 ||
+        m_ProjectionMonitorIdx >= static_cast<int>(m_Monitors.size())) {
+        m_ProjectionMonitorIdx = DefaultProjectionMonitorIndex(m_Monitors);
+    }
+    m_Main->set_projection_monitor_idx(m_ProjectionMonitorIdx);
     ApplyGpuAndUpscalerConfig();
     UpdatePlayerRenderSize();
     m_Player.SetScaleMode(m_BgScaleMode);
@@ -914,6 +922,59 @@ void SlintApp::BindCallbacks() {
     });
     m_Main->on_import_document_clicked([this]() { ImportFileAsync(false, false, 10); });
 
+    // QR desde texto — previsualización en vivo y guardado como PNG en Documentos.
+    m_Main->on_qr_text_changed([this](slint::SharedString txt) {
+        std::string s(txt);
+        if (s.empty()) {
+            m_Main->set_has_qr_preview(false);
+            m_Main->set_qr_status("");
+            return;
+        }
+        m_Main->set_qr_preview_image(GenerateQrImage(s, 6, 2));
+        m_Main->set_has_qr_preview(true);
+        m_Main->set_qr_status("");
+    });
+    m_Main->on_qr_save_clicked([this](slint::SharedString textS, slint::SharedString nameS) {
+        std::string text(textS);
+        if (text.empty()) return;
+
+        // Nombre de archivo seguro (sin separadores ni caracteres problemáticos).
+        std::string stem(nameS);
+        std::string safe;
+        for (char c : stem) {
+            unsigned char uc = static_cast<unsigned char>(c);
+            if (uc >= 0x80) { safe.push_back(c); continue; }
+            if (std::isalnum(uc) || c == ' ' || c == '-' || c == '_') safe.push_back(c);
+            else safe.push_back('_');
+        }
+        while (!safe.empty() && safe.front() == ' ') safe.erase(safe.begin());
+        while (!safe.empty() && safe.back()  == ' ') safe.pop_back();
+        if (safe.empty()) safe = "qr";
+
+        fs::path dir  = ProyecThor::DocumentsPath();
+        std::error_code ec;
+        fs::create_directories(dir, ec);
+        fs::path out = dir / (safe + ".png");
+        // Evita pisar un archivo existente: añade sufijo incremental.
+        int n = 1;
+        while (fs::exists(out, ec)) {
+            out = dir / (safe + "_" + std::to_string(++n) + ".png");
+        }
+
+        if (SaveQrPng(text, out.string())) {
+            m_Main->set_qr_status(slint::SharedString(
+                "QR guardado como \"" + out.stem().string() + "\" en Documentos."));
+            // Refresca la lista de documentos para que aparezca de inmediato.
+            m_CachedTabEntries.erase(10);
+            m_ActiveTab = 10;
+            m_Main->set_active_tab(10);
+            LoadTabData(10);
+            m_Main->set_qr_modal_open(false);
+        } else {
+            m_Main->set_qr_status("No se pudo generar el QR (¿texto demasiado largo?).");
+        }
+    });
+
     // Debug & Firewall
     m_Main->on_debug_clear_log([this]() {
         m_DebugLogLines.clear();
@@ -1242,6 +1303,26 @@ void SlintApp::BindCallbacks() {
     m_Main->on_fullscreen_changed([this](bool fs) {
         if (m_ProjectorVisible) {
             m_Projector->window().set_fullscreen(fs);
+        }
+        SavePersistedState();
+    });
+    m_Main->on_projection_monitor_changed([this](int idx) {
+        if (idx < 0 || idx >= static_cast<int>(m_Monitors.size())) return;
+        m_ProjectionMonitorIdx = idx;
+        // Si la proyección ya está abierta, muévela al monitor elegido ahora.
+        if (m_ProjectorVisible) {
+            const bool wantFs = m_Main->get_fullscreen_output();
+            if (wantFs) m_Projector->window().set_fullscreen(false);
+            PositionProjectorOnSelectedMonitor();
+            if (wantFs) {
+                slint::ComponentWeakHandle<ProjectorWindow> weakProj(m_Projector);
+                slint::Timer::single_shot(std::chrono::milliseconds(60), [weakProj]() {
+                    if (auto locked = weakProj.lock()) {
+                        (*locked)->window().set_fullscreen(true);
+                        (*locked)->invoke_focus_window();
+                    }
+                });
+            }
         }
         SavePersistedState();
     });
@@ -2532,11 +2613,20 @@ void SlintApp::SetTextColorRGB(uint8_t r, uint8_t g, uint8_t b) {
 void SlintApp::SelectTextColor(int colorIdx) {
     m_Main->set_text_color_idx(colorIdx);
     switch (colorIdx) {
-        case 1: SetTextColorRGB(254, 243, 199); break;
-        case 2: SetTextColorRGB(212, 212, 216); break;
-        case 3: SetTextColorRGB(245, 196, 81);  break;
-        case 4: SetTextColorRGB(250, 204, 21);  break;
-        default: SetTextColorRGB(255, 255, 255); break;
+        case 1:  SetTextColorRGB(254, 243, 199); break; // Crema
+        case 2:  SetTextColorRGB(212, 212, 216); break; // Gris claro
+        case 3:  SetTextColorRGB(245, 196, 81);  break; // Dorado
+        case 4:  SetTextColorRGB(250, 204, 21);  break; // Amarillo
+        case 5:  SetTextColorRGB(56, 189, 248);  break; // Celeste
+        case 6:  SetTextColorRGB(59, 130, 246);  break; // Azul
+        case 7:  SetTextColorRGB(74, 222, 128);  break; // Verde
+        case 8:  SetTextColorRGB(248, 113, 113); break; // Rojo coral
+        case 9:  SetTextColorRGB(236, 72, 153);  break; // Rosa
+        case 10: SetTextColorRGB(192, 132, 252); break; // Violeta
+        case 11: SetTextColorRGB(251, 146, 60);  break; // Naranja
+        case 12: SetTextColorRGB(45, 212, 191);  break; // Turquesa
+        case 13: SetTextColorRGB(9, 9, 11);      break; // Negro
+        default: SetTextColorRGB(255, 255, 255); break; // Blanco
     }
 }
 
@@ -2592,13 +2682,20 @@ void SlintApp::ToggleAudienceWindow() {
         m_Projector->set_bg_scale_mode(m_BgScaleMode);
         m_Projector->show();
         const bool wantFs = m_Main->get_fullscreen_output();
+        // Coloca la ventana en el monitor elegido (por defecto el secundario)
+        // antes de ir a pantalla completa, para que no se abra en la pantalla
+        // equivocada.
+        PositionProjectorOnSelectedMonitor();
         m_Projector->window().set_fullscreen(wantFs);
         m_Projector->invoke_focus_window();
         // Wayland / Hyprland: re-apply fullscreen & focus once xdg_toplevel surface maps
         slint::ComponentWeakHandle<ProjectorWindow> weakProj(m_Projector);
-        slint::Timer::single_shot(std::chrono::milliseconds(60), [weakProj, wantFs]() {
+        slint::Timer::single_shot(std::chrono::milliseconds(60), [this, weakProj, wantFs]() {
             if (auto locked = weakProj.lock()) {
-                if (wantFs) (*locked)->window().set_fullscreen(true);
+                if (wantFs) {
+                    PositionProjectorOnSelectedMonitor();
+                    (*locked)->window().set_fullscreen(true);
+                }
                 (*locked)->invoke_focus_window();
             }
         });
@@ -3752,6 +3849,9 @@ void SlintApp::LoadPersistedState() {
         m_Main->set_style_target_mode(m_StyleTargetMode);
         m_Main->set_style_target_label(slint::SharedString(GetStyleTargetShortLabel(m_StyleTargetMode)));
         m_Main->set_fullscreen_output(j.value("fullscreen", true));
+        // Pantalla de proyección elegida (se valida contra los monitores
+        // detectados en RefreshMonitorList; -1 => usa la secundaria por defecto).
+        m_ProjectionMonitorIdx = j.value("projectionMonitorIdx", -1);
         m_Main->set_fsr_enabled(j.value("fsr", true));
         m_BgScaleMode = std::clamp(j.value("bgScaleMode", 0), 0, 2);
         m_OutputResPreset = std::clamp(j.value("outputResPreset", 1), 0, 4);
@@ -3890,6 +3990,7 @@ void SlintApp::SavePersistedState() {
     j["screenStyles"]    = scrStylesArr;
     j["textColorIdx"]    = m_Main->get_text_color_idx();
     j["fullscreen"]      = m_Main->get_fullscreen_output();
+    j["projectionMonitorIdx"] = m_ProjectionMonitorIdx;
     j["fsr"]             = m_Main->get_fsr_enabled();
     j["bgScaleMode"]       = m_BgScaleMode;
     j["outputResPreset"]   = m_OutputResPreset;
@@ -8254,6 +8355,43 @@ void SlintApp::InitMultiScreens() {
     m_Main->set_inspected_screen_name("Público");
     m_Main->set_style_target_mode(0);
     m_Main->set_style_target_label("Todas las pantallas");
+}
+
+// ── Monitores físicos: detección + selección de pantalla de proyección ───────
+void SlintApp::RefreshMonitorList() {
+    m_Monitors = EnumerateMonitors();
+
+    std::vector<slint::SharedString> labels;
+    labels.reserve(m_Monitors.size());
+    for (size_t i = 0; i < m_Monitors.size(); ++i) {
+        const auto& m = m_Monitors[i];
+        std::string label = "Pantalla " + std::to_string(i + 1)
+                          + " — " + std::to_string(m.width) + "×" + std::to_string(m.height);
+        if (m.isPrimary) label += " (Principal)";
+        labels.emplace_back(label);
+    }
+    auto model = std::make_shared<slint::VectorModel<slint::SharedString>>(labels);
+    m_Main->set_monitor_names(model);
+
+    // Por defecto prioriza la pantalla secundaria, salvo que el usuario ya
+    // haya elegido una válida.
+    if (m_ProjectionMonitorIdx < 0 ||
+        m_ProjectionMonitorIdx >= static_cast<int>(m_Monitors.size())) {
+        m_ProjectionMonitorIdx = DefaultProjectionMonitorIndex(m_Monitors);
+    }
+    m_Main->set_projection_monitor_idx(m_ProjectionMonitorIdx);
+}
+
+void SlintApp::PositionProjectorOnSelectedMonitor() {
+    if (m_ProjectionMonitorIdx < 0 ||
+        m_ProjectionMonitorIdx >= static_cast<int>(m_Monitors.size())) {
+        return; // sin info de monitores: deja que el compositor decida
+    }
+    const auto& m = m_Monitors[m_ProjectionMonitorIdx];
+    // Coloca la ventana en la esquina del monitor elegido antes de ir a
+    // pantalla completa, para que el fullscreen cubra ese monitor y no otro.
+    m_Projector->window().set_position(
+        slint::PhysicalPosition(slint::Point<int32_t>{ m.x, m.y }));
 }
 
 bool SlintApp::IsScreenTargeted(int screenIdx) const {
