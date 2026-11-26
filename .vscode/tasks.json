@@ -44,7 +44,7 @@
                 "isDefault": true
             },
             "problemMatcher": ["$msCompile", "$gcc"],
-            "detail": "Compila el ejecutable para Windows en build-win/ usando Ninja + MSVC (el más rápido en Windows)"
+            "detail": "Compila el ejecutable para Windows en build-win/ usando Ninja + MSVC (nativo) o mingw (cross en Linux)"
         },
         {
             "label": "Compilar Linux",
@@ -71,7 +71,7 @@
             "type": "shell",
             "command": "bash ./scripts/build.sh windows-run",
             "problemMatcher": [],
-            "detail": "Compila (si es necesario) y ejecuta ProyecThor.exe bajo Wine en Linux"
+            "detail": "Compila (si es necesario) y ejecuta ProyecThorSlint.exe bajo Wine en Linux"
         },
         {
             "label": "Ejecutar Linux",
