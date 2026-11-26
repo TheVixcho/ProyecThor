@@ -1126,6 +1126,7 @@ void SettingsManager::SaveSettings() {
     j["performance"]["pauseBackgroundScan"] = m_Settings.performance.pauseBackgroundScan;
     j["performance"]["targetFPS"]           = m_Settings.performance.targetFPS;
     j["performance"]["lowMemoryMode"]       = m_Settings.performance.lowMemoryMode;
+    j["performance"]["performanceModeAutoSet"] = m_Settings.performance.performanceModeAutoSet;
 
     std::string langStr = "es";
     if      (m_Settings.general.language == Language::English)    langStr = "en";
@@ -1191,11 +1192,55 @@ void SettingsManager::SaveSettings() {
     }
 }
 
+void SettingsManager::AutoDetectLowEndHardware() {
+    uint64_t ramGb = 0;
+#ifdef _WIN32
+    MEMORYSTATUSEX ms = {};
+    ms.dwLength = sizeof(ms);
+    if (GlobalMemoryStatusEx(&ms)) {
+        ramGb = static_cast<uint64_t>(ms.ullTotalPhys / (1024ULL * 1024ULL * 1024ULL));
+    }
+#else
+    // Lee MemTotal (en kB) de /proc/meminfo y lo convierte a GB redondeando
+    // hacia arriba para no clasificar un equipo de 8 GB (que reporta algo
+    // menos de 8.000.000 kB por memoria reservada) como "menos de 8".
+    std::ifstream meminfo("/proc/meminfo");
+    if (meminfo.is_open()) {
+        std::string label;
+        uint64_t    kb = 0;
+        std::string unit;
+        while (meminfo >> label >> kb >> unit) {
+            if (label == "MemTotal:") {
+                ramGb = (kb + (1024ULL * 1024ULL - 1)) / (1024ULL * 1024ULL); // kB -> GB (ceil)
+                break;
+            }
+            // Descarta el resto de la línea actual.
+            std::getline(meminfo, label);
+        }
+    }
+#endif
+
+    if (ramGb > 0 && ramGb <= 8) {
+        m_Settings.performance.performanceMode = true;
+        m_Settings.performance.targetFPS       = 30;
+        std::cerr << "[Settings] Hardware de gama baja detectado (" << ramGb
+                  << " GB RAM) -> Modo Rendimiento activado y 30 FPS por defecto.\n";
+    }
+}
+
 void SettingsManager::LoadSettings() {
     std::string path = GetSettingsPath();
     std::ifstream f(path);
     if (!f.is_open()) {
+        // Primer arranque real (sin settings.json): aplica tema por defecto y
+        // corre la auto-detección de hardware débil una sola vez, persistiendo
+        // el resultado para que no se repita en el próximo arranque.
         m_Settings.theme = MakeThemePreset(ThemePreset::Dark);
+        if (!m_Settings.performance.performanceModeAutoSet) {
+            AutoDetectLowEndHardware();
+            m_Settings.performance.performanceModeAutoSet = true;
+            SaveSettings();
+        }
         return;
     }
 
@@ -1669,6 +1714,18 @@ void SettingsManager::LoadSettings() {
             m_Settings.performance.pauseBackgroundScan = jp.value("pauseBackgroundScan", true);
             m_Settings.performance.targetFPS           = jp.value("targetFPS", 60);
             m_Settings.performance.lowMemoryMode       = jp.value("lowMemoryMode", false);
+            m_Settings.performance.performanceModeAutoSet = jp.value("performanceModeAutoSet", false);
+        }
+
+        // Auto-detección de hardware débil en el primer arranque (o tras un
+        // reset): si nunca se ejecutó la detección, mide la RAM física y, si
+        // es ≤ 8 GB, activa el Modo Rendimiento y limita a 30 FPS. Se corre
+        // una sola vez (performanceModeAutoSet) para no volver a pisar la
+        // elección manual del usuario en arranques siguientes.
+        if (!m_Settings.performance.performanceModeAutoSet) {
+            AutoDetectLowEndHardware();
+            m_Settings.performance.performanceModeAutoSet = true;
+            SaveSettings();
         }
 
     } catch (const std::exception& e) {

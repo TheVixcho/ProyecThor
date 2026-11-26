@@ -12,6 +12,7 @@
 #if defined(_WIN32)
     #include <windows.h>
     #include <shellapi.h>
+    #include "core/HiddenProcess.h"
     #define PT_POPEN  _popen
     #define PT_PCLOSE _pclose
 #else
@@ -453,11 +454,47 @@ void PluginManager::ExecuteActionAsync(const std::string& pluginId,
 
         // Armar comando con cd a su carpeta de trabajo
 #if defined(_WIN32)
-        std::string fullCmd = "cd /d \"" + workDir.string() + "\" && " + command + " 2>&1";
+        std::string fullCmd = "cd /d \"" + workDir.string() + "\" && " + command;
 #else
         std::string fullCmd = "cd \"" + workDir.string() + "\" && " + command + " 2>&1";
 #endif
 
+#if defined(_WIN32)
+        // En Windows usar HiddenProcess con captura de stdout+stderr combinados
+        // para no mostrar ventana de consola del plugin.
+        FILE* outputPipe = nullptr;
+        void* hProc      = nullptr;
+        bool started = ProyecThor::Core::StartHiddenProcess(
+            fullCmd, false, nullptr, true, &outputPipe, &hProc);
+
+        PluginExecutionResult result;
+        if (!started || !outputPipe) {
+            if (hProc) ProyecThor::Core::WaitHiddenProcess(hProc);
+            result.success = false;
+            result.error   = "No se pudo iniciar el proceso del plugin.";
+            plugin->isRunning = false;
+            if (onComplete) onComplete(result);
+            return;
+        }
+
+        std::array<char, 1024> buffer;
+        std::string combinedOutput;
+        while (std::fgets(buffer.data(), buffer.size(), outputPipe) != nullptr) {
+            std::string line = buffer.data();
+            combinedOutput += line;
+            if (!line.empty() && line.back() == '\n') line.pop_back();
+            if (!line.empty() && line.back() == '\r') line.pop_back();
+            {
+                std::lock_guard<std::mutex> lock(m_Mutex);
+                plugin->consoleLogs.push_back(line);
+                if (plugin->consoleLogs.size() > 500)
+                    plugin->consoleLogs.erase(plugin->consoleLogs.begin(), plugin->consoleLogs.begin() + 100);
+            }
+            if (onLog) onLog(line);
+        }
+        std::fclose(outputPipe);
+        int exitCode = ProyecThor::Core::WaitHiddenProcess(hProc);
+#else
         FILE* pipe = PT_POPEN(fullCmd.c_str(), "r");
         PluginExecutionResult result;
 
@@ -489,6 +526,7 @@ void PluginManager::ExecuteActionAsync(const std::string& pluginId,
         }
 
         int exitCode = PT_PCLOSE(pipe);
+#endif
         result.exitCode = exitCode;
         result.output   = combinedOutput;
 

@@ -20,6 +20,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <random>
 #include <sstream>
 #include <thread>
@@ -43,6 +44,46 @@ namespace ProyecThor::SlintUI {
 
 namespace {
 
+// Total de RAM física del sistema en GB (redondeado hacia abajo). 0 si no se
+// puede determinar. Se usa para auto-detectar hardware modesto: un Pentium
+// Gold reporta 4 hilos (hardware_concurrency no lo marca como gama baja), pero
+// suele venir con 8 GB o menos, así que la RAM es el mejor indicador.
+unsigned long long SystemRamGb() {
+#ifdef _WIN32
+    MEMORYSTATUSEX ms = {};
+    ms.dwLength = sizeof(ms);
+    if (GlobalMemoryStatusEx(&ms))
+        return ms.ullTotalPhys / (1024ULL * 1024 * 1024);
+    return 0;
+#elif defined(__APPLE__)
+    int64_t mem = 0;
+    size_t len = sizeof(mem);
+    int mib[2] = { CTL_HW, HW_MEMSIZE };
+    if (sysctl(mib, 2, &mem, &len, nullptr, 0) == 0 && mem > 0)
+        return static_cast<unsigned long long>(mem) / (1024ULL * 1024 * 1024);
+    return 0;
+#else
+    std::ifstream meminfo("/proc/meminfo");
+    std::string key;
+    unsigned long long kb = 0;
+    while (meminfo >> key) {
+        if (key == "MemTotal:") { meminfo >> kb; break; }
+        meminfo.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    }
+    return kb / (1024ULL * 1024);
+#endif
+}
+
+// Heurística de gama baja: 2 o menos núcleos lógicos, o 8 GB de RAM o menos.
+// Cubre el caso Pentium Gold (4 hilos pero 8 GB) que el chequeo de solo
+// núcleos dejaba pasar.
+bool IsLowEndHardware() {
+    if (std::thread::hardware_concurrency() <= 2)
+        return true;
+    const unsigned long long ramGb = SystemRamGb();
+    return ramGb != 0 && ramGb <= 8;
+}
+
 bool HasExtension(const fs::path& p, const std::vector<std::string>& exts) {
     std::string ext = p.extension().string();
     std::transform(ext.begin(), ext.end(), ext.begin(),
@@ -53,18 +94,53 @@ bool HasExtension(const fs::path& p, const std::vector<std::string>& exts) {
 std::string RunCommandCapture(const std::string& cmd) {
     std::string out;
 #ifdef _WIN32
-    FILE* pipe = _popen(cmd.c_str(), "r");
+    // Usar CreateProcess con CREATE_NO_WINDOW en vez de _popen para que NO
+    // aparezca una ventana de consola/PowerShell parpadeando cada vez que se
+    // consulta la GPU, se sondea ffmpeg o se abre el diálogo de importar.
+    // _popen siempre arrastra una consola visible en una app GUI sin consola.
+    SECURITY_ATTRIBUTES sa = { sizeof(sa), nullptr, TRUE };
+    HANDLE readPipe = nullptr, writePipe = nullptr;
+    if (!CreatePipe(&readPipe, &writePipe, &sa, 0))
+        return out;
+    SetHandleInformation(readPipe, HANDLE_FLAG_INHERIT, 0);
+
+    STARTUPINFOA si = {};
+    si.cb          = sizeof(si);
+    si.dwFlags     = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+    si.hStdOutput  = writePipe;
+    si.hStdError   = writePipe;
+    si.hStdInput   = GetStdHandle(STD_INPUT_HANDLE);
+
+    PROCESS_INFORMATION pi = {};
+    // cmd.exe /c para resolver programas en PATH y comandos con tuberías/redirecciones.
+    std::string full = "cmd.exe /c " + cmd;
+    std::string mutableCmd = full;
+
+    BOOL ok = CreateProcessA(nullptr, mutableCmd.data(), nullptr, nullptr,
+                             TRUE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
+    CloseHandle(writePipe);
+    if (!ok) {
+        CloseHandle(readPipe);
+        return out;
+    }
+
+    char buf[512];
+    DWORD read = 0;
+    while (ReadFile(readPipe, buf, sizeof(buf), &read, nullptr) && read > 0)
+        out.append(buf, read);
+
+    CloseHandle(readPipe);
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 #else
     FILE* pipe = popen(cmd.c_str(), "r");
-#endif
     if (!pipe) return out;
     char buf[512];
     while (fgets(buf, sizeof(buf), pipe) != nullptr) {
         out += buf;
     }
-#ifdef _WIN32
-    _pclose(pipe);
-#else
     pclose(pipe);
 #endif
     return out;
@@ -3538,7 +3614,16 @@ static nlohmann::json SavedStyleToJson(const StyleT& st) {
 void SlintApp::LoadPersistedState() {
     fs::path path = fs::path(ProyecThor::GetAppDataRoot()) / "settings_slint.json";
     std::ifstream f(path);
-    if (!f.is_open()) return;
+    if (!f.is_open()) {
+        // Primer arranque sin settings guardados: en hardware modesto (<=2
+        // núcleos o <=8 GB de RAM, p. ej. Pentium Gold + GT 710) activar el
+        // modo rendimiento y 30 FPS por defecto para que la experiencia salga
+        // fluida de entrada. El usuario puede cambiarlo después y se persiste.
+        if (IsLowEndHardware()) {
+            ApplyLowSpecPreset();
+        }
+        return;
+    }
 
     try {
         nlohmann::json j;
@@ -3676,7 +3761,7 @@ void SlintApp::LoadPersistedState() {
         m_Player.SetScaleMode(m_BgScaleMode);
         m_Main->set_slide_columns(std::clamp(j.value("slideColumns", 3), 1, 4));
         m_Main->set_slide_card_size(std::clamp(j.value("slideCardSize", 1), 0, 2));
-        bool defaultPerf = (std::thread::hardware_concurrency() <= 2);
+        bool defaultPerf = IsLowEndHardware();
         bool perf = j.value("performanceMode", defaultPerf);
         m_Main->set_performance_mode(perf);
         m_HoverPlayer.SetRenderSize(perf ? 256 : 320, perf ? 144 : 180);

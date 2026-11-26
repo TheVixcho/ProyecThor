@@ -47,25 +47,25 @@ case "$PLATFORM" in
         cmake --build build-linux
         ;;
     windows-run)
-        if [ ! -f "build-win/ProyecThor.exe" ]; then
+        if [ ! -f "build-win/ProyecThorSlint.exe" ]; then
             if command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then
                 cmake -B build-win -G Ninja -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchain-mingw.cmake"
                 cmake --build build-win
             else
-                echo "Error: build-win/ProyecThor.exe no existe y mingw-w64-gcc no está instalado para compilarlo."
+                echo "Error: build-win/ProyecThorSlint.exe no existe y mingw-w64-gcc no está instalado para compilarlo."
                 exit 1
             fi
         fi
         cd build-win
-        wine ProyecThor.exe
+        wine ProyecThorSlint.exe
         ;;
     linux-run)
-        if [ ! -f "build-linux/ProyecThor" ]; then
+        if [ ! -f "build-linux/ProyecThorSlint" ]; then
             cmake -B build-linux -G Ninja
             cmake --build build-linux
         fi
         cd build-linux
-        ./ProyecThor
+        ./ProyecThorSlint
         ;;
     flatpak)
         cmake -B build-linux -G Ninja

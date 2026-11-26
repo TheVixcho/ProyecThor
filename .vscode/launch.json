@@ -27,10 +27,9 @@
             "name": "ProyecThor (Slint) - Windows con Wine (Linux)",
             "type": "cppdbg",
             "request": "launch",
-            "program": "/usr/bin/wine",
-            "args": [
-                "${workspaceFolder}/build-win/ProyecThorSlint.exe"
-            ],
+            "program": "${workspaceFolder}/build-win/ProyecThorSlint.exe",
+            "miDebuggerPath": "/usr/bin/winedbg",
+            "miDebuggerArgs": "--gdb",
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build-win",
             "environment": [
@@ -59,7 +58,8 @@
                     "text": "-enable-pretty-printing",
                     "ignoreFailures": true
                 }
-            ]
+            ],
+            "preLaunchTask": "Compilar Windows"
         },
         {
             "name": "ProyecThor (Slint) - Windows Nativo (MSVC)",
@@ -72,61 +72,6 @@
             "environment": [],
             "console": "integratedTerminal",
             "preLaunchTask": "Compilar Slint (Windows)"
-        },
-        {
-            "name": "ProyecThor (Legacy ImGui) - Linux Nativo",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/build-linux/ProyecThor",
-            "args": [],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/build-linux",
-            "environment": [
-                { "name": "LD_LIBRARY_PATH", "value": "${workspaceFolder}/build-linux" }
-            ],
-            "externalConsole": false,
-            "MIMode": "gdb",
-            "setupCommands": [
-                {
-                    "description": "Habilitar pretty-printing para gdb",
-                    "text": "-enable-pretty-printing",
-                    "ignoreFailures": true
-                }
-            ],
-            "preLaunchTask": "Compilar Linux"
-        },
-        {
-            "name": "ProyecThor (Legacy ImGui) - Windows con Wine (Linux)",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "/usr/bin/wine",
-            "args": [
-                "${workspaceFolder}/build-win/ProyecThor.exe"
-            ],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/build-win",
-            "environment": [
-                { "name": "WINEDEBUG", "value": "-all" }
-            ],
-            "externalConsole": false,
-            "MIMode": "gdb",
-            "setupCommands": [
-                {
-                    "description": "Ignorar señales internas de Wine (SIGUSR1)",
-                    "text": "handle SIGUSR1 nostop noprint pass",
-                    "ignoreFailures": true
-                },
-                {
-                    "description": "Ignorar señales internas de Wine (SIGUSR2)",
-                    "text": "handle SIGUSR2 nostop noprint pass",
-                    "ignoreFailures": true
-                },
-                {
-                    "description": "Ignorar señales internas de Wine (SIG32)",
-                    "text": "handle SIG32 nostop noprint pass",
-                    "ignoreFailures": true
-                }
-            ]
         },
         {
             "name": "ProyecThor - Iniciar Web",

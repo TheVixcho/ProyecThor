@@ -7,9 +7,9 @@ namespace ProyecThor::Core {
 
 namespace {
     constexpr double kEmaAlpha            = 0.05;  // suaviza picos puntuales
-    constexpr double kFrameBudgetMs       = 20.0;  // ~50 FPS: umbral de "va lento"
-    constexpr double kUpgradeThresholdMs  = kFrameBudgetMs * 0.7; // 14ms: umbral de "sobra margen"
-    constexpr double kSustainToDowngradeS = 3.0;   // bajar rapido si se pone lento
+    constexpr double kFrameBudgetMs       = 33.3;  // ~30 FPS: presupuesto objetivo para hardware debil
+    constexpr double kUpgradeThresholdMs  = kFrameBudgetMs * 0.6; // ~20ms: hay que ir claramente mas rapido para subir de nuevo
+    constexpr double kSustainToDowngradeS = 2.0;   // bajar rapido si se pone lento
     constexpr double kSustainToUpgradeS   = 20.0;  // subir solo tras un buen rato estable (evita flapping)
     constexpr int    kMaxLevel            = 3;
 
@@ -38,7 +38,7 @@ void PerformanceGovernor::ReportFrame(double frameMs)
     const double budgetMs = (targetFps > 0)
         ? std::max(kFrameBudgetMs, (1000.0 / static_cast<double>(targetFps)) * 1.18)
         : kFrameBudgetMs;
-    const double upgradeMs = budgetMs * 0.72;
+    const double upgradeMs = budgetMs * 0.6;
 
     if (m_EmaFrameMs > budgetMs) {
         m_TimeOverBudget  += dtSeconds;

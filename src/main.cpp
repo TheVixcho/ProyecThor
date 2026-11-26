@@ -744,8 +744,20 @@ GLFWwindow* CreateSplashWindow(int splashW, int splashH, bool visible, const flo
     (void)baseColor;
 #endif
 
-    GLFWmonitor* primary = glfwGetPrimaryMonitor();
-    const GLFWvidmode* vm = glfwGetVideoMode(primary);
+    // En Windows el sistema puede tardar un frame en reportar el monitor
+    // primario (especialmente al arrancar desde el explorador o por asociacion
+    // de archivos). Se reintenta hasta 3 veces con un delay corto antes de
+    // rendirse, para garantizar que el splash aparezca centrado.
+    GLFWmonitor* primary = nullptr;
+    const GLFWvidmode* vm = nullptr;
+    for (int attempt = 0; attempt < 3 && !vm; ++attempt)
+    {
+        if (attempt > 0)
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        primary = glfwGetPrimaryMonitor();
+        if (primary)
+            vm = glfwGetVideoMode(primary);
+    }
     if (vm)
     {
         int mx = 0, my = 0;
@@ -1181,7 +1193,7 @@ void RunMainLoop(GLFWwindow* window, ProyecThor::UI::UIManager& uiManager,
         glfwGetFramebufferSize(window, &fw, &fh);
         if (fw == 0 || fh == 0 || glfwGetWindowAttrib(window, GLFW_ICONIFIED))
         {
-            std::this_thread::sleep_for(std::chrono::milliseconds(core.IsProjecting() ? 16 : 50));
+            std::this_thread::sleep_for(std::chrono::milliseconds(core.IsProjecting() ? 16 : 100));
             continue;
         }
 
@@ -1261,11 +1273,10 @@ void RunMainLoop(GLFWwindow* window, ProyecThor::UI::UIManager& uiManager,
         if (targetFps > 0) {
             double targetMs = 1000.0 / static_cast<double>(targetFps);
             double elapsedMs = FrameProfiler::ElapsedMs(frameStart);
-            if (elapsedMs + 0.5 < targetMs) {
-                long long sleepMs = static_cast<long long>(targetMs - elapsedMs);
-                if (sleepMs > 0) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(sleepMs));
-                }
+            double sleepMs = targetMs - elapsedMs - 0.5; // 0.5ms de margen por el overshoot del scheduler
+            if (sleepMs >= 1.0) {
+                std::this_thread::sleep_for(std::chrono::microseconds(
+                    static_cast<long long>(sleepMs * 1000.0)));
             }
         }
 

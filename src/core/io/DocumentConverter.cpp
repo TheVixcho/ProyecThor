@@ -9,6 +9,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <iomanip>
+#ifdef _WIN32
+#include "core/HiddenProcess.h"
+#endif
 #include <vector>
 
 #include "stb_image_write.h"
@@ -238,10 +241,21 @@ namespace ProyecThor::UI {
         };
 
         for (const auto& candidate : candidates) {
+#ifdef _WIN32
+            // Usar HiddenProcess para no mostrar ventana de consola al testear soffice
+            std::string testCmd = "\"" + candidate + "\" --version";
+            void* hProc = nullptr;
+            if (ProyecThor::Core::StartHiddenProcess(testCmd, false, nullptr, false, nullptr, &hProc)) {
+                int ec = ProyecThor::Core::WaitHiddenProcess(hProc);
+                if (ec == 0)
+                    return candidate;
+            }
+#else
             std::string testCmd = "\"" + candidate + "\" --version > /dev/null 2>&1";
             if (std::system(testCmd.c_str()) == 0) {
                 return candidate;
             }
+#endif
         }
 
         return "";
@@ -267,9 +281,23 @@ namespace ProyecThor::UI {
                   << " --headless"
                   << " --convert-to pdf"
                   << " --outdir \"" << outputDir << "\""
-                  << " \"" << filePath << "\""
-                  << " > /dev/null 2>&1";
-
+                  << " \"" << filePath << "\"";
+#ifdef _WIN32
+        // En Windows usar HiddenProcess para no mostrar ventana de consola de soffice
+        {
+            std::string cmd = cmdStream.str();
+            void* hProc = nullptr;
+            int exitCode = -1;
+            if (ProyecThor::Core::StartHiddenProcess(cmd, false, nullptr, false, nullptr, &hProc))
+                exitCode = ProyecThor::Core::WaitHiddenProcess(hProc);
+            if (exitCode != 0) {
+                result.success      = false;
+                result.errorMessage = "LibreOffice fallo al convertir el archivo. Código: " + std::to_string(exitCode);
+                return result;
+            }
+        }
+#else
+        cmdStream << " > /dev/null 2>&1";
         std::string cmd     = cmdStream.str();
         int         exitCode = std::system(cmd.c_str());
 
@@ -278,6 +306,7 @@ namespace ProyecThor::UI {
             result.errorMessage = "LibreOffice fallo al convertir el archivo. Código: " + std::to_string(exitCode);
             return result;
         }
+#endif
 
         fs::path    inputPath(filePath);
         std::string pdfName = inputPath.stem().string() + ".pdf";

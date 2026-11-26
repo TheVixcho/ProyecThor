@@ -658,6 +658,7 @@ namespace ProyecThor::Settings {
         bool pauseBackgroundScan = true;  // Limitar escaneo periódico en segundo plano
         int  targetFPS           = 60;    // 30, 60, o 0 (sin límite)
         bool lowMemoryMode       = false; // Modo ahorro de memoria
+        bool performanceModeAutoSet = false; // true una vez que la auto-detección de hardware se ejecutó (evita sobreescribir la elección del usuario)
     };
 
     struct AppSettings {
@@ -724,6 +725,11 @@ namespace ProyecThor::Settings {
         ~SettingsManager()                                 = default;
         SettingsManager(const SettingsManager&)            = delete;
         SettingsManager& operator=(const SettingsManager&) = delete;
+
+        // Detecta hardware de gama baja (RAM física ≤ 8 GB) y, de ser el
+        // caso, activa el Modo Rendimiento y limita a 30 FPS. Solo la llama
+        // LoadSettings en el primer arranque -- ver performanceModeAutoSet.
+        void AutoDetectLowEndHardware();
 
         AppSettings m_Settings;
         bool        m_RestartRequested = false;

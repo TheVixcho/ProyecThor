@@ -17,6 +17,13 @@ namespace ProyecThor::Core {
 
 namespace {
 
+// Tope de miniaturas recordadas por el worker. En GPUs con poca VRAM (p.ej.
+// GT710, 2 GB) las texturas de miniatura se acumulan sin control; limitar el
+// historial de claves generadas acota cuántas texturas puede llegar a pedir
+// el consumidor a la vez. Al superarlo se descarta la entrada más vieja
+// (LRU): esa miniatura podrá regenerarse si se vuelve a necesitar.
+constexpr size_t kMaxCachedThumbnails = 200;
+
 std::filesystem::path ResolveFsPath(const std::string& path)
 {
     std::error_code ec;
@@ -315,6 +322,13 @@ void ThumbnailWorker::Request(const std::string& key, const std::string& videoPa
         m_Thread = std::thread([this] { ThreadFunc(); });
     }
     m_Seen.push_back(key);
+    // Evicción LRU: el frente de m_Seen es la clave más antigua. Mantener el
+    // historial acotado evita que el consumidor acumule texturas sin límite
+    // en GPUs con poca VRAM.
+    if (m_Seen.size() > kMaxCachedThumbnails) {
+        m_Seen.erase(m_Seen.begin(),
+                     m_Seen.begin() + (m_Seen.size() - kMaxCachedThumbnails));
+    }
     m_Pending.push_back({ key, videoPath, cachePngPath });
     m_Cv.notify_one();
 }
