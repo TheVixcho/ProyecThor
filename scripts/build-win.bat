@@ -37,6 +37,15 @@ if not defined VCVARS (
 
 call "%VCVARS%" >nul
 
+REM Descargar SDKs binarios faltantes (libmpv-2.dll / Slint C++ SDK) si no existen
+if not exist "src\vendor\sdk\mpv\libmpv-2.dll" goto :fetch_sdks
+if not exist "src\vendor\sdk\slint-win\lib\cmake\Slint\SlintConfig.cmake" goto :fetch_sdks
+goto :sdks_ready
+:fetch_sdks
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0fetch-win-sdks.ps1"
+if errorlevel 1 exit /b %errorlevel%
+:sdks_ready
+
 REM Actualizar contador de compilacion (Build Number) e inyectar en Version.h
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "$bFile = 'build_count.txt'; " ^

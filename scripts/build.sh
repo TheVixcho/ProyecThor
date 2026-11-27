@@ -43,6 +43,12 @@ case "$PLATFORM" in
         cmake --build build-win
         ;;
     linux)
+        SLINT_LINUX_DIR="$PROJECT_ROOT/src/vendor/sdk/slint-linux"
+        if [ ! -f "$SLINT_LINUX_DIR/lib/cmake/Slint/SlintConfig.cmake" ]; then
+            echo "[SDK] Descargando Slint C++ SDK 1.19.0 (Linux x86_64)..."
+            mkdir -p "$SLINT_LINUX_DIR"
+            curl -fSL --retry 3 "https://github.com/slint-ui/slint/releases/download/v1.19.0/Slint-cpp-1.19.0-Linux-x86_64.tar.gz" | tar -xz --strip-components=1 -C "$SLINT_LINUX_DIR"
+        fi
         cmake -B build-linux -G Ninja
         cmake --build build-linux
         ;;

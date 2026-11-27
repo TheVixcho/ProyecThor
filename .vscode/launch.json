@@ -71,7 +71,7 @@
             "cwd": "${workspaceFolder}/build-win",
             "environment": [],
             "console": "integratedTerminal",
-            "preLaunchTask": "Compilar Slint (Windows)"
+            "preLaunchTask": "Compilar Windows"
         },
         {
             "name": "ProyecThor - Iniciar Web",

@@ -14,13 +14,18 @@
         },
         {
             "label": "Compilar Slint (Windows)",
-            "type": "shell",
-            "command": "cmake -B build-win -G Ninja && cmake --build build-win --target ProyecThorSlint",
+            "type": "process",
+            "command": "cmd.exe",
+            "args": [
+                "/d",
+                "/c",
+                "${workspaceFolder}\\scripts\\build-win.bat"
+            ],
             "group": {
                 "kind": "build"
             },
             "problemMatcher": ["$msCompile", "$gcc"],
-            "detail": "Compila la nueva UI Slint + libmpv para Windows en build-win/ProyecThor.exe"
+            "detail": "Compila la nueva UI Slint + libmpv para Windows en build-win/ProyecThor.exe usando MSVC"
         },
         {
             "label": "Compilar Windows",
