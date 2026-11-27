@@ -219,6 +219,9 @@ private:
     void ApplyScalingMode(int mode);
     void ApplyOutputResolution(int preset);
     void ApplyTargetFps(int fps);
+    // Aplica el idioma de la interfaz (código "es"/"en"/...): selecciona la
+    // traducción empaquetada con Slint. Normaliza códigos desconocidos a "es".
+    void ApplyUiLanguage(const std::string& code);
     void ApplyGpuAndUpscalerConfig();
     void ApplyLowSpecPreset();
     void PurgeMemoryCaches();
@@ -485,6 +488,7 @@ private:
     // vista previa del operador, para respetar el tope de FPS de preview
     // (ver DeliverVideoFrameToOutputs / preview-max-fps / prioritize-output).
     int64_t  m_LastPreviewDeliverMs = 0;
+    std::string m_UiLanguage = "es";  // código del idioma de la interfaz activo
     std::shared_ptr<std::atomic<bool>> m_AppAliveFlag;
     std::string          m_StaticSrcPath;
     std::vector<uint8_t> m_StaticSrcRgba;

@@ -6,8 +6,1170 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
+msgid "© 2026 ProyecThor Team • Open Source"
+msgstr "© 2026 ProyecThor Team • Open Source"
+
+msgid "+ Carpeta"
+msgstr "+ Folder"
+
+msgid "→ Cola"
+msgstr "→ Queue"
+
+msgid "+ Crear"
+msgstr "+ Create"
+
+msgid "+ Elegir Carpeta"
+msgstr "+ Choose Folder"
+
+msgid "★ Favorito"
+msgstr "★ Favorite"
+
+msgid "A:"
+msgstr "To:"
+
+msgid "A Cola"
+msgstr "To Queue"
+
+msgid "A Playlist"
+msgstr "To Playlist"
+
+msgid "Aa"
+msgstr "Aa"
+
+msgid "Aa Bb"
+msgstr "Aa Bb"
+
+msgid "Abre esta dirección en OBS Studio (Fuente de Navegador), otra PC, celular o navegador de tu Smart TV. Utiliza el mismo servidor HTTP/MJPEG y codificador en segundo plano que la versión clásica."
+msgstr "Open this address in OBS Studio (Browser Source), another PC, phone or your Smart TV browser. It uses the same HTTP/MJPEG server and background encoder as the classic version."
+
+msgid "Abrir"
+msgstr "Open"
+
+msgid "Abrir Editor de Estilos"
+msgstr "Open Style Editor"
+
+msgid "Abrir ProyecThor Clásico (Interfaz ImGui)"
+msgstr "Open ProyecThor Classic (ImGui Interface)"
+
+msgid "Abrir Puertos (8080, 8082, 8090)"
+msgstr "Open Ports (8080, 8082, 8090)"
+
+msgid "ACCIONES RÁPIDAS DE BIBLIOTECA"
+msgstr "QUICK LIBRARY ACTIONS"
+
+msgid "ACELERACIÓN POR HARDWARE (GPU / NVIDIA)"
+msgstr "HARDWARE ACCELERATION (GPU / NVIDIA)"
+
+msgid "Activar Modo Tiles (Pantalla Dividida)"
+msgstr "Enable Tiles Mode (Split Screen)"
+
+msgid "Activo:"
+msgstr "Active:"
+
+msgid "ACTIVO EN LAN"
+msgstr "ACTIVE ON LAN"
+
+msgid "Actualiza canciones, multimedia, fondos, overlays, música y documentos desde el disco"
+msgstr "Refresh songs, media, backgrounds, overlays, music and documents from disk"
+
+msgid "Actualizaciones"
+msgstr "Updates"
+
+msgid "Además de las carpetas internas (assets/audio y assets/music), las carpetas que agregues aquí se escanearán automáticamente en la pestaña Música."
+msgstr "In addition to the internal folders (assets/audio and assets/music), any folders you add here will be scanned automatically in the Music tab."
+
+msgid "Afecta la ventana de Público y la nitidez interna de videos e imágenes. Para pantallas 4K elige 2160p; para proyectores HD clásicos 1080p o 720p."
+msgstr "Affects the Audience window and the internal sharpness of videos and images. For 4K screens choose 2160p; for classic HD projectors 1080p or 720p."
+
+msgid "Agregar"
+msgstr "Add"
+
+msgid "AJUSTE DE PANTALLA Y ENCUADRE"
+msgstr "SCREEN FIT AND FRAMING"
+
+msgid "Ajustes y Temas"
+msgstr "Settings and Themes"
+
+msgid "Al pulsar el botón se abrirá https://ko-fi.com/vixcho en tu navegador predeterminado."
+msgstr "Pressing the button will open https://ko-fi.com/vixcho in your default browser."
+
+msgid "Anterior"
+msgstr "Previous"
+
+msgid "Añade logos, marcos o plecas transparentes a assets/overlays"
+msgstr "Add logos, frames or transparent banners to assets/overlays"
+
+msgid "Añade videos MP4/WebM o fondos estáticos directamente a assets/backgrounds"
+msgstr "Add MP4/WebM videos or static backgrounds directly to assets/backgrounds"
+
+msgid "Apariencia y Temas"
+msgstr "Appearance and Themes"
+
+msgid "Aplicar ahora"
+msgstr "Apply now"
+
+msgid "Aplicar Perfil Recomendado para PC Modesta"
+msgstr "Apply Recommended Profile for Modest PC"
+
+msgid "APOYA EL PROYECTO"
+msgstr "SUPPORT THE PROJECT"
+
+msgid "Apoyar el Proyecto (Ko-fi)"
+msgstr "Support the Project (Ko-fi)"
+
+msgid "Arrastra la caja para moverla o su esquina inferior derecha para redimensionar el área sin alterar el tamaño de fuente."
+msgstr "Drag the box to move it, or its bottom-right corner to resize the area without changing the font size."
+
+msgid "Aún no tienes estilos guardados. Crea uno (ej. 'LAN Gigante 140px')."
+msgstr "You don't have any saved styles yet. Create one (e.g. 'LAN Giant 140px')."
+
+msgid "Avisos de nuevas versiones directo a tu celular"
+msgstr "New version alerts straight to your phone"
+
+msgid "Ayuda a mantener ProyecThor 100% gratis para todos"
+msgstr "Help keep ProyecThor 100% free for everyone"
+
+msgid "Ayuda, Soporte y Comunidad"
+msgstr "Help, Support and Community"
+
+msgid "Biblia"
+msgstr "Bible"
+
 msgid "Biblioteca"
 msgstr "Library"
 
+msgid "Biblioteca (Resumen General)"
+msgstr "Library (General Overview)"
+
+msgid "Biblioteca y Música"
+msgstr "Library and Music"
+
+msgid "¡Bienvenido a ProyecThor!"
+msgstr "Welcome to ProyecThor!"
+
+msgid "Borrar Todo"
+msgstr "Clear All"
+
+msgid "Buscar"
+msgstr "Search"
+
+msgid "Buscar Actualizaciones en GitHub"
+msgstr "Check for Updates on GitHub"
+
+msgid "Cambiar Nombre"
+msgstr "Rename"
+
+msgid "Cancelar"
+msgstr "Cancel"
+
+msgid "Canciones"
+msgstr "Songs"
+
+msgid "Canciones (.txt/.song), videos, imágenes, PDFs o Biblias XML"
+msgstr "Songs (.txt/.song), videos, images, PDFs or XML Bibles"
+
+msgid "Canciones y Letras"
+msgstr "Songs and Lyrics"
+
+msgid "CAPAS ACTIVAS"
+msgstr "ACTIVE LAYERS"
+
+msgid "Capturadora HDMI / Cámara"
+msgstr "HDMI Capture / Camera"
+
+msgid "Capturadoras y Cámaras Detectadas (USB / HDMI / V4L2)"
+msgstr "Detected Capture Cards and Cameras (USB / HDMI / V4L2)"
+
+msgid "Carpeta vacía — pulsa 'Importar Fondo' o '+ Carpeta' para organizar tus fondos."
+msgstr "Empty folder — press 'Import Background' or '+ Folder' to organize your backgrounds."
+
+msgid "CARPETAS DE ESCANEO DE MÚSICA"
+msgstr "MUSIC SCAN FOLDERS"
+
+msgid "Centro de Redes (LAN, Smart TV, Chat, Celular, Reloj, OSC)"
+msgstr "Network Hub (LAN, Smart TV, Chat, Phone, Clock, OSC)"
+
+msgid "Cerrar"
+msgstr "Close"
+
+msgid "Chat LAN de Equipo"
+msgstr "Team LAN Chat"
+
+msgid "Clonar Público"
+msgstr "Clone Audience"
+
+msgid "Cola de Servicio"
+msgstr "Service Queue"
+
+msgid "COMPATIBILIDAD Y VERSIÓN CLÁSICA"
+msgstr "COMPATIBILITY AND CLASSIC VERSION"
+
+msgid "Configura automáticamente 720p, 30 FPS, Modo Ultra-Ligero, Reescalado Off y limpieza de buffers"
+msgstr "Automatically sets 720p, 30 FPS, Ultra-Light Mode, Upscaling Off and buffer cleanup"
+
+msgid "Configurar servidor LAN (8080), estilos propios de LAN, QR móvil y firewall"
+msgstr "Configure LAN server (8080), LAN-specific styles, mobile QR and firewall"
+
+msgid "Consola de Diagnóstico y Telemetría"
+msgstr "Diagnostics and Telemetry Console"
+
+msgid "Consola Debug y Diagnóstico"
+msgstr "Debug and Diagnostics Console"
+
+msgid "Consulta el changelog completo y atajos de operación en vivo"
+msgstr "See the full changelog and live operation shortcuts"
+
+msgid "Contenido"
+msgstr "Content"
+
+msgid "Control Celular"
+msgstr "Phone Control"
+
+msgid "Convierte fondos y videos grabados a 24, 25 o 30 FPS en 60 FPS suaves en tiempo real"
+msgstr "Converts backgrounds and videos recorded at 24, 25 or 30 FPS to smooth 60 FPS in real time"
+
+msgid "Créalos desde el botón de Estilos (🎨) en la barra superior."
+msgstr "Create them from the Styles button (🎨) in the top bar."
+
+msgid "Crear"
+msgstr "Create"
+
+msgid "Crear / Editar Estilos"
+msgstr "Create / Edit Styles"
+
+msgid "Crear Estilo"
+msgstr "Create Style"
+
+msgid "Crear Estilo LAN"
+msgstr "Create LAN Style"
+
+msgid "Crear Nuevo Estilo"
+msgstr "Create New Style"
+
+msgid "Cubre todo el monitor del proyector sin bordes ni barra de título (Esc para salir)"
+msgstr "Covers the entire projector monitor with no borders or title bar (Esc to exit)"
+
+msgid "Degradado Blanco y Brillo Superior"
+msgstr "White Gradient and Top Highlight"
+
+msgid "Descargas, novedades y guía completa"
+msgstr "Downloads, news and full guide"
+
+msgid "DESTINO:"
+msgstr "TARGET:"
+
+msgid "Detener"
+msgstr "Stop"
+
+msgid "Discord — Soporte y Ayuda"
+msgstr "Discord — Support and Help"
+
+msgid "Divide la salida Público en 2 paneles para mostrar continuidad o dos bloques"
+msgstr "Splits the Audience output into 2 panels to show continuity or two blocks"
+
+msgid "Documentos"
+msgstr "Documents"
+
+msgid "Documentos (PDF e Imágenes)"
+msgstr "Documents (PDF and Images)"
+
+msgid "Donar en Ko-fi"
+msgstr "Donate on Ko-fi"
+
+msgid "Donar en Ko-fi (ko-fi.com/vixcho)"
+msgstr "Donate on Ko-fi (ko-fi.com/vixcho)"
+
+msgid "Editar"
+msgstr "Edit"
+
+msgid "Editor de Canciones"
+msgstr "Song Editor"
+
+msgid "Editor de Overlay:"
+msgstr "Overlay Editor:"
+
+msgid "EFECTOS VISUALES Y LIQUID GLASS"
+msgstr "VISUAL EFFECTS AND LIQUID GLASS"
+
+msgid "Ejecutar"
+msgstr "Run"
+
+msgid "El cambio se aplica al instante. Para agregar más idiomas en el futuro solo hace falta un archivo de traducción nuevo."
+msgstr "The change applies instantly. To add more languages in the future, all you need is a new translation file."
+
+msgid "Elige el estilo de letra exclusivo para LAN:"
+msgstr "Choose the text style exclusive to LAN:"
+
+msgid "Elige una opción y apunta con la cámara de tu teléfono al código blanco de la derecha:"
+msgstr "Choose an option and point your phone's camera at the white code on the right:"
+
+msgid "Eliminar de la Biblioteca"
+msgstr "Remove from Library"
+
+msgid "Eliminar Definitivamente"
+msgstr "Delete Permanently"
+
+msgid "En el panel Capas > Overlays (izquierda), pulsa '+' para añadir aquí."
+msgstr "In the Layers > Overlays panel (left), press '+' to add here."
+
+msgid "En Multimedia, usa '+ Cola Videos' para encolar videos."
+msgstr "In Media, use '+ Queue Videos' to queue videos."
+
+msgid "EN VIVO"
+msgstr "LIVE"
+
+msgid "Envía solo texto sobre fondo transparente (desactiva Fondo automáticamente)"
+msgstr "Sends text only over a transparent background (automatically disables Background)"
+
+msgid "Envía video o imagen de fondo (desactivado muestra fondo negro)"
+msgstr "Sends a background video or image (when off, shows a black background)"
+
+msgid "Enviar"
+msgstr "Send"
+
+msgid "Enviar a:"
+msgstr "Send to:"
+
+msgid "Enviar a IP"
+msgstr "Send to IP"
+
+msgid "Enviar a Pantalla"
+msgstr "Send to Screen"
+
+msgid "Enviar a Smart TV / Screen Sharing (DLNA / Wi-Fi)"
+msgstr "Send to Smart TV / Screen Sharing (DLNA / Wi-Fi)"
+
+msgid "Enviar estilo a:"
+msgstr "Send style to:"
+
+msgid "Enviar OSC"
+msgstr "Send OSC"
+
+msgid "Enviar Selección"
+msgstr "Send Selection"
+
+msgid "Enviar solo a:"
+msgstr "Send only to:"
+
+msgid "Escanea el QR desde tu celular para abrir el Control Remoto en el navegador o emparejar la app ProyecThor Mobile (UDP 47990 + HTTP 8090)."
+msgstr "Scan the QR from your phone to open the Remote Control in the browser or pair the ProyecThor Mobile app (UDP 47990 + HTTP 8090)."
+
+msgid "Escanear"
+msgstr "Scan"
+
+msgid "Escanear Bibliotecas (Actualización Manual)"
+msgstr "Scan Libraries (Manual Refresh)"
+
+msgid "Escribe algo para ver el QR aquí."
+msgstr "Type something to see the QR here."
+
+msgid "Escribe un enlace o cualquier texto."
+msgstr "Type a link or any text."
+
+msgid "ESTILO DE LETRAS PARA LAN"
+msgstr "TEXT STYLE FOR LAN"
+
+msgid "Estilos de Letras"
+msgstr "Text Styles"
+
+msgid "Estilos, Shaders, Transiciones y Pads"
+msgstr "Styles, Shaders, Transitions and Pads"
+
+msgid "Estirar a Pantalla Completa (Fill 16:9)"
+msgstr "Stretch to Full Screen (Fill 16:9)"
+
+msgid "Fijar Tiempo"
+msgstr "Set Time"
+
+msgid "Fondo"
+msgstr "Background"
+
+msgid "Fondo Ambiental Degradado"
+msgstr "Gradient Ambient Background"
+
+msgid "Fondos"
+msgstr "Backgrounds"
+
+msgid "GALERÍA DE TEMAS (14 PRESETS)"
+msgstr "THEME GALLERY (14 PRESETS)"
+
+msgid "Guardar"
+msgstr "Save"
+
+msgid "Guardar en Documentos"
+msgstr "Save to Documents"
+
+msgid "Guardar Nombre"
+msgstr "Save Name"
+
+msgid "Guardar (.txt)"
+msgstr "Save (.txt)"
+
+msgid "Guardar y Aplicar"
+msgstr "Save and Apply"
+
+msgid "Guardar y Enviar"
+msgstr "Save and Send"
+
+msgid "Guía Rápida, Atajos de Teclado y Novedades"
+msgstr "Quick Guide, Keyboard Shortcuts and News"
+
+msgid "Guía rápida para empezar a proyectar en segundos"
+msgstr "Quick guide to start projecting in seconds"
+
+msgid "HERRAMIENTAS DEL SISTEMA"
+msgstr "SYSTEM TOOLS"
+
+msgid "Idioma"
+msgstr "Language"
+
+msgid "IDIOMA DE LA INTERFAZ"
+msgstr "INTERFACE LANGUAGE"
+
+msgid "Importar"
+msgstr "Import"
+
+msgid "Importar Archivo a Biblioteca"
+msgstr "Import File to Library"
+
+msgid "Importar Audio"
+msgstr "Import Audio"
+
+msgid "Importar Fondo en Bucle"
+msgstr "Import Looping Background"
+
+msgid "Importar Overlay PNG Transparente"
+msgstr "Import Transparent PNG Overlay"
+
+msgid "Importar PDF"
+msgstr "Import PDF"
+
+msgid "Incluir Tiempo / Reloj"
+msgstr "Include Time / Clock"
+
+msgid "Incluye capas gráficas activas en la transmisión"
+msgstr "Includes active graphic layers in the stream"
+
+msgid "Inicia la interfaz legada ImGui manteniendo todos tus archivos intactos"
+msgstr "Launches the legacy ImGui interface while keeping all your files intact"
+
+msgid "Instagram — @theproyecthor"
+msgstr "Instagram — @theproyecthor"
+
+msgid "Interpolación Fluida de Movimiento (24/30 → 60 FPS)"
+msgstr "Smooth Motion Interpolation (24/30 → 60 FPS)"
+
+msgid "Invítame un café en Ko-fi"
+msgstr "Buy me a coffee on Ko-fi"
+
+msgid "La salida al público (proyector) siempre recibe el 100% de los cuadros. Estas opciones solo afectan a la vista previa del operador para liberar CPU/GPU en equipos de bajos recursos."
+msgstr "The audience output (projector) always receives 100% of the frames. These options only affect the operator preview to free up CPU/GPU on low-resource machines."
+
+msgid "LAN"
+msgstr "LAN"
+
+msgid "LAN mantiene su propio tamaño/fuente (ej. letras gigantes) sin afectar ni ser afectado por Público"
+msgstr "LAN keeps its own size/font (e.g. giant text) without affecting or being affected by Audience"
+
+msgid "Las canciones no muestran índice; solo se usa para citas bíblicas"
+msgstr "Songs don't show an index; it's only used for Bible references"
+
+msgid "Libera memoria acumulada sin detener tu proyección en vivo"
+msgstr "Frees accumulated memory without stopping your live projection"
+
+msgid "Liberar RAM"
+msgstr "Free RAM"
+
+msgid "LÍMITE DE CUADROS DE LA VISTA PREVIA"
+msgstr "PREVIEW FRAME LIMIT"
+
+msgid "Limpiar"
+msgstr "Clear"
+
+msgid "Luces OSC"
+msgstr "OSC Lights"
+
+msgid "Matriz Multi-Pantalla y Salas (Público, LAN, Stage, Salas)"
+msgstr "Multi-Screen and Rooms Matrix (Audience, LAN, Stage, Rooms)"
+
+msgid "Modo Ultra-Ligero (Pentium Gold / GT 710 / 4GB RAM)"
+msgstr "Ultra-Light Mode (Pentium Gold / GT 710 / 4GB RAM)"
+
+msgid "Mostrar Índice en Versículos de Biblia"
+msgstr "Show Index on Bible Verses"
+
+msgid "Mostrar Línea Divisora"
+msgstr "Show Divider Line"
+
+msgid "Mostrar tutorial de bienvenida al abrir"
+msgstr "Show welcome tutorial on startup"
+
+msgid "Muestra el recuadro guía con las funciones principales al iniciar ProyecThor"
+msgstr "Shows the guide box with the main features when ProyecThor starts"
+
+msgid "Muestra el video en el monitor de vista previa del operador. Apágala para liberar por completo una subida de textura por cuadro."
+msgstr "Shows the video on the operator's preview monitor. Turn it off to fully free one texture upload per frame."
+
+msgid "Muestra letras de canciones y versículos en vivo sobre el stream"
+msgstr "Shows song lyrics and verses live over the stream"
+
+msgid "Muestra paneles, tarjetas e islas translúcidos con profundidad"
+msgstr "Shows translucent panels, cards and islands with depth"
+
+msgid "Multimedia"
+msgstr "Media"
+
+msgid "Multimedia (Videos e Imágenes)"
+msgstr "Media (Videos and Images)"
+
 msgid "Música"
 msgstr "Music"
+
+msgid "Música y Audio"
+msgstr "Music and Audio"
+
+msgid "No se detectaron cámaras o capturadoras USB conectadas. Conecta tu capturadora HDMI/USB y pulsa 'Refrescar Cámaras'."
+msgstr "No connected USB cameras or capture cards detected. Connect your HDMI/USB capture card and press 'Refresh Cameras'."
+
+msgid "No se encontraron archivos .xml en assets/bibles."
+msgstr "No .xml files found in assets/bibles."
+
+msgid "No volver a mostrar"
+msgstr "Don't show again"
+
+msgid "Novedades, capturas y tutoriales rápidos"
+msgstr "News, screenshots and quick tutorials"
+
+msgid "Nueva Canción"
+msgstr "New Song"
+
+msgid "Nueva Sala"
+msgstr "New Room"
+
+msgid "NVIDIA NIS y FidelityFX CAS+ funcionan en tiempo real en cualquier gráfica (GT 710, GTX, RTX, Intel UHD y AMD) superando la claridad de FSR 1.0 sin requerir Tensor Cores."
+msgstr "NVIDIA NIS and FidelityFX CAS+ run in real time on any graphics card (GT 710, GTX, RTX, Intel UHD and AMD), surpassing the clarity of FSR 1.0 without requiring Tensor Cores."
+
+msgid "Optimiza resolución interna de decodificación, limita caché en RAM y prioriza 100% la fluidez del proyector"
+msgstr "Optimizes internal decoding resolution, limits RAM cache and prioritizes projector smoothness 100%"
+
+msgid "OPTIMIZACIÓN PARA EQUIPOS MODESTOS (2 NÚCLEOS / 4 GB RAM)"
+msgstr "OPTIMIZATION FOR MODEST MACHINES (2 CORES / 4 GB RAM)"
+
+msgid "Overlay"
+msgstr "Overlay"
+
+msgid "Overlays"
+msgstr "Overlays"
+
+msgid "P"
+msgstr "P"
+
+msgid "Pads de Escena"
+msgstr "Scene Pads"
+
+msgid "Pantalla:"
+msgstr "Screen:"
+
+msgid "Pantalla y Video"
+msgstr "Screen and Video"
+
+msgid "Pasa el puntero sobre cualquier tarjeta de abajo para inspeccionar su contraste y superficies antes de aplicarlo a toda la interfaz."
+msgstr "Hover over any card below to inspect its contrast and surfaces before applying it to the whole interface."
+
+msgid "Predeterminada del Sistema"
+msgstr "System Default"
+
+msgid "Prioriza NVDEC + NVENC en gráficas NVIDIA con respaldo seguro automático en GPUs sin NVENC (ej. GT 710)"
+msgstr "Prioritizes NVDEC + NVENC on NVIDIA graphics with an automatic safe fallback on GPUs without NVENC (e.g. GT 710)"
+
+msgid "Priorizar salida de video (Modo salida)"
+msgstr "Prioritize video output (Output Mode)"
+
+msgid "Probar Transición en Pantalla"
+msgstr "Test Transition On Screen"
+
+msgid "Professional Presentation Engine  •  Open Source"
+msgstr "Professional Presentation Engine  •  Open Source"
+
+msgid "Proyección a Pantalla Completa"
+msgstr "Full-Screen Projection"
+
+msgid "ProyecThor"
+msgstr "ProyecThor"
+
+msgid "ProyecThor — Open Source (Slint + libmpv)"
+msgstr "ProyecThor — Open Source (Slint + libmpv)"
+
+msgid "ProyecThor — Salida Público"
+msgstr "ProyecThor — Audience Output"
+
+msgid "ProyecThor — Stage Display"
+msgstr "ProyecThor — Stage Display"
+
+msgid "ProyecThor es gratuito. Tu donación ayuda a seguir desarrollando nuevas funciones, mejoras de rendimiento y actualizaciones."
+msgstr "ProyecThor is free. Your donation helps keep developing new features, performance improvements and updates."
+
+msgid "ProyecThor Studio"
+msgstr "ProyecThor Studio"
+
+msgid "Público"
+msgstr "Audience"
+
+msgid "Puedes desactivar las transparencias o los brillos blancos superiores si prefieres un estilo sólido o para ahorrar aún más recursos en PCs modestas."
+msgstr "You can disable the transparencies or the top white highlights if you prefer a solid style or to save even more resources on modest PCs."
+
+msgid "Pulsa Esc en cualquier momento para cerrar salida"
+msgstr "Press Esc at any time to close the output"
+
+msgid "Purgar Caché de Miniaturas y Buffers en RAM"
+msgstr "Purge Thumbnail Cache and RAM Buffers"
+
+msgid "Quitar"
+msgstr "Remove"
+
+msgid "Recortar / Llenar (Cover — Sin barras negras)"
+msgstr "Crop / Fill (Cover — No black bars)"
+
+msgid "Red Local, Smart TV, Chat y Control Celular"
+msgstr "Local Network, Smart TV, Chat and Phone Control"
+
+msgid "Reduce la vista previa a su tasa mínima para que el video del público aproveche todo el equipo, sin importar qué pestaña esté abierta."
+msgstr "Reduces the preview to its minimum rate so the audience video can use the whole machine, no matter which tab is open."
+
+msgid "Re-escanear Todas las Bibliotecas"
+msgstr "Re-scan All Libraries"
+
+msgid "Reflejo especular blanco en la barra superior, botones e islas flotantes"
+msgstr "White specular reflection on the top bar, buttons and floating islands"
+
+msgid "Refrescar"
+msgstr "Refresh"
+
+msgid "Regenerar PIN"
+msgstr "Regenerate PIN"
+
+msgid "Reiniciar"
+msgstr "Reset"
+
+msgid "Rendimiento y GPU"
+msgstr "Performance and GPU"
+
+msgid "Renombrar"
+msgstr "Rename"
+
+msgid "Repetir Preview"
+msgstr "Repeat Preview"
+
+msgid "Repositorio oficial: github.com/TheVixcho/ProyecThor"
+msgstr "Official repository: github.com/TheVixcho/ProyecThor"
+
+msgid "RESOLUCIÓN Y FRECUENCIA DE PROYECCIÓN"
+msgstr "PROJECTION RESOLUTION AND FRAME RATE"
+
+msgid "Resplandor sutil del color de acento detrás de los paneles principales"
+msgstr "Subtle glow of the accent color behind the main panels"
+
+msgid "Resuelve dudas en vivo con nosotros y otros usuarios"
+msgstr "Get your questions answered live with us and other users"
+
+msgid "Salida Público Pantalla Completa"
+msgstr "Full-Screen Audience Output"
+
+msgid "Salmos 145:3  •  Vista Previa de Transición"
+msgstr "Psalm 145:3  •  Transition Preview"
+
+msgid "Se conservará la extensión original y se actualizarán colas y listas automáticamente."
+msgstr "The original extension will be kept, and queues and lists will update automatically."
+
+msgid "¿Seguro que quieres eliminar este archivo de forma permanente? Si está en reproducción o en cola, se detendrá y quitará automáticamente."
+msgstr "Are you sure you want to permanently delete this file? If it is playing or queued, it will be stopped and removed automatically."
+
+msgid "Selecciona un libro y capítulo para proyectar versículos, o escribe una cita arriba (ej. Juan 3:16)."
+msgstr "Select a book and chapter to project verses, or type a reference above (e.g. John 3:16)."
+
+msgid "Selecciona una canción a la izquierda o pulsa '+' para crear una nueva."
+msgstr "Select a song on the left or press '+' to create a new one."
+
+msgid "Selecciona videos a la izquierda y pulsa '+ Cola Videos' para reproducirlos uno tras otro automáticamente."
+msgstr "Select videos on the left and press '+ Queue Videos' to play them one after another automatically."
+
+msgid "Separa cada estrofa con una línea en blanco:"
+msgstr "Separate each stanza with a blank line:"
+
+msgid "Servidor ligero solo para texto en el puerto 8082. No codifica ni transmite video, así que casi no consume recursos."
+msgstr "Lightweight text-only server on port 8082. It doesn't encode or stream video, so it uses almost no resources."
+
+msgid "Shaders y Filtros"
+msgstr "Shaders and Filters"
+
+msgid "Siguiente"
+msgstr "Next"
+
+msgid "SIGUIENTE"
+msgstr "NEXT"
+
+msgid "Sin estilos guardados — crea uno en Diseño > Estilos."
+msgstr "No saved styles — create one in Design > Styles."
+
+msgid "Sin estilos guardados todavía."
+msgstr "No saved styles yet."
+
+msgid "Sin overlays aún — pulsa '+ Crear' para diseñar un reloj/temporizador/texto o 'Importar' para un PNG."
+msgstr "No overlays yet — press '+ Create' to design a clock/timer/text or 'Import' for a PNG."
+
+msgid "Sistema y Diagnóstico"
+msgstr "System and Diagnostics"
+
+msgid "Sitio Web Oficial"
+msgstr "Official Website"
+
+msgid "Solo escaneando carpetas internas por defecto (assets/audio y assets/music)."
+msgstr "Scanning only the default internal folders (assets/audio and assets/music)."
+
+msgid "Soporte NVIDIA NVENC / CUDA"
+msgstr "NVIDIA NVENC / CUDA Support"
+
+msgid "Stage"
+msgstr "Stage"
+
+msgid "STAGE DISPLAY"
+msgstr "STAGE DISPLAY"
+
+msgid "SUPER-RESOLUCIÓN Y NITIDEZ EN TIEMPO REAL"
+msgstr "SUPER-RESOLUTION AND REAL-TIME SHARPNESS"
+
+msgid "Tamaño Original / Ajustar (Contain — Sin recortar)"
+msgstr "Original Size / Fit (Contain — No cropping)"
+
+msgid "Texto a código QR"
+msgstr "Text to QR code"
+
+msgid "Texto a QR"
+msgstr "Text to QR"
+
+msgid "Textos"
+msgstr "Text"
+
+msgid "Tiempo Manual (Min : Seg):"
+msgstr "Manual Time (Min : Sec):"
+
+msgid "¿Tienes alguna duda o necesitas ayuda? Toca cualquiera de estos botones para abrir nuestra página oficial o hablar con la comunidad:"
+msgstr "Have a question or need help? Tap any of these buttons to open our official page or talk with the community:"
+
+msgid "Tiles (Pantalla Dividida)"
+msgstr "Tiles (Split Screen)"
+
+msgid "Todas"
+msgstr "All"
+
+msgid "Transiciones"
+msgstr "Transitions"
+
+msgid "Transparencia (Canal Alpha para OBS)"
+msgstr "Transparency (Alpha Channel for OBS)"
+
+msgid "Transparencias Liquid Glass"
+msgstr "Liquid Glass Transparencies"
+
+msgid "Tus canciones, biblias, fondos y estilos se comparten en la misma carpeta de datos entre Slint e ImGui."
+msgstr "Your songs, Bibles, backgrounds and styles are shared in the same data folder between Slint and ImGui."
+
+msgid "UBICACIÓN DE DATOS EN ESTE EQUIPO (RETROCOMPATIBLE CON IMGUI)"
+msgstr "DATA LOCATION ON THIS MACHINE (BACKWARD-COMPATIBLE WITH IMGUI)"
+
+msgid "Usa '+ Cola' o envía una Playlist de canciones aquí."
+msgstr "Use '+ Queue' or send a song Playlist here."
+
+msgid "Usar estilo de letra independiente en LAN"
+msgstr "Use an independent text style on LAN"
+
+msgid "Ver registros en vivo, estado de decodificador GPU, hilos y puertos activos"
+msgstr "View live logs, GPU decoder status, threads and active ports"
+
+msgid "Video LAN y Smart TV"
+msgstr "LAN Video and Smart TV"
+
+msgid "VISTA PREVIA 16:9"
+msgstr "PREVIEW 16:9"
+
+msgid "Vista previa activa"
+msgstr "Preview active"
+
+msgid "VISTA PREVIA Y PRIORIDAD DE SALIDA (AHORRO DE ENERGÍA)"
+msgstr "PREVIEW AND OUTPUT PRIORITY (POWER SAVING)"
+
+msgid "vixcho"
+msgstr "vixcho"
+
+msgid "WhatsApp — Canal Oficial"
+msgstr "WhatsApp — Official Channel"
+
+# Segunda pasada: labels de botones, placeholders y defaults
+msgid "1 FPS"
+msgstr "1 FPS"
+
+msgid "1080p FHD"
+msgstr "1080p FHD"
+
+msgid "2160p 4K"
+msgstr "2160p 4K"
+
+msgid "2 Columnas (Izq / Der)"
+msgstr "2 Columns (Left / Right)"
+
+msgid "2 Filas (Sup / Inf)"
+msgstr "2 Rows (Top / Bottom)"
+
+msgid "12h +Seg"
+msgstr "12h +Sec"
+
+msgid "Abajo"
+msgstr "Bottom"
+
+msgid "Abrir Canciones ›"
+msgstr "Open Songs ›"
+
+msgid "Abrir Música ›"
+msgstr "Open Music ›"
+
+msgid "Abrir ›"
+msgstr "Open ›"
+
+msgid "Acento"
+msgstr "Accent"
+
+msgid "Actual + Anterior"
+msgstr "Current + Previous"
+
+msgid "Actual + Siguiente"
+msgstr "Current + Next"
+
+msgid "Actualizar"
+msgstr "Refresh"
+
+msgid "Acústico"
+msgstr "Acoustic"
+
+msgid "Ahorro (8 FPS)"
+msgstr "Power Saving (8 FPS)"
+
+msgid "Alabanza"
+msgstr "Worship"
+
+msgid "Alta (1080p)"
+msgstr "High (1080p)"
+
+msgid "Aplicar"
+msgstr "Apply"
+
+msgid "Apoyar"
+msgstr "Support"
+
+msgid "Apoyar en Ko-fi"
+msgstr "Support on Ko-fi"
+
+msgid "Args (ej. 1, 0.5)"
+msgstr "Args (e.g. 1, 0.5)"
+
+msgid "Arriba"
+msgstr "Top"
+
+msgid "Auto-Achicar"
+msgstr "Auto-Shrink"
+
+msgid "Auto-Cortar"
+msgstr "Auto-Cut"
+
+msgid "Autor / Artista..."
+msgstr "Author / Artist..."
+
+msgid "Bajos"
+msgstr "Bass"
+
+msgid "Blanco"
+msgstr "White"
+
+msgid "Buscar fuente instalada (ej. Noto, Serif, DejaVu, Arial)..."
+msgstr "Search installed font (e.g. Noto, Serif, DejaVu, Arial)..."
+
+msgid "Buscar..."
+msgstr "Search..."
+
+msgid "Básica (360p)"
+msgstr "Basic (360p)"
+
+msgid "Caja: Letras"
+msgstr "Box: Lyrics"
+
+msgid "Caja: Índice (Solo Biblia)"
+msgstr "Box: Index (Bible Only)"
+
+msgid "Celeste"
+msgstr "Sky Blue"
+
+msgid "Centro"
+msgstr "Center"
+
+msgid "Cine"
+msgstr "Cinema"
+
+msgid "Claros (2)"
+msgstr "Light (2)"
+
+msgid "Contraste"
+msgstr "Contrast"
+
+msgid "Corte Directo (0ms)"
+msgstr "Hard Cut (0ms)"
+
+msgid "Cue 1 (/cue/1)"
+msgstr "Cue 1 (/cue/1)"
+
+msgid "Cue 2 (/cue/2)"
+msgstr "Cue 2 (/cue/2)"
+
+msgid "Cue 3 (/cue/3)"
+msgstr "Cue 3 (/cue/3)"
+
+msgid "Cálido"
+msgstr "Warm"
+
+msgid "Der"
+msgstr "Right"
+
+msgid "Deslizar Arriba (420ms)"
+msgstr "Slide Up (420ms)"
+
+msgid "Deslizar Der (400ms)"
+msgstr "Slide Right (400ms)"
+
+msgid "Deslizar Izq (400ms)"
+msgstr "Slide Left (400ms)"
+
+msgid "Detectando GPU..."
+msgstr "Detecting GPU..."
+
+msgid "Detectando aceleración de hardware GPU..."
+msgstr "Detecting GPU hardware acceleration..."
+
+msgid "Dirección OSC (ej. /cue/1)"
+msgstr "OSC Address (e.g. /cue/1)"
+
+msgid "Discord (Soporte y Comunidad)"
+msgstr "Discord (Support & Community)"
+
+msgid "Dorado"
+msgstr "Gold"
+
+msgid "Escribe un mensaje para el equipo..."
+msgstr "Write a message for the team..."
+
+msgid "Estilos"
+msgstr "Styles"
+
+msgid "Estirar (Fill)"
+msgstr "Stretch (Fill)"
+
+msgid "Estudio"
+msgstr "Studio"
+
+msgid "Estándar (720p)"
+msgstr "Standard (720p)"
+
+msgid "Fundido Cine (900ms)"
+msgstr "Cinema Fade (900ms)"
+
+msgid "Fundido Suave (350ms)"
+msgstr "Soft Fade (350ms)"
+
+msgid "Grande"
+msgstr "Large"
+
+msgid "Guía Rápida"
+msgstr "Quick Guide"
+
+msgid "Hacia Arriba ↑"
+msgstr "Count Up ↑"
+
+msgid "Hora en Vivo"
+msgstr "Live Clock"
+
+msgid "IP Destino (ej. 127.0.0.1)"
+msgstr "Target IP (e.g. 127.0.0.1)"
+
+msgid "IP de red local (auto)"
+msgstr "Local network IP (auto)"
+
+msgid "IP directa de Smart TV (ej. 192.168.1.50)"
+msgstr "Direct Smart TV IP (e.g. 192.168.1.50)"
+
+msgid "Inf-Cen"
+msgstr "Bottom-Center"
+
+msgid "Inf-Der"
+msgstr "Bottom-Right"
+
+msgid "Inf-Izq"
+msgstr "Bottom-Left"
+
+msgid "Ir a cita (ej. Ester 4:14, Juan 3:16) o buscar palabra..."
+msgstr "Go to reference (e.g. Esther 4:14, John 3:16) or search a word..."
+
+msgid "Izq"
+msgstr "Left"
+
+msgid "Libros y Capítulos"
+msgstr "Books & Chapters"
+
+msgid "Limpiar Log"
+msgstr "Clear Log"
+
+msgid "Manual X/Y"
+msgstr "Manual X/Y"
+
+msgid "Medio"
+msgstr "Medium"
+
+msgid "Máxima (UltraEstable)"
+msgstr "Maximum (UltraStable)"
+
+msgid "Negrita"
+msgstr "Bold"
+
+msgid "Noir B&W"
+msgstr "Noir B&W"
+
+msgid "Ninguna"
+msgstr "None"
+
+msgid "Nombre de subcarpeta..."
+msgstr "Subfolder name..."
+
+msgid "Nombre del estilo (ej. Alabanza Principal, LAN Gigante, Biblia)..."
+msgstr "Style name (e.g. Main Worship, Giant LAN, Bible)..."
+
+msgid "Nombre del overlay (ej. Reloj LAN, Cuenta 5m)..."
+msgstr "Overlay name (e.g. LAN Clock, 5m Countdown)..."
+
+msgid "Normal (MJPEG 30)"
+msgstr "Normal (MJPEG 30)"
+
+msgid "Novedades / Changelog"
+msgstr "What's New / Changelog"
+
+msgid "Nueva playlist..."
+msgstr "New playlist..."
+
+msgid "Nueva sala (ej. Sala Niños)..."
+msgstr "New room (e.g. Kids Room)..."
+
+msgid "Nuevo nombre del archivo..."
+msgstr "New file name..."
+
+msgid "Original (Contain)"
+msgstr "Original (Contain)"
+
+msgid "Oscuros (12)"
+msgstr "Dark (12)"
+
+msgid "Panel"
+msgstr "Panel"
+
+msgid "Pastilla"
+msgstr "Pill"
+
+msgid "Pega una ruta (ej. /home/usuario/Música)..."
+msgstr "Paste a path (e.g. /home/user/Music)..."
+
+msgid "Pequeño"
+msgstr "Small"
+
+msgid "Plano"
+msgstr "Flat"
+
+msgid "Plata"
+msgstr "Silver"
+
+msgid "Puerto (8080)"
+msgstr "Port (8080)"
+
+msgid "Puerto (9000)"
+msgstr "Port (9000)"
+
+msgid "Raíz"
+msgstr "Root"
+
+msgid "Re-escanear Todo"
+msgstr "Rescan All"
+
+msgid "Realce"
+msgstr "Highlight"
+
+msgid "Recortar (Cover)"
+msgstr "Crop (Cover)"
+
+msgid "Rectángulo"
+msgstr "Rectangle"
+
+msgid "Redondeado"
+msgstr "Rounded"
+
+msgid "Restablecer"
+msgstr "Reset"
+
+msgid "Retroceso ↓"
+msgstr "Countdown ↓"
+
+msgid "Seg"
+msgstr "Sec"
+
+msgid "Sepia"
+msgstr "Sepia"
+
+msgid "Shaders / EQ"
+msgstr "Shaders / EQ"
+
+msgid "Sitio Web"
+msgstr "Website"
+
+msgid "Solo CPU"
+msgstr "CPU Only"
+
+msgid "Subtítulo opcional..."
+msgstr "Optional subtitle..."
+
+msgid "Sup-Cen"
+msgstr "Top-Center"
+
+msgid "Sup-Der"
+msgstr "Top-Right"
+
+msgid "Sup-Izq"
+msgstr "Top-Left"
+
+msgid "Tarjeta"
+msgstr "Card"
+
+msgid "Tiles"
+msgstr "Tiles"
+
+msgid "Todas las pantallas"
+msgstr "All screens"
+
+msgid "Todos"
+msgstr "All"
+
+msgid "Todos (14)"
+msgstr "All (14)"
+
+msgid "Título / Etiqueta (ej. INICIAMOS EN, EN VIVO)..."
+msgstr "Title / Label (e.g. STARTING IN, LIVE)..."
+
+msgid "Título de la canción..."
+msgstr "Song title..."
+
+msgid "Voz"
+msgstr "Voice"
+
+msgid "Voz / Pred."
+msgstr "Voice / Default"

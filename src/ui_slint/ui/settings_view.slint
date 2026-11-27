@@ -206,7 +206,7 @@ component AppleInsetGroup inherits VerticalLayout {
 
 // ── Botón Premium de Donación Ko-fi (https://ko-fi.com/vixcho) ───────────────
 component KofiDonateButton inherits Rectangle {
-    in property <string> label: "Apoyar en Ko-fi";
+    in property <string> label: @tr("Apoyar en Ko-fi");
     in property <string> sublabel: "";
     in property <bool> compact: false;
     callback clicked();
@@ -844,7 +844,7 @@ export component AppleSettingsView inherits Rectangle {
     in-out property <int>   target-fps: 60;
     in-out property <int>   gpu-hwdec-mode: 0;
     in-out property <bool>  nvenc-enabled: false;
-    in property     <string> gpu-status-label: "Detectando GPU...";
+    in property     <string> gpu-status-label: @tr("Detectando GPU...");
     in-out property <int>   upscaler-mode: 2;
     in-out property <float> upscaler-sharpness: 55.0;
     in-out property <bool>  smooth-motion-60: false;
@@ -852,6 +852,7 @@ export component AppleSettingsView inherits Rectangle {
     in-out property <bool>  preview-enabled: true;
     in-out property <int>   preview-max-fps: 0;
     in-out property <bool>  prioritize-output: false;
+    in-out property <string> ui-language: "es";
     in-out property <bool>  fullscreen-output: true;
     in-out property <bool>  enable-glass-translucency: true;
     in-out property <bool>  enable-glass-sheen: true;
@@ -884,6 +885,7 @@ export component AppleSettingsView inherits Rectangle {
     callback purge-ram-cache();
     callback performance-mode-changed(bool);
     callback preview-config-changed();
+    callback language-changed(string);
     callback fullscreen-changed(bool);
     callback visual-effects-changed();
     callback tutorial-preference-changed(bool);
@@ -986,7 +988,7 @@ export component AppleSettingsView inherits Rectangle {
                                 image-fit: contain;
                             }
                             if !root.has-logo : Text {
-                                text: "P";
+                                text: @tr("P");
                                 color: #ffffff;
                                 font-size: 20px;
                                 font-weight: 900;
@@ -1000,7 +1002,7 @@ export component AppleSettingsView inherits Rectangle {
                             alignment: center;
                             spacing: 2px;
                             Text {
-                                text: "ProyecThor";
+                                text: @tr("ProyecThor");
                                 color: Theme.text-primary;
                                 font-size: 14px;
                                 font-weight: 800;
@@ -1035,7 +1037,7 @@ export component AppleSettingsView inherits Rectangle {
                                 Text { text: "PERSONALIZACIÓN"; color: Theme.text-muted; font-size: 10px; font-weight: 700; }
                             }
                             AppleSidebarItem {
-                                label: "Apariencia y Temas";
+                                label: @tr("Apariencia y Temas");
                                 icon: @image-url("icons/palette.svg");
                                 badge-color: #8b5cf6;
                                 pill-text: "14";
@@ -1054,7 +1056,7 @@ export component AppleSettingsView inherits Rectangle {
                                 Text { text: "PROYECCIÓN Y HARDWARE"; color: Theme.text-muted; font-size: 10px; font-weight: 700; }
                             }
                             AppleSidebarItem {
-                                label: "Pantalla y Video";
+                                label: @tr("Pantalla y Video");
                                 icon: @image-url("icons/monitor.svg");
                                 badge-color: #007aff;
                                 pill-text: root.res-label;
@@ -1062,7 +1064,7 @@ export component AppleSettingsView inherits Rectangle {
                                 clicked => { root.active-section = 1; }
                             }
                             AppleSidebarItem {
-                                label: "Rendimiento y GPU";
+                                label: @tr("Rendimiento y GPU");
                                 icon: @image-url("icons/zap.svg");
                                 badge-color: #34c759;
                                 pill-text: root.performance-mode ? "LITE" : (root.nvenc-enabled ? "NVENC" : "GPU");
@@ -1081,7 +1083,7 @@ export component AppleSettingsView inherits Rectangle {
                                 Text { text: "CONTENIDO Y SISTEMA"; color: Theme.text-muted; font-size: 10px; font-weight: 700; }
                             }
                             AppleSidebarItem {
-                                label: "Biblioteca y Música";
+                                label: @tr("Biblioteca y Música");
                                 icon: @image-url("icons/folder.svg");
                                 badge-color: #ff9500;
                                 pill-text: root.music-scan-folders.length > 0 ? ("" + root.music-scan-folders.length) : "";
@@ -1089,7 +1091,7 @@ export component AppleSettingsView inherits Rectangle {
                                 clicked => { root.active-section = 3; }
                             }
                             AppleSidebarItem {
-                                label: "Sistema y Diagnóstico";
+                                label: @tr("Sistema y Diagnóstico");
                                 icon: @image-url("icons/terminal.svg");
                                 badge-color: #64748b;
                                 pill-text: root.debug-fps-text + " FPS";
@@ -1097,7 +1099,7 @@ export component AppleSettingsView inherits Rectangle {
                                 clicked => { root.active-section = 4; }
                             }
                             AppleSidebarItem {
-                                label: "Actualizaciones";
+                                label: @tr("Actualizaciones");
                                 icon: @image-url("icons/refresh.svg");
                                 badge-color: #ff2d55;
                                 active: root.active-section == 5;
@@ -1109,7 +1111,7 @@ export component AppleSettingsView inherits Rectangle {
 
                 // Botón directo de donaciones Ko-fi en la barra lateral
                 KofiDonateButton {
-                    label: "Donar en Ko-fi";
+                    label: @tr("Donar en Ko-fi");
                     sublabel: "♥";
                     compact: true;
                     clicked => { root.open-kofi-donations(); }
@@ -1227,7 +1229,7 @@ export component AppleSettingsView inherits Rectangle {
                                     : root.active-section == 1 ? "Resolución de salida, límite de FPS, modo de escalado y reescalado en tiempo real."
                                     : root.active-section == 2 ? "Decodificación por hardware, NVIDIA NVDEC/NVENC y optimización para PCs modestas."
                                     : root.active-section == 3 ? "Carpetas locales de música, escaneo rápido e importación directa de medios."
-                                    : root.active-section == 4 ? "Telemetría en vivo, accesos de diagnóstico y modo legado ImGui."
+                                    : root.active-section == 4 ? "Idioma de la interfaz, telemetría en vivo y accesos de diagnóstico."
                                     : "Comprobación de nuevas versiones desde GitHub Releases.";
                                 color: Theme.text-muted;
                                 font-size: 11.5px;
@@ -1535,7 +1537,7 @@ export component AppleSettingsView inherits Rectangle {
                                     }
 
                                     Text {
-                                        text: "Pasa el puntero sobre cualquier tarjeta de abajo para inspeccionar su contraste y superficies antes de aplicarlo a toda la interfaz.";
+                                        text: @tr("Pasa el puntero sobre cualquier tarjeta de abajo para inspeccionar su contraste y superficies antes de aplicarlo a toda la interfaz.");
                                         color: Theme.text-muted;
                                         font-size: 11.5px;
                                         wrap: word-wrap;
@@ -1548,11 +1550,11 @@ export component AppleSettingsView inherits Rectangle {
                                     alignment: start;
 
                                     for sw in [
-                                        { label: "Fondo",    col: root.preview-theme.c-root },
-                                        { label: "Panel",    col: root.preview-theme.c-s0 },
-                                        { label: "Tarjeta",  col: root.preview-theme.c-s1 },
-                                        { label: "Acento",   col: root.preview-theme.c-acc },
-                                        { label: "Realce",   col: root.preview-theme.c-acc2 },
+                                        { label: @tr("Fondo"),    col: root.preview-theme.c-root },
+                                        { label: @tr("Panel"),    col: root.preview-theme.c-s0 },
+                                        { label: @tr("Tarjeta"),  col: root.preview-theme.c-s1 },
+                                        { label: @tr("Acento"),   col: root.preview-theme.c-acc },
+                                        { label: @tr("Realce"),   col: root.preview-theme.c-acc2 },
                                     ] : VerticalLayout {
                                         spacing: 3px;
                                         Rectangle {
@@ -1583,7 +1585,7 @@ export component AppleSettingsView inherits Rectangle {
                         spacing: 12px;
 
                         Text {
-                            text: "GALERÍA DE TEMAS (14 PRESETS)";
+                            text: @tr("GALERÍA DE TEMAS (14 PRESETS)");
                             color: Theme.text-muted;
                             font-size: 11px;
                             font-weight: 700;
@@ -1599,9 +1601,9 @@ export component AppleSettingsView inherits Rectangle {
                             HorizontalLayout {
                                 padding: 3px;
                                 spacing: 3px;
-                                AppleSegmentOption { label: "Todos (14)";   active: root.theme-filter == 0; clicked => { root.theme-filter = 0; } }
-                                AppleSegmentOption { label: "Oscuros (12)"; active: root.theme-filter == 1; clicked => { root.theme-filter = 1; } }
-                                AppleSegmentOption { label: "Claros (2)";   active: root.theme-filter == 2; clicked => { root.theme-filter = 2; } }
+                                AppleSegmentOption { label: @tr("Todos (14)");   active: root.theme-filter == 0; clicked => { root.theme-filter = 0; } }
+                                AppleSegmentOption { label: @tr("Oscuros (12)"); active: root.theme-filter == 1; clicked => { root.theme-filter = 1; } }
+                                AppleSegmentOption { label: @tr("Claros (2)");   active: root.theme-filter == 2; clicked => { root.theme-filter = 2; } }
                             }
                         }
                     }
@@ -1677,12 +1679,12 @@ export component AppleSettingsView inherits Rectangle {
 
                     // ── Controles de Efectos Visuales Liquid Glass ──
                     AppleInsetGroup {
-                        header: "EFECTOS VISUALES Y LIQUID GLASS";
-                        footer: "Puedes desactivar las transparencias o los brillos blancos superiores si prefieres un estilo sólido o para ahorrar aún más recursos en PCs modestas.";
+                        header: @tr("EFECTOS VISUALES Y LIQUID GLASS");
+                        footer: @tr("Puedes desactivar las transparencias o los brillos blancos superiores si prefieres un estilo sólido o para ahorrar aún más recursos en PCs modestas.");
 
                         AppleSwitchRow {
-                            title: "Transparencias Liquid Glass";
-                            subtitle: "Muestra paneles, tarjetas e islas translúcidos con profundidad";
+                            title: @tr("Transparencias Liquid Glass");
+                            subtitle: @tr("Muestra paneles, tarjetas e islas translúcidos con profundidad");
                             active-color: #8b5cf6;
                             checked <=> root.enable-glass-translucency;
                             toggled(v) => { root.visual-effects-changed(); }
@@ -1691,8 +1693,8 @@ export component AppleSettingsView inherits Rectangle {
                         AppleDivider {}
 
                         AppleSwitchRow {
-                            title: "Degradado Blanco y Brillo Superior";
-                            subtitle: "Reflejo especular blanco en la barra superior, botones e islas flotantes";
+                            title: @tr("Degradado Blanco y Brillo Superior");
+                            subtitle: @tr("Reflejo especular blanco en la barra superior, botones e islas flotantes");
                             active-color: #007aff;
                             checked <=> root.enable-glass-sheen;
                             toggled(v) => { root.visual-effects-changed(); }
@@ -1701,8 +1703,8 @@ export component AppleSettingsView inherits Rectangle {
                         AppleDivider {}
 
                         AppleSwitchRow {
-                            title: "Fondo Ambiental Degradado";
-                            subtitle: "Resplandor sutil del color de acento detrás de los paneles principales";
+                            title: @tr("Fondo Ambiental Degradado");
+                            subtitle: @tr("Resplandor sutil del color de acento detrás de los paneles principales");
                             active-color: #34c759;
                             checked <=> root.enable-ambient-bg;
                             toggled(v) => { root.visual-effects-changed(); }
@@ -1717,8 +1719,8 @@ export component AppleSettingsView inherits Rectangle {
                     active: root.active-section == 1;
 
                     AppleInsetGroup {
-                        header: "RESOLUCIÓN Y FRECUENCIA DE PROYECCIÓN";
-                        footer: "Afecta la ventana de Público y la nitidez interna de videos e imágenes. Para pantallas 4K elige 2160p; para proyectores HD clásicos 1080p o 720p.";
+                        header: @tr("RESOLUCIÓN Y FRECUENCIA DE PROYECCIÓN");
+                        footer: @tr("Afecta la ventana de Público y la nitidez interna de videos e imágenes. Para pantallas 4K elige 2160p; para proyectores HD clásicos 1080p o 720p.");
 
                         VerticalLayout {
                             padding: 16px;
@@ -1732,9 +1734,9 @@ export component AppleSettingsView inherits Rectangle {
                                 HorizontalLayout {
                                     padding: 4px;
                                     spacing: 4px;
-                                    AppleSegmentOption { label: "720p HD";  sublabel: "1280×720";  horizontal-stretch: 1; active: root.output-res-preset == 0; clicked => { root.output-res-preset = 0; root.output-res-changed(0); } }
-                                    AppleSegmentOption { label: "1080p FHD"; sublabel: "1920×1080"; horizontal-stretch: 1; active: root.output-res-preset == 1; clicked => { root.output-res-preset = 1; root.output-res-changed(1); } }
-                                    AppleSegmentOption { label: "2160p 4K"; sublabel: "3840×2160"; horizontal-stretch: 1; active: root.output-res-preset == 4; clicked => { root.output-res-preset = 4; root.output-res-changed(4); } }
+                                    AppleSegmentOption { label: @tr("720p HD");  sublabel: "1280×720";  horizontal-stretch: 1; active: root.output-res-preset == 0; clicked => { root.output-res-preset = 0; root.output-res-changed(0); } }
+                                    AppleSegmentOption { label: @tr("1080p FHD"); sublabel: "1920×1080"; horizontal-stretch: 1; active: root.output-res-preset == 1; clicked => { root.output-res-preset = 1; root.output-res-changed(1); } }
+                                    AppleSegmentOption { label: @tr("2160p 4K"); sublabel: "3840×2160"; horizontal-stretch: 1; active: root.output-res-preset == 4; clicked => { root.output-res-preset = 4; root.output-res-changed(4); } }
                                     AppleSegmentOption { label: "16:10";    sublabel: "1920×1200"; horizontal-stretch: 1; active: root.output-res-preset == 2; clicked => { root.output-res-preset = 2; root.output-res-changed(2); } }
                                     AppleSegmentOption { label: "4:3";      sublabel: "1440×1080"; horizontal-stretch: 1; active: root.output-res-preset == 3; clicked => { root.output-res-preset = 3; root.output-res-changed(3); } }
                                 }
@@ -1755,9 +1757,9 @@ export component AppleSettingsView inherits Rectangle {
                                 HorizontalLayout {
                                     padding: 4px;
                                     spacing: 4px;
-                                    AppleSegmentOption { label: "30 FPS";  sublabel: "Ahorro CPU";    horizontal-stretch: 1; active: root.target-fps == 30;  clicked => { root.target-fps = 30;  root.target-fps-changed(30); } }
-                                    AppleSegmentOption { label: "60 FPS";  sublabel: "Fluido Estándar"; horizontal-stretch: 1; active: root.target-fps == 60;  clicked => { root.target-fps = 60;  root.target-fps-changed(60); } }
-                                    AppleSegmentOption { label: "120 FPS"; sublabel: "Ultra Fluido";   horizontal-stretch: 1; active: root.target-fps == 120; clicked => { root.target-fps = 120; root.target-fps-changed(120); } }
+                                    AppleSegmentOption { label: @tr("30 FPS");  sublabel: "Ahorro CPU";    horizontal-stretch: 1; active: root.target-fps == 30;  clicked => { root.target-fps = 30;  root.target-fps-changed(30); } }
+                                    AppleSegmentOption { label: @tr("60 FPS");  sublabel: "Fluido Estándar"; horizontal-stretch: 1; active: root.target-fps == 60;  clicked => { root.target-fps = 60;  root.target-fps-changed(60); } }
+                                    AppleSegmentOption { label: @tr("120 FPS"); sublabel: "Ultra Fluido";   horizontal-stretch: 1; active: root.target-fps == 120; clicked => { root.target-fps = 120; root.target-fps-changed(120); } }
                                 }
                             }
                         }
@@ -1765,8 +1767,8 @@ export component AppleSettingsView inherits Rectangle {
                         AppleDivider {}
 
                         AppleSwitchRow {
-                            title: "Interpolación Fluida de Movimiento (24/30 → 60 FPS)";
-                            subtitle: "Convierte fondos y videos grabados a 24, 25 o 30 FPS en 60 FPS suaves en tiempo real";
+                            title: @tr("Interpolación Fluida de Movimiento (24/30 → 60 FPS)");
+                            subtitle: @tr("Convierte fondos y videos grabados a 24, 25 o 30 FPS en 60 FPS suaves en tiempo real");
                             active-color: #007aff;
                             checked <=> root.smooth-motion-60;
                             toggled(v) => {
@@ -1780,7 +1782,7 @@ export component AppleSettingsView inherits Rectangle {
                     }
 
                     AppleInsetGroup {
-                        header: "AJUSTE DE PANTALLA Y ENCUADRE";
+                        header: @tr("AJUSTE DE PANTALLA Y ENCUADRE");
 
                         VerticalLayout {
                             padding: 16px;
@@ -1794,9 +1796,9 @@ export component AppleSettingsView inherits Rectangle {
                                 HorizontalLayout {
                                     padding: 4px;
                                     spacing: 4px;
-                                    AppleSegmentOption { label: "Recortar (Cover)";   sublabel: "Sin barras negras"; horizontal-stretch: 1; active: root.bg-scale-mode == 0; clicked => { root.bg-scale-mode = 0; root.scale-mode-changed(0); } }
-                                    AppleSegmentOption { label: "Estirar (Fill)";     sublabel: "Llena 100% pantalla"; horizontal-stretch: 1; active: root.bg-scale-mode == 1; clicked => { root.bg-scale-mode = 1; root.scale-mode-changed(1); } }
-                                    AppleSegmentOption { label: "Original (Contain)"; sublabel: "Sin recortar bordes"; horizontal-stretch: 1; active: root.bg-scale-mode == 2; clicked => { root.bg-scale-mode = 2; root.scale-mode-changed(2); } }
+                                    AppleSegmentOption { label: @tr("Recortar (Cover)");   sublabel: "Sin barras negras"; horizontal-stretch: 1; active: root.bg-scale-mode == 0; clicked => { root.bg-scale-mode = 0; root.scale-mode-changed(0); } }
+                                    AppleSegmentOption { label: @tr("Estirar (Fill)");     sublabel: "Llena 100% pantalla"; horizontal-stretch: 1; active: root.bg-scale-mode == 1; clicked => { root.bg-scale-mode = 1; root.scale-mode-changed(1); } }
+                                    AppleSegmentOption { label: @tr("Original (Contain)"); sublabel: "Sin recortar bordes"; horizontal-stretch: 1; active: root.bg-scale-mode == 2; clicked => { root.bg-scale-mode = 2; root.scale-mode-changed(2); } }
                                 }
                             }
                         }
@@ -1804,8 +1806,8 @@ export component AppleSettingsView inherits Rectangle {
                         AppleDivider {}
 
                         AppleSwitchRow {
-                            title: "Proyección a Pantalla Completa";
-                            subtitle: "Cubre todo el monitor del proyector sin bordes ni barra de título (Esc para salir)";
+                            title: @tr("Proyección a Pantalla Completa");
+                            subtitle: @tr("Cubre todo el monitor del proyector sin bordes ni barra de título (Esc para salir)");
                             active-color: #34c759;
                             checked <=> root.fullscreen-output;
                             toggled(v) => { root.fullscreen-changed(v); }
@@ -1813,8 +1815,8 @@ export component AppleSettingsView inherits Rectangle {
                     }
 
                     AppleInsetGroup {
-                        header: "SUPER-RESOLUCIÓN Y NITIDEZ EN TIEMPO REAL";
-                        footer: "NVIDIA NIS y FidelityFX CAS+ funcionan en tiempo real en cualquier gráfica (GT 710, GTX, RTX, Intel UHD y AMD) superando la claridad de FSR 1.0 sin requerir Tensor Cores.";
+                        header: @tr("SUPER-RESOLUCIÓN Y NITIDEZ EN TIEMPO REAL");
+                        footer: @tr("NVIDIA NIS y FidelityFX CAS+ funcionan en tiempo real en cualquier gráfica (GT 710, GTX, RTX, Intel UHD y AMD) superando la claridad de FSR 1.0 sin requerir Tensor Cores.");
 
                         VerticalLayout {
                             padding: 16px;
@@ -1828,11 +1830,11 @@ export component AppleSettingsView inherits Rectangle {
                                 HorizontalLayout {
                                     padding: 4px;
                                     spacing: 4px;
-                                    AppleSegmentOption { label: "Off";             sublabel: "Bilineal rápido"; horizontal-stretch: 1; active: root.upscaler-mode == 0; clicked => { root.upscaler-mode = 0; root.gpu-config-changed(); } }
-                                    AppleSegmentOption { label: "AMD FSR 1.0";     sublabel: "RCAS clásico";    horizontal-stretch: 1; active: root.upscaler-mode == 1; clicked => { root.upscaler-mode = 1; root.gpu-config-changed(); } }
-                                    AppleSegmentOption { label: "FidelityFX CAS+"; sublabel: "Recomendado";     horizontal-stretch: 1; active: root.upscaler-mode == 2; clicked => { root.upscaler-mode = 2; root.gpu-config-changed(); } }
-                                    AppleSegmentOption { label: "NVIDIA NIS";      sublabel: "Direccional HD";  horizontal-stretch: 1; active: root.upscaler-mode == 3; clicked => { root.upscaler-mode = 3; root.gpu-config-changed(); } }
-                                    AppleSegmentOption { label: "LanczosHQ 4K";    sublabel: "Máximo detalle";  horizontal-stretch: 1; active: root.upscaler-mode == 4; clicked => { root.upscaler-mode = 4; root.gpu-config-changed(); } }
+                                    AppleSegmentOption { label: @tr("Off");             sublabel: "Bilineal rápido"; horizontal-stretch: 1; active: root.upscaler-mode == 0; clicked => { root.upscaler-mode = 0; root.gpu-config-changed(); } }
+                                    AppleSegmentOption { label: @tr("AMD FSR 1.0");     sublabel: "RCAS clásico";    horizontal-stretch: 1; active: root.upscaler-mode == 1; clicked => { root.upscaler-mode = 1; root.gpu-config-changed(); } }
+                                    AppleSegmentOption { label: @tr("FidelityFX CAS+"); sublabel: "Recomendado";     horizontal-stretch: 1; active: root.upscaler-mode == 2; clicked => { root.upscaler-mode = 2; root.gpu-config-changed(); } }
+                                    AppleSegmentOption { label: @tr("NVIDIA NIS");      sublabel: "Direccional HD";  horizontal-stretch: 1; active: root.upscaler-mode == 3; clicked => { root.upscaler-mode = 3; root.gpu-config-changed(); } }
+                                    AppleSegmentOption { label: @tr("LanczosHQ 4K");    sublabel: "Máximo detalle";  horizontal-stretch: 1; active: root.upscaler-mode == 4; clicked => { root.upscaler-mode = 4; root.gpu-config-changed(); } }
                                 }
                             }
 
@@ -1904,7 +1906,7 @@ export component AppleSettingsView inherits Rectangle {
                             }
 
                             GlassButton {
-                                label: "Liberar RAM";
+                                label: @tr("Liberar RAM");
                                 icon: @image-url("icons/refresh.svg");
                                 has-icon: true;
                                 clicked => { root.purge-ram-cache(); }
@@ -1913,7 +1915,7 @@ export component AppleSettingsView inherits Rectangle {
                     }
 
                     AppleInsetGroup {
-                        header: "ACELERACIÓN POR HARDWARE (GPU / NVIDIA)";
+                        header: @tr("ACELERACIÓN POR HARDWARE (GPU / NVIDIA)");
 
                         VerticalLayout {
                             padding: 16px;
@@ -1927,11 +1929,11 @@ export component AppleSettingsView inherits Rectangle {
                                 HorizontalLayout {
                                     padding: 4px;
                                     spacing: 4px;
-                                    AppleSegmentOption { label: "Auto";       sublabel: "Inteligente";  horizontal-stretch: 1; active: root.gpu-hwdec-mode == 0; clicked => { root.gpu-hwdec-mode = 0; root.gpu-config-changed(); } }
-                                    AppleSegmentOption { label: "NVIDIA";     sublabel: "CUDA / NVDEC"; horizontal-stretch: 1; active: root.gpu-hwdec-mode == 1; clicked => { root.gpu-hwdec-mode = 1; root.gpu-config-changed(); } }
-                                    AppleSegmentOption { label: "Direct3D 11"; sublabel: "Windows GPU"; horizontal-stretch: 1; active: root.gpu-hwdec-mode == 2; clicked => { root.gpu-hwdec-mode = 2; root.gpu-config-changed(); } }
-                                    AppleSegmentOption { label: "VAAPI";      sublabel: "Linux/Vulkan"; horizontal-stretch: 1; active: root.gpu-hwdec-mode == 3; clicked => { root.gpu-hwdec-mode = 3; root.gpu-config-changed(); } }
-                                    AppleSegmentOption { label: "Solo CPU";   sublabel: "Software";     horizontal-stretch: 1; active: root.gpu-hwdec-mode == 4; clicked => { root.gpu-hwdec-mode = 4; root.gpu-config-changed(); } }
+                                    AppleSegmentOption { label: @tr("Auto");       sublabel: "Inteligente";  horizontal-stretch: 1; active: root.gpu-hwdec-mode == 0; clicked => { root.gpu-hwdec-mode = 0; root.gpu-config-changed(); } }
+                                    AppleSegmentOption { label: @tr("NVIDIA");     sublabel: "CUDA / NVDEC"; horizontal-stretch: 1; active: root.gpu-hwdec-mode == 1; clicked => { root.gpu-hwdec-mode = 1; root.gpu-config-changed(); } }
+                                    AppleSegmentOption { label: @tr("Direct3D 11"); sublabel: "Windows GPU"; horizontal-stretch: 1; active: root.gpu-hwdec-mode == 2; clicked => { root.gpu-hwdec-mode = 2; root.gpu-config-changed(); } }
+                                    AppleSegmentOption { label: @tr("VAAPI");      sublabel: "Linux/Vulkan"; horizontal-stretch: 1; active: root.gpu-hwdec-mode == 3; clicked => { root.gpu-hwdec-mode = 3; root.gpu-config-changed(); } }
+                                    AppleSegmentOption { label: @tr("Solo CPU");   sublabel: "Software";     horizontal-stretch: 1; active: root.gpu-hwdec-mode == 4; clicked => { root.gpu-hwdec-mode = 4; root.gpu-config-changed(); } }
                                 }
                             }
                         }
@@ -1939,8 +1941,8 @@ export component AppleSettingsView inherits Rectangle {
                         AppleDivider {}
 
                         AppleSwitchRow {
-                            title: "Soporte NVIDIA NVENC / CUDA";
-                            subtitle: "Prioriza NVDEC + NVENC en gráficas NVIDIA con respaldo seguro automático en GPUs sin NVENC (ej. GT 710)";
+                            title: @tr("Soporte NVIDIA NVENC / CUDA");
+                            subtitle: @tr("Prioriza NVDEC + NVENC en gráficas NVIDIA con respaldo seguro automático en GPUs sin NVENC (ej. GT 710)");
                             active-color: #34c759;
                             checked <=> root.nvenc-enabled;
                             toggled(v) => {
@@ -1953,11 +1955,11 @@ export component AppleSettingsView inherits Rectangle {
                     }
 
                     AppleInsetGroup {
-                        header: "OPTIMIZACIÓN PARA EQUIPOS MODESTOS (2 NÚCLEOS / 4 GB RAM)";
+                        header: @tr("OPTIMIZACIÓN PARA EQUIPOS MODESTOS (2 NÚCLEOS / 4 GB RAM)");
 
                         AppleSwitchRow {
-                            title: "Modo Ultra-Ligero (Pentium Gold / GT 710 / 4GB RAM)";
-                            subtitle: "Optimiza resolución interna de decodificación, limita caché en RAM y prioriza 100% la fluidez del proyector";
+                            title: @tr("Modo Ultra-Ligero (Pentium Gold / GT 710 / 4GB RAM)");
+                            subtitle: @tr("Optimiza resolución interna de decodificación, limita caché en RAM y prioriza 100% la fluidez del proyector");
                             active-color: #ff9500;
                             checked <=> root.performance-mode;
                             toggled(v) => { root.performance-mode-changed(v); }
@@ -1966,33 +1968,33 @@ export component AppleSettingsView inherits Rectangle {
                         AppleDivider {}
 
                         AppleActionRow {
-                            title: "Aplicar Perfil Recomendado para PC Modesta";
-                            subtitle: "Configura automáticamente 720p, 30 FPS, Modo Ultra-Ligero, Reescalado Off y limpieza de buffers";
+                            title: @tr("Aplicar Perfil Recomendado para PC Modesta");
+                            subtitle: @tr("Configura automáticamente 720p, 30 FPS, Modo Ultra-Ligero, Reescalado Off y limpieza de buffers");
                             icon: @image-url("icons/zap.svg");
                             badge-color: #ff9500;
-                            trailing-label: "Aplicar ahora";
+                            trailing-label: @tr("Aplicar ahora");
                             clicked => { root.apply-low-spec-preset(); }
                         }
 
                         AppleDivider {}
 
                         AppleActionRow {
-                            title: "Purgar Caché de Miniaturas y Buffers en RAM";
-                            subtitle: "Libera memoria acumulada sin detener tu proyección en vivo";
+                            title: @tr("Purgar Caché de Miniaturas y Buffers en RAM");
+                            subtitle: @tr("Libera memoria acumulada sin detener tu proyección en vivo");
                             icon: @image-url("icons/refresh.svg");
                             badge-color: #0ea5e9;
-                            trailing-label: "Limpiar";
+                            trailing-label: @tr("Limpiar");
                             clicked => { root.purge-ram-cache(); }
                         }
                     }
 
                     AppleInsetGroup {
-                        header: "VISTA PREVIA Y PRIORIDAD DE SALIDA (AHORRO DE ENERGÍA)";
-                        footer: "La salida al público (proyector) siempre recibe el 100% de los cuadros. Estas opciones solo afectan a la vista previa del operador para liberar CPU/GPU en equipos de bajos recursos.";
+                        header: @tr("VISTA PREVIA Y PRIORIDAD DE SALIDA (AHORRO DE ENERGÍA)");
+                        footer: @tr("La salida al público (proyector) siempre recibe el 100% de los cuadros. Estas opciones solo afectan a la vista previa del operador para liberar CPU/GPU en equipos de bajos recursos.");
 
                         AppleSwitchRow {
-                            title: "Vista previa activa";
-                            subtitle: "Muestra el video en el monitor de vista previa del operador. Apágala para liberar por completo una subida de textura por cuadro.";
+                            title: @tr("Vista previa activa");
+                            subtitle: @tr("Muestra el video en el monitor de vista previa del operador. Apágala para liberar por completo una subida de textura por cuadro.");
                             active-color: #34c759;
                             checked <=> root.preview-enabled;
                             toggled(v) => { root.preview-config-changed(); }
@@ -2004,7 +2006,7 @@ export component AppleSettingsView inherits Rectangle {
                             padding: 16px;
                             spacing: 8px;
                             Text {
-                                text: "LÍMITE DE CUADROS DE LA VISTA PREVIA";
+                                text: @tr("LÍMITE DE CUADROS DE LA VISTA PREVIA");
                                 color: Theme.text-muted;
                                 font-size: 11px;
                                 font-weight: 700;
@@ -2017,10 +2019,10 @@ export component AppleSettingsView inherits Rectangle {
                                 HorizontalLayout {
                                     padding: 4px;
                                     spacing: 4px;
-                                    AppleSegmentOption { label: "Auto";   sublabel: "Sin tope extra"; horizontal-stretch: 1; active: root.preview-max-fps == 0;  clicked => { root.preview-max-fps = 0;  root.preview-config-changed(); } }
-                                    AppleSegmentOption { label: "15 FPS"; sublabel: "Suave";          horizontal-stretch: 1; active: root.preview-max-fps == 15; clicked => { root.preview-max-fps = 15; root.preview-config-changed(); } }
-                                    AppleSegmentOption { label: "5 FPS";  sublabel: "Ahorro";         horizontal-stretch: 1; active: root.preview-max-fps == 5;  clicked => { root.preview-max-fps = 5;  root.preview-config-changed(); } }
-                                    AppleSegmentOption { label: "1 FPS";  sublabel: "Mínimo";         horizontal-stretch: 1; active: root.preview-max-fps == 1;  clicked => { root.preview-max-fps = 1;  root.preview-config-changed(); } }
+                                    AppleSegmentOption { label: @tr("Auto");   sublabel: "Sin tope extra"; horizontal-stretch: 1; active: root.preview-max-fps == 0;  clicked => { root.preview-max-fps = 0;  root.preview-config-changed(); } }
+                                    AppleSegmentOption { label: @tr("15 FPS"); sublabel: "Suave";          horizontal-stretch: 1; active: root.preview-max-fps == 15; clicked => { root.preview-max-fps = 15; root.preview-config-changed(); } }
+                                    AppleSegmentOption { label: @tr("5 FPS");  sublabel: "Ahorro";         horizontal-stretch: 1; active: root.preview-max-fps == 5;  clicked => { root.preview-max-fps = 5;  root.preview-config-changed(); } }
+                                    AppleSegmentOption { label: @tr("1 FPS");  sublabel: "Mínimo";         horizontal-stretch: 1; active: root.preview-max-fps == 1;  clicked => { root.preview-max-fps = 1;  root.preview-config-changed(); } }
                                 }
                             }
                         }
@@ -2028,8 +2030,8 @@ export component AppleSettingsView inherits Rectangle {
                         AppleDivider {}
 
                         AppleSwitchRow {
-                            title: "Priorizar salida de video (Modo salida)";
-                            subtitle: "Reduce la vista previa a su tasa mínima para que el video del público aproveche todo el equipo, sin importar qué pestaña esté abierta.";
+                            title: @tr("Priorizar salida de video (Modo salida)");
+                            subtitle: @tr("Reduce la vista previa a su tasa mínima para que el video del público aproveche todo el equipo, sin importar qué pestaña esté abierta.");
                             active-color: #ff9500;
                             checked <=> root.prioritize-output;
                             toggled(v) => { root.preview-config-changed(); }
@@ -2044,8 +2046,8 @@ export component AppleSettingsView inherits Rectangle {
                     active: root.active-section == 3;
 
                     AppleInsetGroup {
-                        header: "CARPETAS DE ESCANEO DE MÚSICA";
-                        footer: "Además de las carpetas internas (assets/audio y assets/music), las carpetas que agregues aquí se escanearán automáticamente en la pestaña Música.";
+                        header: @tr("CARPETAS DE ESCANEO DE MÚSICA");
+                        footer: @tr("Además de las carpetas internas (assets/audio y assets/music), las carpetas que agregues aquí se escanearán automáticamente en la pestaña Música.");
 
                         VerticalLayout {
                             padding: 16px;
@@ -2060,7 +2062,7 @@ export component AppleSettingsView inherits Rectangle {
                                     Text { text: "Elige carpetas de tu PC o pega una ruta directamente."; color: Theme.text-muted; font-size: 11px; }
                                 }
                                 GlassButton {
-                                    label: "+ Elegir Carpeta";
+                                    label: @tr("+ Elegir Carpeta");
                                     icon: @image-url("icons/folder.svg");
                                     has-icon: true;
                                     primary: true;
@@ -2072,7 +2074,7 @@ export component AppleSettingsView inherits Rectangle {
                                 spacing: 8px;
                                 LineEdit {
                                     horizontal-stretch: 1;
-                                    placeholder-text: "Pega una ruta (ej. /home/usuario/Música)...";
+                                    placeholder-text: @tr("Pega una ruta (ej. /home/usuario/Música)...");
                                     text <=> root.music-folder-input;
                                     accepted(p) => {
                                         if (p != "") {
@@ -2082,7 +2084,7 @@ export component AppleSettingsView inherits Rectangle {
                                     }
                                 }
                                 GlassButton {
-                                    label: "Agregar";
+                                    label: @tr("Agregar");
                                     clicked => {
                                         if (root.music-folder-input != "") {
                                             root.add-music-folder(root.music-folder-input);
@@ -2101,7 +2103,7 @@ export component AppleSettingsView inherits Rectangle {
                                 HorizontalLayout {
                                     padding-left: 12px;
                                     Text {
-                                        text: "Solo escaneando carpetas internas por defecto (assets/audio y assets/music).";
+                                        text: @tr("Solo escaneando carpetas internas por defecto (assets/audio y assets/music).");
                                         color: Theme.text-muted;
                                         font-size: 11.5px;
                                         vertical-alignment: center;
@@ -2136,7 +2138,7 @@ export component AppleSettingsView inherits Rectangle {
                                         horizontal-stretch: 1;
                                     }
                                     GlassButton {
-                                        label: "Quitar";
+                                        label: @tr("Quitar");
                                         compact: true;
                                         danger: true;
                                         clicked => { root.remove-music-folder(mdidx); }
@@ -2147,47 +2149,47 @@ export component AppleSettingsView inherits Rectangle {
                     }
 
                     AppleInsetGroup {
-                        header: "ACCIONES RÁPIDAS DE BIBLIOTECA";
+                        header: @tr("ACCIONES RÁPIDAS DE BIBLIOTECA");
 
                         AppleActionRow {
-                            title: "Re-escanear Todas las Bibliotecas";
-                            subtitle: "Actualiza canciones, multimedia, fondos, overlays, música y documentos desde el disco";
+                            title: @tr("Re-escanear Todas las Bibliotecas");
+                            subtitle: @tr("Actualiza canciones, multimedia, fondos, overlays, música y documentos desde el disco");
                             icon: @image-url("icons/refresh.svg");
                             badge-color: #ff9500;
-                            trailing-label: "Escanear";
+                            trailing-label: @tr("Escanear");
                             clicked => { root.scan-libraries(); }
                         }
                         AppleDivider {}
                         AppleActionRow {
-                            title: "Importar Archivo a Biblioteca";
-                            subtitle: "Canciones (.txt/.song), videos, imágenes, PDFs o Biblias XML";
+                            title: @tr("Importar Archivo a Biblioteca");
+                            subtitle: @tr("Canciones (.txt/.song), videos, imágenes, PDFs o Biblias XML");
                             icon: @image-url("icons/upload.svg");
                             badge-color: #007aff;
-                            trailing-label: "Importar";
+                            trailing-label: @tr("Importar");
                             clicked => { root.import-file-clicked(); }
                         }
                         AppleDivider {}
                         AppleActionRow {
-                            title: "Importar Fondo en Bucle";
-                            subtitle: "Añade videos MP4/WebM o fondos estáticos directamente a assets/backgrounds";
+                            title: @tr("Importar Fondo en Bucle");
+                            subtitle: @tr("Añade videos MP4/WebM o fondos estáticos directamente a assets/backgrounds");
                             icon: @image-url("icons/film.svg");
                             badge-color: #8b5cf6;
-                            trailing-label: "Importar";
+                            trailing-label: @tr("Importar");
                             clicked => { root.import-background-clicked(); }
                         }
                         AppleDivider {}
                         AppleActionRow {
-                            title: "Importar Overlay PNG Transparente";
-                            subtitle: "Añade logos, marcos o plecas transparentes a assets/overlays";
+                            title: @tr("Importar Overlay PNG Transparente");
+                            subtitle: @tr("Añade logos, marcos o plecas transparentes a assets/overlays");
                             icon: @image-url("icons/layers.svg");
                             badge-color: #10b981;
-                            trailing-label: "Importar";
+                            trailing-label: @tr("Importar");
                             clicked => { root.import-overlay-clicked(); }
                         }
                     }
 
                     if root.debug-paths != "" : AppleInsetGroup {
-                        header: "UBICACIÓN DE DATOS EN ESTE EQUIPO (RETROCOMPATIBLE CON IMGUI)";
+                        header: @tr("UBICACIÓN DE DATOS EN ESTE EQUIPO (RETROCOMPATIBLE CON IMGUI)");
                         VerticalLayout {
                             padding: 14px;
                             Text {
@@ -2233,38 +2235,61 @@ export component AppleSettingsView inherits Rectangle {
                     }
 
                     AppleInsetGroup {
-                        header: "HERRAMIENTAS DEL SISTEMA";
+                        header: @tr("IDIOMA DE LA INTERFAZ");
+                        footer: @tr("El cambio se aplica al instante. Para agregar más idiomas en el futuro solo hace falta un archivo de traducción nuevo.");
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 10px;
+                            Text { text: @tr("Idioma"); color: Theme.text-primary; font-size: 13px; font-weight: 600; }
+                            Rectangle {
+                                border-radius: 10px;
+                                background: Theme.bg-surface-0;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+                                HorizontalLayout {
+                                    padding: 4px;
+                                    spacing: 4px;
+                                    AppleSegmentOption { label: "Español"; sublabel: "Español"; horizontal-stretch: 1; active: root.ui-language == "es"; clicked => { root.ui-language = "es"; root.language-changed("es"); } }
+                                    AppleSegmentOption { label: "English"; sublabel: "Inglés";  horizontal-stretch: 1; active: root.ui-language == "en"; clicked => { root.ui-language = "en"; root.language-changed("en"); } }
+                                }
+                            }
+                        }
+                    }
+
+                    AppleInsetGroup {
+                        header: @tr("HERRAMIENTAS DEL SISTEMA");
 
                         AppleActionRow {
-                            title: "Consola de Diagnóstico y Telemetría";
-                            subtitle: "Ver registros en vivo, estado de decodificador GPU, hilos y puertos activos";
+                            title: @tr("Consola de Diagnóstico y Telemetría");
+                            subtitle: @tr("Ver registros en vivo, estado de decodificador GPU, hilos y puertos activos");
                             icon: @image-url("icons/terminal.svg");
                             badge-color: #64748b;
-                            trailing-label: "Abrir";
+                            trailing-label: @tr("Abrir");
                             clicked => { root.navigate-to-tab(12); }
                         }
                         AppleDivider {}
                         AppleActionRow {
-                            title: "Red Local, Smart TV, Chat y Control Celular";
-                            subtitle: "Configurar servidor LAN (8080), estilos propios de LAN, QR móvil y firewall";
+                            title: @tr("Red Local, Smart TV, Chat y Control Celular");
+                            subtitle: @tr("Configurar servidor LAN (8080), estilos propios de LAN, QR móvil y firewall");
                             icon: @image-url("icons/wifi.svg");
                             badge-color: #0ea5e9;
-                            trailing-label: "Abrir";
+                            trailing-label: @tr("Abrir");
                             clicked => { root.navigate-to-tab(5); }
                         }
                         AppleDivider {}
                         AppleActionRow {
-                            title: "Guía Rápida, Atajos de Teclado y Novedades";
-                            subtitle: "Consulta el changelog completo y atajos de operación en vivo";
+                            title: @tr("Guía Rápida, Atajos de Teclado y Novedades");
+                            subtitle: @tr("Consulta el changelog completo y atajos de operación en vivo");
                             icon: @image-url("icons/help.svg");
                             badge-color: #8b5cf6;
-                            trailing-label: "Abrir";
+                            trailing-label: @tr("Abrir");
                             clicked => { root.navigate-to-tab(11); }
                         }
                         AppleDivider {}
                         AppleSwitchRow {
-                            title: "Mostrar tutorial de bienvenida al abrir";
-                            subtitle: "Muestra el recuadro guía con las funciones principales al iniciar ProyecThor";
+                            title: @tr("Mostrar tutorial de bienvenida al abrir");
+                            subtitle: @tr("Muestra el recuadro guía con las funciones principales al iniciar ProyecThor");
                             active-color: #3b82f6;
                             checked <=> root.show-tutorial-on-start;
                             toggled(v) => { root.tutorial-preference-changed(v); }
@@ -2272,15 +2297,15 @@ export component AppleSettingsView inherits Rectangle {
                     }
 
                     AppleInsetGroup {
-                        header: "COMPATIBILIDAD Y VERSIÓN CLÁSICA";
-                        footer: "Tus canciones, biblias, fondos y estilos se comparten en la misma carpeta de datos entre Slint e ImGui.";
+                        header: @tr("COMPATIBILIDAD Y VERSIÓN CLÁSICA");
+                        footer: @tr("Tus canciones, biblias, fondos y estilos se comparten en la misma carpeta de datos entre Slint e ImGui.");
 
                         AppleActionRow {
-                            title: "Abrir ProyecThor Clásico (Interfaz ImGui)";
-                            subtitle: "Inicia la interfaz legada ImGui manteniendo todos tus archivos intactos";
+                            title: @tr("Abrir ProyecThor Clásico (Interfaz ImGui)");
+                            subtitle: @tr("Inicia la interfaz legada ImGui manteniendo todos tus archivos intactos");
                             icon: @image-url("icons/sliders.svg");
                             badge-color: #f59e0b;
-                            trailing-label: "Ejecutar";
+                            trailing-label: @tr("Ejecutar");
                             clicked => { root.open-legacy-imgui(); }
                         }
                     }
@@ -2326,7 +2351,7 @@ export component AppleSettingsView inherits Rectangle {
                                         image-fit: contain;
                                     }
                                     if !root.has-logo : Text {
-                                        text: "P";
+                                        text: @tr("P");
                                         color: #ffffff;
                                         font-size: 34px;
                                         font-weight: 900;
@@ -2337,7 +2362,7 @@ export component AppleSettingsView inherits Rectangle {
                             }
 
                             Text {
-                                text: "ProyecThor Studio";
+                                text: @tr("ProyecThor Studio");
                                 color: Theme.text-primary;
                                 font-size: 21px;
                                 font-weight: 800;
@@ -2373,7 +2398,7 @@ export component AppleSettingsView inherits Rectangle {
                                 alignment: center;
                                 spacing: 10px;
                                 GlassButton {
-                                    label: "Buscar Actualizaciones en GitHub";
+                                    label: @tr("Buscar Actualizaciones en GitHub");
                                     icon: @image-url("icons/refresh.svg");
                                     has-icon: true;
                                     primary: true;
@@ -2382,7 +2407,7 @@ export component AppleSettingsView inherits Rectangle {
                             }
 
                             Text {
-                                text: "Repositorio oficial: github.com/TheVixcho/ProyecThor";
+                                text: @tr("Repositorio oficial: github.com/TheVixcho/ProyecThor");
                                 color: Theme.text-muted;
                                 font-size: 11px;
                                 horizontal-alignment: center;
@@ -2392,8 +2417,8 @@ export component AppleSettingsView inherits Rectangle {
 
                     // ── Tarjeta de Donaciones Ko-fi (https://ko-fi.com/vixcho) ──
                     AppleInsetGroup {
-                        header: "APOYA EL PROYECTO";
-                        footer: "Al pulsar el botón se abrirá https://ko-fi.com/vixcho en tu navegador predeterminado.";
+                        header: @tr("APOYA EL PROYECTO");
+                        footer: @tr("Al pulsar el botón se abrirá https://ko-fi.com/vixcho en tu navegador predeterminado.");
 
                         Rectangle {
                             background: @linear-gradient(135deg, #ff5e5b18 0%, transparent 65%);
@@ -2423,13 +2448,13 @@ export component AppleSettingsView inherits Rectangle {
                                         alignment: center;
                                         spacing: 3px;
                                         Text {
-                                            text: "Invítame un café en Ko-fi";
+                                            text: @tr("Invítame un café en Ko-fi");
                                             color: Theme.text-primary;
                                             font-size: 15px;
                                             font-weight: 800;
                                         }
                                         Text {
-                                            text: "ProyecThor es gratuito. Tu donación ayuda a seguir desarrollando nuevas funciones, mejoras de rendimiento y actualizaciones.";
+                                            text: @tr("ProyecThor es gratuito. Tu donación ayuda a seguir desarrollando nuevas funciones, mejoras de rendimiento y actualizaciones.");
                                             color: Theme.text-secondary;
                                             font-size: 11.5px;
                                             wrap: word-wrap;
@@ -2443,8 +2468,8 @@ export component AppleSettingsView inherits Rectangle {
                                     y: (parent.height - self.height) / 2;
                                     KofiDonateButton {
                                         width: 100%;
-                                        label: "Donar en Ko-fi";
-                                        sublabel: "vixcho";
+                                        label: @tr("Donar en Ko-fi");
+                                        sublabel: @tr("vixcho");
                                         clicked => { root.open-kofi-donations(); }
                                     }
                                 }

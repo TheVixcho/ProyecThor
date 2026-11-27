@@ -188,7 +188,7 @@ export struct ScreenMatrixItem {
 }
 
 export component MainWindow inherits Window {
-    title: "ProyecThor — Open Source (Slint + libmpv)";
+    title: @tr("ProyecThor — Open Source (Slint + libmpv)");
     preferred-width: 1420px;
     preferred-height: 860px;
     min-width: 1100px;
@@ -298,7 +298,7 @@ export component MainWindow inherits Window {
     in property <string> live-overlay-name: "Sin overlay";
     in property <[LibraryItem]> bg-dock-items: [];
     in property <[BgFolderItem]> bg-folders: [];
-    in property <string> bg-current-folder-label: "Raíz";
+    in property <string> bg-current-folder-label: @tr("Raíz");
     in property <bool> bg-can-go-up: false;
     in-out property <bool> bg-new-folder-open: false;
     in-out property <string> bg-new-folder-name: "";
@@ -403,7 +403,7 @@ export component MainWindow inherits Window {
     in-out property <float> text-color-b: 255.0;
     in-out property <int> active-saved-style-idx: -1;
     in-out property <int> style-target-mode: 0; // 0=Todas, 1=Público, 2=LAN, 3=Stage, >=4=Sala Extra
-    in property <string> style-target-label: "Todas las pantallas";
+    in property <string> style-target-label: @tr("Todas las pantallas");
     in property <[StyleCardItem]> saved-style-cards: [];
 
     // Media / Background Preview, Hover Video Preview & Video Queue
@@ -621,7 +621,7 @@ export component MainWindow inherits Window {
     in-out property <bool> tutorial-dont-show-again: false;
     in-out property <int> help-qr-idx: 1; // 0=Web, 1=Discord, 2=Instagram, 3=WhatsApp
     in-out property <image> help-qr-image;
-    in-out property <string> help-qr-label: "Discord (Soporte y Comunidad)";
+    in-out property <string> help-qr-label: @tr("Discord (Soporte y Comunidad)");
     in-out property <string> help-qr-url: "https://discord.gg/QJ6wGHQjs6";
     in property <string> changelog-text: "";
 
@@ -660,7 +660,7 @@ export component MainWindow inherits Window {
     in-out property <bool> fsr-enabled: true;
     in-out property <int> gpu-hwdec-mode: 0;        // 0=Auto, 1=NVIDIA(NVDEC/CUDA), 2=D3D11VA, 3=VAAPI/Vulkan, 4=CPU
     in-out property <bool> nvenc-enabled: false;
-    in property <string> gpu-status-label: "Detectando aceleración de hardware GPU...";
+    in property <string> gpu-status-label: @tr("Detectando aceleración de hardware GPU...");
     in-out property <int> upscaler-mode: 2;         // 0=Off(Bilinear), 1=FSR 1.0, 2=FidelityFX CAS+, 3=NVIDIA NIS, 4=LanczosHQ 4K
     in-out property <float> upscaler-sharpness: 55.0; // 0..100%
     in-out property <bool> smooth-motion-60: false; // Interpolación 24/30 -> 60 FPS
@@ -679,6 +679,15 @@ export component MainWindow inherits Window {
     in-out property <bool> preview-enabled: true;
     in-out property <int>  preview-max-fps: 0;
     in-out property <bool> prioritize-output: false;
+
+    // ── Idioma de la interfaz (i18n) ──────────────────────────────────────
+    // Código corto del idioma activo ("es", "en", ...). Lo aplica C++ con
+    // slint::select_bundled_translation(code); las cadenas marcadas con
+    // @tr("...") en los .slint se re-traducen en vivo. Agregar un idioma a
+    // futuro NO requiere tocar este archivo: basta un nuevo .po y sumar su
+    // código a la lista de opciones del selector (ver settings_view.slint).
+    in-out property <string> ui-language: "es";
+    callback language-changed(string);
 
     in-out property <bool> fullscreen-output: true;
 
@@ -1095,7 +1104,7 @@ export component MainWindow inherits Window {
                         if root.active-tab == 3 : HorizontalLayout {
                             spacing: 6px;
                             GlassButton {
-                                label: "Fondos";
+                                label: @tr("Fondos");
                                 icon: @image-url("icons/film.svg");
                                 has-icon: true;
                                 primary: root.bg-subtab == 0;
@@ -1103,7 +1112,7 @@ export component MainWindow inherits Window {
                                 clicked => { root.bg-subtab = 0; root.bg-subtab-changed(0); }
                             }
                             GlassButton {
-                                label: "Overlays";
+                                label: @tr("Overlays");
                                 icon: @image-url("icons/layers.svg");
                                 has-icon: true;
                                 primary: root.bg-subtab == 1;
@@ -1134,7 +1143,7 @@ export component MainWindow inherits Window {
                                 }
 
                                 LineEdit {
-                                    placeholder-text: "Buscar...";
+                                    placeholder-text: @tr("Buscar...");
                                     text <=> root.search-query;
                                     edited(txt) => { root.search-changed(txt); }
                                 }
@@ -1156,7 +1165,7 @@ export component MainWindow inherits Window {
                                     spacing: 5px;
                                     LineEdit {
                                         horizontal-stretch: 1;
-                                        placeholder-text: "Nueva playlist...";
+                                        placeholder-text: @tr("Nueva playlist...");
                                         text <=> root.new-playlist-name;
                                         accepted(txt) => {
                                             if (txt != "") {
@@ -1166,7 +1175,7 @@ export component MainWindow inherits Window {
                                         }
                                     }
                                     GlassButton {
-                                        label: "Crear";
+                                        label: @tr("Crear");
                                         compact: true;
                                         clicked => {
                                             if (root.new-playlist-name != "") {
@@ -1189,7 +1198,7 @@ export component MainWindow inherits Window {
                                             border-width: 1px;
                                             border-color: root.active-song-playlist-idx < 0 ? Theme.accent-strong : Theme.border-subtle;
                                             pl-all-lbl := Text {
-                                                text: "Todas";
+                                                text: @tr("Todas");
                                                 color: root.active-song-playlist-idx < 0 ? Theme.accent-fg : Theme.text-secondary;
                                                 font-size: 10.5px;
                                                 font-weight: 700;
@@ -1233,7 +1242,7 @@ export component MainWindow inherits Window {
                                         clicked => { root.toggle-playlist-filter(); }
                                     }
                                     GlassButton {
-                                        label: "→ Cola";
+                                        label: @tr("→ Cola");
                                         primary: true;
                                         clicked => { root.send-playlist-to-queue(); }
                                     }
@@ -1434,7 +1443,7 @@ export component MainWindow inherits Window {
                                     colorize: Theme.accent-strong;
                                 }
                                 Text {
-                                    text: "Contenido";
+                                    text: @tr("Contenido");
                                     color: Theme.text-primary;
                                     font-size: 13px;
                                     font-weight: 700;
@@ -1444,7 +1453,7 @@ export component MainWindow inherits Window {
                             HorizontalLayout {
                                 spacing: 4px;
                                 if root.bg-dock-tab == 1 : GlassButton {
-                                    label: "+ Crear";
+                                    label: @tr("+ Crear");
                                     compact: true;
                                     primary: true;
                                     clicked => { root.open-new-overlay-editor(true); }
@@ -1563,7 +1572,7 @@ export component MainWindow inherits Window {
                                     }
                                 }
                                 GlassButton {
-                                    label: "+ Carpeta";
+                                    label: @tr("+ Carpeta");
                                     compact: true;
                                     clicked => { root.bg-new-folder-open = !root.bg-new-folder-open; }
                                 }
@@ -1573,7 +1582,7 @@ export component MainWindow inherits Window {
                                 spacing: 4px;
                                 LineEdit {
                                     horizontal-stretch: 1;
-                                    placeholder-text: "Nombre de subcarpeta...";
+                                    placeholder-text: @tr("Nombre de subcarpeta...");
                                     text <=> root.bg-new-folder-name;
                                     accepted(n) => {
                                         if (n != "") {
@@ -1584,7 +1593,7 @@ export component MainWindow inherits Window {
                                     }
                                 }
                                 GlassButton {
-                                    label: "Crear";
+                                    label: @tr("Crear");
                                     compact: true;
                                     primary: true;
                                     clicked => {
@@ -1641,7 +1650,7 @@ export component MainWindow inherits Window {
                                     }
 
                                     if root.bg-dock-items.length == 0 && root.bg-folders.length == 0 : Text {
-                                        text: "Carpeta vacía — pulsa 'Importar Fondo' o '+ Carpeta' para organizar tus fondos.";
+                                        text: @tr("Carpeta vacía — pulsa 'Importar Fondo' o '+ Carpeta' para organizar tus fondos.");
                                         color: Theme.text-muted;
                                         font-size: 11.5px;
                                         wrap: word-wrap;
@@ -1761,14 +1770,14 @@ export component MainWindow inherits Window {
                             HorizontalLayout {
                                 spacing: 3px;
                                 Text {
-                                    text: "A:";
+                                    text: @tr("A:");
                                     color: Theme.text-muted;
                                     font-size: 9.5px;
                                     font-weight: 700;
                                     vertical-alignment: center;
                                 }
                                 GlassButton {
-                                    label: "Todas";
+                                    label: @tr("Todas");
                                     compact: true;
                                     primary: root.output-target-mode == 0;
                                     clicked => { root.select-output-target(0); }
@@ -1788,7 +1797,7 @@ export component MainWindow inherits Window {
                                     padding-right: 4px;
 
                                     if root.overlay-layer-items.length == 0 : Text {
-                                        text: "Sin overlays aún — pulsa '+ Crear' para diseñar un reloj/temporizador/texto o 'Importar' para un PNG.";
+                                        text: @tr("Sin overlays aún — pulsa '+ Crear' para diseñar un reloj/temporizador/texto o 'Importar' para un PNG.");
                                         color: Theme.text-muted;
                                         font-size: 11.5px;
                                         wrap: word-wrap;
@@ -1906,7 +1915,7 @@ export component MainWindow inherits Window {
                                         padding: 7px;
                                         spacing: 5px;
                                         Text {
-                                            text: "Enviar estilo a:";
+                                            text: @tr("Enviar estilo a:");
                                             color: Theme.text-muted;
                                             font-size: 10px;
                                             font-weight: 700;
@@ -1914,7 +1923,7 @@ export component MainWindow inherits Window {
                                         HorizontalLayout {
                                             spacing: 4px;
                                             GlassButton {
-                                                label: "Todas";
+                                                label: @tr("Todas");
                                                 compact: true;
                                                 horizontal-stretch: 1;
                                                 primary: root.style-target-mode == 0;
@@ -1940,14 +1949,14 @@ export component MainWindow inherits Window {
                                         padding: 14px;
                                         spacing: 4px;
                                         Text {
-                                            text: "Sin estilos guardados todavía.";
+                                            text: @tr("Sin estilos guardados todavía.");
                                             color: Theme.text-primary;
                                             font-size: 11.5px;
                                             font-weight: 700;
                                             horizontal-alignment: center;
                                         }
                                         Text {
-                                            text: "Créalos desde el botón de Estilos (🎨) en la barra superior.";
+                                            text: @tr("Créalos desde el botón de Estilos (🎨) en la barra superior.");
                                             color: Theme.text-muted;
                                             font-size: 10.5px;
                                             horizontal-alignment: center;
@@ -2001,7 +2010,7 @@ export component MainWindow inherits Window {
                                                     border-radius: 3px;
                                                     background: sc.box-bg ? #00000099 : transparent;
                                                     Text {
-                                                        text: "Aa Bb";
+                                                        text: @tr("Aa Bb");
                                                         color: sc.text-color;
                                                         font-family: sc.font-family-name;
                                                         font-size: 11px;
@@ -2072,7 +2081,7 @@ export component MainWindow inherits Window {
                                                 HorizontalLayout {
                                                     padding-left: 6px; padding-right: 6px;
                                                     Text {
-                                                        text: "Todas";
+                                                        text: @tr("Todas");
                                                         color: Theme.text-secondary;
                                                         font-size: 9.5px;
                                                         font-weight: 700;
@@ -2147,7 +2156,7 @@ export component MainWindow inherits Window {
                         HorizontalLayout {
                             spacing: 8px;
                             Text {
-                                text: "Editor de Overlay:";
+                                text: @tr("Editor de Overlay:");
                                 color: Theme.text-primary;
                                 font-size: 14px;
                                 font-weight: 800;
@@ -2155,23 +2164,23 @@ export component MainWindow inherits Window {
                             }
                             LineEdit {
                                 horizontal-stretch: 1;
-                                placeholder-text: "Nombre del overlay (ej. Reloj LAN, Cuenta 5m)...";
+                                placeholder-text: @tr("Nombre del overlay (ej. Reloj LAN, Cuenta 5m)...");
                                 text <=> root.ov-ed-name;
                             }
                             GlassButton {
-                                label: "Cancelar";
+                                label: @tr("Cancelar");
                                 compact: true;
                                 clicked => { root.cancel-overlay-editor(); }
                             }
                             GlassButton {
-                                label: "Guardar";
+                                label: @tr("Guardar");
                                 icon: @image-url("icons/save.svg");
                                 has-icon: true;
                                 compact: true;
                                 clicked => { root.save-overlay-editor(false); }
                             }
                             GlassButton {
-                                label: "Guardar y Enviar";
+                                label: @tr("Guardar y Enviar");
                                 icon: @image-url("icons/monitor.svg");
                                 has-icon: true;
                                 compact: true;
@@ -2191,14 +2200,14 @@ export component MainWindow inherits Window {
                                 padding: 7px;
                                 spacing: 5px;
                                 Text {
-                                    text: "Enviar solo a:";
+                                    text: @tr("Enviar solo a:");
                                     color: Theme.text-secondary;
                                     font-size: 11px;
                                     font-weight: 700;
                                     vertical-alignment: center;
                                 }
                                 GlassButton {
-                                    label: "Todas";
+                                    label: @tr("Todas");
                                     compact: true;
                                     primary: root.output-target-mode == 0;
                                     clicked => { root.apply-overlay-editor(0); }
@@ -2234,7 +2243,7 @@ export component MainWindow inherits Window {
                                 clip: true;
 
                                 Text {
-                                    text: "VISTA PREVIA 16:9";
+                                    text: @tr("VISTA PREVIA 16:9");
                                     color: #ffffff1c;
                                     font-size: 11px;
                                     font-weight: 800;
@@ -2284,7 +2293,7 @@ export component MainWindow inherits Window {
                                         spacing: 8px;
 
                                         SwitchRow {
-                                            title: "Incluir Tiempo / Reloj";
+                                            title: @tr("Incluir Tiempo / Reloj");
                                             checked <=> root.ov-ed-show-clock;
                                             toggled(v) => { root.ov-editor-props-changed(); }
                                         }
@@ -2294,9 +2303,9 @@ export component MainWindow inherits Window {
                                             HorizontalLayout {
                                                 spacing: 5px;
                                                 Text { text: "Modo:"; color: Theme.text-secondary; font-size: 11px; font-weight: 700; vertical-alignment: center; }
-                                                GlassButton { label: "Hora en Vivo"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-clock-mode == 0; clicked => { root.ov-ed-clock-mode = 0; root.ov-editor-props-changed(); } }
-                                                GlassButton { label: "Retroceso ↓";  compact: true; horizontal-stretch: 1; primary: root.ov-ed-clock-mode == 1; clicked => { root.ov-ed-clock-mode = 1; root.ov-editor-props-changed(); } }
-                                                GlassButton { label: "Hacia Arriba ↑"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-clock-mode == 2; clicked => { root.ov-ed-clock-mode = 2; root.ov-editor-props-changed(); } }
+                                                GlassButton { label: @tr("Hora en Vivo"); compact: true; horizontal-stretch: 1; primary: root.ov-ed-clock-mode == 0; clicked => { root.ov-ed-clock-mode = 0; root.ov-editor-props-changed(); } }
+                                                GlassButton { label: @tr("Retroceso ↓");  compact: true; horizontal-stretch: 1; primary: root.ov-ed-clock-mode == 1; clicked => { root.ov-ed-clock-mode = 1; root.ov-editor-props-changed(); } }
+                                                GlassButton { label: @tr("Hacia Arriba ↑"); compact: true; horizontal-stretch: 1; primary: root.ov-ed-clock-mode == 2; clicked => { root.ov-ed-clock-mode = 2; root.ov-editor-props-changed(); } }
                                             }
 
                                             HorizontalLayout {
@@ -2305,16 +2314,16 @@ export component MainWindow inherits Window {
                                                 if root.ov-ed-clock-mode == 0 : HorizontalLayout {
                                                     horizontal-stretch: 1;
                                                     spacing: 4px;
-                                                    GlassButton { label: "24h HH:MM:SS"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-time-format == 0; clicked => { root.ov-ed-time-format = 0; root.ov-editor-props-changed(); } }
-                                                    GlassButton { label: "24h HH:MM";    compact: true; horizontal-stretch: 1; primary: root.ov-ed-time-format == 1; clicked => { root.ov-ed-time-format = 1; root.ov-editor-props-changed(); } }
-                                                    GlassButton { label: "12h AM/PM";    compact: true; horizontal-stretch: 1; primary: root.ov-ed-time-format == 2; clicked => { root.ov-ed-time-format = 2; root.ov-editor-props-changed(); } }
-                                                    GlassButton { label: "12h +Seg";     compact: true; horizontal-stretch: 1; primary: root.ov-ed-time-format == 3; clicked => { root.ov-ed-time-format = 3; root.ov-editor-props-changed(); } }
+                                                    GlassButton { label: @tr("24h HH:MM:SS"); compact: true; horizontal-stretch: 1; primary: root.ov-ed-time-format == 0; clicked => { root.ov-ed-time-format = 0; root.ov-editor-props-changed(); } }
+                                                    GlassButton { label: @tr("24h HH:MM");    compact: true; horizontal-stretch: 1; primary: root.ov-ed-time-format == 1; clicked => { root.ov-ed-time-format = 1; root.ov-editor-props-changed(); } }
+                                                    GlassButton { label: @tr("12h AM/PM");    compact: true; horizontal-stretch: 1; primary: root.ov-ed-time-format == 2; clicked => { root.ov-ed-time-format = 2; root.ov-editor-props-changed(); } }
+                                                    GlassButton { label: @tr("12h +Seg");     compact: true; horizontal-stretch: 1; primary: root.ov-ed-time-format == 3; clicked => { root.ov-ed-time-format = 3; root.ov-editor-props-changed(); } }
                                                 }
                                                 if root.ov-ed-clock-mode != 0 : HorizontalLayout {
                                                     horizontal-stretch: 1;
                                                     spacing: 4px;
-                                                    GlassButton { label: "MM:SS";    compact: true; horizontal-stretch: 1; primary: root.ov-ed-time-format == 4 || root.ov-ed-time-format == 1 || root.ov-ed-time-format == 2; clicked => { root.ov-ed-time-format = 4; root.ov-editor-props-changed(); } }
-                                                    GlassButton { label: "HH:MM:SS"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-time-format == 0 || root.ov-ed-time-format == 3; clicked => { root.ov-ed-time-format = 0; root.ov-editor-props-changed(); } }
+                                                    GlassButton { label: @tr("MM:SS");    compact: true; horizontal-stretch: 1; primary: root.ov-ed-time-format == 4 || root.ov-ed-time-format == 1 || root.ov-ed-time-format == 2; clicked => { root.ov-ed-time-format = 4; root.ov-editor-props-changed(); } }
+                                                    GlassButton { label: @tr("HH:MM:SS"); compact: true; horizontal-stretch: 1; primary: root.ov-ed-time-format == 0 || root.ov-ed-time-format == 3; clicked => { root.ov-ed-time-format = 0; root.ov-editor-props-changed(); } }
                                                 }
                                             }
 
@@ -2348,7 +2357,7 @@ export component MainWindow inherits Window {
                                                         clicked => { root.ov-editor-timer-toggle(); }
                                                     }
                                                     GlassButton {
-                                                        label: "Reiniciar";
+                                                        label: @tr("Reiniciar");
                                                         icon: @image-url("icons/refresh.svg");
                                                         has-icon: true;
                                                         compact: true;
@@ -2360,20 +2369,20 @@ export component MainWindow inherits Window {
                                                     spacing: 6px;
                                                     HorizontalLayout {
                                                         spacing: 4px;
-                                                        GlassButton { label: "-1m"; compact: true; clicked => { root.ov-editor-set-minutes(Math.max(1, root.ov-ed-initial-min - 1)); } }
-                                                        GlassButton { label: "1m";  compact: true; horizontal-stretch: 1; primary: root.ov-ed-initial-min == 1;  clicked => { root.ov-editor-set-minutes(1); } }
-                                                        GlassButton { label: "3m";  compact: true; horizontal-stretch: 1; primary: root.ov-ed-initial-min == 3;  clicked => { root.ov-editor-set-minutes(3); } }
-                                                        GlassButton { label: "5m";  compact: true; horizontal-stretch: 1; primary: root.ov-ed-initial-min == 5;  clicked => { root.ov-editor-set-minutes(5); } }
-                                                        GlassButton { label: "10m"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-initial-min == 10; clicked => { root.ov-editor-set-minutes(10); } }
-                                                        GlassButton { label: "15m"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-initial-min == 15; clicked => { root.ov-editor-set-minutes(15); } }
-                                                        GlassButton { label: "30m"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-initial-min == 30; clicked => { root.ov-editor-set-minutes(30); } }
-                                                        GlassButton { label: "+1m"; compact: true; clicked => { root.ov-editor-set-minutes(root.ov-ed-initial-min + 1); } }
+                                                        GlassButton { label: @tr("-1m"); compact: true; clicked => { root.ov-editor-set-minutes(Math.max(1, root.ov-ed-initial-min - 1)); } }
+                                                        GlassButton { label: @tr("1m");  compact: true; horizontal-stretch: 1; primary: root.ov-ed-initial-min == 1;  clicked => { root.ov-editor-set-minutes(1); } }
+                                                        GlassButton { label: @tr("3m");  compact: true; horizontal-stretch: 1; primary: root.ov-ed-initial-min == 3;  clicked => { root.ov-editor-set-minutes(3); } }
+                                                        GlassButton { label: @tr("5m");  compact: true; horizontal-stretch: 1; primary: root.ov-ed-initial-min == 5;  clicked => { root.ov-editor-set-minutes(5); } }
+                                                        GlassButton { label: @tr("10m"); compact: true; horizontal-stretch: 1; primary: root.ov-ed-initial-min == 10; clicked => { root.ov-editor-set-minutes(10); } }
+                                                        GlassButton { label: @tr("15m"); compact: true; horizontal-stretch: 1; primary: root.ov-ed-initial-min == 15; clicked => { root.ov-editor-set-minutes(15); } }
+                                                        GlassButton { label: @tr("30m"); compact: true; horizontal-stretch: 1; primary: root.ov-ed-initial-min == 30; clicked => { root.ov-editor-set-minutes(30); } }
+                                                        GlassButton { label: @tr("+1m"); compact: true; clicked => { root.ov-editor-set-minutes(root.ov-ed-initial-min + 1); } }
                                                     }
 
                                                     HorizontalLayout {
                                                         spacing: 6px;
                                                         Text {
-                                                            text: "Tiempo Manual (Min : Seg):";
+                                                            text: @tr("Tiempo Manual (Min : Seg):");
                                                             color: Theme.text-secondary;
                                                             font-size: 11px;
                                                             font-weight: 700;
@@ -2381,7 +2390,7 @@ export component MainWindow inherits Window {
                                                         }
                                                         LineEdit {
                                                             width: 56px;
-                                                            placeholder-text: "Min";
+                                                            placeholder-text: @tr("Min");
                                                             text <=> root.ov-ed-manual-min;
                                                             accepted => { root.ov-editor-set-manual-time(root.ov-ed-manual-min, root.ov-ed-manual-sec); }
                                                         }
@@ -2394,12 +2403,12 @@ export component MainWindow inherits Window {
                                                         }
                                                         LineEdit {
                                                             width: 56px;
-                                                            placeholder-text: "Seg";
+                                                            placeholder-text: @tr("Seg");
                                                             text <=> root.ov-ed-manual-sec;
                                                             accepted => { root.ov-editor-set-manual-time(root.ov-ed-manual-min, root.ov-ed-manual-sec); }
                                                         }
                                                         GlassButton {
-                                                            label: "Fijar Tiempo";
+                                                            label: @tr("Fijar Tiempo");
                                                             compact: true;
                                                             primary: true;
                                                             clicked => { root.ov-editor-set-manual-time(root.ov-ed-manual-min, root.ov-ed-manual-sec); }
@@ -2425,13 +2434,13 @@ export component MainWindow inherits Window {
                                             spacing: 8px;
                                             LineEdit {
                                                 horizontal-stretch: 1;
-                                                placeholder-text: "Título / Etiqueta (ej. INICIAMOS EN, EN VIVO)...";
+                                                placeholder-text: @tr("Título / Etiqueta (ej. INICIAMOS EN, EN VIVO)...");
                                                 text <=> root.ov-ed-title;
                                                 edited => { root.ov-editor-props-changed(); }
                                             }
                                             LineEdit {
                                                 horizontal-stretch: 1;
-                                                placeholder-text: "Subtítulo opcional...";
+                                                placeholder-text: @tr("Subtítulo opcional...");
                                                 text <=> root.ov-ed-sub;
                                                 edited => { root.ov-editor-props-changed(); }
                                             }
@@ -2451,17 +2460,17 @@ export component MainWindow inherits Window {
                                         Text { text: "Posición en Pantalla"; color: Theme.text-primary; font-size: 12px; font-weight: 700; }
                                         HorizontalLayout {
                                             spacing: 4px;
-                                            GlassButton { label: "Sup-Izq"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 1; clicked => { root.ov-ed-pos-preset = 1; root.ov-editor-props-changed(); } }
-                                            GlassButton { label: "Sup-Cen"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 2; clicked => { root.ov-ed-pos-preset = 2; root.ov-editor-props-changed(); } }
-                                            GlassButton { label: "Sup-Der"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 3; clicked => { root.ov-ed-pos-preset = 3; root.ov-editor-props-changed(); } }
-                                            GlassButton { label: "Centro";  compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 0; clicked => { root.ov-ed-pos-preset = 0; root.ov-editor-props-changed(); } }
+                                            GlassButton { label: @tr("Sup-Izq"); compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 1; clicked => { root.ov-ed-pos-preset = 1; root.ov-editor-props-changed(); } }
+                                            GlassButton { label: @tr("Sup-Cen"); compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 2; clicked => { root.ov-ed-pos-preset = 2; root.ov-editor-props-changed(); } }
+                                            GlassButton { label: @tr("Sup-Der"); compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 3; clicked => { root.ov-ed-pos-preset = 3; root.ov-editor-props-changed(); } }
+                                            GlassButton { label: @tr("Centro");  compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 0; clicked => { root.ov-ed-pos-preset = 0; root.ov-editor-props-changed(); } }
                                         }
                                         HorizontalLayout {
                                             spacing: 4px;
-                                            GlassButton { label: "Inf-Izq"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 4; clicked => { root.ov-ed-pos-preset = 4; root.ov-editor-props-changed(); } }
-                                            GlassButton { label: "Inf-Cen"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 5; clicked => { root.ov-ed-pos-preset = 5; root.ov-editor-props-changed(); } }
-                                            GlassButton { label: "Inf-Der"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 6; clicked => { root.ov-ed-pos-preset = 6; root.ov-editor-props-changed(); } }
-                                            GlassButton { label: "Manual X/Y"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 7; clicked => { root.ov-ed-pos-preset = 7; root.ov-editor-props-changed(); } }
+                                            GlassButton { label: @tr("Inf-Izq"); compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 4; clicked => { root.ov-ed-pos-preset = 4; root.ov-editor-props-changed(); } }
+                                            GlassButton { label: @tr("Inf-Cen"); compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 5; clicked => { root.ov-ed-pos-preset = 5; root.ov-editor-props-changed(); } }
+                                            GlassButton { label: @tr("Inf-Der"); compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 6; clicked => { root.ov-ed-pos-preset = 6; root.ov-editor-props-changed(); } }
+                                            GlassButton { label: @tr("Manual X/Y"); compact: true; horizontal-stretch: 1; primary: root.ov-ed-pos-preset == 7; clicked => { root.ov-ed-pos-preset = 7; root.ov-editor-props-changed(); } }
                                         }
                                         if root.ov-ed-pos-preset == 7 : HorizontalLayout {
                                             spacing: 10px;
@@ -2549,9 +2558,9 @@ export component MainWindow inherits Window {
                                         HorizontalLayout {
                                             spacing: 6px;
                                             Text { text: "Forma:"; color: Theme.text-secondary; font-size: 11px; vertical-alignment: center; width: 76px; }
-                                            GlassButton { label: "Rectángulo"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-radius <= 2.0; clicked => { root.ov-ed-radius = 0.0; root.ov-editor-props-changed(); } }
-                                            GlassButton { label: "Redondeado"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-radius > 2.0 && root.ov-ed-radius < 40.0; clicked => { root.ov-ed-radius = 16.0; root.ov-editor-props-changed(); } }
-                                            GlassButton { label: "Pastilla"; compact: true; horizontal-stretch: 1; primary: root.ov-ed-radius >= 40.0; clicked => { root.ov-ed-radius = 48.0; root.ov-editor-props-changed(); } }
+                                            GlassButton { label: @tr("Rectángulo"); compact: true; horizontal-stretch: 1; primary: root.ov-ed-radius <= 2.0; clicked => { root.ov-ed-radius = 0.0; root.ov-editor-props-changed(); } }
+                                            GlassButton { label: @tr("Redondeado"); compact: true; horizontal-stretch: 1; primary: root.ov-ed-radius > 2.0 && root.ov-ed-radius < 40.0; clicked => { root.ov-ed-radius = 16.0; root.ov-editor-props-changed(); } }
+                                            GlassButton { label: @tr("Pastilla"); compact: true; horizontal-stretch: 1; primary: root.ov-ed-radius >= 40.0; clicked => { root.ov-ed-radius = 48.0; root.ov-editor-props-changed(); } }
                                         }
 
                                         HorizontalLayout {
@@ -2604,7 +2613,7 @@ export component MainWindow inherits Window {
                         HorizontalLayout {
                             alignment: space-between;
                             Text {
-                                text: "Editor de Canciones";
+                                text: @tr("Editor de Canciones");
                                 color: Theme.text-primary;
                                 font-size: 16px;
                                 font-weight: 700;
@@ -2613,11 +2622,11 @@ export component MainWindow inherits Window {
                             HorizontalLayout {
                                 spacing: 6px;
                                 GlassButton {
-                                    label: "Cancelar";
+                                    label: @tr("Cancelar");
                                     clicked => { root.cancel-song-editor(); }
                                 }
                                 GlassButton {
-                                    label: "Guardar (.txt)";
+                                    label: @tr("Guardar (.txt)");
                                     icon: @image-url("icons/save.svg");
                                     has-icon: true;
                                     primary: true;
@@ -2630,18 +2639,18 @@ export component MainWindow inherits Window {
                             spacing: 8px;
                             LineEdit {
                                 horizontal-stretch: 2;
-                                placeholder-text: "Título de la canción...";
+                                placeholder-text: @tr("Título de la canción...");
                                 text <=> root.editor-song-title;
                             }
                             LineEdit {
                                 horizontal-stretch: 1;
-                                placeholder-text: "Autor / Artista...";
+                                placeholder-text: @tr("Autor / Artista...");
                                 text <=> root.editor-song-author;
                             }
                         }
 
                         Text {
-                            text: "Separa cada estrofa con una línea en blanco:";
+                            text: @tr("Separa cada estrofa con una línea en blanco:");
                             color: Theme.text-muted;
                             font-size: 11.5px;
                         }
@@ -2680,7 +2689,7 @@ export component MainWindow inherits Window {
                                         colorize: Theme.text-muted;
                                     }
                                     LineEdit {
-                                        placeholder-text: "Ir a cita (ej. Ester 4:14, Juan 3:16) o buscar palabra...";
+                                        placeholder-text: @tr("Ir a cita (ej. Ester 4:14, Juan 3:16) o buscar palabra...");
                                         text <=> root.bible-search-query;
                                         edited(txt) => { root.bible-search-edited(txt); }
                                         accepted(txt) => { root.bible-search-submitted(txt); }
@@ -2689,7 +2698,7 @@ export component MainWindow inherits Window {
                             }
 
                             GlassButton {
-                                label: "Buscar";
+                                label: @tr("Buscar");
                                 icon: @image-url("icons/search.svg");
                                 has-icon: true;
                                 primary: true;
@@ -2713,24 +2722,24 @@ export component MainWindow inherits Window {
                             alignment: space-between;
                             HorizontalLayout {
                                 spacing: 6px;
-                                GlassButton { label: "Libros y Capítulos"; primary: root.bible-submode == 0; clicked => { root.bible-submode = 0; } }
+                                GlassButton { label: @tr("Libros y Capítulos"); primary: root.bible-submode == 0; clicked => { root.bible-submode = 0; } }
                                 GlassButton { label: "Historial (" + root.bible-history.length + ")"; primary: root.bible-submode == 1; clicked => { root.bible-submode = 1; } }
                                 GlassButton { label: "Favoritos (" + root.bible-favorites.length + ")"; primary: root.bible-submode == 2; clicked => { root.bible-submode = 2; } }
                             }
                             HorizontalLayout {
                                 spacing: 6px;
                                 if root.active-slide-index >= 0 : GlassButton {
-                                    label: "★ Favorito";
+                                    label: @tr("★ Favorito");
                                     clicked => { root.bible-favorite-current(); }
                                 }
                                 GlassButton {
-                                    label: "Anterior";
+                                    label: @tr("Anterior");
                                     icon: @image-url("icons/prev.svg");
                                     has-icon: true;
                                     clicked => { root.prev-slide(); }
                                 }
                                 GlassButton {
-                                    label: "Siguiente";
+                                    label: @tr("Siguiente");
                                     icon: @image-url("icons/next.svg");
                                     has-icon: true;
                                     primary: true;
@@ -2759,9 +2768,9 @@ export component MainWindow inherits Window {
 
                                     HorizontalLayout {
                                         spacing: 4px;
-                                        GlassButton { label: "Todos"; horizontal-stretch: 1; primary: root.bible-testament-filter == 0; clicked => { root.bible-testament-filter = 0; root.bible-filter-changed(0); } }
-                                        GlassButton { label: "AT";    horizontal-stretch: 1; primary: root.bible-testament-filter == 1; clicked => { root.bible-testament-filter = 1; root.bible-filter-changed(1); } }
-                                        GlassButton { label: "NT";    horizontal-stretch: 1; primary: root.bible-testament-filter == 2; clicked => { root.bible-testament-filter = 2; root.bible-filter-changed(2); } }
+                                        GlassButton { label: @tr("Todos"); horizontal-stretch: 1; primary: root.bible-testament-filter == 0; clicked => { root.bible-testament-filter = 0; root.bible-filter-changed(0); } }
+                                        GlassButton { label: @tr("AT");    horizontal-stretch: 1; primary: root.bible-testament-filter == 1; clicked => { root.bible-testament-filter = 1; root.bible-filter-changed(1); } }
+                                        GlassButton { label: @tr("NT");    horizontal-stretch: 1; primary: root.bible-testament-filter == 2; clicked => { root.bible-testament-filter = 2; root.bible-filter-changed(2); } }
                                     }
 
                                     ScrollView {
@@ -2895,7 +2904,7 @@ export component MainWindow inherits Window {
                                             padding-right: 4px;
 
                                             if root.slides.length == 0 : Text {
-                                                text: "Selecciona un libro y capítulo para proyectar versículos, o escribe una cita arriba (ej. Juan 3:16).";
+                                                text: @tr("Selecciona un libro y capítulo para proyectar versículos, o escribe una cita arriba (ej. Juan 3:16).");
                                                 color: Theme.text-muted;
                                                 font-size: 13px;
                                                 wrap: word-wrap;
@@ -2979,33 +2988,33 @@ export component MainWindow inherits Window {
                             HorizontalLayout {
                                 spacing: 5px;
                                 if root.active-tab == 0 && root.selected-library-index >= 0 : GlassButton {
-                                    label: "Editar";
+                                    label: @tr("Editar");
                                     icon: @image-url("icons/edit.svg");
                                     has-icon: true;
                                     compact: true;
                                     clicked => { root.edit-song-clicked(); }
                                 }
                                 if root.active-tab == 0 && root.selected-library-index >= 0 && root.selected-library-path != "" : GlassButton {
-                                    label: "Renombrar";
+                                    label: @tr("Renombrar");
                                     compact: true;
                                     clicked => { root.open-item-modal(1, 0, root.selected-item-title, root.selected-song-author, root.selected-library-path); }
                                 }
                                 if root.active-tab == 2 && root.selected-library-index >= 0 : GlassButton {
-                                    label: "Enviar a Pantalla";
+                                    label: @tr("Enviar a Pantalla");
                                     icon: @image-url("icons/tv.svg");
                                     has-icon: true;
                                     primary: true;
                                     clicked => { root.project-selected-media(); }
                                 }
                                 if root.active-tab == 2 && root.selected-library-index >= 0 : GlassButton {
-                                    label: "A Cola";
+                                    label: @tr("A Cola");
                                     icon: @image-url("icons/list.svg");
                                     has-icon: true;
                                     compact: true;
                                     clicked => { root.add-selected-to-video-queue(); }
                                 }
                                 if root.active-tab == 2 && root.selected-library-index >= 0 && root.selected-library-path != "" : GlassButton {
-                                    label: "Renombrar";
+                                    label: @tr("Renombrar");
                                     icon: @image-url("icons/edit.svg");
                                     has-icon: true;
                                     compact: true;
@@ -3017,12 +3026,12 @@ export component MainWindow inherits Window {
                                     clicked => { root.open-item-modal(2, 1, root.selected-item-title, root.selected-media-info, root.selected-library-path); }
                                 }
                                 if root.active-tab == 0 && root.active-song-playlist-idx >= 0 && root.selected-library-index >= 0 : GlassButton {
-                                    label: "A Playlist";
+                                    label: @tr("A Playlist");
                                     compact: true;
                                     clicked => { root.add-song-to-playlist(); }
                                 }
                                 if root.active-tab == 0 && root.selected-library-index >= 0 : GlassButton {
-                                    label: "A Cola";
+                                    label: @tr("A Cola");
                                     icon: @image-url("icons/list.svg");
                                     has-icon: true;
                                     compact: true;
@@ -3058,9 +3067,9 @@ export component MainWindow inherits Window {
                             HorizontalLayout {
                                 spacing: 4px;
                                 Text { text: "Tamaño:"; color: Theme.text-muted; font-size: 11px; vertical-alignment: center; }
-                                GlassButton { label: "Pequeño"; compact: true; primary: root.slide-card-size == 0; clicked => { root.slide-card-size = 0; } }
-                                GlassButton { label: "Medio";   compact: true; primary: root.slide-card-size == 1; clicked => { root.slide-card-size = 1; } }
-                                GlassButton { label: "Grande";  compact: true; primary: root.slide-card-size == 2; clicked => { root.slide-card-size = 2; } }
+                                GlassButton { label: @tr("Pequeño"); compact: true; primary: root.slide-card-size == 0; clicked => { root.slide-card-size = 0; } }
+                                GlassButton { label: @tr("Medio");   compact: true; primary: root.slide-card-size == 1; clicked => { root.slide-card-size = 1; } }
+                                GlassButton { label: @tr("Grande");  compact: true; primary: root.slide-card-size == 2; clicked => { root.slide-card-size = 2; } }
                             }
                         }
 
@@ -3200,7 +3209,7 @@ export component MainWindow inherits Window {
                                         }
 
                                         if root.video-queue-items.length == 0 : Text {
-                                            text: "Selecciona videos a la izquierda y pulsa '+ Cola Videos' para reproducirlos uno tras otro automáticamente.";
+                                            text: @tr("Selecciona videos a la izquierda y pulsa '+ Cola Videos' para reproducirlos uno tras otro automáticamente.");
                                             color: Theme.text-muted;
                                             font-size: 11.5px;
                                             wrap: word-wrap;
@@ -3289,7 +3298,7 @@ export component MainWindow inherits Window {
                                 if root.slides.length == 0 && root.active-tab == 0 : Rectangle {
                                     height: 220px;
                                     Text {
-                                        text: "Selecciona una canción a la izquierda o pulsa '+' para crear una nueva.";
+                                        text: @tr("Selecciona una canción a la izquierda o pulsa '+' para crear una nueva.");
                                         color: Theme.text-muted;
                                         font-size: 13px;
                                         horizontal-alignment: center;
@@ -3343,10 +3352,10 @@ export component MainWindow inherits Window {
 
                         HorizontalLayout {
                             spacing: 6px;
-                            GlassButton { label: "Estilos";      icon: @image-url("icons/palette.svg"); has-icon: true; primary: root.design-subtab == 0; clicked => { root.design-subtab = 0; } }
-                            GlassButton { label: "Shaders / EQ"; icon: @image-url("icons/sliders.svg"); has-icon: true; primary: root.design-subtab == 1; clicked => { root.design-subtab = 1; } }
-                            GlassButton { label: "Transiciones"; icon: @image-url("icons/shuffle.svg"); has-icon: true; primary: root.design-subtab == 2; clicked => { root.design-subtab = 2; } }
-                            GlassButton { label: "Tiles";        icon: @image-url("icons/columns.svg"); has-icon: true; primary: root.design-subtab == 3; clicked => { root.design-subtab = 3; } }
+                            GlassButton { label: @tr("Estilos");      icon: @image-url("icons/palette.svg"); has-icon: true; primary: root.design-subtab == 0; clicked => { root.design-subtab = 0; } }
+                            GlassButton { label: @tr("Shaders / EQ"); icon: @image-url("icons/sliders.svg"); has-icon: true; primary: root.design-subtab == 1; clicked => { root.design-subtab = 1; } }
+                            GlassButton { label: @tr("Transiciones"); icon: @image-url("icons/shuffle.svg"); has-icon: true; primary: root.design-subtab == 2; clicked => { root.design-subtab = 2; } }
+                            GlassButton { label: @tr("Tiles");        icon: @image-url("icons/columns.svg"); has-icon: true; primary: root.design-subtab == 3; clicked => { root.design-subtab = 3; } }
                         }
 
                         // Subtab 0A: SELECTOR / GALERÍA DE ESTILOS DEL USUARIO (sin presets hardcodeados — FULL como ImGui)
@@ -3364,7 +3373,7 @@ export component MainWindow inherits Window {
                                         Text { text: "Define estilos propios (.theme) y elige a qué pantalla enviar cada estilo de letra (ej. letras gigantes solo para LAN)."; color: Theme.text-muted; font-size: 11.5px; }
                                     }
                                     GlassButton {
-                                        label: "Crear Nuevo Estilo";
+                                        label: @tr("Crear Nuevo Estilo");
                                         icon: @image-url("icons/plus.svg");
                                         has-icon: true;
                                         primary: true;
@@ -3386,14 +3395,14 @@ export component MainWindow inherits Window {
                                         HorizontalLayout {
                                             spacing: 6px;
                                             Text {
-                                                text: "Enviar estilo a:";
+                                                text: @tr("Enviar estilo a:");
                                                 color: Theme.text-secondary;
                                                 font-size: 11px;
                                                 font-weight: 700;
                                                 vertical-alignment: center;
                                             }
                                             GlassButton {
-                                                label: "Todas";
+                                                label: @tr("Todas");
                                                 compact: true;
                                                 primary: root.style-target-mode == 0;
                                                 clicked => { root.select-style-target(0); }
@@ -3409,7 +3418,7 @@ export component MainWindow inherits Window {
                                         HorizontalLayout {
                                             spacing: 6px;
                                             Text {
-                                                text: "Activo:";
+                                                text: @tr("Activo:");
                                                 color: Theme.text-muted;
                                                 font-size: 10px;
                                                 font-weight: 700;
@@ -3456,7 +3465,7 @@ export component MainWindow inherits Window {
                                         alignment: center;
                                         spacing: 12px;
                                         Text {
-                                            text: "No tienes estilos guardados todavía.\nPulsa '+ Crear Nuevo Estilo' para abrir el editor completo y diseñar tu primer estilo.";
+                                            text: @tr("No tienes estilos guardados todavía.\nPulsa '+ Crear Nuevo Estilo' para abrir el editor completo y diseñar tu primer estilo.");
                                             color: Theme.text-secondary;
                                             font-size: 13px;
                                             horizontal-alignment: center;
@@ -3465,7 +3474,7 @@ export component MainWindow inherits Window {
                                         HorizontalLayout {
                                             alignment: center;
                                             GlassButton {
-                                                label: "Abrir Editor de Estilos";
+                                                label: @tr("Abrir Editor de Estilos");
                                                 icon: @image-url("icons/palette.svg");
                                                 has-icon: true;
                                                 primary: true;
@@ -3512,7 +3521,7 @@ export component MainWindow inherits Window {
                                 Text { text: "Editor de Estilo:"; color: Theme.text-secondary; font-size: 13px; font-weight: 700; vertical-alignment: center; }
                                 LineEdit {
                                     horizontal-stretch: 1;
-                                    placeholder-text: "Nombre del estilo (ej. Alabanza Principal, LAN Gigante, Biblia)...";
+                                    placeholder-text: @tr("Nombre del estilo (ej. Alabanza Principal, LAN Gigante, Biblia)...");
                                     text <=> root.editing-style-name;
                                 }
                                 Rectangle {
@@ -3534,11 +3543,11 @@ export component MainWindow inherits Window {
                                     }
                                 }
                                 GlassButton {
-                                    label: "Cancelar";
+                                    label: @tr("Cancelar");
                                     clicked => { root.cancel-style-editor(); }
                                 }
                                 GlassButton {
-                                    label: "Guardar y Aplicar";
+                                    label: @tr("Guardar y Aplicar");
                                     icon: @image-url("icons/save.svg");
                                     has-icon: true;
                                     primary: true;
@@ -3750,12 +3759,12 @@ export component MainWindow inherits Window {
 
                                                 HorizontalLayout {
                                                     spacing: 6px;
-                                                    GlassButton { label: "Caja: Letras"; horizontal-stretch: 1; primary: root.style-editor-box == 0; clicked => { root.style-editor-box = 0; } }
-                                                    GlassButton { label: "Caja: Índice (Solo Biblia)"; horizontal-stretch: 1; primary: root.style-editor-box == 1; clicked => { root.style-editor-box = 1; } }
+                                                    GlassButton { label: @tr("Caja: Letras"); horizontal-stretch: 1; primary: root.style-editor-box == 0; clicked => { root.style-editor-box = 0; } }
+                                                    GlassButton { label: @tr("Caja: Índice (Solo Biblia)"); horizontal-stretch: 1; primary: root.style-editor-box == 1; clicked => { root.style-editor-box = 1; } }
                                                 }
 
                                                 Text {
-                                                    text: "Arrastra la caja para moverla o su esquina inferior derecha para redimensionar el área sin alterar el tamaño de fuente.";
+                                                    text: @tr("Arrastra la caja para moverla o su esquina inferior derecha para redimensionar el área sin alterar el tamaño de fuente.");
                                                     color: Theme.text-muted;
                                                     font-size: 10.5px;
                                                     wrap: word-wrap;
@@ -3776,8 +3785,8 @@ export component MainWindow inherits Window {
                                                 if root.style-editor-box == 1 : VerticalLayout {
                                                     spacing: 4px;
                                                     SwitchRow {
-                                                        title: "Mostrar Índice en Versículos de Biblia";
-                                                        subtitle: "Las canciones no muestran índice; solo se usa para citas bíblicas";
+                                                        title: @tr("Mostrar Índice en Versículos de Biblia");
+                                                        subtitle: @tr("Las canciones no muestran índice; solo se usa para citas bíblicas");
                                                         checked <=> root.index-box-enabled;
                                                         toggled(v) => { root.style-changed(); }
                                                     }
@@ -3842,16 +3851,16 @@ export component MainWindow inherits Window {
                                                 }
                                                 HorizontalLayout {
                                                     spacing: 5px;
-                                                    GlassButton { label: "Default"; compact: true; horizontal-stretch: 1; primary: root.font-family-idx == 0; clicked => { root.font-preset-selected(0, 0); } }
-                                                    GlassButton { label: "Sans";    compact: true; horizontal-stretch: 1; primary: root.font-family-idx == 1; clicked => { root.font-preset-selected(0, 1); } }
-                                                    GlassButton { label: "Serif";   compact: true; horizontal-stretch: 1; primary: root.font-family-idx == 2; clicked => { root.font-preset-selected(0, 2); } }
-                                                    GlassButton { label: "Mono";    compact: true; horizontal-stretch: 1; primary: root.font-family-idx == 3; clicked => { root.font-preset-selected(0, 3); } }
+                                                    GlassButton { label: @tr("Default"); compact: true; horizontal-stretch: 1; primary: root.font-family-idx == 0; clicked => { root.font-preset-selected(0, 0); } }
+                                                    GlassButton { label: @tr("Sans");    compact: true; horizontal-stretch: 1; primary: root.font-family-idx == 1; clicked => { root.font-preset-selected(0, 1); } }
+                                                    GlassButton { label: @tr("Serif");   compact: true; horizontal-stretch: 1; primary: root.font-family-idx == 2; clicked => { root.font-preset-selected(0, 2); } }
+                                                    GlassButton { label: @tr("Mono");    compact: true; horizontal-stretch: 1; primary: root.font-family-idx == 3; clicked => { root.font-preset-selected(0, 3); } }
                                                 }
                                                 HorizontalLayout {
                                                     spacing: 5px;
-                                                    GlassButton { label: "Normal";  compact: true; horizontal-stretch: 1; primary: root.font-weight-idx == 0; clicked => { root.font-weight-idx = 0; root.style-changed(); } }
-                                                    GlassButton { label: "Negrita"; compact: true; horizontal-stretch: 1; primary: root.font-weight-idx == 1; clicked => { root.font-weight-idx = 1; root.style-changed(); } }
-                                                    GlassButton { label: "Extra";   compact: true; horizontal-stretch: 1; primary: root.font-weight-idx == 2; clicked => { root.font-weight-idx = 2; root.style-changed(); } }
+                                                    GlassButton { label: @tr("Normal");  compact: true; horizontal-stretch: 1; primary: root.font-weight-idx == 0; clicked => { root.font-weight-idx = 0; root.style-changed(); } }
+                                                    GlassButton { label: @tr("Negrita"); compact: true; horizontal-stretch: 1; primary: root.font-weight-idx == 1; clicked => { root.font-weight-idx = 1; root.style-changed(); } }
+                                                    GlassButton { label: @tr("Extra");   compact: true; horizontal-stretch: 1; primary: root.font-weight-idx == 2; clicked => { root.font-weight-idx = 2; root.style-changed(); } }
                                                 }
 
                                                 HorizontalLayout { alignment: space-between; Text { text: "Tamaño de Fuente"; color: Theme.text-primary; font-size: 12px; } Text { text: Math.round(root.text-size) + " px"; color: Theme.accent-strong; font-size: 12px; font-weight: 700; } }
@@ -3859,15 +3868,15 @@ export component MainWindow inherits Window {
 
                                                 HorizontalLayout {
                                                     spacing: 5px;
-                                                    GlassButton { label: "Izq";    compact: true; horizontal-stretch: 1; primary: root.text-align == 0; clicked => { root.text-align = 0; root.style-changed(); } }
-                                                    GlassButton { label: "Centro"; compact: true; horizontal-stretch: 1; primary: root.text-align == 1; clicked => { root.text-align = 1; root.style-changed(); } }
-                                                    GlassButton { label: "Der";    compact: true; horizontal-stretch: 1; primary: root.text-align == 2; clicked => { root.text-align = 2; root.style-changed(); } }
+                                                    GlassButton { label: @tr("Izq");    compact: true; horizontal-stretch: 1; primary: root.text-align == 0; clicked => { root.text-align = 0; root.style-changed(); } }
+                                                    GlassButton { label: @tr("Centro"); compact: true; horizontal-stretch: 1; primary: root.text-align == 1; clicked => { root.text-align = 1; root.style-changed(); } }
+                                                    GlassButton { label: @tr("Der");    compact: true; horizontal-stretch: 1; primary: root.text-align == 2; clicked => { root.text-align = 2; root.style-changed(); } }
                                                 }
                                                 HorizontalLayout {
                                                     spacing: 5px;
-                                                    GlassButton { label: "Arriba"; compact: true; horizontal-stretch: 1; primary: root.text-valign == 0; clicked => { root.text-valign = 0; root.style-changed(); } }
-                                                    GlassButton { label: "Medio";  compact: true; horizontal-stretch: 1; primary: root.text-valign == 1; clicked => { root.text-valign = 1; root.style-changed(); } }
-                                                    GlassButton { label: "Abajo";  compact: true; horizontal-stretch: 1; primary: root.text-valign == 2; clicked => { root.text-valign = 2; root.style-changed(); } }
+                                                    GlassButton { label: @tr("Arriba"); compact: true; horizontal-stretch: 1; primary: root.text-valign == 0; clicked => { root.text-valign = 0; root.style-changed(); } }
+                                                    GlassButton { label: @tr("Medio");  compact: true; horizontal-stretch: 1; primary: root.text-valign == 1; clicked => { root.text-valign = 1; root.style-changed(); } }
+                                                    GlassButton { label: @tr("Abajo");  compact: true; horizontal-stretch: 1; primary: root.text-valign == 2; clicked => { root.text-valign = 2; root.style-changed(); } }
                                                 }
 
                                                 Text { text: "Color de Letras (RGB Libre)"; color: Theme.text-secondary; font-size: 12px; font-weight: 700; }
@@ -3916,9 +3925,9 @@ export component MainWindow inherits Window {
                                                 Text { text: "Ajuste Automático si el Texto No Cabe (Biblia / Letras)"; color: Theme.text-secondary; font-size: 12px; font-weight: 700; }
                                                 HorizontalLayout {
                                                     spacing: 5px;
-                                                    GlassButton { label: "Normal";       compact: true; horizontal-stretch: 1; primary: root.text-fit-mode == 0; clicked => { root.text-fit-mode = 0; root.style-changed(); } }
-                                                    GlassButton { label: "Auto-Achicar"; compact: true; horizontal-stretch: 1; primary: root.text-fit-mode == 1; clicked => { root.text-fit-mode = 1; root.style-changed(); } }
-                                                    GlassButton { label: "Auto-Cortar";  compact: true; horizontal-stretch: 1; primary: root.text-fit-mode == 2; clicked => { root.text-fit-mode = 2; root.style-changed(); } }
+                                                    GlassButton { label: @tr("Normal");       compact: true; horizontal-stretch: 1; primary: root.text-fit-mode == 0; clicked => { root.text-fit-mode = 0; root.style-changed(); } }
+                                                    GlassButton { label: @tr("Auto-Achicar"); compact: true; horizontal-stretch: 1; primary: root.text-fit-mode == 1; clicked => { root.text-fit-mode = 1; root.style-changed(); } }
+                                                    GlassButton { label: @tr("Auto-Cortar");  compact: true; horizontal-stretch: 1; primary: root.text-fit-mode == 2; clicked => { root.text-fit-mode = 2; root.style-changed(); } }
                                                 }
                                                 Text {
                                                     text: root.text-fit-mode == 1 ? "Reduce automáticamente el tamaño de la fuente cuando un versículo o estrofa supera el alto del área."
@@ -3947,16 +3956,16 @@ export component MainWindow inherits Window {
                                                 }
                                                 HorizontalLayout {
                                                     spacing: 5px;
-                                                    GlassButton { label: "Default"; compact: true; horizontal-stretch: 1; primary: root.index-font-family-idx == 0; clicked => { root.font-preset-selected(1, 0); } }
-                                                    GlassButton { label: "Sans";    compact: true; horizontal-stretch: 1; primary: root.index-font-family-idx == 1; clicked => { root.font-preset-selected(1, 1); } }
-                                                    GlassButton { label: "Serif";   compact: true; horizontal-stretch: 1; primary: root.index-font-family-idx == 2; clicked => { root.font-preset-selected(1, 2); } }
-                                                    GlassButton { label: "Mono";    compact: true; horizontal-stretch: 1; primary: root.index-font-family-idx == 3; clicked => { root.font-preset-selected(1, 3); } }
+                                                    GlassButton { label: @tr("Default"); compact: true; horizontal-stretch: 1; primary: root.index-font-family-idx == 0; clicked => { root.font-preset-selected(1, 0); } }
+                                                    GlassButton { label: @tr("Sans");    compact: true; horizontal-stretch: 1; primary: root.index-font-family-idx == 1; clicked => { root.font-preset-selected(1, 1); } }
+                                                    GlassButton { label: @tr("Serif");   compact: true; horizontal-stretch: 1; primary: root.index-font-family-idx == 2; clicked => { root.font-preset-selected(1, 2); } }
+                                                    GlassButton { label: @tr("Mono");    compact: true; horizontal-stretch: 1; primary: root.index-font-family-idx == 3; clicked => { root.font-preset-selected(1, 3); } }
                                                 }
                                                 HorizontalLayout {
                                                     spacing: 5px;
-                                                    GlassButton { label: "Normal";  compact: true; horizontal-stretch: 1; primary: root.index-font-weight-idx == 0; clicked => { root.index-font-weight-idx = 0; root.style-changed(); } }
-                                                    GlassButton { label: "Negrita"; compact: true; horizontal-stretch: 1; primary: root.index-font-weight-idx == 1; clicked => { root.index-font-weight-idx = 1; root.style-changed(); } }
-                                                    GlassButton { label: "Extra";   compact: true; horizontal-stretch: 1; primary: root.index-font-weight-idx == 2; clicked => { root.index-font-weight-idx = 2; root.style-changed(); } }
+                                                    GlassButton { label: @tr("Normal");  compact: true; horizontal-stretch: 1; primary: root.index-font-weight-idx == 0; clicked => { root.index-font-weight-idx = 0; root.style-changed(); } }
+                                                    GlassButton { label: @tr("Negrita"); compact: true; horizontal-stretch: 1; primary: root.index-font-weight-idx == 1; clicked => { root.index-font-weight-idx = 1; root.style-changed(); } }
+                                                    GlassButton { label: @tr("Extra");   compact: true; horizontal-stretch: 1; primary: root.index-font-weight-idx == 2; clicked => { root.index-font-weight-idx = 2; root.style-changed(); } }
                                                 }
 
                                                 HorizontalLayout { alignment: space-between; Text { text: "Tamaño del Índice"; color: Theme.text-primary; font-size: 12px; } Text { text: Math.round(root.index-size) + " px"; color: Theme.stage-amber; font-size: 12px; font-weight: 700; } }
@@ -3964,19 +3973,19 @@ export component MainWindow inherits Window {
 
                                                 HorizontalLayout {
                                                     spacing: 5px;
-                                                    GlassButton { label: "Izq";    compact: true; horizontal-stretch: 1; primary: root.index-align == 0; clicked => { root.index-align = 0; root.style-changed(); } }
-                                                    GlassButton { label: "Centro"; compact: true; horizontal-stretch: 1; primary: root.index-align == 1; clicked => { root.index-align = 1; root.style-changed(); } }
-                                                    GlassButton { label: "Der";    compact: true; horizontal-stretch: 1; primary: root.index-align == 2; clicked => { root.index-align = 2; root.style-changed(); } }
+                                                    GlassButton { label: @tr("Izq");    compact: true; horizontal-stretch: 1; primary: root.index-align == 0; clicked => { root.index-align = 0; root.style-changed(); } }
+                                                    GlassButton { label: @tr("Centro"); compact: true; horizontal-stretch: 1; primary: root.index-align == 1; clicked => { root.index-align = 1; root.style-changed(); } }
+                                                    GlassButton { label: @tr("Der");    compact: true; horizontal-stretch: 1; primary: root.index-align == 2; clicked => { root.index-align = 2; root.style-changed(); } }
                                                 }
 
                                                 Text { text: "Color del Índice (RGB Independiente)"; color: Theme.text-secondary; font-size: 12px; font-weight: 700; }
                                                 HorizontalLayout {
                                                     spacing: 6px;
                                                     Rectangle { width: 28px; height: 28px; border-radius: 6px; background: root.index-color; border-width: 1px; border-color: Theme.border-medium; }
-                                                    GlassButton { label: "Blanco"; compact: true; horizontal-stretch: 1; clicked => { root.index-color-selected(0); } }
-                                                    GlassButton { label: "Dorado"; compact: true; horizontal-stretch: 1; clicked => { root.index-color-selected(1); } }
-                                                    GlassButton { label: "Celeste"; compact: true; horizontal-stretch: 1; clicked => { root.index-color-selected(2); } }
-                                                    GlassButton { label: "Plata";  compact: true; horizontal-stretch: 1; clicked => { root.index-color-selected(3); } }
+                                                    GlassButton { label: @tr("Blanco"); compact: true; horizontal-stretch: 1; clicked => { root.index-color-selected(0); } }
+                                                    GlassButton { label: @tr("Dorado"); compact: true; horizontal-stretch: 1; clicked => { root.index-color-selected(1); } }
+                                                    GlassButton { label: @tr("Celeste"); compact: true; horizontal-stretch: 1; clicked => { root.index-color-selected(2); } }
+                                                    GlassButton { label: @tr("Plata");  compact: true; horizontal-stretch: 1; clicked => { root.index-color-selected(3); } }
                                                 }
                                                 HorizontalLayout { alignment: space-between; Text { text: "R"; color: #f87171; font-size: 11px; width: 16px; } Slider { horizontal-stretch: 1; minimum: 0; maximum: 255; value <=> root.index-color-r; changed(v) => { root.index-color-rgb-changed(root.index-color-r, root.index-color-g, root.index-color-b); } } Text { text: Math.round(root.index-color-r); color: Theme.text-muted; font-size: 11px; width: 28px; } }
                                                 HorizontalLayout { alignment: space-between; Text { text: "G"; color: #4ade80; font-size: 11px; width: 16px; } Slider { horizontal-stretch: 1; minimum: 0; maximum: 255; value <=> root.index-color-g; changed(v) => { root.index-color-rgb-changed(root.index-color-r, root.index-color-g, root.index-color-b); } } Text { text: Math.round(root.index-color-g); color: Theme.text-muted; font-size: 11px; width: 28px; } }
@@ -4015,17 +4024,17 @@ export component MainWindow inherits Window {
                                         HorizontalLayout {
                                             alignment: space-between;
                                             Text { text: "Shaders y Color Grading en Vivo (libmpv)"; color: Theme.text-primary; font-size: 13.5px; font-weight: 700; vertical-alignment: center; }
-                                            GlassButton { label: "Restablecer"; icon: @image-url("icons/refresh.svg"); has-icon: true; clicked => { root.reset-shaders(); } }
+                                            GlassButton { label: @tr("Restablecer"); icon: @image-url("icons/refresh.svg"); has-icon: true; clicked => { root.reset-shaders(); } }
                                         }
 
                                         HorizontalLayout {
                                             spacing: 6px;
-                                            GlassButton { label: "Normal"; horizontal-stretch: 1; primary: root.shader-preset == 0; clicked => { root.shader-preset = 0; root.shaders-changed(); } }
-                                            GlassButton { label: "Cálido"; horizontal-stretch: 1; primary: root.shader-preset == 1; clicked => { root.shader-preset = 1; root.shaders-changed(); } }
-                                            GlassButton { label: "Cine";   horizontal-stretch: 1; primary: root.shader-preset == 2; clicked => { root.shader-preset = 2; root.shaders-changed(); } }
-                                            GlassButton { label: "Noir B&W"; horizontal-stretch: 1; primary: root.shader-preset == 3; clicked => { root.shader-preset = 3; root.shaders-changed(); } }
-                                            GlassButton { label: "Sepia";  horizontal-stretch: 1; primary: root.shader-preset == 4; clicked => { root.shader-preset = 4; root.shaders-changed(); } }
-                                            GlassButton { label: "Contraste"; horizontal-stretch: 1; primary: root.shader-preset == 5; clicked => { root.shader-preset = 5; root.shaders-changed(); } }
+                                            GlassButton { label: @tr("Normal"); horizontal-stretch: 1; primary: root.shader-preset == 0; clicked => { root.shader-preset = 0; root.shaders-changed(); } }
+                                            GlassButton { label: @tr("Cálido"); horizontal-stretch: 1; primary: root.shader-preset == 1; clicked => { root.shader-preset = 1; root.shaders-changed(); } }
+                                            GlassButton { label: @tr("Cine");   horizontal-stretch: 1; primary: root.shader-preset == 2; clicked => { root.shader-preset = 2; root.shaders-changed(); } }
+                                            GlassButton { label: @tr("Noir B&W"); horizontal-stretch: 1; primary: root.shader-preset == 3; clicked => { root.shader-preset = 3; root.shaders-changed(); } }
+                                            GlassButton { label: @tr("Sepia");  horizontal-stretch: 1; primary: root.shader-preset == 4; clicked => { root.shader-preset = 4; root.shaders-changed(); } }
+                                            GlassButton { label: @tr("Contraste"); horizontal-stretch: 1; primary: root.shader-preset == 5; clicked => { root.shader-preset = 5; root.shaders-changed(); } }
                                         }
 
                                         HorizontalLayout { alignment: space-between; Text { text: "Brillo"; color: Theme.text-secondary; font-size: 12px; } Text { text: Math.round(root.shader-brightness); color: Theme.text-primary; font-size: 12px; } }
@@ -4060,10 +4069,10 @@ export component MainWindow inherits Window {
 
                                         HorizontalLayout {
                                             spacing: 6px;
-                                            GlassButton { label: "Plano";     horizontal-stretch: 1; clicked => { root.apply-eq-preset(0); } }
-                                            GlassButton { label: "Voz / Pred."; horizontal-stretch: 1; clicked => { root.apply-eq-preset(1); } }
-                                            GlassButton { label: "Alabanza";  horizontal-stretch: 1; clicked => { root.apply-eq-preset(2); } }
-                                            GlassButton { label: "Acústico";  horizontal-stretch: 1; clicked => { root.apply-eq-preset(3); } }
+                                            GlassButton { label: @tr("Plano");     horizontal-stretch: 1; clicked => { root.apply-eq-preset(0); } }
+                                            GlassButton { label: @tr("Voz / Pred."); horizontal-stretch: 1; clicked => { root.apply-eq-preset(1); } }
+                                            GlassButton { label: @tr("Alabanza");  horizontal-stretch: 1; clicked => { root.apply-eq-preset(2); } }
+                                            GlassButton { label: @tr("Acústico");  horizontal-stretch: 1; clicked => { root.apply-eq-preset(3); } }
                                         }
 
                                         HorizontalLayout { alignment: space-between; Text { text: "Graves (100 Hz)"; color: Theme.text-secondary; font-size: 12px; } Text { text: Math.round(root.eq-bass) + " dB"; color: Theme.text-primary; font-size: 12px; } }
@@ -4114,14 +4123,14 @@ export component MainWindow inherits Window {
                                             spacing: 8px;
                                             padding: 20px;
                                             Text {
-                                                text: "Cuan grande es Dios\nCántale cuan grande es Dios";
+                                                text: @tr("Cuan grande es Dios\nCántale cuan grande es Dios");
                                                 color: #ffffff;
                                                 font-size: 22px;
                                                 font-weight: 800;
                                                 horizontal-alignment: center;
                                             }
                                             Text {
-                                                text: "Salmos 145:3  •  Vista Previa de Transición";
+                                                text: @tr("Salmos 145:3  •  Vista Previa de Transición");
                                                 color: Theme.accent-strong;
                                                 font-size: 12px;
                                                 font-weight: 600;
@@ -4173,7 +4182,7 @@ export component MainWindow inherits Window {
                                             alignment: space-between;
                                             Text { text: "Transiciones Incluidas (Haz clic para previsualizar y aplicar)"; color: Theme.text-primary; font-size: 13.5px; font-weight: 700; vertical-alignment: center; }
                                             GlassButton {
-                                                label: "Repetir Preview";
+                                                label: @tr("Repetir Preview");
                                                 icon: @image-url("icons/play.svg");
                                                 has-icon: true;
                                                 clicked => { root.replay-transition-preview(); }
@@ -4182,15 +4191,15 @@ export component MainWindow inherits Window {
 
                                         HorizontalLayout {
                                             spacing: 8px;
-                                            GlassButton { label: "Corte Directo (0ms)"; horizontal-stretch: 1; primary: root.active-transition-preset == 0; clicked => { root.select-transition-preset(0); } }
-                                            GlassButton { label: "Fundido Suave (350ms)"; horizontal-stretch: 1; primary: root.active-transition-preset == 1; clicked => { root.select-transition-preset(1); } }
-                                            GlassButton { label: "Fundido Cine (900ms)"; horizontal-stretch: 1; primary: root.active-transition-preset == 2; clicked => { root.select-transition-preset(2); } }
+                                            GlassButton { label: @tr("Corte Directo (0ms)"); horizontal-stretch: 1; primary: root.active-transition-preset == 0; clicked => { root.select-transition-preset(0); } }
+                                            GlassButton { label: @tr("Fundido Suave (350ms)"); horizontal-stretch: 1; primary: root.active-transition-preset == 1; clicked => { root.select-transition-preset(1); } }
+                                            GlassButton { label: @tr("Fundido Cine (900ms)"); horizontal-stretch: 1; primary: root.active-transition-preset == 2; clicked => { root.select-transition-preset(2); } }
                                         }
                                         HorizontalLayout {
                                             spacing: 8px;
-                                            GlassButton { label: "Deslizar Izq (400ms)"; horizontal-stretch: 1; primary: root.active-transition-preset == 3; clicked => { root.select-transition-preset(3); } }
-                                            GlassButton { label: "Deslizar Arriba (420ms)"; horizontal-stretch: 1; primary: root.active-transition-preset == 4; clicked => { root.select-transition-preset(4); } }
-                                            GlassButton { label: "Deslizar Der (400ms)"; horizontal-stretch: 1; primary: root.active-transition-preset == 5; clicked => { root.select-transition-preset(5); } }
+                                            GlassButton { label: @tr("Deslizar Izq (400ms)"); horizontal-stretch: 1; primary: root.active-transition-preset == 3; clicked => { root.select-transition-preset(3); } }
+                                            GlassButton { label: @tr("Deslizar Arriba (420ms)"); horizontal-stretch: 1; primary: root.active-transition-preset == 4; clicked => { root.select-transition-preset(4); } }
+                                            GlassButton { label: @tr("Deslizar Der (400ms)"); horizontal-stretch: 1; primary: root.active-transition-preset == 5; clicked => { root.select-transition-preset(5); } }
                                         }
                                     }
                                 }
@@ -4210,11 +4219,11 @@ export component MainWindow inherits Window {
 
                                         HorizontalLayout {
                                             spacing: 6px;
-                                            GlassButton { label: "Ninguna"; horizontal-stretch: 1; primary: root.transition-type == 0; clicked => { root.transition-type = 0; root.active-transition-preset = -1; root.transition-changed(); root.replay-transition-preview(); } }
-                                            GlassButton { label: "Fade"; horizontal-stretch: 1; primary: root.transition-type == 1; clicked => { root.transition-type = 1; root.active-transition-preset = -1; root.transition-changed(); root.replay-transition-preview(); } }
-                                            GlassButton { label: "Izq"; horizontal-stretch: 1; primary: root.transition-type == 2; clicked => { root.transition-type = 2; root.active-transition-preset = -1; root.transition-changed(); root.replay-transition-preview(); } }
-                                            GlassButton { label: "Arriba"; horizontal-stretch: 1; primary: root.transition-type == 3; clicked => { root.transition-type = 3; root.active-transition-preset = -1; root.transition-changed(); root.replay-transition-preview(); } }
-                                            GlassButton { label: "Der"; horizontal-stretch: 1; primary: root.transition-type == 4; clicked => { root.transition-type = 4; root.active-transition-preset = -1; root.transition-changed(); root.replay-transition-preview(); } }
+                                            GlassButton { label: @tr("Ninguna"); horizontal-stretch: 1; primary: root.transition-type == 0; clicked => { root.transition-type = 0; root.active-transition-preset = -1; root.transition-changed(); root.replay-transition-preview(); } }
+                                            GlassButton { label: @tr("Fade"); horizontal-stretch: 1; primary: root.transition-type == 1; clicked => { root.transition-type = 1; root.active-transition-preset = -1; root.transition-changed(); root.replay-transition-preview(); } }
+                                            GlassButton { label: @tr("Izq"); horizontal-stretch: 1; primary: root.transition-type == 2; clicked => { root.transition-type = 2; root.active-transition-preset = -1; root.transition-changed(); root.replay-transition-preview(); } }
+                                            GlassButton { label: @tr("Arriba"); horizontal-stretch: 1; primary: root.transition-type == 3; clicked => { root.transition-type = 3; root.active-transition-preset = -1; root.transition-changed(); root.replay-transition-preview(); } }
+                                            GlassButton { label: @tr("Der"); horizontal-stretch: 1; primary: root.transition-type == 4; clicked => { root.transition-type = 4; root.active-transition-preset = -1; root.transition-changed(); root.replay-transition-preview(); } }
                                         }
 
                                         HorizontalLayout {
@@ -4234,7 +4243,7 @@ export component MainWindow inherits Window {
                                             spacing: 8px;
                                             alignment: start;
                                             GlassButton {
-                                                label: "Probar Transición en Pantalla";
+                                                label: @tr("Probar Transición en Pantalla");
                                                 icon: @image-url("icons/tv.svg");
                                                 has-icon: true;
                                                 primary: true;
@@ -4266,8 +4275,8 @@ export component MainWindow inherits Window {
                                         Text { text: "Tiles — Pantalla Dividida en Vivo"; color: Theme.text-primary; font-size: 14px; font-weight: 700; }
 
                                         SwitchRow {
-                                            title: "Activar Modo Tiles (Pantalla Dividida)";
-                                            subtitle: "Divide la salida Público en 2 paneles para mostrar continuidad o dos bloques";
+                                            title: @tr("Activar Modo Tiles (Pantalla Dividida)");
+                                            subtitle: @tr("Divide la salida Público en 2 paneles para mostrar continuidad o dos bloques");
                                             checked <=> root.tiles-enabled;
                                             toggled(v) => { root.tiles-changed(); }
                                         }
@@ -4275,19 +4284,19 @@ export component MainWindow inherits Window {
                                         Text { text: "Distribución"; color: Theme.text-secondary; font-size: 12px; font-weight: 600; }
                                         HorizontalLayout {
                                             spacing: 8px;
-                                            GlassButton { label: "2 Columnas (Izq / Der)"; horizontal-stretch: 1; primary: root.tiles-layout == 0; clicked => { root.tiles-layout = 0; root.tiles-changed(); } }
-                                            GlassButton { label: "2 Filas (Sup / Inf)";    horizontal-stretch: 1; primary: root.tiles-layout == 1; clicked => { root.tiles-layout = 1; root.tiles-changed(); } }
+                                            GlassButton { label: @tr("2 Columnas (Izq / Der)"); horizontal-stretch: 1; primary: root.tiles-layout == 0; clicked => { root.tiles-layout = 0; root.tiles-changed(); } }
+                                            GlassButton { label: @tr("2 Filas (Sup / Inf)");    horizontal-stretch: 1; primary: root.tiles-layout == 1; clicked => { root.tiles-layout = 1; root.tiles-changed(); } }
                                         }
 
                                         Text { text: "Modo de Continuidad en Panel 2"; color: Theme.text-secondary; font-size: 12px; font-weight: 600; }
                                         HorizontalLayout {
                                             spacing: 8px;
-                                            GlassButton { label: "Actual + Siguiente"; horizontal-stretch: 1; primary: root.tiles-continuity == 0; clicked => { root.tiles-continuity = 0; root.tiles-changed(); } }
-                                            GlassButton { label: "Actual + Anterior";  horizontal-stretch: 1; primary: root.tiles-continuity == 1; clicked => { root.tiles-continuity = 1; root.tiles-changed(); } }
+                                            GlassButton { label: @tr("Actual + Siguiente"); horizontal-stretch: 1; primary: root.tiles-continuity == 0; clicked => { root.tiles-continuity = 0; root.tiles-changed(); } }
+                                            GlassButton { label: @tr("Actual + Anterior");  horizontal-stretch: 1; primary: root.tiles-continuity == 1; clicked => { root.tiles-continuity = 1; root.tiles-changed(); } }
                                         }
 
                                         SwitchRow {
-                                            title: "Mostrar Línea Divisora";
+                                            title: @tr("Mostrar Línea Divisora");
                                             checked <=> root.tiles-divider;
                                             toggled(v) => { root.tiles-changed(); }
                                         }
@@ -4307,7 +4316,7 @@ export component MainWindow inherits Window {
                             GlassButton { label: root.lan-running ? "● LAN" : "LAN";          compact: true; icon: @image-url("icons/radio.svg");      has-icon: true; primary: root.net-subtab == 0; clicked => { root.net-subtab = 0; } }
                             GlassButton { label: root.chat-running ? "● Chat" : "Chat";       compact: true; icon: @image-url("icons/chat.svg");       has-icon: true; primary: root.net-subtab == 1; clicked => { root.net-subtab = 1; } }
                             GlassButton { label: root.mobile-running ? "● Celular" : "Celular"; compact: true; icon: @image-url("icons/smartphone.svg"); has-icon: true; primary: root.net-subtab == 2; clicked => { root.net-subtab = 2; } }
-                            GlassButton { label: "Luces OSC";                                 compact: true; icon: @image-url("icons/zap.svg");        has-icon: true; primary: root.net-subtab == 3; clicked => { root.net-subtab = 3; } }
+                            GlassButton { label: @tr("Luces OSC");                                 compact: true; icon: @image-url("icons/zap.svg");        has-icon: true; primary: root.net-subtab == 3; clicked => { root.net-subtab = 3; } }
                         }
 
                         // Subtab 0: Transmisión LAN (Video / Letras / OBS — Puerto 8080, SIN Chat)
@@ -4343,12 +4352,12 @@ export component MainWindow inherits Window {
 
                                             HorizontalLayout {
                                                 spacing: 8px;
-                                                LineEdit { horizontal-stretch: 2; placeholder-text: "IP de red local (auto)"; text <=> root.lan-host-ip; }
-                                                LineEdit { horizontal-stretch: 1; placeholder-text: "Puerto (8080)"; text <=> root.lan-port-input; }
+                                                LineEdit { horizontal-stretch: 2; placeholder-text: @tr("IP de red local (auto)"); text <=> root.lan-host-ip; }
+                                                LineEdit { horizontal-stretch: 1; placeholder-text: @tr("Puerto (8080)"); text <=> root.lan-port-input; }
                                             }
 
                                             Text {
-                                                text: "Abre esta dirección en OBS Studio (Fuente de Navegador), otra PC, celular o navegador de tu Smart TV. Utiliza el mismo servidor HTTP/MJPEG y codificador en segundo plano que la versión clásica.";
+                                                text: @tr("Abre esta dirección en OBS Studio (Fuente de Navegador), otra PC, celular o navegador de tu Smart TV. Utiliza el mismo servidor HTTP/MJPEG y codificador en segundo plano que la versión clásica.");
                                                 color: Theme.text-muted;
                                                 font-size: 11.5px;
                                                 wrap: word-wrap;
@@ -4395,8 +4404,8 @@ export component MainWindow inherits Window {
                                         spacing: 6px;
                                         Text { text: "CONTENIDO (CAPAS)"; color: Theme.text-secondary; font-size: 11.5px; font-weight: 700; }
                                         SwitchRow {
-                                            title: "Fondo";
-                                            subtitle: "Envía video o imagen de fondo (desactivado muestra fondo negro)";
+                                            title: @tr("Fondo");
+                                            subtitle: @tr("Envía video o imagen de fondo (desactivado muestra fondo negro)");
                                             checked <=> root.lan-send-bg;
                                             toggled(v) => {
                                                 if (v) { root.lan-transparent = false; }
@@ -4404,8 +4413,8 @@ export component MainWindow inherits Window {
                                             }
                                         }
                                         SwitchRow {
-                                            title: "Transparencia (Canal Alpha para OBS)";
-                                            subtitle: "Envía solo texto sobre fondo transparente (desactiva Fondo automáticamente)";
+                                            title: @tr("Transparencia (Canal Alpha para OBS)");
+                                            subtitle: @tr("Envía solo texto sobre fondo transparente (desactiva Fondo automáticamente)");
                                             checked <=> root.lan-transparent;
                                             toggled(v) => {
                                                 if (v) { root.lan-send-bg = false; }
@@ -4413,14 +4422,14 @@ export component MainWindow inherits Window {
                                             }
                                         }
                                         SwitchRow {
-                                            title: "Textos";
-                                            subtitle: "Muestra letras de canciones y versículos en vivo sobre el stream";
+                                            title: @tr("Textos");
+                                            subtitle: @tr("Muestra letras de canciones y versículos en vivo sobre el stream");
                                             checked <=> root.lan-send-text;
                                             toggled(v) => { root.lan-config-changed(); }
                                         }
                                         SwitchRow {
-                                            title: "Overlay";
-                                            subtitle: "Incluye capas gráficas activas en la transmisión";
+                                            title: @tr("Overlay");
+                                            subtitle: @tr("Incluye capas gráficas activas en la transmisión");
                                             checked <=> root.lan-send-overlay;
                                             toggled(v) => { root.lan-config-changed(); }
                                         }
@@ -4453,7 +4462,7 @@ export component MainWindow inherits Window {
                                                     animate colorize { duration: 150ms; }
                                                 }
                                                 Text {
-                                                    text: "ESTILO DE LETRAS PARA LAN";
+                                                    text: @tr("ESTILO DE LETRAS PARA LAN");
                                                     color: root.lan-own-style ? #38bdf8 : Theme.text-secondary;
                                                     font-size: 11.5px;
                                                     font-weight: 800;
@@ -4461,7 +4470,7 @@ export component MainWindow inherits Window {
                                                 }
                                             }
                                             GlassButton {
-                                                label: "Crear / Editar Estilos";
+                                                label: @tr("Crear / Editar Estilos");
                                                 icon: @image-url("icons/edit.svg");
                                                 has-icon: true;
                                                 compact: true;
@@ -4474,8 +4483,8 @@ export component MainWindow inherits Window {
                                         }
 
                                         SwitchRow {
-                                            title: "Usar estilo de letra independiente en LAN";
-                                            subtitle: "LAN mantiene su propio tamaño/fuente (ej. letras gigantes) sin afectar ni ser afectado por Público";
+                                            title: @tr("Usar estilo de letra independiente en LAN");
+                                            subtitle: @tr("LAN mantiene su propio tamaño/fuente (ej. letras gigantes) sin afectar ni ser afectado por Público");
                                             checked <=> root.lan-own-style;
                                             toggled(v) => { root.set-screen-own-style(1, v); }
                                         }
@@ -4505,7 +4514,7 @@ export component MainWindow inherits Window {
                                             HorizontalLayout {
                                                 alignment: space-between;
                                                 Text {
-                                                    text: "Elige el estilo de letra exclusivo para LAN:";
+                                                    text: @tr("Elige el estilo de letra exclusivo para LAN:");
                                                     color: Theme.text-secondary;
                                                     font-size: 11.5px;
                                                     font-weight: 600;
@@ -4531,13 +4540,13 @@ export component MainWindow inherits Window {
                                                     padding-right: 10px;
                                                     alignment: space-between;
                                                     Text {
-                                                        text: "Aún no tienes estilos guardados. Crea uno (ej. 'LAN Gigante 140px').";
+                                                        text: @tr("Aún no tienes estilos guardados. Crea uno (ej. 'LAN Gigante 140px').");
                                                         color: Theme.text-muted;
                                                         font-size: 11px;
                                                         vertical-alignment: center;
                                                     }
                                                     GlassButton {
-                                                        label: "Crear Estilo LAN";
+                                                        label: @tr("Crear Estilo LAN");
                                                         compact: true;
                                                         primary: true;
                                                         clicked => {
@@ -4608,7 +4617,7 @@ export component MainWindow inherits Window {
                                                             padding-left: 7px;
                                                             padding-right: 7px;
                                                             Text {
-                                                                text: "ACTIVO EN LAN";
+                                                                text: @tr("ACTIVO EN LAN");
                                                                 color: #ffffff;
                                                                 font-size: 9px;
                                                                 font-weight: 800;
@@ -4641,24 +4650,24 @@ export component MainWindow inherits Window {
                                         }
                                         HorizontalLayout {
                                             spacing: 5px;
-                                            GlassButton { label: "Básica (360p)";   compact: true; horizontal-stretch: 1; primary: root.lan-res-preset == 0; clicked => { root.lan-res-preset = 0; root.lan-config-changed(); } }
-                                            GlassButton { label: "Estándar (720p)"; compact: true; horizontal-stretch: 1; primary: root.lan-res-preset == 1; clicked => { root.lan-res-preset = 1; root.lan-config-changed(); } }
-                                            GlassButton { label: "Alta (1080p)";    compact: true; horizontal-stretch: 1; primary: root.lan-res-preset == 2; clicked => { root.lan-res-preset = 2; root.lan-config-changed(); } }
+                                            GlassButton { label: @tr("Básica (360p)");   compact: true; horizontal-stretch: 1; primary: root.lan-res-preset == 0; clicked => { root.lan-res-preset = 0; root.lan-config-changed(); } }
+                                            GlassButton { label: @tr("Estándar (720p)"); compact: true; horizontal-stretch: 1; primary: root.lan-res-preset == 1; clicked => { root.lan-res-preset = 1; root.lan-config-changed(); } }
+                                            GlassButton { label: @tr("Alta (1080p)");    compact: true; horizontal-stretch: 1; primary: root.lan-res-preset == 2; clicked => { root.lan-res-preset = 2; root.lan-config-changed(); } }
                                         }
 
                                         Text { text: "Fluidez"; color: Theme.text-primary; font-size: 12px; }
                                         HorizontalLayout {
                                             spacing: 5px;
-                                            GlassButton { label: "Ahorro (8 FPS)";     compact: true; horizontal-stretch: 1; primary: root.lan-video-mode == 0; clicked => { root.lan-video-mode = 0; root.lan-high-quality = false; root.lan-config-changed(); } }
-                                            GlassButton { label: "Normal (MJPEG 30)";  compact: true; horizontal-stretch: 1; primary: root.lan-video-mode == 1; clicked => { root.lan-video-mode = 1; root.lan-high-quality = true;  root.lan-config-changed(); } }
-                                            GlassButton { label: "Máxima (UltraEstable)"; compact: true; horizontal-stretch: 1; primary: root.lan-video-mode == 2; clicked => { root.lan-video-mode = 2; root.lan-high-quality = true; if (root.lan-jpeg-quality < 92) { root.lan-jpeg-quality = 95; } root.lan-config-changed(); } }
+                                            GlassButton { label: @tr("Ahorro (8 FPS)");     compact: true; horizontal-stretch: 1; primary: root.lan-video-mode == 0; clicked => { root.lan-video-mode = 0; root.lan-high-quality = false; root.lan-config-changed(); } }
+                                            GlassButton { label: @tr("Normal (MJPEG 30)");  compact: true; horizontal-stretch: 1; primary: root.lan-video-mode == 1; clicked => { root.lan-video-mode = 1; root.lan-high-quality = true;  root.lan-config-changed(); } }
+                                            GlassButton { label: @tr("Máxima (UltraEstable)"); compact: true; horizontal-stretch: 1; primary: root.lan-video-mode == 2; clicked => { root.lan-video-mode = 2; root.lan-high-quality = true; if (root.lan-jpeg-quality < 92) { root.lan-jpeg-quality = 95; } root.lan-config-changed(); } }
                                         }
 
                                         if root.lan-video-mode == 2 : HorizontalLayout {
                                             spacing: 6px;
                                             Text { text: "Velocidad objetivo:"; color: Theme.text-secondary; font-size: 11.5px; vertical-alignment: center; horizontal-stretch: 1; }
-                                            GlassButton { label: "30 FPS"; compact: true; primary: root.lan-target-fps != 60; clicked => { root.lan-target-fps = 30; root.lan-config-changed(); } }
-                                            GlassButton { label: "60 FPS"; compact: true; primary: root.lan-target-fps == 60; clicked => { root.lan-target-fps = 60; root.lan-config-changed(); } }
+                                            GlassButton { label: @tr("30 FPS"); compact: true; primary: root.lan-target-fps != 60; clicked => { root.lan-target-fps = 30; root.lan-config-changed(); } }
+                                            GlassButton { label: @tr("60 FPS"); compact: true; primary: root.lan-target-fps == 60; clicked => { root.lan-target-fps = 60; root.lan-config-changed(); } }
                                         }
 
                                         HorizontalLayout {
@@ -4693,7 +4702,7 @@ export component MainWindow inherits Window {
                                                     colorize: Theme.accent-strong;
                                                 }
                                                 Text {
-                                                    text: "Enviar a Smart TV / Screen Sharing (DLNA / Wi-Fi)";
+                                                    text: @tr("Enviar a Smart TV / Screen Sharing (DLNA / Wi-Fi)");
                                                     color: Theme.text-primary;
                                                     font-size: 13.5px;
                                                     font-weight: 700;
@@ -4714,14 +4723,14 @@ export component MainWindow inherits Window {
                                             spacing: 8px;
                                             LineEdit {
                                                 horizontal-stretch: 1;
-                                                placeholder-text: "IP directa de Smart TV (ej. 192.168.1.50)";
+                                                placeholder-text: @tr("IP directa de Smart TV (ej. 192.168.1.50)");
                                                 text <=> root.smart-tv-manual-ip;
                                                 accepted(ip) => {
                                                     if (ip != "") { root.cast-to-smart-tv-ip(ip); }
                                                 }
                                             }
                                             GlassButton {
-                                                label: "Enviar a IP";
+                                                label: @tr("Enviar a IP");
                                                 icon: @image-url("icons/tv.svg");
                                                 has-icon: true;
                                                 clicked => {
@@ -4760,7 +4769,7 @@ export component MainWindow inherits Window {
                                                         clicked => { root.cast-to-smart-tv(tidx); }
                                                     }
                                                     if tv.active : GlassButton {
-                                                        label: "Detener";
+                                                        label: @tr("Detener");
                                                         compact: true;
                                                         danger: true;
                                                         clicked => { root.stop-smart-tv-cast(tidx); }
@@ -4792,7 +4801,7 @@ export component MainWindow inherits Window {
                                             alignment: space-between;
                                             Text { text: "Acceso Wi-Fi / Firewall del Sistema"; color: root.lan-firewall-warning ? Theme.stage-amber : Theme.text-primary; font-size: 12.5px; font-weight: 700; vertical-alignment: center; }
                                             GlassButton {
-                                                label: "Abrir Puertos (8080, 8082, 8090)";
+                                                label: @tr("Abrir Puertos (8080, 8082, 8090)");
                                                 compact: true;
                                                 primary: root.lan-firewall-warning;
                                                 clicked => { root.open-firewall-ports(); }
@@ -4832,7 +4841,7 @@ export component MainWindow inherits Window {
                                             Text { text: "Chat de Equipo en Red Local (Independiente, sin Video)"; color: Theme.text-primary; font-size: 14px; font-weight: 700; }
                                             Text { text: root.chat-url; color: root.chat-running ? Theme.live-green : Theme.text-secondary; font-size: 13px; font-weight: 600; wrap: word-wrap; }
                                             Text {
-                                                text: "Servidor ligero solo para texto en el puerto 8082. No codifica ni transmite video, así que casi no consume recursos.";
+                                                text: @tr("Servidor ligero solo para texto en el puerto 8082. No codifica ni transmite video, así que casi no consume recursos.");
                                                 color: Theme.text-muted;
                                                 font-size: 11.5px;
                                                 wrap: word-wrap;
@@ -4896,7 +4905,7 @@ export component MainWindow inherits Window {
                                             spacing: 8px;
                                             LineEdit {
                                                 horizontal-stretch: 1;
-                                                placeholder-text: "Escribe un mensaje para el equipo...";
+                                                placeholder-text: @tr("Escribe un mensaje para el equipo...");
                                                 text <=> root.chat-input;
                                                 accepted(txt) => {
                                                     if (txt != "") {
@@ -4906,7 +4915,7 @@ export component MainWindow inherits Window {
                                                 }
                                             }
                                             GlassButton {
-                                                label: "Enviar";
+                                                label: @tr("Enviar");
                                                 icon: @image-url("icons/chat.svg");
                                                 has-icon: true;
                                                 primary: true;
@@ -4966,14 +4975,14 @@ export component MainWindow inherits Window {
                                                     }
                                                 }
                                                 GlassButton {
-                                                    label: "Regenerar PIN";
+                                                    label: @tr("Regenerar PIN");
                                                     icon: @image-url("icons/refresh.svg");
                                                     has-icon: true;
                                                     clicked => { root.regenerate-mobile-pin(); }
                                                 }
                                             }
                                             Text {
-                                                text: "Escanea el QR desde tu celular para abrir el Control Remoto en el navegador o emparejar la app ProyecThor Mobile (UDP 47990 + HTTP 8090).";
+                                                text: @tr("Escanea el QR desde tu celular para abrir el Control Remoto en el navegador o emparejar la app ProyecThor Mobile (UDP 47990 + HTTP 8090).");
                                                 color: Theme.text-muted;
                                                 font-size: 11.5px;
                                                 wrap: word-wrap;
@@ -5030,15 +5039,15 @@ export component MainWindow inherits Window {
 
                                         HorizontalLayout {
                                             spacing: 8px;
-                                            LineEdit { horizontal-stretch: 2; placeholder-text: "IP Destino (ej. 127.0.0.1)"; text <=> root.osc-host; }
-                                            LineEdit { horizontal-stretch: 1; placeholder-text: "Puerto (9000)"; text <=> root.osc-port; }
+                                            LineEdit { horizontal-stretch: 2; placeholder-text: @tr("IP Destino (ej. 127.0.0.1)"); text <=> root.osc-host; }
+                                            LineEdit { horizontal-stretch: 1; placeholder-text: @tr("Puerto (9000)"); text <=> root.osc-port; }
                                         }
                                         HorizontalLayout {
                                             spacing: 8px;
-                                            LineEdit { horizontal-stretch: 2; placeholder-text: "Dirección OSC (ej. /cue/1)"; text <=> root.osc-address; }
-                                            LineEdit { horizontal-stretch: 1; placeholder-text: "Args (ej. 1, 0.5)"; text <=> root.osc-args; }
+                                            LineEdit { horizontal-stretch: 2; placeholder-text: @tr("Dirección OSC (ej. /cue/1)"); text <=> root.osc-address; }
+                                            LineEdit { horizontal-stretch: 1; placeholder-text: @tr("Args (ej. 1, 0.5)"); text <=> root.osc-args; }
                                             GlassButton {
-                                                label: "Enviar OSC";
+                                                label: @tr("Enviar OSC");
                                                 icon: @image-url("icons/zap.svg");
                                                 has-icon: true;
                                                 primary: true;
@@ -5049,10 +5058,10 @@ export component MainWindow inherits Window {
                                         Text { text: "Disparos Rápidos"; color: Theme.text-secondary; font-size: 12px; font-weight: 600; }
                                         HorizontalLayout {
                                             spacing: 8px;
-                                            GlassButton { label: "Cue 1 (/cue/1)"; compact: true; horizontal-stretch: 1; clicked => { root.send-osc(root.osc-host, root.osc-port, "/cue/1", "1"); } }
-                                            GlassButton { label: "Cue 2 (/cue/2)"; compact: true; horizontal-stretch: 1; clicked => { root.send-osc(root.osc-host, root.osc-port, "/cue/2", "1"); } }
-                                            GlassButton { label: "Cue 3 (/cue/3)"; compact: true; horizontal-stretch: 1; clicked => { root.send-osc(root.osc-host, root.osc-port, "/cue/3", "1"); } }
-                                            GlassButton { label: "Blackout";       compact: true; horizontal-stretch: 1; danger: true; clicked => { root.send-osc(root.osc-host, root.osc-port, "/blackout", "1"); } }
+                                            GlassButton { label: @tr("Cue 1 (/cue/1)"); compact: true; horizontal-stretch: 1; clicked => { root.send-osc(root.osc-host, root.osc-port, "/cue/1", "1"); } }
+                                            GlassButton { label: @tr("Cue 2 (/cue/2)"); compact: true; horizontal-stretch: 1; clicked => { root.send-osc(root.osc-host, root.osc-port, "/cue/2", "1"); } }
+                                            GlassButton { label: @tr("Cue 3 (/cue/3)"); compact: true; horizontal-stretch: 1; clicked => { root.send-osc(root.osc-host, root.osc-port, "/cue/3", "1"); } }
+                                            GlassButton { label: @tr("Blackout");       compact: true; horizontal-stretch: 1; danger: true; clicked => { root.send-osc(root.osc-host, root.osc-port, "/blackout", "1"); } }
                                         }
 
                                         Text { text: root.osc-status; color: Theme.text-secondary; font-size: 12px; wrap: word-wrap; }
@@ -5118,6 +5127,7 @@ export component MainWindow inherits Window {
                         preview-enabled <=> root.preview-enabled;
                         preview-max-fps <=> root.preview-max-fps;
                         prioritize-output <=> root.prioritize-output;
+                        ui-language <=> root.ui-language;
                         fullscreen-output <=> root.fullscreen-output;
                         enable-glass-translucency <=> root.enable-glass-translucency;
                         enable-glass-sheen <=> root.enable-glass-sheen;
@@ -5144,6 +5154,7 @@ export component MainWindow inherits Window {
                         purge-ram-cache => { root.purge-ram-cache(); }
                         performance-mode-changed(v) => { root.performance-mode-changed(v); }
                         preview-config-changed => { root.preview-config-changed(); }
+                        language-changed(c) => { root.language-changed(c); }
                         fullscreen-changed(v) => { root.fullscreen-changed(v); }
                         visual-effects-changed => { root.visual-effects-changed(); }
                         tutorial-preference-changed(v) => { root.tutorial-preference-changed(v); }
@@ -5190,7 +5201,7 @@ export component MainWindow inherits Window {
                                                 colorize: Theme.accent-strong;
                                             }
                                             Text {
-                                                text: "Capturadoras y Cámaras Detectadas (USB / HDMI / V4L2)";
+                                                text: @tr("Capturadoras y Cámaras Detectadas (USB / HDMI / V4L2)");
                                                 color: Theme.text-primary;
                                                 font-size: 13.5px;
                                                 font-weight: 700;
@@ -5200,13 +5211,13 @@ export component MainWindow inherits Window {
                                         HorizontalLayout {
                                             spacing: 6px;
                                             GlassButton {
-                                                label: "Refrescar";
+                                                label: @tr("Refrescar");
                                                 icon: @image-url("icons/refresh.svg");
                                                 has-icon: true;
                                                 clicked => { root.refresh-capture-devices(); }
                                             }
                                             GlassButton {
-                                                label: "Detener";
+                                                label: @tr("Detener");
                                                 icon: @image-url("icons/stop.svg");
                                                 has-icon: true;
                                                 danger: true;
@@ -5216,7 +5227,7 @@ export component MainWindow inherits Window {
                                     }
 
                                     if root.capture-devices.length == 0 : Text {
-                                        text: "No se detectaron cámaras o capturadoras USB conectadas. Conecta tu capturadora HDMI/USB y pulsa 'Refrescar Cámaras'.";
+                                        text: @tr("No se detectaron cámaras o capturadoras USB conectadas. Conecta tu capturadora HDMI/USB y pulsa 'Refrescar Cámaras'.");
                                         color: Theme.text-muted;
                                         font-size: 12px;
                                         wrap: word-wrap;
@@ -5279,7 +5290,7 @@ export component MainWindow inherits Window {
                         HorizontalLayout {
                             alignment: end;
                             GlassButton {
-                                label: "Importar Audio";
+                                label: @tr("Importar Audio");
                                 icon: @image-url("icons/upload.svg");
                                 has-icon: true;
                                 compact: true;
@@ -5303,7 +5314,7 @@ export component MainWindow inherits Window {
                                     border-width: 1px;
                                     border-color: Theme.border-subtle;
                                     Text {
-                                        text: "Sin archivos de audio en assets/audio/ ni carpetas configuradas.\nPulsa 'Importar Audio' o agrega tus carpetas de música en Ajustes → Carpetas de Escaneo de Música.";
+                                        text: @tr("Sin archivos de audio en assets/audio/ ni carpetas configuradas.\nPulsa 'Importar Audio' o agrega tus carpetas de música en Ajustes → Carpetas de Escaneo de Música.");
                                         color: Theme.text-muted;
                                         font-size: 12.5px;
                                         horizontal-alignment: center;
@@ -5451,7 +5462,7 @@ export component MainWindow inherits Window {
                                 HorizontalLayout {
                                     spacing: 6px;
                                     GlassButton {
-                                        label: "Nueva Canción";
+                                        label: @tr("Nueva Canción");
                                         icon: @image-url("icons/plus.svg");
                                         has-icon: true;
                                         compact: true;
@@ -5459,14 +5470,14 @@ export component MainWindow inherits Window {
                                         clicked => { root.active-tab = 0; root.new-song-clicked(); }
                                     }
                                     GlassButton {
-                                        label: "Importar";
+                                        label: @tr("Importar");
                                         icon: @image-url("icons/upload.svg");
                                         has-icon: true;
                                         compact: true;
                                         clicked => { root.import-file-clicked(); }
                                     }
                                     GlassButton {
-                                        label: "Escanear";
+                                        label: @tr("Escanear");
                                         icon: @image-url("icons/refresh.svg");
                                         has-icon: true;
                                         compact: true;
@@ -5609,7 +5620,7 @@ export component MainWindow inherits Window {
                                     HorizontalLayout {
                                         alignment: space-between;
                                         Text { text: "Canciones y Letras"; color: Theme.text-primary; font-size: 13px; font-weight: 700; vertical-alignment: center; }
-                                        GlassButton { label: "Abrir Canciones ›"; compact: true; clicked => { root.active-tab = 0; } }
+                                        GlassButton { label: @tr("Abrir Canciones ›"); compact: true; clicked => { root.active-tab = 0; } }
                                     }
                                     if root.hub-recent-songs.length == 0 : Text { text: "Sin canciones todavía."; color: Theme.text-muted; font-size: 11.5px; }
                                     for s in root.hub-recent-songs : Rectangle {
@@ -5662,7 +5673,7 @@ export component MainWindow inherits Window {
                                     HorizontalLayout {
                                         alignment: space-between;
                                         Text { text: "Música y Pistas de Audio"; color: Theme.text-primary; font-size: 13px; font-weight: 700; vertical-alignment: center; }
-                                        GlassButton { label: "Abrir Música ›"; compact: true; clicked => { root.active-tab = 9; } }
+                                        GlassButton { label: @tr("Abrir Música ›"); compact: true; clicked => { root.active-tab = 9; } }
                                     }
                                     if root.hub-recent-music.length == 0 : Text { text: "Sin pistas de audio. Puedes agregar carpetas de música en Ajustes."; color: Theme.text-muted; font-size: 11.5px; }
                                     for mt[midx] in root.hub-recent-music : Rectangle {
@@ -5725,7 +5736,7 @@ export component MainWindow inherits Window {
                                         HorizontalLayout {
                                             alignment: space-between;
                                             Text { text: "Multimedia"; color: Theme.text-primary; font-size: 13px; font-weight: 700; vertical-alignment: center; }
-                                            GlassButton { label: "Abrir ›"; compact: true; clicked => { root.active-tab = 2; } }
+                                            GlassButton { label: @tr("Abrir ›"); compact: true; clicked => { root.active-tab = 2; } }
                                         }
                                         if root.hub-recent-media.length == 0 : Text { text: "Sin videos ni imágenes."; color: Theme.text-muted; font-size: 11px; }
                                         for md in root.hub-recent-media : Rectangle {
@@ -5776,7 +5787,7 @@ export component MainWindow inherits Window {
                                         HorizontalLayout {
                                             alignment: space-between;
                                             Text { text: "Documentos"; color: Theme.text-primary; font-size: 13px; font-weight: 700; vertical-alignment: center; }
-                                            GlassButton { label: "Abrir ›"; compact: true; clicked => { root.active-tab = 10; } }
+                                            GlassButton { label: @tr("Abrir ›"); compact: true; clicked => { root.active-tab = 10; } }
                                         }
                                         if root.hub-recent-docs.length == 0 : Text { text: "Sin documentos PDF."; color: Theme.text-muted; font-size: 11px; }
                                         for dc in root.hub-recent-docs : Rectangle {
@@ -5830,14 +5841,14 @@ export component MainWindow inherits Window {
                             HorizontalLayout {
                                 spacing: 5px;
                                 if root.selected-library-index >= 0 && root.selected-library-path != "" : GlassButton {
-                                    label: "A Cola";
+                                    label: @tr("A Cola");
                                     icon: @image-url("icons/list.svg");
                                     has-icon: true;
                                     compact: true;
                                     clicked => { root.item-action-queue(2, root.selected-library-path); }
                                 }
                                 if root.selected-library-index >= 0 && root.selected-library-path != "" : GlassButton {
-                                    label: "Renombrar";
+                                    label: @tr("Renombrar");
                                     icon: @image-url("icons/edit.svg");
                                     has-icon: true;
                                     compact: true;
@@ -5851,7 +5862,7 @@ export component MainWindow inherits Window {
                                 IconButton { icon: @image-url("icons/prev.svg"); clicked => { root.doc-prev-page(); } }
                                 IconButton { icon: @image-url("icons/next.svg"); clicked => { root.doc-next-page(); } }
                                 GlassButton {
-                                    label: "Texto a QR";
+                                    label: @tr("Texto a QR");
                                     icon: @image-url("icons/qr.svg");
                                     has-icon: true;
                                     compact: true;
@@ -5863,7 +5874,7 @@ export component MainWindow inherits Window {
                                     }
                                 }
                                 GlassButton {
-                                    label: "Importar PDF";
+                                    label: @tr("Importar PDF");
                                     icon: @image-url("icons/upload.svg");
                                     has-icon: true;
                                     compact: true;
@@ -5886,7 +5897,7 @@ export component MainWindow inherits Window {
                                     border-width: 1px;
                                     border-color: Theme.border-subtle;
                                     Text {
-                                        text: "Selecciona un documento PDF o imagen a la izquierda.\nCada página aparecerá aquí lista para proyectar con un clic.";
+                                        text: @tr("Selecciona un documento PDF o imagen a la izquierda.\nCada página aparecerá aquí lista para proyectar con un clic.");
                                         color: Theme.text-muted;
                                         font-size: 12.5px;
                                         horizontal-alignment: center;
@@ -5945,8 +5956,8 @@ export component MainWindow inherits Window {
 
                         HorizontalLayout {
                             spacing: 6px;
-                            GlassButton { label: "Guía Rápida"; primary: root.help-subtab == 0; clicked => { root.help-subtab = 0; } }
-                            GlassButton { label: "Novedades / Changelog"; primary: root.help-subtab == 1; clicked => { root.help-subtab = 1; } }
+                            GlassButton { label: @tr("Guía Rápida"); primary: root.help-subtab == 0; clicked => { root.help-subtab = 0; } }
+                            GlassButton { label: @tr("Novedades / Changelog"); primary: root.help-subtab == 1; clicked => { root.help-subtab = 1; } }
                         }
 
                         if root.help-subtab == 0 : ScrollView {
@@ -5965,46 +5976,46 @@ export component MainWindow inherits Window {
                                         spacing: 10px;
                                         Text { text: "Soporte Oficial y Comunidad"; color: Theme.accent-strong; font-size: 14px; font-weight: 700; }
                                         Text {
-                                            text: "¿Tienes alguna duda o necesitas ayuda? Toca cualquiera de estos botones para abrir nuestra página oficial o hablar con la comunidad:";
+                                            text: @tr("¿Tienes alguna duda o necesitas ayuda? Toca cualquiera de estos botones para abrir nuestra página oficial o hablar con la comunidad:");
                                             color: Theme.text-secondary;
                                             font-size: 12px;
                                             wrap: word-wrap;
                                         }
 
                                         SupportLinkCard {
-                                            title: "Sitio Web Oficial";
-                                            subtitle: "Descargas, novedades y guía completa";
+                                            title: @tr("Sitio Web Oficial");
+                                            subtitle: @tr("Descargas, novedades y guía completa");
                                             icon: @image-url("icons/globe.svg");
                                             accent: #3b82f6;
                                             clicked => { root.open-website(); }
                                         }
                                         SupportLinkCard {
-                                            title: "Discord — Soporte y Ayuda";
-                                            subtitle: "Resuelve dudas en vivo con nosotros y otros usuarios";
+                                            title: @tr("Discord — Soporte y Ayuda");
+                                            subtitle: @tr("Resuelve dudas en vivo con nosotros y otros usuarios");
                                             icon: @image-url("icons/discord.svg");
                                             accent: #5865f2;
                                             clicked => { root.open-discord(); }
                                         }
                                         SupportLinkCard {
-                                            title: "Instagram — @theproyecthor";
-                                            subtitle: "Novedades, capturas y tutoriales rápidos";
+                                            title: @tr("Instagram — @theproyecthor");
+                                            subtitle: @tr("Novedades, capturas y tutoriales rápidos");
                                             icon: @image-url("icons/instagram.svg");
                                             accent: #e1306c;
                                             clicked => { root.open-instagram(); }
                                         }
                                         SupportLinkCard {
-                                            title: "WhatsApp — Canal Oficial";
-                                            subtitle: "Avisos de nuevas versiones directo a tu celular";
+                                            title: @tr("WhatsApp — Canal Oficial");
+                                            subtitle: @tr("Avisos de nuevas versiones directo a tu celular");
                                             icon: @image-url("icons/whatsapp.svg");
                                             accent: #25d366;
                                             clicked => { root.open-whatsapp(); }
                                         }
                                         SupportLinkCard {
-                                            title: "Apoyar el Proyecto (Ko-fi)";
-                                            subtitle: "Ayuda a mantener ProyecThor 100% gratis para todos";
+                                            title: @tr("Apoyar el Proyecto (Ko-fi)");
+                                            subtitle: @tr("Ayuda a mantener ProyecThor 100% gratis para todos");
                                             icon: @image-url("icons/coffee.svg");
                                             accent: #ff5e5b;
-                                            action-label: "Apoyar";
+                                            action-label: @tr("Apoyar");
                                             clicked => { root.open-kofi-donations(); }
                                         }
                                     }
@@ -6023,20 +6034,20 @@ export component MainWindow inherits Window {
                                             spacing: 8px;
                                             Text { text: "Abrir desde tu Celular (Código QR)"; color: Theme.accent-strong; font-size: 13.5px; font-weight: 700; }
                                             Text {
-                                                text: "Elige una opción y apunta con la cámara de tu teléfono al código blanco de la derecha:";
+                                                text: @tr("Elige una opción y apunta con la cámara de tu teléfono al código blanco de la derecha:");
                                                 color: Theme.text-secondary;
                                                 font-size: 11.5px;
                                                 wrap: word-wrap;
                                             }
                                             HorizontalLayout {
                                                 spacing: 6px;
-                                                GlassButton { label: "Sitio Web"; horizontal-stretch: 1; primary: root.help-qr-idx == 0; clicked => { root.help-qr-idx = 0; root.select-help-qr(0); } }
-                                                GlassButton { label: "Discord";   horizontal-stretch: 1; primary: root.help-qr-idx == 1; clicked => { root.help-qr-idx = 1; root.select-help-qr(1); } }
+                                                GlassButton { label: @tr("Sitio Web"); horizontal-stretch: 1; primary: root.help-qr-idx == 0; clicked => { root.help-qr-idx = 0; root.select-help-qr(0); } }
+                                                GlassButton { label: @tr("Discord");   horizontal-stretch: 1; primary: root.help-qr-idx == 1; clicked => { root.help-qr-idx = 1; root.select-help-qr(1); } }
                                             }
                                             HorizontalLayout {
                                                 spacing: 6px;
-                                                GlassButton { label: "Instagram"; horizontal-stretch: 1; primary: root.help-qr-idx == 2; clicked => { root.help-qr-idx = 2; root.select-help-qr(2); } }
-                                                GlassButton { label: "WhatsApp";  horizontal-stretch: 1; primary: root.help-qr-idx == 3; clicked => { root.help-qr-idx = 3; root.select-help-qr(3); } }
+                                                GlassButton { label: @tr("Instagram"); horizontal-stretch: 1; primary: root.help-qr-idx == 2; clicked => { root.help-qr-idx = 2; root.select-help-qr(2); } }
+                                                GlassButton { label: @tr("WhatsApp");  horizontal-stretch: 1; primary: root.help-qr-idx == 3; clicked => { root.help-qr-idx = 3; root.select-help-qr(3); } }
                                             }
                                             Text {
                                                 text: root.help-qr-url;
@@ -6128,9 +6139,9 @@ export component MainWindow inherits Window {
 
                         HorizontalLayout {
                             spacing: 6px;
-                            GlassButton { label: "Actualizar"; icon: @image-url("icons/refresh.svg"); has-icon: true; compact: true; clicked => { root.debug-refresh(); } }
-                            GlassButton { label: "Re-escanear Todo"; compact: true; clicked => { root.scan-libraries(); } }
-                            GlassButton { label: "Limpiar Log"; compact: true; danger: true; clicked => { root.debug-clear-log(); } }
+                            GlassButton { label: @tr("Actualizar"); icon: @image-url("icons/refresh.svg"); has-icon: true; compact: true; clicked => { root.debug-refresh(); } }
+                            GlassButton { label: @tr("Re-escanear Todo"); compact: true; clicked => { root.scan-libraries(); } }
+                            GlassButton { label: @tr("Limpiar Log"); compact: true; danger: true; clicked => { root.debug-clear-log(); } }
                         }
 
                         // Telemetry KPI Strip: FPS, CPU % y Consumo de RAM
@@ -6258,7 +6269,7 @@ export component MainWindow inherits Window {
                                 spacing: 8px;
 
                                 Text {
-                                    text: "DESTINO:";
+                                    text: @tr("DESTINO:");
                                     color: Theme.text-muted;
                                     font-size: 10px;
                                     font-weight: 800;
@@ -6266,13 +6277,13 @@ export component MainWindow inherits Window {
                                 }
 
                                 GlassButton {
-                                    label: "Todas";
+                                    label: @tr("Todas");
                                     compact: true;
                                     primary: root.output-target-mode == 0;
                                     clicked => { root.select-output-target(0); }
                                 }
                                 GlassButton {
-                                    label: "Público";
+                                    label: @tr("Público");
                                     icon: @image-url("icons/tv.svg");
                                     has-icon: true;
                                     compact: true;
@@ -6280,7 +6291,7 @@ export component MainWindow inherits Window {
                                     clicked => { root.select-output-target(1); }
                                 }
                                 GlassButton {
-                                    label: "LAN";
+                                    label: @tr("LAN");
                                     icon: @image-url("icons/wifi.svg");
                                     has-icon: true;
                                     compact: true;
@@ -6288,7 +6299,7 @@ export component MainWindow inherits Window {
                                     clicked => { root.select-output-target(2); }
                                 }
                                 GlassButton {
-                                    label: "Stage";
+                                    label: @tr("Stage");
                                     icon: @image-url("icons/monitor.svg");
                                     has-icon: true;
                                     compact: true;
@@ -6300,7 +6311,7 @@ export component MainWindow inherits Window {
 
                                 LineEdit {
                                     width: 170px;
-                                    placeholder-text: "Nueva sala (ej. Sala Niños)...";
+                                    placeholder-text: @tr("Nueva sala (ej. Sala Niños)...");
                                     text <=> root.new-room-name;
                                     accepted(v) => {
                                         if (v != "") {
@@ -6310,7 +6321,7 @@ export component MainWindow inherits Window {
                                     }
                                 }
                                 GlassButton {
-                                    label: "Nueva Sala";
+                                    label: @tr("Nueva Sala");
                                     icon: @image-url("icons/plus.svg");
                                     has-icon: true;
                                     compact: true;
@@ -6413,7 +6424,7 @@ export component MainWindow inherits Window {
                                                 if scr.id == 0 && root.monitor-names.length > 1 : HorizontalLayout {
                                                     spacing: 4px;
                                                     Text {
-                                                        text: "Pantalla:";
+                                                        text: @tr("Pantalla:");
                                                         color: Theme.text-muted;
                                                         font-size: 10.5px;
                                                         font-weight: 700;
@@ -6567,7 +6578,7 @@ export component MainWindow inherits Window {
                                                 VerticalLayout {
                                                     spacing: 5px;
                                                     Text {
-                                                        text: "CAPAS ACTIVAS";
+                                                        text: @tr("CAPAS ACTIVAS");
                                                         color: Theme.text-muted;
                                                         font-size: 9.5px;
                                                         font-weight: 800;
@@ -6629,7 +6640,7 @@ export component MainWindow inherits Window {
                                                 HorizontalLayout {
                                                     spacing: 6px;
                                                     GlassButton {
-                                                        label: "Enviar Selección";
+                                                        label: @tr("Enviar Selección");
                                                         icon: @image-url("icons/play.svg");
                                                         has-icon: true;
                                                         compact: true;
@@ -6638,12 +6649,12 @@ export component MainWindow inherits Window {
                                                         clicked => { root.screen-send-current(scr.id); }
                                                     }
                                                     if scr.id != 0 : GlassButton {
-                                                        label: "Clonar Público";
+                                                        label: @tr("Clonar Público");
                                                         compact: true;
                                                         clicked => { root.screen-clone-public(scr.id); }
                                                     }
                                                     GlassButton {
-                                                        label: "Limpiar";
+                                                        label: @tr("Limpiar");
                                                         compact: true;
                                                         danger: true;
                                                         clicked => { root.screen-clear-all(scr.id); }
@@ -6770,13 +6781,13 @@ export component MainWindow inherits Window {
                                                 if (scr.id == 0 || scr.use-own-style) && root.saved-style-cards.length == 0 : HorizontalLayout {
                                                     alignment: space-between;
                                                     Text {
-                                                        text: "Sin estilos guardados — crea uno en Diseño > Estilos.";
+                                                        text: @tr("Sin estilos guardados — crea uno en Diseño > Estilos.");
                                                         color: Theme.text-muted;
                                                         font-size: 10px;
                                                         vertical-alignment: center;
                                                     }
                                                     GlassButton {
-                                                        label: "Crear Estilo";
+                                                        label: @tr("Crear Estilo");
                                                         compact: true;
                                                         clicked => {
                                                             root.select-style-target(scr.id + 1);
@@ -6855,7 +6866,7 @@ export component MainWindow inherits Window {
                                             HorizontalLayout {
                                                 padding-left: 8px; padding-right: 8px;
                                                 Text {
-                                                    text: "Público";
+                                                    text: @tr("Público");
                                                     color: root.inspected-screen-idx == 0 ? Theme.text-primary : Theme.text-muted;
                                                     font-size: 10px;
                                                     font-weight: root.inspected-screen-idx == 0 ? 700 : 500;
@@ -6872,7 +6883,7 @@ export component MainWindow inherits Window {
                                             HorizontalLayout {
                                                 padding-left: 8px; padding-right: 8px;
                                                 Text {
-                                                    text: "LAN";
+                                                    text: @tr("LAN");
                                                     color: root.inspected-screen-idx == 1 ? #38bdf8 : Theme.text-muted;
                                                     font-size: 10px;
                                                     font-weight: root.inspected-screen-idx == 1 ? 700 : 500;
@@ -6889,7 +6900,7 @@ export component MainWindow inherits Window {
                                             HorizontalLayout {
                                                 padding-left: 8px; padding-right: 8px;
                                                 Text {
-                                                    text: "Stage";
+                                                    text: @tr("Stage");
                                                     color: root.inspected-screen-idx == 2 ? #fbbf24 : Theme.text-muted;
                                                     font-size: 10px;
                                                     font-weight: root.inspected-screen-idx == 2 ? 700 : 500;
@@ -7339,7 +7350,7 @@ export component MainWindow inherits Window {
                                                     colorize: Theme.accent-strong;
                                                 }
                                                 Text {
-                                                    text: "Overlay";
+                                                    text: @tr("Overlay");
                                                     color: Theme.text-secondary;
                                                     font-size: 9.5px;
                                                     font-weight: 700;
@@ -7362,7 +7373,7 @@ export component MainWindow inherits Window {
                                                 padding-left: 6px;
                                                 padding-right: 6px;
                                                 Text {
-                                                    text: "Limpiar";
+                                                    text: @tr("Limpiar");
                                                     color: clr-all-ta.has-hover ? #f87171 : Theme.text-muted;
                                                     font-size: 9.5px;
                                                     font-weight: 700;
@@ -7621,7 +7632,7 @@ export component MainWindow inherits Window {
                                     colorize: Theme.text-secondary;
                                 }
                                 Text {
-                                    text: "Cola de Servicio";
+                                    text: @tr("Cola de Servicio");
                                     color: Theme.text-primary;
                                     font-size: 12.5px;
                                     font-weight: 700;
@@ -7726,7 +7737,7 @@ export component MainWindow inherits Window {
                             VerticalLayout {
                                 spacing: 3px;
                                 if root.queue-items.length == 0 : Text {
-                                    text: "Usa '+ Cola' o envía una Playlist de canciones aquí.";
+                                    text: @tr("Usa '+ Cola' o envía una Playlist de canciones aquí.");
                                     color: Theme.text-muted;
                                     font-size: 11px;
                                     wrap: word-wrap;
@@ -7774,7 +7785,7 @@ export component MainWindow inherits Window {
                             VerticalLayout {
                                 spacing: 3px;
                                 if root.video-queue-items.length == 0 : Text {
-                                    text: "En Multimedia, usa '+ Cola Videos' para encolar videos.";
+                                    text: @tr("En Multimedia, usa '+ Cola Videos' para encolar videos.");
                                     color: Theme.text-muted;
                                     font-size: 11px;
                                     wrap: word-wrap;
@@ -7821,7 +7832,7 @@ export component MainWindow inherits Window {
                             VerticalLayout {
                                 spacing: 3px;
                                 if root.overlay-queue-items.length == 0 : Text {
-                                    text: "En el panel Capas > Overlays (izquierda), pulsa '+' para añadir aquí.";
+                                    text: @tr("En el panel Capas > Overlays (izquierda), pulsa '+' para añadir aquí.");
                                     color: Theme.text-muted;
                                     font-size: 11px;
                                     wrap: word-wrap;
@@ -8476,12 +8487,12 @@ export component MainWindow inherits Window {
                             // Instant EQ Presets
                             HorizontalLayout {
                                 spacing: 3px;
-                                GlassButton { label: "Plano";    compact: true; primary: root.music-eq-enabled && root.music-eq-preset == 0; clicked => { root.music-eq-preset-selected(0); } }
-                                GlassButton { label: "Alabanza"; compact: true; primary: root.music-eq-enabled && root.music-eq-preset == 1; clicked => { root.music-eq-preset-selected(1); } }
-                                GlassButton { label: "Voz";      compact: true; primary: root.music-eq-enabled && root.music-eq-preset == 2; clicked => { root.music-eq-preset-selected(2); } }
-                                GlassButton { label: "Acústico"; compact: true; primary: root.music-eq-enabled && root.music-eq-preset == 3; clicked => { root.music-eq-preset-selected(3); } }
-                                GlassButton { label: "Bajos";    compact: true; primary: root.music-eq-enabled && root.music-eq-preset == 4; clicked => { root.music-eq-preset-selected(4); } }
-                                GlassButton { label: "Estudio";  compact: true; primary: root.music-eq-enabled && root.music-eq-preset == 5; clicked => { root.music-eq-preset-selected(5); } }
+                                GlassButton { label: @tr("Plano");    compact: true; primary: root.music-eq-enabled && root.music-eq-preset == 0; clicked => { root.music-eq-preset-selected(0); } }
+                                GlassButton { label: @tr("Alabanza"); compact: true; primary: root.music-eq-enabled && root.music-eq-preset == 1; clicked => { root.music-eq-preset-selected(1); } }
+                                GlassButton { label: @tr("Voz");      compact: true; primary: root.music-eq-enabled && root.music-eq-preset == 2; clicked => { root.music-eq-preset-selected(2); } }
+                                GlassButton { label: @tr("Acústico"); compact: true; primary: root.music-eq-enabled && root.music-eq-preset == 3; clicked => { root.music-eq-preset-selected(3); } }
+                                GlassButton { label: @tr("Bajos");    compact: true; primary: root.music-eq-enabled && root.music-eq-preset == 4; clicked => { root.music-eq-preset-selected(4); } }
+                                GlassButton { label: @tr("Estudio");  compact: true; primary: root.music-eq-enabled && root.music-eq-preset == 5; clicked => { root.music-eq-preset-selected(5); } }
                             }
                         }
 
@@ -8734,42 +8745,42 @@ export component MainWindow inherits Window {
                 spacing: 5px;
 
                 GlassButton {
-                    label: "Biblioteca";
+                    label: @tr("Biblioteca");
                     icon: @image-url("icons/folder.svg");
                     has-icon: true;
                     primary: root.active-tab == 13;
                     clicked => { root.active-tab = 13; root.library-menu-open = false; }
                 }
                 GlassButton {
-                    label: "Canciones";
+                    label: @tr("Canciones");
                     icon: @image-url("icons/music.svg");
                     has-icon: true;
                     primary: root.active-tab == 0;
                     clicked => { root.active-tab = 0; root.library-menu-open = false; }
                 }
                 GlassButton {
-                    label: "Biblia";
+                    label: @tr("Biblia");
                     icon: @image-url("icons/book.svg");
                     has-icon: true;
                     primary: root.active-tab == 1;
                     clicked => { root.active-tab = 1; root.library-menu-open = false; }
                 }
                 GlassButton {
-                    label: "Multimedia";
+                    label: @tr("Multimedia");
                     icon: @image-url("icons/film.svg");
                     has-icon: true;
                     primary: root.active-tab == 2;
                     clicked => { root.active-tab = 2; root.library-menu-open = false; }
                 }
                 GlassButton {
-                    label: "Música";
+                    label: @tr("Música");
                     icon: @image-url("icons/headphones.svg");
                     has-icon: true;
                     primary: root.active-tab == 9;
                     clicked => { root.active-tab = 9; root.library-menu-open = false; }
                 }
                 GlassButton {
-                    label: "Documentos";
+                    label: @tr("Documentos");
                     icon: @image-url("icons/file_text.svg");
                     has-icon: true;
                     primary: root.active-tab == 10;
@@ -8805,28 +8816,28 @@ export component MainWindow inherits Window {
                 spacing: 5px;
 
                 GlassButton {
-                    label: "Estilos de Letras";
+                    label: @tr("Estilos de Letras");
                     icon: @image-url("icons/palette.svg");
                     has-icon: true;
                     primary: root.active-tab == 4 && root.design-subtab == 0;
                     clicked => { root.active-tab = 4; root.design-subtab = 0; root.design-menu-open = false; }
                 }
                 GlassButton {
-                    label: "Shaders y Filtros";
+                    label: @tr("Shaders y Filtros");
                     icon: @image-url("icons/sliders.svg");
                     has-icon: true;
                     primary: root.active-tab == 4 && root.design-subtab == 1;
                     clicked => { root.active-tab = 4; root.design-subtab = 1; root.design-menu-open = false; }
                 }
                 GlassButton {
-                    label: "Transiciones";
+                    label: @tr("Transiciones");
                     icon: @image-url("icons/shuffle.svg");
                     has-icon: true;
                     primary: root.active-tab == 4 && root.design-subtab == 2;
                     clicked => { root.active-tab = 4; root.design-subtab = 2; root.design-menu-open = false; }
                 }
                 GlassButton {
-                    label: "Pads de Escena";
+                    label: @tr("Pads de Escena");
                     icon: @image-url("icons/grid.svg");
                     has-icon: true;
                     primary: root.active-tab == 6;
@@ -8862,28 +8873,28 @@ export component MainWindow inherits Window {
                 spacing: 5px;
 
                 GlassButton {
-                    label: "Video LAN y Smart TV";
+                    label: @tr("Video LAN y Smart TV");
                     icon: @image-url("icons/wifi.svg");
                     has-icon: true;
                     primary: root.active-tab == 5 && root.net-subtab == 0;
                     clicked => { root.active-tab = 5; root.net-subtab = 0; root.net-menu-open = false; }
                 }
                 GlassButton {
-                    label: "Chat LAN de Equipo";
+                    label: @tr("Chat LAN de Equipo");
                     icon: @image-url("icons/chat.svg");
                     has-icon: true;
                     primary: root.active-tab == 5 && root.net-subtab == 1;
                     clicked => { root.active-tab = 5; root.net-subtab = 1; root.net-menu-open = false; }
                 }
                 GlassButton {
-                    label: "Control Celular";
+                    label: @tr("Control Celular");
                     icon: @image-url("icons/smartphone.svg");
                     has-icon: true;
                     primary: root.active-tab == 5 && root.net-subtab == 2;
                     clicked => { root.active-tab = 5; root.net-subtab = 2; root.net-menu-open = false; }
                 }
                 GlassButton {
-                    label: "Luces OSC";
+                    label: @tr("Luces OSC");
                     icon: @image-url("icons/zap.svg");
                     has-icon: true;
                     primary: root.active-tab == 5 && root.net-subtab == 3;
@@ -8925,17 +8936,17 @@ export component MainWindow inherits Window {
                 }
 
                 GlassButton {
-                    label: "Recortar / Llenar (Cover — Sin barras negras)";
+                    label: @tr("Recortar / Llenar (Cover — Sin barras negras)");
                     primary: root.bg-scale-mode == 0;
                     clicked => { root.bg-scale-mode = 0; root.scale-mode-changed(0); }
                 }
                 GlassButton {
-                    label: "Estirar a Pantalla Completa (Fill 16:9)";
+                    label: @tr("Estirar a Pantalla Completa (Fill 16:9)");
                     primary: root.bg-scale-mode == 1;
                     clicked => { root.bg-scale-mode = 1; root.scale-mode-changed(1); }
                 }
                 GlassButton {
-                    label: "Tamaño Original / Ajustar (Contain — Sin recortar)";
+                    label: @tr("Tamaño Original / Ajustar (Contain — Sin recortar)");
                     primary: root.bg-scale-mode == 2;
                     clicked => { root.bg-scale-mode = 2; root.scale-mode-changed(2); }
                 }
@@ -8945,9 +8956,9 @@ export component MainWindow inherits Window {
                 Text { text: "Resolución de Salida (Imágenes y Video)"; color: Theme.text-secondary; font-size: 11px; font-weight: 700; }
                 HorizontalLayout {
                     spacing: 4px;
-                    GlassButton { label: "720p";  compact: true; horizontal-stretch: 1; primary: root.output-res-preset == 0; clicked => { root.output-res-preset = 0; root.output-res-changed(0); } }
-                    GlassButton { label: "1080p"; compact: true; horizontal-stretch: 1; primary: root.output-res-preset == 1; clicked => { root.output-res-preset = 1; root.output-res-changed(1); } }
-                    GlassButton { label: "2160p"; compact: true; horizontal-stretch: 1; primary: root.output-res-preset == 4; clicked => { root.output-res-preset = 4; root.output-res-changed(4); } }
+                    GlassButton { label: @tr("720p");  compact: true; horizontal-stretch: 1; primary: root.output-res-preset == 0; clicked => { root.output-res-preset = 0; root.output-res-changed(0); } }
+                    GlassButton { label: @tr("1080p"); compact: true; horizontal-stretch: 1; primary: root.output-res-preset == 1; clicked => { root.output-res-preset = 1; root.output-res-changed(1); } }
+                    GlassButton { label: @tr("2160p"); compact: true; horizontal-stretch: 1; primary: root.output-res-preset == 4; clicked => { root.output-res-preset = 4; root.output-res-changed(4); } }
                     GlassButton { label: "16:10"; compact: true; horizontal-stretch: 1; primary: root.output-res-preset == 2; clicked => { root.output-res-preset = 2; root.output-res-changed(2); } }
                     GlassButton { label: "4:3";   compact: true; horizontal-stretch: 1; primary: root.output-res-preset == 3; clicked => { root.output-res-preset = 3; root.output-res-changed(3); } }
                 }
@@ -8955,9 +8966,9 @@ export component MainWindow inherits Window {
                 Text { text: "Límite de FPS de Video (Entrega Asíncrona Directa)"; color: Theme.text-secondary; font-size: 11px; font-weight: 700; }
                 HorizontalLayout {
                     spacing: 4px;
-                    GlassButton { label: "30 FPS";  compact: true; horizontal-stretch: 1; primary: root.target-fps == 30;  clicked => { root.target-fps = 30;  root.target-fps-changed(30); } }
-                    GlassButton { label: "60 FPS";  compact: true; horizontal-stretch: 1; primary: root.target-fps == 60;  clicked => { root.target-fps = 60;  root.target-fps-changed(60); } }
-                    GlassButton { label: "120 FPS"; compact: true; horizontal-stretch: 1; primary: root.target-fps == 120; clicked => { root.target-fps = 120; root.target-fps-changed(120); } }
+                    GlassButton { label: @tr("30 FPS");  compact: true; horizontal-stretch: 1; primary: root.target-fps == 30;  clicked => { root.target-fps = 30;  root.target-fps-changed(30); } }
+                    GlassButton { label: @tr("60 FPS");  compact: true; horizontal-stretch: 1; primary: root.target-fps == 60;  clicked => { root.target-fps = 60;  root.target-fps-changed(60); } }
+                    GlassButton { label: @tr("120 FPS"); compact: true; horizontal-stretch: 1; primary: root.target-fps == 120; clicked => { root.target-fps = 120; root.target-fps-changed(120); } }
                     GlassButton {
                         label: "24→60";
                         compact: true;
@@ -8976,18 +8987,18 @@ export component MainWindow inherits Window {
                 Text { text: "Super-Resolución / Reescalado en Tiempo Real"; color: Theme.text-secondary; font-size: 11px; font-weight: 700; }
                 HorizontalLayout {
                     spacing: 4px;
-                    GlassButton { label: "Off";     compact: true; horizontal-stretch: 1; primary: root.upscaler-mode == 0; clicked => { root.upscaler-mode = 0; root.gpu-config-changed(); } }
-                    GlassButton { label: "FSR 1";   compact: true; horizontal-stretch: 1; primary: root.upscaler-mode == 1; clicked => { root.upscaler-mode = 1; root.gpu-config-changed(); } }
-                    GlassButton { label: "CAS+";    compact: true; horizontal-stretch: 1; primary: root.upscaler-mode == 2; clicked => { root.upscaler-mode = 2; root.gpu-config-changed(); } }
-                    GlassButton { label: "NIS";     compact: true; horizontal-stretch: 1; primary: root.upscaler-mode == 3; clicked => { root.upscaler-mode = 3; root.gpu-config-changed(); } }
-                    GlassButton { label: "Lanczos"; compact: true; horizontal-stretch: 1; primary: root.upscaler-mode == 4; clicked => { root.upscaler-mode = 4; root.gpu-config-changed(); } }
+                    GlassButton { label: @tr("Off");     compact: true; horizontal-stretch: 1; primary: root.upscaler-mode == 0; clicked => { root.upscaler-mode = 0; root.gpu-config-changed(); } }
+                    GlassButton { label: @tr("FSR 1");   compact: true; horizontal-stretch: 1; primary: root.upscaler-mode == 1; clicked => { root.upscaler-mode = 1; root.gpu-config-changed(); } }
+                    GlassButton { label: @tr("CAS+");    compact: true; horizontal-stretch: 1; primary: root.upscaler-mode == 2; clicked => { root.upscaler-mode = 2; root.gpu-config-changed(); } }
+                    GlassButton { label: @tr("NIS");     compact: true; horizontal-stretch: 1; primary: root.upscaler-mode == 3; clicked => { root.upscaler-mode = 3; root.gpu-config-changed(); } }
+                    GlassButton { label: @tr("Lanczos"); compact: true; horizontal-stretch: 1; primary: root.upscaler-mode == 4; clicked => { root.upscaler-mode = 4; root.gpu-config-changed(); } }
                 }
 
                 Rectangle { height: 1px; background: Theme.border-subtle; }
 
                 SwitchRow {
-                    title: "Salida Público Pantalla Completa";
-                    subtitle: "Pulsa Esc en cualquier momento para cerrar salida";
+                    title: @tr("Salida Público Pantalla Completa");
+                    subtitle: @tr("Pulsa Esc en cualquier momento para cerrar salida");
                     checked <=> root.fullscreen-output;
                     toggled(v) => { root.fullscreen-changed(v); }
                 }
@@ -9044,7 +9055,7 @@ export component MainWindow inherits Window {
                         padding-right: 4px;
 
                         if root.bible-version-names.length == 0 : Text {
-                            text: "No se encontraron archivos .xml en assets/bibles.";
+                            text: @tr("No se encontraron archivos .xml en assets/bibles.");
                             color: Theme.text-muted;
                             font-size: 12px;
                             wrap: word-wrap;
@@ -9136,13 +9147,13 @@ export component MainWindow inherits Window {
                 }
 
                 LineEdit {
-                    placeholder-text: "Buscar fuente instalada (ej. Noto, Serif, DejaVu, Arial)...";
+                    placeholder-text: @tr("Buscar fuente instalada (ej. Noto, Serif, DejaVu, Arial)...");
                     text <=> root.font-picker-search;
                     edited(txt) => { root.font-search-changed(txt); }
                 }
 
                 GlassButton {
-                    label: "Predeterminada del Sistema";
+                    label: @tr("Predeterminada del Sistema");
                     compact: true;
                     primary: (root.font-picker-target == 1 ? root.index-font-family-name : root.font-family-name) == "";
                     clicked => {
@@ -9183,7 +9194,7 @@ export component MainWindow inherits Window {
                                     horizontal-stretch: 1;
                                 }
                                 Text {
-                                    text: "Aa";
+                                    text: @tr("Aa");
                                     font-family: fname;
                                     color: (root.font-picker-target == 1 ? root.index-font-family-name : root.font-family-name) == fname ? Theme.accent-fg : Theme.text-muted;
                                     font-size: 14px;
@@ -9316,7 +9327,7 @@ export component MainWindow inherits Window {
                         }
                     }
                     GlassButton {
-                        label: "Cambiar Nombre";
+                        label: @tr("Cambiar Nombre");
                         icon: @image-url("icons/edit.svg");
                         has-icon: true;
                         clicked => {
@@ -9325,7 +9336,7 @@ export component MainWindow inherits Window {
                         }
                     }
                     GlassButton {
-                        label: "Eliminar de la Biblioteca";
+                        label: @tr("Eliminar de la Biblioteca");
                         icon: @image-url("icons/trash.svg");
                         has-icon: true;
                         danger: true;
@@ -9339,7 +9350,7 @@ export component MainWindow inherits Window {
                 if root.item-modal-mode == 1 : VerticalLayout {
                     spacing: 9px;
                     LineEdit {
-                        placeholder-text: "Nuevo nombre del archivo...";
+                        placeholder-text: @tr("Nuevo nombre del archivo...");
                         text <=> root.item-modal-rename-input;
                         accepted(txt) => {
                             if (txt != "") {
@@ -9349,7 +9360,7 @@ export component MainWindow inherits Window {
                         }
                     }
                     Text {
-                        text: "Se conservará la extensión original y se actualizarán colas y listas automáticamente.";
+                        text: @tr("Se conservará la extensión original y se actualizarán colas y listas automáticamente.");
                         color: Theme.text-muted;
                         font-size: 11px;
                         wrap: word-wrap;
@@ -9358,12 +9369,12 @@ export component MainWindow inherits Window {
                         spacing: 8px;
                         alignment: end;
                         GlassButton {
-                            label: "Cancelar";
+                            label: @tr("Cancelar");
                             compact: true;
                             clicked => { root.item-modal-open = false; }
                         }
                         GlassButton {
-                            label: "Guardar Nombre";
+                            label: @tr("Guardar Nombre");
                             icon: @image-url("icons/save.svg");
                             has-icon: true;
                             compact: true;
@@ -9382,7 +9393,7 @@ export component MainWindow inherits Window {
                 if root.item-modal-mode == 2 : VerticalLayout {
                     spacing: 10px;
                     Text {
-                        text: "¿Seguro que quieres eliminar este archivo de forma permanente? Si está en reproducción o en cola, se detendrá y quitará automáticamente.";
+                        text: @tr("¿Seguro que quieres eliminar este archivo de forma permanente? Si está en reproducción o en cola, se detendrá y quitará automáticamente.");
                         color: Theme.text-secondary;
                         font-size: 11.5px;
                         wrap: word-wrap;
@@ -9391,12 +9402,12 @@ export component MainWindow inherits Window {
                         spacing: 8px;
                         alignment: end;
                         GlassButton {
-                            label: "Cancelar";
+                            label: @tr("Cancelar");
                             compact: true;
                             clicked => { root.item-modal-open = false; }
                         }
                         GlassButton {
-                            label: "Eliminar Definitivamente";
+                            label: @tr("Eliminar Definitivamente");
                             icon: @image-url("icons/trash.svg");
                             has-icon: true;
                             compact: true;
@@ -9451,13 +9462,13 @@ export component MainWindow inherits Window {
                         horizontal-stretch: 1;
                         spacing: 2px;
                         Text {
-                            text: "Texto a código QR";
+                            text: @tr("Texto a código QR");
                             color: Theme.text-primary;
                             font-size: 15px;
                             font-weight: 800;
                         }
                         Text {
-                            text: "Escribe un enlace o cualquier texto.";
+                            text: @tr("Escribe un enlace o cualquier texto.");
                             color: Theme.text-muted;
                             font-size: 11.5px;
                             wrap: word-wrap;
@@ -9496,7 +9507,7 @@ export component MainWindow inherits Window {
                         y: (parent.height - self.height) / 2;
                     }
                     if !root.has-qr-preview : Text {
-                        text: "Escribe algo para ver el QR aquí.";
+                        text: @tr("Escribe algo para ver el QR aquí.");
                         color: Theme.text-muted;
                         font-size: 12px;
                         horizontal-alignment: center;
@@ -9507,7 +9518,7 @@ export component MainWindow inherits Window {
 
                 Text { text: "Nombre del archivo"; color: Theme.text-secondary; font-size: 11.5px; font-weight: 700; }
                 LineEdit {
-                    placeholder-text: "qr";
+                    placeholder-text: @tr("qr");
                     text <=> root.qr-name-input;
                 }
 
@@ -9522,12 +9533,12 @@ export component MainWindow inherits Window {
                     spacing: 8px;
                     alignment: end;
                     GlassButton {
-                        label: "Cerrar";
+                        label: @tr("Cerrar");
                         compact: true;
                         clicked => { root.qr-modal-open = false; }
                     }
                     GlassButton {
-                        label: "Guardar en Documentos";
+                        label: @tr("Guardar en Documentos");
                         icon: @image-url("icons/save.svg");
                         has-icon: true;
                         compact: true;
@@ -9599,13 +9610,13 @@ export component MainWindow inherits Window {
                             alignment: center;
                             spacing: 2px;
                             Text {
-                                text: "¡Bienvenido a ProyecThor!";
+                                text: @tr("¡Bienvenido a ProyecThor!");
                                 color: Theme.text-primary;
                                 font-size: 16px;
                                 font-weight: 800;
                             }
                             Text {
-                                text: "Guía rápida para empezar a proyectar en segundos";
+                                text: @tr("Guía rápida para empezar a proyectar en segundos");
                                 color: Theme.text-muted;
                                 font-size: 11.5px;
                             }
@@ -9743,7 +9754,7 @@ export component MainWindow inherits Window {
                                 }
                             }
                             Text {
-                                text: "No volver a mostrar";
+                                text: @tr("No volver a mostrar");
                                 color: Theme.text-secondary;
                                 font-size: 12px;
                                 font-weight: 600;
@@ -9755,7 +9766,7 @@ export component MainWindow inherits Window {
                     HorizontalLayout {
                         spacing: 8px;
                         GlassButton {
-                            label: "Cerrar";
+                            label: @tr("Cerrar");
                             primary: true;
                             clicked => {
                                 root.show-tutorial-on-start = !root.tutorial-dont-show-again;

@@ -512,7 +512,7 @@ export component SlideTile inherits Rectangle {
                         background: Theme.accent-fg;
                     }
                     Text {
-                        text: "EN VIVO";
+                        text: @tr("EN VIVO");
                         color: Theme.accent-fg;
                         font-size: 9px;
                         font-weight: 800;
@@ -757,7 +757,7 @@ export component StyleGalleryCard inherits Rectangle {
     in property <string> preview-font-family: "";
     in property <int> preview-font-weight: 700;
     in property <bool> active: false;
-    in property <string> apply-label: "Aplicar";
+    in property <string> apply-label: @tr("Aplicar");
     in property <string> assigned-screens-label: "";
     in property <[StyleScreenTarget]> screen-targets: [];
     callback apply-style();
@@ -802,7 +802,7 @@ export component StyleGalleryCard inherits Rectangle {
                 background: root.preview-box-bg ? #00000099 : transparent;
 
                 Text {
-                    text: "Aa Bb Cc\nEjemplo";
+                    text: @tr("Aa Bb Cc\nEjemplo");
                     color: root.preview-text-color;
                     font-family: root.preview-font-family;
                     font-size: 13px;
@@ -865,7 +865,7 @@ export component StyleGalleryCard inherits Rectangle {
                     clicked => { root.apply-style(); }
                 }
                 GlassButton {
-                    label: "Editar";
+                    label: @tr("Editar");
                     icon: @image-url("icons/edit.svg");
                     has-icon: true;
                     clicked => { root.edit-style(); }
@@ -885,7 +885,7 @@ export component StyleGalleryCard inherits Rectangle {
             HorizontalLayout {
                 spacing: 4px;
                 Text {
-                    text: "Enviar a:";
+                    text: @tr("Enviar a:");
                     color: Theme.text-muted;
                     font-size: 9.5px;
                     font-weight: 700;
@@ -903,7 +903,7 @@ export component StyleGalleryCard inherits Rectangle {
                         padding-left: 7px;
                         padding-right: 7px;
                         Text {
-                            text: "Todas";
+                            text: @tr("Todas");
                             color: Theme.text-secondary;
                             font-size: 9.5px;
                             font-weight: 700;
@@ -1044,7 +1044,7 @@ export component SupportLinkCard inherits Rectangle {
     in property <string> subtitle;
     in property <image> icon;
     in property <color> accent: #3b82f6;
-    in property <string> action-label: "Abrir";
+    in property <string> action-label: @tr("Abrir");
     callback clicked();
 
     height: 58px;

@@ -265,7 +265,7 @@ export component CustomOverlayView inherits Rectangle {
 }
 
 export component ProjectorWindow inherits Window {
-    title: "ProyecThor — Salida Público";
+    title: @tr("ProyecThor — Salida Público");
     preferred-width: 1280px;
     preferred-height: 720px;
     background: #000000;
@@ -667,7 +667,7 @@ export component ProjectorWindow inherits Window {
 }
 
 export component StageWindow inherits Window {
-    title: "ProyecThor — Stage Display";
+    title: @tr("ProyecThor — Stage Display");
     preferred-width: 1120px;
     preferred-height: 640px;
     background: #08080a;
@@ -691,7 +691,7 @@ export component StageWindow inherits Window {
         HorizontalLayout {
             alignment: space-between;
             Text {
-                text: "STAGE DISPLAY";
+                text: @tr("STAGE DISPLAY");
                 color: Theme.stage-amber;
                 font-size: 15px;
                 font-weight: 800;
@@ -774,7 +774,7 @@ export component StageWindow inherits Window {
                 padding: 18px;
                 spacing: 6px;
                 Text {
-                    text: "SIGUIENTE";
+                    text: @tr("SIGUIENTE");
                     color: Theme.text-muted;
                     font-size: 12.5px;
                     font-weight: 700;

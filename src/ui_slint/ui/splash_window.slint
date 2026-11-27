@@ -1,7 +1,7 @@
 import { Theme } from "theme.slint";
 
 export component SplashWindow inherits Window {
-    title: "ProyecThor";
+    title: @tr("ProyecThor");
     width: 660px;
     height: 380px;
     no-frame: true;
@@ -63,7 +63,7 @@ export component SplashWindow inherits Window {
                     image-fit: contain;
                 }
                 if !root.has-logo : Text {
-                    text: "P";
+                    text: @tr("P");
                     color: #ffffff;
                     font-size: 40px;
                     font-weight: 800;
@@ -85,13 +85,13 @@ export component SplashWindow inherits Window {
                 alignment: center;
                 spacing: 4px;
                 Text {
-                    text: "ProyecThor";
+                    text: @tr("ProyecThor");
                     color: #f4f4f5;
                     font-size: 34px;
                     font-weight: 800;
                 }
                 Text {
-                    text: "Professional Presentation Engine  •  Open Source";
+                    text: @tr("Professional Presentation Engine  •  Open Source");
                     color: Theme.accent;
                     font-size: 13px;
                     font-weight: 500;
@@ -179,7 +179,7 @@ export component SplashWindow inherits Window {
                         horizontal-alignment: right;
                     }
                     Text {
-                        text: "© 2026 ProyecThor Team • Open Source";
+                        text: @tr("© 2026 ProyecThor Team • Open Source");
                         color: #71717a;
                         font-size: 10.5px;
                         horizontal-alignment: right;

@@ -1307,6 +1307,13 @@ void SlintApp::BindCallbacks() {
         m_LastPreviewDeliverMs = 0; // re-arma el gate para que surta efecto ya
         SavePersistedState();
     });
+    // Idioma de la interfaz: aplica la traducción empaquetada en vivo y la
+    // persiste. slint::select_bundled_translation re-traduce todas las
+    // cadenas @tr(...) visibles sin reiniciar la app.
+    m_Main->on_language_changed([this](slint::SharedString code) {
+        ApplyUiLanguage(std::string(code));
+        SavePersistedState();
+    });
     m_Main->on_fullscreen_changed([this](bool fs) {
         if (m_ProjectorVisible) {
             m_Projector->window().set_fullscreen(fs);
@@ -2866,6 +2873,18 @@ void SlintApp::ApplyOutputResolution(int preset) {
     SavePersistedState();
 }
 
+void SlintApp::ApplyUiLanguage(const std::string& code) {
+    // Solo idiomas con traducción empaquetada. "es" es el idioma fuente
+    // (los msgid de @tr están en español), así que seleccionar "es" vuelve
+    // a las cadenas originales. Cualquier código desconocido cae a "es".
+    std::string lang = (code == "en") ? "en" : "es";
+    m_UiLanguage = lang;
+    m_Main->set_ui_language(slint::SharedString(lang));
+    // Para el idioma fuente pasamos "" (sin bundle) -> usa los msgid tal cual.
+    slint::select_bundled_translation(lang == "es" ? "" : lang);
+    AppendDebugLog("Idioma de interfaz: " + lang);
+}
+
 void SlintApp::ApplyTargetFps(int fps) {
     if (fps != 30 && fps != 60 && fps != 120) fps = 60;
     m_TargetFps = fps;
@@ -3923,6 +3942,9 @@ void SlintApp::LoadPersistedState() {
         m_Main->set_preview_max_fps(j.value("previewMaxFps", defaultPerf ? 15 : 0));
         m_Main->set_prioritize_output(j.value("prioritizeOutput", false));
 
+        // Idioma de la interfaz (i18n). Por defecto español.
+        ApplyUiLanguage(j.value("uiLanguage", std::string("es")));
+
         m_GpuHwdecMode      = std::clamp(j.value("gpuHwdecMode", 0), 0, 4);
         m_NvencEnabled      = j.value("nvencEnabled", false);
         int defaultUpscaler = defaultPerf ? 0 : (j.value("fsr", true) ? 2 : 0);
@@ -4063,6 +4085,7 @@ void SlintApp::SavePersistedState() {
     j["previewEnabled"]    = m_Main->get_preview_enabled();
     j["previewMaxFps"]     = m_Main->get_preview_max_fps();
     j["prioritizeOutput"]  = m_Main->get_prioritize_output();
+    j["uiLanguage"]        = m_UiLanguage;
     j["themeIdx"]        = m_ActiveThemeIdx;
     j["enableGlassTranslucency"] = m_EnableGlassTranslucency;
     j["enableGlassSheen"]        = m_EnableGlassSheen;
