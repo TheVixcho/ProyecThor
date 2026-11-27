@@ -304,8 +304,6 @@ jobs:
             "build-win\ProyecThor.exe",
             "build-win\slint_cpp.dll",
             "build-win\libmpv-2.dll",
-            "build-win\pdfium.dll",
-            "build-win\WebView2Loader.dll",
             "build-win\ffmpeg.exe"
           )
           foreach ($f in $required) {
@@ -812,18 +810,26 @@ jobs:
 
           # Empaquetar librerías compartidas (libmpv, libslint_cpp, libpdfium, códecs y libxkbcommon-x11 cargada vía dlopen por winit/Slint)
           cp packaging/proyecthor.png /tmp/io.github.thevixcho.ProyecThor.png
+
+          # linuxdeploy empareja el "Exec=" del .desktop con el basename del
+          # ejecutable que despliega (ProyecThor). El .desktop del repo usa
+          # "proyecthor" en minúsculas para los paquetes de distro, así que
+          # generamos una variante solo para el AppImage con Exec=ProyecThor.
+          cp packaging/io.github.thevixcho.ProyecThor.desktop /tmp/io.github.thevixcho.ProyecThor.desktop
+          sed -i 's/^Exec=proyecthor/Exec=ProyecThor/' /tmp/io.github.thevixcho.ProyecThor.desktop
+
           LD_LIBRARY_PATH="$(pwd)/build-appimage/AppDir/usr/lib/proyecthor:${LD_LIBRARY_PATH:-}" \
           NO_STRIP=1 ./.ci-tools/linuxdeploy-x86_64.AppImage --appimage-extract-and-run \
             --appdir build-appimage/AppDir \
             -e build-appimage/AppDir/usr/lib/proyecthor/ProyecThor \
             -l /usr/lib/x86_64-linux-gnu/libxkbcommon-x11.so.0 \
             -l /usr/lib/x86_64-linux-gnu/libxkbcommon.so.0 \
-            -d packaging/io.github.thevixcho.ProyecThor.desktop \
+            -d /tmp/io.github.thevixcho.ProyecThor.desktop \
             -i /tmp/io.github.thevixcho.ProyecThor.png
           ln -sf libxkbcommon-x11.so.0 build-appimage/AppDir/usr/lib/libxkbcommon-x11.so
           ln -sf libxkbcommon.so.0 build-appimage/AppDir/usr/lib/libxkbcommon.so
 
-          cp packaging/io.github.thevixcho.ProyecThor.desktop build-appimage/AppDir/io.github.thevixcho.ProyecThor.desktop
+          cp /tmp/io.github.thevixcho.ProyecThor.desktop build-appimage/AppDir/io.github.thevixcho.ProyecThor.desktop
           cp packaging/proyecthor.png build-appimage/AppDir/io.github.thevixcho.ProyecThor.png
           cp packaging/proyecthor.png build-appimage/AppDir/.DirIcon
 
