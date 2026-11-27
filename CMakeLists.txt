@@ -268,6 +268,10 @@ if(PROYECTHOR_BUILD_SLINT)
             # crear translations/<lang>/LC_MESSAGES/proyecthor.po, sin tocar C++.
             SLINT_TRANSLATION_DOMAIN "proyecthor"
             SLINT_BUNDLE_TRANSLATIONS "${CMAKE_CURRENT_SOURCE_DIR}/translations"
+            # Las cadenas @tr del .po no llevan msgctxt; sin esta opción Slint
+            # usa el nombre del componente como contexto y no encuentra ninguna
+            # traducción (todas quedarían sin traducir).
+            SLINT_NO_DEFAULT_TRANSLATION_CONTEXT ON
         )
         slint_target_sources(ProyecThorSlintUI src/ui_slint/ui/main_window.slint COMPILATION_UNITS 12)
         target_link_libraries(ProyecThorSlintUI PUBLIC Slint::Slint)
@@ -314,7 +318,11 @@ if(PROYECTHOR_BUILD_SLINT)
             )
         endif()
 
-        set_target_properties(ProyecThorSlint PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+        set_target_properties(ProyecThorSlint PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            OUTPUT_NAME ProyecThor
+        )
         target_compile_definitions(ProyecThorSlint PRIVATE CPPHTTPLIB_NO_EXCEPTIONS)
         if(MSVC)
             target_compile_options(ProyecThorSlint PRIVATE /bigobj)

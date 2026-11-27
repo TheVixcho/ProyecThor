@@ -301,7 +301,6 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $required = @(
-            "build-win\ProyecThorSlint.exe",
             "build-win\ProyecThor.exe",
             "build-win\slint_cpp.dll",
             "build-win\libmpv-2.dll",
@@ -564,7 +563,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $required = @(
-            "build-win-arm64\ProyecThorSlint.exe",
+            "build-win-arm64\ProyecThor.exe",
             "build-win-arm64\slint_cpp.dll",
             "build-win-arm64\libmpv-2.dll",
             "build-win-arm64\ffmpeg.exe"
@@ -573,16 +572,16 @@ jobs:
             if (-not (Test-Path $f)) { throw "Falta archivo requerido en build-win-arm64: $f" }
             Write-Host "[OK] $f ($([Math]::Round((Get-Item $f).Length / 1MB, 2)) MB)"
           }
-          foreach ($pe in @("build-win-arm64\ProyecThorSlint.exe", "build-win-arm64\slint_cpp.dll", "build-win-arm64\libmpv-2.dll")) {
+          foreach ($pe in @("build-win-arm64\ProyecThor.exe", "build-win-arm64\slint_cpp.dll", "build-win-arm64\libmpv-2.dll")) {
             $hdr = & dumpbin.exe /headers $pe | Select-String -Pattern "AA64 machine \(ARM64\)"
             if (-not $hdr) { throw "ERROR: $pe NO es un binario nativo ARM64 (AA64)" }
             Write-Host "[OK] $pe verificado como ARM64 nativo (AA64)"
           }
           $env:PROYECTHOR_SOFTWARE_RENDERER = "1"
-          $p = Start-Process -FilePath "$PWD\build-win-arm64\ProyecThorSlint.exe" -ArgumentList "--software-renderer" -WorkingDirectory "$PWD\build-win-arm64" -PassThru
+          $p = Start-Process -FilePath "$PWD\build-win-arm64\ProyecThor.exe" -ArgumentList "--software-renderer" -WorkingDirectory "$PWD\build-win-arm64" -PassThru
           Start-Sleep -Seconds 3
           if ($p.HasExited -and $p.ExitCode -ne 0) {
-            throw "ERROR: ProyecThorSlint ARM64 fallo al iniciar (ExitCode=$($p.ExitCode))"
+            throw "ERROR: ProyecThor ARM64 fallo al iniciar (ExitCode=$($p.ExitCode))"
           }
           if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
           Remove-Item Env:\PROYECTHOR_SOFTWARE_RENDERER -ErrorAction SilentlyContinue
@@ -702,9 +701,9 @@ jobs:
           chmod +x scripts/package-macos.sh
           FULL_VER="${{ needs.resolve-meta.outputs.version }}${{ needs.resolve-meta.outputs.suffix }}"
           ./scripts/package-macos.sh build-macos-arm64 arm64 "$FULL_VER" dist-macos-arm64 "$(pwd)/src/vendor/sdk/slint-macos/lib"
-          file build-macos-arm64/ProyecThorSlint | grep -q "arm64"
+          file build-macos-arm64/ProyecThor | grep -q "arm64"
           # Smoke test headless de inicialización en Apple Silicon
-          (cd build-macos-arm64 && DYLD_LIBRARY_PATH="$(pwd):${DYLD_LIBRARY_PATH:-}" ./ProyecThorSlint --software-renderer) &
+          (cd build-macos-arm64 && DYLD_LIBRARY_PATH="$(pwd):${DYLD_LIBRARY_PATH:-}" ./ProyecThor --software-renderer) &
           APP_PID=$!
           sleep 3
           if ! kill -0 "$APP_PID" 2>/dev/null; then
@@ -816,7 +815,6 @@ jobs:
           LD_LIBRARY_PATH="$(pwd)/build-appimage/AppDir/usr/lib/proyecthor:${LD_LIBRARY_PATH:-}" \
           NO_STRIP=1 ./.ci-tools/linuxdeploy-x86_64.AppImage --appimage-extract-and-run \
             --appdir build-appimage/AppDir \
-            -e build-appimage/AppDir/usr/lib/proyecthor/ProyecThorSlint \
             -e build-appimage/AppDir/usr/lib/proyecthor/ProyecThor \
             -l /usr/lib/x86_64-linux-gnu/libxkbcommon-x11.so.0 \
             -l /usr/lib/x86_64-linux-gnu/libxkbcommon.so.0 \
@@ -845,10 +843,10 @@ jobs:
               cd "${HERE}/usr/lib64/proyecthor"
           fi
 
-          if [ -x ./ProyecThorSlint ]; then
-              exec ./ProyecThorSlint "$@"
+          if [ -x ./ProyecThor ]; then
+              exec ./ProyecThor "$@"
           fi
-          exec ./ProyecThor "$@"
+          exec ./ProyecThorSlint "$@"
           EOF
           chmod +x build-appimage/AppDir/AppRun
 
@@ -868,17 +866,12 @@ jobs:
           FULL_VER="${{ needs.resolve-meta.outputs.version }}${{ needs.resolve-meta.outputs.suffix }}"
           APPIMAGE="dist-linux/ProyecThor-${FULL_VER}-x86_64.AppImage"
 
-          # 1. Extraer y verificar que no falte ninguna librería .so en ProyecThorSlint ni ProyecThor
+          # 1. Extraer y verificar que no falte ninguna librería .so en ProyecThor
           rm -rf /tmp/appimage-check
           mkdir -p /tmp/appimage-check
           (cd /tmp/appimage-check && "$OLDPWD/$APPIMAGE" --appimage-extract >/dev/null)
           export LD_LIBRARY_PATH="/tmp/appimage-check/squashfs-root/usr/lib/proyecthor:/tmp/appimage-check/squashfs-root/usr/lib"
-          echo "Verificando dependencias de ProyecThorSlint:"
-          if ldd /tmp/appimage-check/squashfs-root/usr/lib/proyecthor/ProyecThorSlint | grep -i "not found"; then
-            echo "ERROR: Faltan dependencias en ProyecThorSlint"
-            exit 1
-          fi
-          echo "Verificando dependencias de ProyecThor (Clásico):"
+          echo "Verificando dependencias de ProyecThor:"
           if ldd /tmp/appimage-check/squashfs-root/usr/lib/proyecthor/ProyecThor | grep -i "not found"; then
             echo "ERROR: Faltan dependencias en ProyecThor"
             exit 1

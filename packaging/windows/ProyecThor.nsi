@@ -154,8 +154,8 @@ Section "ProyecThor" SEC01
 
     ; Copiar ejecutables y dependencias binarias runtime
     SetOverwrite on
-    File "${BUILD_DIR}\ProyecThorSlint.exe"
-    File /nonfatal "${BUILD_DIR}\ProyecThor.exe"
+    File "${BUILD_DIR}\ProyecThor.exe"
+    File /nonfatal "${BUILD_DIR}\ProyecThorSlint.exe"
     File "${BUILD_DIR}\*.dll"
     File /nonfatal "${BUILD_DIR}\ffmpeg.exe"
     File /nonfatal "${BUILD_DIR}\yt-dlp.exe"
@@ -185,13 +185,11 @@ Section "ProyecThor" SEC01
     SetOutPath "$INSTDIR"
     WriteUninstaller "$INSTDIR\Uninstall.exe"
 
-    ; Crear accesos directos (ProyecThorSlint como app principal + modo clásico opcional)
+    ; Crear accesos directos (ProyecThor como app principal)
     CreateDirectory "$SMPROGRAMS\ProyecThor"
-    CreateShortcut "$SMPROGRAMS\ProyecThor\ProyecThor.lnk" "$INSTDIR\ProyecThorSlint.exe" "" "$INSTDIR\proyecthor.ico" 0
-    IfFileExists "$INSTDIR\ProyecThor.exe" 0 +2
-        CreateShortcut "$SMPROGRAMS\ProyecThor\ProyecThor (Modo Clásico).lnk" "$INSTDIR\ProyecThor.exe" "" "$INSTDIR\proyecthor.ico" 0
+    CreateShortcut "$SMPROGRAMS\ProyecThor\ProyecThor.lnk" "$INSTDIR\ProyecThor.exe" "" "$INSTDIR\proyecthor.ico" 0
     CreateShortcut "$SMPROGRAMS\ProyecThor\Desinstalar ProyecThor.lnk" "$INSTDIR\Uninstall.exe" "" "$INSTDIR\Uninstall.exe" 0
-    CreateShortcut "$DESKTOP\ProyecThor.lnk" "$INSTDIR\ProyecThorSlint.exe" "" "$INSTDIR\proyecthor.ico" 0
+    CreateShortcut "$DESKTOP\ProyecThor.lnk" "$INSTDIR\ProyecThor.exe" "" "$INSTDIR\proyecthor.ico" 0
 
     ; Registro único y exclusivo en Agregar o Quitar Programas (HKCU)
     WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\ProyecThor" "DisplayName" "ProyecThor"
@@ -207,7 +205,7 @@ Section "ProyecThor" SEC01
 
     ; Registro de tipos de archivos soportados en "Abrir con..."
     WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe" "FriendlyAppName" "ProyecThor"
-    WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe\shell\open\command" "" '"$INSTDIR\ProyecThorSlint.exe" "%1"'
+    WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe\shell\open\command" "" '"$INSTDIR\ProyecThor.exe" "%1"'
     WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe\SupportedTypes" ".mp3" ""
     WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe\SupportedTypes" ".flac" ""
     WriteRegStr HKCU "Software\Classes\Applications\ProyecThor.exe\SupportedTypes" ".wav" ""
@@ -233,7 +231,7 @@ Section "ProyecThor" SEC01
     ; Menú contextual clic derecho directo en Windows Explorer: "Abrir con ProyecThor"
     WriteRegStr HKCU "Software\Classes\*\shell\ProyecThor" "" "Abrir con ProyecThor"
     WriteRegStr HKCU "Software\Classes\*\shell\ProyecThor" "Icon" '"$INSTDIR\proyecthor.ico"'
-    WriteRegStr HKCU "Software\Classes\*\shell\ProyecThor\command" "" '"$INSTDIR\ProyecThorSlint.exe" "%1"'
+    WriteRegStr HKCU "Software\Classes\*\shell\ProyecThor\command" "" '"$INSTDIR\ProyecThor.exe" "%1"'
 SectionEnd
 
 ; -----------------------------------------------------------------------------

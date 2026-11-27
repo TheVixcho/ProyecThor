@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Empaqueta ProyecThorSlint en un bundle autocontenido ProyecThor.app y genera .dmg
+# Empaqueta ProyecThor en un bundle autocontenido ProyecThor.app y genera .dmg
 # Uso: scripts/package-macos.sh <BUILD_DIR> <ARCH_LABEL> <FULL_VERSION> <OUT_DIR> [SLINT_SDK_LIB_DIR]
 
 BUILD_DIR="${1:?Falta BUILD_DIR}"
@@ -13,7 +13,7 @@ SLINT_LIB_DIR="${5:-}"
 SHORT_VER="$(echo "$FULL_VER" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
 [ -n "$SHORT_VER" ] || SHORT_VER="1.2.0"
 
-BIN_SRC="${BUILD_DIR}/ProyecThorSlint"
+BIN_SRC="${BUILD_DIR}/ProyecThor"
 if [ ! -x "$BIN_SRC" ]; then
     echo "ERROR: No se encontro el ejecutable $BIN_SRC" >&2
     exit 1
@@ -25,8 +25,8 @@ trap 'rm -rf "$STAGE_DIR"' EXIT
 APP_DIR="${STAGE_DIR}/ProyecThor.app"
 mkdir -p "${APP_DIR}/Contents/MacOS" "${APP_DIR}/Contents/Frameworks" "${APP_DIR}/Contents/Resources" "${OUT_DIR}"
 
-cp "$BIN_SRC" "${APP_DIR}/Contents/MacOS/ProyecThorSlint"
-chmod +x "${APP_DIR}/Contents/MacOS/ProyecThorSlint"
+cp "$BIN_SRC" "${APP_DIR}/Contents/MacOS/ProyecThor"
+chmod +x "${APP_DIR}/Contents/MacOS/ProyecThor"
 
 # Generar icono .icns desde packaging/proyecthor.png
 ICON_SRC="packaging/proyecthor.png"
@@ -63,7 +63,7 @@ cat <<EOF > "${APP_DIR}/Contents/Info.plist"
     <key>CFBundleDisplayName</key>
     <string>ProyecThor</string>
     <key>CFBundleExecutable</key>
-    <string>ProyecThorSlint</string>
+    <string>ProyecThor</string>
     <key>CFBundleIconFile</key>
     <string>ProyecThor.icns</string>
     <key>CFBundleIdentifier</key>
@@ -114,10 +114,10 @@ if [ -n "$SLINT_DYLIB" ] && [ -f "$SLINT_DYLIB" ]; then
         case "$dep" in
             *libslint_cpp*.dylib)
                 install_name_tool -change "$dep" "@executable_path/../Frameworks/libslint_cpp.dylib" \
-                    "${APP_DIR}/Contents/MacOS/ProyecThorSlint" || true
+                    "${APP_DIR}/Contents/MacOS/ProyecThor" || true
                 ;;
         esac
-    done < <(otool -L "${APP_DIR}/Contents/MacOS/ProyecThorSlint" | awk 'NR>1 {print $1}')
+    done < <(otool -L "${APP_DIR}/Contents/MacOS/ProyecThor" | awk 'NR>1 {print $1}')
 fi
 
 # Incluir ffmpeg de Homebrew dentro del bundle para ondas FFT y miniaturas
@@ -131,7 +131,7 @@ fi
 # Empaquetar libmpv y todas las dependencias dylib de Homebrew en Contents/Frameworks
 if command -v dylibbundler >/dev/null 2>&1; then
     dylibbundler -od -b \
-        -x "${APP_DIR}/Contents/MacOS/ProyecThorSlint" \
+        -x "${APP_DIR}/Contents/MacOS/ProyecThor" \
         "${FFMPEG_ARGS[@]}" \
         "${BUNDLER_SEARCH_ARGS[@]}" \
         -d "${APP_DIR}/Contents/Frameworks" \
@@ -141,10 +141,10 @@ else
 fi
 
 # Verificar que no queden rutas absolutas a Homebrew en el binario principal y que Metal.framework esté enlazado
-echo "Verificando dependencias Mach-O de ProyecThorSlint:"
-otool -L "${APP_DIR}/Contents/MacOS/ProyecThorSlint"
-if otool -L "${APP_DIR}/Contents/MacOS/ProyecThorSlint" | grep -E '/opt/homebrew/|/usr/local/'; then
-    echo "ERROR: Quedan dependencias sin empaquetar en ProyecThorSlint" >&2
+echo "Verificando dependencias Mach-O de ProyecThor:"
+otool -L "${APP_DIR}/Contents/MacOS/ProyecThor"
+if otool -L "${APP_DIR}/Contents/MacOS/ProyecThor" | grep -E '/opt/homebrew/|/usr/local/'; then
+    echo "ERROR: Quedan dependencias sin empaquetar en ProyecThor" >&2
     exit 1
 fi
 if [ -f "${APP_DIR}/Contents/Frameworks/libslint_cpp.dylib" ]; then

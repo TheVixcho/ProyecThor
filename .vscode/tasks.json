@@ -10,7 +10,7 @@
                 "isDefault": true
             },
             "problemMatcher": ["$gcc"],
-            "detail": "Compila la nueva UI Slint + libmpv nativa en build-linux/ProyecThorSlint"
+            "detail": "Compila la nueva UI Slint + libmpv nativa en build-linux/ProyecThor"
         },
         {
             "label": "Compilar Slint (Windows)",
@@ -20,7 +20,7 @@
                 "kind": "build"
             },
             "problemMatcher": ["$msCompile", "$gcc"],
-            "detail": "Compila la nueva UI Slint + libmpv para Windows en build-win/ProyecThorSlint.exe"
+            "detail": "Compila la nueva UI Slint + libmpv para Windows en build-win/ProyecThor.exe"
         },
         {
             "label": "Compilar Windows",
@@ -71,7 +71,7 @@
             "type": "shell",
             "command": "bash ./scripts/build.sh windows-run",
             "problemMatcher": [],
-            "detail": "Compila (si es necesario) y ejecuta ProyecThorSlint.exe bajo Wine en Linux"
+            "detail": "Compila (si es necesario) y ejecuta ProyecThor.exe bajo Wine en Linux"
         },
         {
             "label": "Ejecutar Linux",

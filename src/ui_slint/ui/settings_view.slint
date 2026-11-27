@@ -1106,6 +1106,25 @@ export component AppleSettingsView inherits Rectangle {
                                 clicked => { root.active-section = 5; }
                             }
                         }
+
+                        // Grupo 4: Preferencias de usuario
+                        VerticalLayout {
+                            alignment: start;
+                            spacing: 4px;
+                            HorizontalLayout {
+                                padding-left: 10px;
+                                padding-bottom: 2px;
+                                Text { text: "PREFERENCIAS DE USUARIO"; color: Theme.text-muted; font-size: 10px; font-weight: 700; }
+                            }
+                            AppleSidebarItem {
+                                label: @tr("Preferencias de Usuario");
+                                icon: @image-url("icons/globe.svg");
+                                badge-color: #5ac8fa;
+                                pill-text: root.ui-language == "en" ? "EN" : "ES";
+                                active: root.active-section == 6;
+                                clicked => { root.active-section = 6; }
+                            }
+                        }
                     }
                 }
 
@@ -1200,13 +1219,15 @@ export component AppleSettingsView inherits Rectangle {
                                     : root.active-section == 2 ? @image-url("icons/zap.svg")
                                     : root.active-section == 3 ? @image-url("icons/folder.svg")
                                     : root.active-section == 4 ? @image-url("icons/terminal.svg")
-                                    : @image-url("icons/refresh.svg");
+                                    : root.active-section == 5 ? @image-url("icons/refresh.svg")
+                                    : @image-url("icons/globe.svg");
                                 badge-color: root.active-section == 0 ? #8b5cf6
                                            : root.active-section == 1 ? #007aff
                                            : root.active-section == 2 ? #34c759
                                            : root.active-section == 3 ? #ff9500
                                            : root.active-section == 4 ? #64748b
-                                           : #ff2d55;
+                                           : root.active-section == 5 ? #ff2d55
+                                           : #5ac8fa;
                             }
                         }
 
@@ -1219,7 +1240,8 @@ export component AppleSettingsView inherits Rectangle {
                                     : root.active-section == 2 ? "Rendimiento y GPU"
                                     : root.active-section == 3 ? "Biblioteca y Música"
                                     : root.active-section == 4 ? "Sistema y Diagnóstico"
-                                    : "Actualizaciones y Acerca de";
+                                    : root.active-section == 5 ? "Actualizaciones y Acerca de"
+                                    : "Preferencias de Usuario";
                                 color: Theme.text-primary;
                                 font-size: 18px;
                                 font-weight: 800;
@@ -1229,8 +1251,9 @@ export component AppleSettingsView inherits Rectangle {
                                     : root.active-section == 1 ? "Resolución de salida, límite de FPS, modo de escalado y reescalado en tiempo real."
                                     : root.active-section == 2 ? "Decodificación por hardware, NVIDIA NVDEC/NVENC y optimización para PCs modestas."
                                     : root.active-section == 3 ? "Carpetas locales de música, escaneo rápido e importación directa de medios."
-                                    : root.active-section == 4 ? "Idioma de la interfaz, telemetría en vivo y accesos de diagnóstico."
-                                    : "Comprobación de nuevas versiones desde GitHub Releases.";
+                                    : root.active-section == 4 ? "Telemetría en vivo, herramientas de red y accesos de diagnóstico."
+                                    : root.active-section == 5 ? "Comprobación de nuevas versiones desde GitHub Releases."
+                                    : "Idioma de la interfaz y preferencias personales de la aplicación.";
                                 color: Theme.text-muted;
                                 font-size: 11.5px;
                                 overflow: elide;
@@ -1261,7 +1284,8 @@ export component AppleSettingsView inherits Rectangle {
                                           : root.active-section == 2 ? #34c759
                                           : root.active-section == 3 ? #ff9500
                                           : root.active-section == 4 ? #38bdf8
-                                          : #ff2d55;
+                                          : root.active-section == 5 ? #ff2d55
+                                          : #5ac8fa;
                                 animate background { duration: 200ms; }
                             }
                             Text {
@@ -1270,7 +1294,8 @@ export component AppleSettingsView inherits Rectangle {
                                     : root.active-section == 2 ? (root.performance-mode ? "Perfil Ultra-Ligero" : "Rendimiento Estándar")
                                     : root.active-section == 3 ? (root.music-scan-folders.length + " carpetas extra")
                                     : root.active-section == 4 ? ("CPU " + root.debug-cpu-text + " • " + root.debug-ram-text)
-                                    : ("v" + root.app-version);
+                                    : root.active-section == 5 ? ("v" + root.app-version)
+                                    : (root.ui-language == "en" ? "English" : "Español");
                                 color: Theme.text-secondary;
                                 font-size: 11px;
                                 font-weight: 700;
@@ -2235,29 +2260,6 @@ export component AppleSettingsView inherits Rectangle {
                     }
 
                     AppleInsetGroup {
-                        header: @tr("IDIOMA DE LA INTERFAZ");
-                        footer: @tr("El cambio se aplica al instante. Para agregar más idiomas en el futuro solo hace falta un archivo de traducción nuevo.");
-
-                        VerticalLayout {
-                            padding: 16px;
-                            spacing: 10px;
-                            Text { text: @tr("Idioma"); color: Theme.text-primary; font-size: 13px; font-weight: 600; }
-                            Rectangle {
-                                border-radius: 10px;
-                                background: Theme.bg-surface-0;
-                                border-width: 1px;
-                                border-color: Theme.border-subtle;
-                                HorizontalLayout {
-                                    padding: 4px;
-                                    spacing: 4px;
-                                    AppleSegmentOption { label: "Español"; sublabel: "Español"; horizontal-stretch: 1; active: root.ui-language == "es"; clicked => { root.ui-language = "es"; root.language-changed("es"); } }
-                                    AppleSegmentOption { label: "English"; sublabel: "Inglés";  horizontal-stretch: 1; active: root.ui-language == "en"; clicked => { root.ui-language = "en"; root.language-changed("en"); } }
-                                }
-                            }
-                        }
-                    }
-
-                    AppleInsetGroup {
                         header: @tr("HERRAMIENTAS DEL SISTEMA");
 
                         AppleActionRow {
@@ -2472,6 +2474,36 @@ export component AppleSettingsView inherits Rectangle {
                                         sublabel: @tr("vixcho");
                                         clicked => { root.open-kofi-donations(); }
                                     }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ═════════════════════════════════════════════════════════════
+                //  SECCIÓN 6: PREFERENCIAS DE USUARIO (IDIOMA DE LA INTERFAZ)
+                // ═════════════════════════════════════════════════════════════
+                AppleSectionPane {
+                    active: root.active-section == 6;
+
+                    AppleInsetGroup {
+                        header: @tr("IDIOMA DE LA INTERFAZ");
+                        footer: @tr("El cambio se aplica al instante. Para agregar más idiomas en el futuro solo hace falta un archivo de traducción nuevo.");
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 10px;
+                            Text { text: @tr("Idioma"); color: Theme.text-primary; font-size: 13px; font-weight: 600; }
+                            Rectangle {
+                                border-radius: 10px;
+                                background: Theme.bg-surface-0;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+                                HorizontalLayout {
+                                    padding: 4px;
+                                    spacing: 4px;
+                                    AppleSegmentOption { label: "Español"; sublabel: "Español"; horizontal-stretch: 1; active: root.ui-language == "es"; clicked => { root.ui-language = "es"; root.language-changed("es"); } }
+                                    AppleSegmentOption { label: "English"; sublabel: "Inglés";  horizontal-stretch: 1; active: root.ui-language == "en"; clicked => { root.ui-language = "en"; root.language-changed("en"); } }
                                 }
                             }
                         }
