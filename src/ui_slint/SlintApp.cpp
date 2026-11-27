@@ -1300,6 +1300,13 @@ void SlintApp::BindCallbacks() {
         if (perf) PurgeMemoryCaches();
         SavePersistedState();
     });
+    // Vista previa del operador: apagar / limitar FPS / priorizar salida.
+    // No toca al reproductor principal ni a la salida pública; solo cambia
+    // cuánto se entrega a la vista previa (ver DeliverVideoFrameToOutputs).
+    m_Main->on_preview_config_changed([this]() {
+        m_LastPreviewDeliverMs = 0; // re-arma el gate para que surta efecto ya
+        SavePersistedState();
+    });
     m_Main->on_fullscreen_changed([this](bool fs) {
         if (m_ProjectorVisible) {
             m_Projector->window().set_fullscreen(fs);
@@ -2928,6 +2935,13 @@ void SlintApp::ApplyLowSpecPreset() {
     m_Main->set_smooth_motion_60(false);
     m_HoverPlayer.SetRenderSize(256, 144);
 
+    // Vista previa casi quieta + prioridad total a la salida pública: en un
+    // Celeron/Pentium de 2 núcleos esto es lo que más libera al decodificador.
+    m_Main->set_preview_enabled(true);
+    m_Main->set_preview_max_fps(5);
+    m_Main->set_prioritize_output(true);
+    m_LastPreviewDeliverMs = 0;
+
     ApplyGpuAndUpscalerConfig();
     UpdatePlayerRenderSize();
     ApplyTargetFps(30);
@@ -2970,8 +2984,44 @@ void SlintApp::DeliverVideoFrameToOutputs() {
     // 2. Smart decimation for MainWindow's small preview monitor so MainWindow's eglSwapBuffers
     //    never serializes against ProjectorWindow VSync on Wayland/OpenGL (eliminates 20/30fps VSync cap!)
     const bool perf = m_Main->get_performance_mode();
+
+    // ── Ahorro de energía: vista previa del operador ──────────────────────
+    // La salida al público (bloque 1, arriba) ya recibió el 100% de los
+    // cuadros SIEMPRE. Acá decidimos cuánto de eso llega a la vista previa
+    // del operador, que es el costo evitable en PC de bajos recursos:
+    //   preview-enabled=false -> no se entrega NADA a la vista previa.
+    //   prioritize-output=true -> la vista previa se fuerza a ~1 FPS para
+    //                             dejarle todo el equipo a la salida pública.
+    //   preview-max-fps>0     -> tope duro de FPS por tiempo real (1/5/15/30).
+    if (!m_Main->get_preview_enabled())
+        return;
+
+    int previewCapFps = m_Main->get_preview_max_fps();
+    if (m_Main->get_prioritize_output()) {
+        // "Modo salida": la referencia del operador basta a 1 FPS. Si el
+        // usuario ya pidió un tope más bajo, se respeta el más restrictivo.
+        previewCapFps = (previewCapFps > 0) ? std::min(previewCapFps, 1) : 1;
+    }
+
+    if (previewCapFps > 0) {
+        const int64_t nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+        const int64_t minIntervalMs = 1000 / static_cast<int64_t>(previewCapFps);
+        // Margen de 2ms para no perder un cuadro justo en el borde del
+        // intervalo por el jitter del scheduler.
+        if ((nowMs - m_LastPreviewDeliverMs) < (minIntervalMs - 2)) {
+            return;
+        }
+        m_LastPreviewDeliverMs = nowMs;
+    }
+
     uint64_t previewDecim = 1;
-    if (m_ProjectorVisible) {
+    if (previewCapFps > 0) {
+        // Ya pasamos el filtro por tiempo real de arriba: este cuadro debe
+        // entregarse tal cual, sin volver a decimarlo por secuencia (si no,
+        // el tope efectivo quedaría muy por debajo del pedido).
+        previewDecim = 1;
+    } else if (m_ProjectorVisible) {
         if (perf) {
             previewDecim = (m_TargetFps >= 120) ? 8 : (m_TargetFps >= 60 ? 4 : 2);
         } else {
@@ -3866,6 +3916,13 @@ void SlintApp::LoadPersistedState() {
         m_Main->set_performance_mode(perf);
         m_HoverPlayer.SetRenderSize(perf ? 256 : 320, perf ? 144 : 180);
 
+        // Vista previa del operador (ahorro de energía). En hardware de gama
+        // baja arrancamos con la vista previa limitada a 15 FPS por defecto:
+        // suficiente para operar, deja CPU/GPU para la salida pública.
+        m_Main->set_preview_enabled(j.value("previewEnabled", true));
+        m_Main->set_preview_max_fps(j.value("previewMaxFps", defaultPerf ? 15 : 0));
+        m_Main->set_prioritize_output(j.value("prioritizeOutput", false));
+
         m_GpuHwdecMode      = std::clamp(j.value("gpuHwdecMode", 0), 0, 4);
         m_NvencEnabled      = j.value("nvencEnabled", false);
         int defaultUpscaler = defaultPerf ? 0 : (j.value("fsr", true) ? 2 : 0);
@@ -4003,6 +4060,9 @@ void SlintApp::SavePersistedState() {
     j["slideColumns"]      = m_Main->get_slide_columns();
     j["slideCardSize"]   = m_Main->get_slide_card_size();
     j["performanceMode"] = m_Main->get_performance_mode();
+    j["previewEnabled"]    = m_Main->get_preview_enabled();
+    j["previewMaxFps"]     = m_Main->get_preview_max_fps();
+    j["prioritizeOutput"]  = m_Main->get_prioritize_output();
     j["themeIdx"]        = m_ActiveThemeIdx;
     j["enableGlassTranslucency"] = m_EnableGlassTranslucency;
     j["enableGlassSheen"]        = m_EnableGlassSheen;

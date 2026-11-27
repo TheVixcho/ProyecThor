@@ -665,6 +665,21 @@ export component MainWindow inherits Window {
     in-out property <float> upscaler-sharpness: 55.0; // 0..100%
     in-out property <bool> smooth-motion-60: false; // Interpolación 24/30 -> 60 FPS
     in-out property <bool> performance-mode: false;
+
+    // ── Ahorro de energía: vista previa del operador y prioridad de salida ──
+    // preview-enabled: si es false, el monitor de vista previa de la ventana
+    //   del operador NO recibe frames (la salida pública al público sigue
+    //   recibiendo el 100%). Ahorra una subida de textura y swap por frame.
+    // preview-max-fps: tope duro de FPS para esa vista previa (0 = sin tope
+    //   extra, usa la decimación inteligente de siempre; 1/5/15/30 = la vista
+    //   previa se actualiza como mucho a esa tasa).
+    // prioritize-output: "Modo salida". Fuerza la vista previa a su tasa más
+    //   baja y libera el equipo para que el video que ve el público aproveche
+    //   todo el CPU/GPU, sin importar qué pestaña del operador esté abierta.
+    in-out property <bool> preview-enabled: true;
+    in-out property <int>  preview-max-fps: 0;
+    in-out property <bool> prioritize-output: false;
+
     in-out property <bool> fullscreen-output: true;
 
     // Selector de pantalla física para la ventana de proyección (Público).
@@ -894,6 +909,7 @@ export component MainWindow inherits Window {
     callback apply-low-spec-preset();
     callback purge-ram-cache();
     callback performance-mode-changed(bool);
+    callback preview-config-changed();
     callback fullscreen-changed(bool);
     // El usuario eligió en qué pantalla física abrir la proyección.
     callback projection-monitor-changed(int);
@@ -5099,6 +5115,9 @@ export component MainWindow inherits Window {
                         upscaler-sharpness <=> root.upscaler-sharpness;
                         smooth-motion-60 <=> root.smooth-motion-60;
                         performance-mode <=> root.performance-mode;
+                        preview-enabled <=> root.preview-enabled;
+                        preview-max-fps <=> root.preview-max-fps;
+                        prioritize-output <=> root.prioritize-output;
                         fullscreen-output <=> root.fullscreen-output;
                         enable-glass-translucency <=> root.enable-glass-translucency;
                         enable-glass-sheen <=> root.enable-glass-sheen;
@@ -5124,6 +5143,7 @@ export component MainWindow inherits Window {
                         apply-low-spec-preset => { root.apply-low-spec-preset(); }
                         purge-ram-cache => { root.purge-ram-cache(); }
                         performance-mode-changed(v) => { root.performance-mode-changed(v); }
+                        preview-config-changed => { root.preview-config-changed(); }
                         fullscreen-changed(v) => { root.fullscreen-changed(v); }
                         visual-effects-changed => { root.visual-effects-changed(); }
                         tutorial-preference-changed(v) => { root.tutorial-preference-changed(v); }
@@ -5425,7 +5445,7 @@ export component MainWindow inherits Window {
                                 spacing: 8px;
                                 VerticalLayout {
                                     spacing: 1px;
-                                    Text { text: "Biblioteca"; color: Theme.text-primary; font-size: 15px; font-weight: 700; }
+                                    Text { text: @tr("Biblioteca"); color: Theme.text-primary; font-size: 15px; font-weight: 700; }
                                     Text { text: "Acceso directo a todo tu contenido en vivo"; color: Theme.text-muted; font-size: 11px; }
                                 }
                                 HorizontalLayout {
@@ -5546,7 +5566,7 @@ export component MainWindow inherits Window {
                                         HorizontalLayout {
                                             spacing: 6px;
                                             Image { source: @image-url("icons/headphones.svg"); width: 15px; height: 15px; y: (parent.height - self.height) / 2; colorize: #22c55e; }
-                                            Text { text: "Música"; color: Theme.text-primary; font-size: 12.5px; font-weight: 700; vertical-alignment: center; }
+                                            Text { text: @tr("Música"); color: Theme.text-primary; font-size: 12.5px; font-weight: 700; vertical-alignment: center; }
                                         }
                                         Text { text: root.hub-music-count + " pistas"; color: Theme.text-muted; font-size: 11px; }
                                     }

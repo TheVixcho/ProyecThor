@@ -259,6 +259,15 @@ if(PROYECTHOR_BUILD_SLINT)
             CXX_STANDARD 20
             CXX_STANDARD_REQUIRED ON
             SLINT_EMBED_RESOURCES "embed-files"
+            # ── Traducciones (i18n) ──────────────────────────────────────
+            # Las cadenas marcadas con @tr("...") en los .slint se traducen
+            # con archivos gettext .po bajo translations/<lang>/LC_MESSAGES/
+            # proyecthor.po. Se empaquetan dentro del binario (bundle) y se
+            # eligen en runtime con slint::select_bundled_translation(...).
+            # El idioma fuente (msgid) es español. Agregar un idioma nuevo =
+            # crear translations/<lang>/LC_MESSAGES/proyecthor.po, sin tocar C++.
+            SLINT_TRANSLATION_DOMAIN "proyecthor"
+            SLINT_BUNDLE_TRANSLATIONS "${CMAKE_CURRENT_SOURCE_DIR}/translations"
         )
         slint_target_sources(ProyecThorSlintUI src/ui_slint/ui/main_window.slint COMPILATION_UNITS 12)
         target_link_libraries(ProyecThorSlintUI PUBLIC Slint::Slint)

@@ -849,6 +849,9 @@ export component AppleSettingsView inherits Rectangle {
     in-out property <float> upscaler-sharpness: 55.0;
     in-out property <bool>  smooth-motion-60: false;
     in-out property <bool>  performance-mode: false;
+    in-out property <bool>  preview-enabled: true;
+    in-out property <int>   preview-max-fps: 0;
+    in-out property <bool>  prioritize-output: false;
     in-out property <bool>  fullscreen-output: true;
     in-out property <bool>  enable-glass-translucency: true;
     in-out property <bool>  enable-glass-sheen: true;
@@ -880,6 +883,7 @@ export component AppleSettingsView inherits Rectangle {
     callback apply-low-spec-preset();
     callback purge-ram-cache();
     callback performance-mode-changed(bool);
+    callback preview-config-changed();
     callback fullscreen-changed(bool);
     callback visual-effects-changed();
     callback tutorial-preference-changed(bool);
@@ -1979,6 +1983,56 @@ export component AppleSettingsView inherits Rectangle {
                             badge-color: #0ea5e9;
                             trailing-label: "Limpiar";
                             clicked => { root.purge-ram-cache(); }
+                        }
+                    }
+
+                    AppleInsetGroup {
+                        header: "VISTA PREVIA Y PRIORIDAD DE SALIDA (AHORRO DE ENERGÍA)";
+                        footer: "La salida al público (proyector) siempre recibe el 100% de los cuadros. Estas opciones solo afectan a la vista previa del operador para liberar CPU/GPU en equipos de bajos recursos.";
+
+                        AppleSwitchRow {
+                            title: "Vista previa activa";
+                            subtitle: "Muestra el video en el monitor de vista previa del operador. Apágala para liberar por completo una subida de textura por cuadro.";
+                            active-color: #34c759;
+                            checked <=> root.preview-enabled;
+                            toggled(v) => { root.preview-config-changed(); }
+                        }
+
+                        AppleDivider {}
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 8px;
+                            Text {
+                                text: "LÍMITE DE CUADROS DE LA VISTA PREVIA";
+                                color: Theme.text-muted;
+                                font-size: 11px;
+                                font-weight: 700;
+                            }
+                            Rectangle {
+                                border-radius: 10px;
+                                background: Theme.bg-surface-0;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+                                HorizontalLayout {
+                                    padding: 4px;
+                                    spacing: 4px;
+                                    AppleSegmentOption { label: "Auto";   sublabel: "Sin tope extra"; horizontal-stretch: 1; active: root.preview-max-fps == 0;  clicked => { root.preview-max-fps = 0;  root.preview-config-changed(); } }
+                                    AppleSegmentOption { label: "15 FPS"; sublabel: "Suave";          horizontal-stretch: 1; active: root.preview-max-fps == 15; clicked => { root.preview-max-fps = 15; root.preview-config-changed(); } }
+                                    AppleSegmentOption { label: "5 FPS";  sublabel: "Ahorro";         horizontal-stretch: 1; active: root.preview-max-fps == 5;  clicked => { root.preview-max-fps = 5;  root.preview-config-changed(); } }
+                                    AppleSegmentOption { label: "1 FPS";  sublabel: "Mínimo";         horizontal-stretch: 1; active: root.preview-max-fps == 1;  clicked => { root.preview-max-fps = 1;  root.preview-config-changed(); } }
+                                }
+                            }
+                        }
+
+                        AppleDivider {}
+
+                        AppleSwitchRow {
+                            title: "Priorizar salida de video (Modo salida)";
+                            subtitle: "Reduce la vista previa a su tasa mínima para que el video del público aproveche todo el equipo, sin importar qué pestaña esté abierta.";
+                            active-color: #ff9500;
+                            checked <=> root.prioritize-output;
+                            toggled(v) => { root.preview-config-changed(); }
                         }
                     }
                 }

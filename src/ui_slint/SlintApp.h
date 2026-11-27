@@ -481,6 +481,10 @@ private:
     bool  m_EnableGlassSheen        = true;
     bool  m_EnableAmbientBg         = true;
     uint64_t m_DeliveredVideoSeq = 0;
+    // Último instante (steady_clock, ms) en que se entregó un cuadro a la
+    // vista previa del operador, para respetar el tope de FPS de preview
+    // (ver DeliverVideoFrameToOutputs / preview-max-fps / prioritize-output).
+    int64_t  m_LastPreviewDeliverMs = 0;
     std::shared_ptr<std::atomic<bool>> m_AppAliveFlag;
     std::string          m_StaticSrcPath;
     std::vector<uint8_t> m_StaticSrcRgba;
