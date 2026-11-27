@@ -15,9 +15,23 @@ if "%ERRORLEVEL%"=="0" (
     if exist "build-win\ProyecThor.pdb" ren "build-win\ProyecThor.pdb" "ProyecThor.old.pdb" >nul 2>&1
 )
 
-set "VCVARS=C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
-if not exist "%VCVARS%" (
-    echo [ERROR] No se encontro vcvars64.bat en Visual Studio.
+set "VCVARS="
+if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" (
+    for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
+        if exist "%%i\VC\Auxiliary\Build\vcvars64.bat" set "VCVARS=%%i\VC\Auxiliary\Build\vcvars64.bat"
+    )
+)
+if not defined VCVARS (
+    for %%V in (18 2022 17) do (
+        for %%E in (Community Professional Enterprise BuildTools Preview) do (
+            if not defined VCVARS if exist "C:\Program Files\Microsoft Visual Studio\%%V\%%E\VC\Auxiliary\Build\vcvars64.bat" (
+                set "VCVARS=C:\Program Files\Microsoft Visual Studio\%%V\%%E\VC\Auxiliary\Build\vcvars64.bat"
+            )
+        )
+    )
+)
+if not defined VCVARS (
+    echo [ERROR] No se encontro vcvars64.bat en Visual Studio. Instala Desktop development with C++.
     exit /b 1
 )
 

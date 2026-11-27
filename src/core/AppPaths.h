@@ -5,12 +5,40 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <shlobj.h>
+#include <filesystem>
 #else
 #include <cstdlib>
 #include <filesystem>
 #endif
 
 namespace ProyecThor {
+
+#ifdef _WIN32
+    inline std::string WinWideToUtf8(const wchar_t* w) {
+        if (!w || !*w) return "";
+        int len = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
+        if (len <= 1) return "";
+        std::string out(static_cast<size_t>(len - 1), '\0');
+        WideCharToMultiByte(CP_UTF8, 0, w, -1, out.data(), len, nullptr, nullptr);
+        return out;
+    }
+
+    inline std::filesystem::path WinUtf8ToPath(const std::string& u8) {
+        if (u8.empty()) return {};
+        int len = MultiByteToWideChar(CP_UTF8, 0, u8.data(), static_cast<int>(u8.size()), nullptr, 0);
+        if (len <= 0) return std::filesystem::path(u8);
+        std::wstring w(static_cast<size_t>(len), L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, u8.data(), static_cast<int>(u8.size()), w.data(), len);
+        return std::filesystem::path(w);
+    }
+
+    inline std::string GetWinAppDataUtf8() {
+        wchar_t appDataBuf[MAX_PATH] = {};
+        if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, SHGFP_TYPE_CURRENT, appDataBuf)))
+            return WinWideToUtf8(appDataBuf);
+        return "";
+    }
+#endif
 
     // Ubicacion FIJA (nunca se mueve, siempre el %APPDATA%/~/.local/share
     // "de fabrica") de un archivo chico de una sola linea que puede apuntar
@@ -21,9 +49,9 @@ namespace ProyecThor {
     // unico que escribe este archivo.
     inline std::string GetDataDirRedirectFilePath() {
 #ifdef _WIN32
-        char appDataBuf[MAX_PATH] = {};
-        if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, SHGFP_TYPE_CURRENT, appDataBuf)))
-            return std::string(appDataBuf) + "\\ProyecThor\\datadir.txt";
+        std::string appData = GetWinAppDataUtf8();
+        if (!appData.empty())
+            return appData + "\\ProyecThor\\datadir.txt";
         return "";
 #elif defined(__APPLE__)
         const char* home = std::getenv("HOME");
@@ -40,7 +68,11 @@ namespace ProyecThor {
     inline std::string ReadDataDirRedirect() {
         std::string redirectFile = GetDataDirRedirectFilePath();
         if (redirectFile.empty()) return "";
+#ifdef _WIN32
+        std::ifstream f(WinUtf8ToPath(redirectFile));
+#else
         std::ifstream f(redirectFile);
+#endif
         if (!f.is_open()) return "";
         std::string customRoot;
         std::getline(f, customRoot);
@@ -60,9 +92,9 @@ namespace ProyecThor {
         }
 
 #ifdef _WIN32
-        char appDataBuf[MAX_PATH] = {};
-        if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, SHGFP_TYPE_CURRENT, appDataBuf))) {
-            s_AssetsPath = std::string(appDataBuf) + "\\ProyecThor\\assets";
+        std::string appData = GetWinAppDataUtf8();
+        if (!appData.empty()) {
+            s_AssetsPath = appData + "\\ProyecThor\\assets";
         } else {
             s_AssetsPath = "assets";
         }
@@ -118,10 +150,15 @@ namespace ProyecThor {
     // ubicacion.
     inline std::string GetAppDataRoot() {
         std::string assets = GetAssetsPath(); // ".../ProyecThor/assets"
-        const std::string suffix = "/assets";
-        if (assets.size() > suffix.size() &&
-            assets.compare(assets.size() - suffix.size(), suffix.size(), suffix) == 0) {
-            return assets.substr(0, assets.size() - suffix.size());
+        const std::string fwdSuffix  = "/assets";
+        const std::string backSuffix = "\\assets";
+        if (assets.size() > fwdSuffix.size() &&
+            assets.compare(assets.size() - fwdSuffix.size(), fwdSuffix.size(), fwdSuffix) == 0) {
+            return assets.substr(0, assets.size() - fwdSuffix.size());
+        }
+        if (assets.size() > backSuffix.size() &&
+            assets.compare(assets.size() - backSuffix.size(), backSuffix.size(), backSuffix) == 0) {
+            return assets.substr(0, assets.size() - backSuffix.size());
         }
         return assets;
     }
@@ -132,9 +169,9 @@ namespace ProyecThor {
     // apunta ahi (primer cambio) o para mostrar "carpeta original" en la UI.
     inline std::string GetDefaultAppDataRoot() {
 #ifdef _WIN32
-        char appDataBuf[MAX_PATH] = {};
-        if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, SHGFP_TYPE_CURRENT, appDataBuf)))
-            return std::string(appDataBuf) + "\\ProyecThor";
+        std::string appData = GetWinAppDataUtf8();
+        if (!appData.empty())
+            return appData + "\\ProyecThor";
         return "assets";
 #elif defined(__APPLE__)
         const char* home = std::getenv("HOME");

@@ -28,9 +28,11 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <commdlg.h>
+#include <objbase.h>
 #include <shellapi.h>
 #include <psapi.h>
 #pragma comment(lib, "comdlg32.lib")
+#pragma comment(lib, "ole32.lib")
 #elif defined(__APPLE__)
 #include <mach/mach.h>
 #include <sys/resource.h>
@@ -96,7 +98,7 @@ std::string PathToUtf8(const fs::path& p) {
     WideCharToMultiByte(CP_UTF8, 0, w.data(), static_cast<int>(w.size()), out.data(), len, nullptr, nullptr);
     return out;
 #else
-    return PathToUtf8(p);
+    return p.string();
 #endif
 }
 
@@ -113,6 +115,92 @@ fs::path Utf8ToFsPath(const std::string& u8) {
 #endif
 }
 
+#ifdef _WIN32
+std::string WinWideToUtf8(const wchar_t* w, int wLen = -1) {
+    if (!w) return {};
+    int len = WideCharToMultiByte(CP_UTF8, 0, w, wLen, nullptr, 0, nullptr, nullptr);
+    if (len <= 0) return {};
+    std::string out(static_cast<size_t>(len), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, w, wLen, out.data(), len, nullptr, nullptr);
+    if (wLen == -1 && !out.empty() && out.back() == '\0') out.pop_back();
+    return out;
+}
+
+std::wstring WinUtf8ToWide(const std::string& u8) {
+    if (u8.empty()) return {};
+    int len = MultiByteToWideChar(CP_UTF8, 0, u8.data(), static_cast<int>(u8.size()), nullptr, 0);
+    if (len <= 0) return {};
+    std::wstring w(static_cast<size_t>(len), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, u8.data(), static_cast<int>(u8.size()), w.data(), len);
+    return w;
+}
+#endif
+
+const std::vector<std::string>& VideoExtensions() {
+    static const std::vector<std::string> exts = {
+        ".mp4", ".mkv", ".mov", ".webm", ".avi", ".wmv", ".m4v", ".flv", ".ts", ".mpg", ".mpeg"
+    };
+    return exts;
+}
+
+const std::vector<std::string>& ImageExtensions() {
+    static const std::vector<std::string> exts = {
+        ".png", ".jpg", ".jpeg", ".webp", ".bmp"
+    };
+    return exts;
+}
+
+unsigned char* StbiLoadUtf8(const std::string& utf8Path, int* w, int* h, int* comp, int reqComp) {
+    std::ifstream in(Utf8ToFsPath(utf8Path), std::ios::binary | std::ios::ate);
+    if (!in.is_open()) return nullptr;
+    const std::streamsize sz = in.tellg();
+    if (sz <= 0 || sz > 256 * 1024 * 1024) return nullptr;
+    std::vector<unsigned char> buf(static_cast<size_t>(sz));
+    in.seekg(0, std::ios::beg);
+    if (!in.read(reinterpret_cast<char*>(buf.data()), sz)) return nullptr;
+    return stbi_load_from_memory(buf.data(), static_cast<int>(buf.size()), w, h, comp, reqComp);
+}
+
+std::string ResolveToolCommand(const char* toolName) {
+#ifdef _WIN32
+    wchar_t exeBuf[MAX_PATH] = {};
+    if (GetModuleFileNameW(nullptr, exeBuf, MAX_PATH) > 0) {
+        fs::path candidate = fs::path(exeBuf).parent_path() / (std::string(toolName) + ".exe");
+        std::error_code ec;
+        if (fs::exists(candidate, ec) && fs::is_regular_file(candidate, ec)) {
+            return "\"" + PathToUtf8(candidate) + "\"";
+        }
+    }
+#endif
+    return toolName;
+}
+
+int RunCommandHiddenStatus(const std::string& utf8Cmd) {
+#ifdef _WIN32
+    STARTUPINFOW si = {};
+    si.cb          = sizeof(si);
+    si.dwFlags     = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+
+    PROCESS_INFORMATION pi = {};
+    std::wstring wCmd = WinUtf8ToWide("cmd.exe /d /c " + utf8Cmd);
+    if (wCmd.empty()) return -1;
+
+    BOOL ok = CreateProcessW(nullptr, wCmd.data(), nullptr, nullptr,
+                             FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
+    if (!ok) return -1;
+
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    DWORD exitCode = 1;
+    GetExitCodeProcess(pi.hProcess, &exitCode);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    return static_cast<int>(exitCode);
+#else
+    return std::system(utf8Cmd.c_str());
+#endif
+}
+
 bool HasExtension(const fs::path& p, const std::vector<std::string>& exts) {
     std::string ext = PathToUtf8(p.extension());
     std::transform(ext.begin(), ext.end(), ext.begin(),
@@ -123,17 +211,16 @@ bool HasExtension(const fs::path& p, const std::vector<std::string>& exts) {
 std::string RunCommandCapture(const std::string& cmd) {
     std::string out;
 #ifdef _WIN32
-    // Usar CreateProcess con CREATE_NO_WINDOW en vez de _popen para que NO
-    // aparezca una ventana de consola/PowerShell parpadeando cada vez que se
-    // consulta la GPU, se sondea ffmpeg o se abre el diálogo de importar.
-    // _popen siempre arrastra una consola visible en una app GUI sin consola.
+    // Usar CreateProcessW con CREATE_NO_WINDOW en vez de _popen para que NO
+    // aparezca una ventana de consola/PowerShell parpadeando y para soportar
+    // rutas Unicode/UTF-8 correctamente en Windows.
     SECURITY_ATTRIBUTES sa = { sizeof(sa), nullptr, TRUE };
     HANDLE readPipe = nullptr, writePipe = nullptr;
     if (!CreatePipe(&readPipe, &writePipe, &sa, 0))
         return out;
     SetHandleInformation(readPipe, HANDLE_FLAG_INHERIT, 0);
 
-    STARTUPINFOA si = {};
+    STARTUPINFOW si = {};
     si.cb          = sizeof(si);
     si.dwFlags     = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
     si.wShowWindow = SW_HIDE;
@@ -142,11 +229,15 @@ std::string RunCommandCapture(const std::string& cmd) {
     si.hStdInput   = GetStdHandle(STD_INPUT_HANDLE);
 
     PROCESS_INFORMATION pi = {};
-    // cmd.exe /c para resolver programas en PATH y comandos con tuberías/redirecciones.
-    std::string full = "cmd.exe /c " + cmd;
-    std::string mutableCmd = full;
+    // cmd.exe /d /c para resolver programas en PATH y comandos con tuberías/redirecciones.
+    std::wstring wCmd = WinUtf8ToWide("cmd.exe /d /c " + cmd);
+    if (wCmd.empty()) {
+        CloseHandle(writePipe);
+        CloseHandle(readPipe);
+        return out;
+    }
 
-    BOOL ok = CreateProcessA(nullptr, mutableCmd.data(), nullptr, nullptr,
+    BOOL ok = CreateProcessW(nullptr, wCmd.data(), nullptr, nullptr,
                              TRUE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
     CloseHandle(writePipe);
     if (!ok) {
@@ -1601,7 +1692,7 @@ void SlintApp::SelectLibraryItem(int filteredIdx) {
         m_SelectedPreviewEntry    = entry;
         m_HasSelectedPreviewEntry = true;
         m_Main->set_selected_item_title(slint::SharedString(entry.title));
-        m_Main->set_selected_media_info(slint::SharedString(entry.subtitle + " • " + PathToUtf8(fs::path(entry.path).filename())));
+        m_Main->set_selected_media_info(slint::SharedString(entry.subtitle + " • " + PathToUtf8(Utf8ToFsPath(entry.path).filename())));
 
         slint::Image thumb;
         if ((entry.isVideo || entry.isImage) && LoadOrCreateThumbnail(entry.path, entry.isVideo, thumb)) {
@@ -1617,7 +1708,7 @@ void SlintApp::SelectLibraryItem(int filteredIdx) {
         m_SelectedPreviewEntry    = entry;
         m_HasSelectedPreviewEntry = true;
         m_Main->set_selected_item_title(slint::SharedString(entry.title));
-        m_Main->set_selected_media_info(slint::SharedString(entry.subtitle + " • " + PathToUtf8(fs::path(entry.path).filename())));
+        m_Main->set_selected_media_info(slint::SharedString(entry.subtitle + " • " + PathToUtf8(Utf8ToFsPath(entry.path).filename())));
 
         slint::Image thumb;
         if (LoadOrCreateThumbnail(entry.path, entry.isVideo, thumb)) {
@@ -2766,7 +2857,7 @@ bool SlintApp::RenderScaledStaticImage(const std::string& path, slint::Image& ou
     // Reuse cached decoded source pixels when re-scaling the same image (instant Cover/Fill/Contain switch!)
     if (m_StaticSrcPath != path || m_StaticSrcRgba.empty() || m_StaticSrcW <= 0 || m_StaticSrcH <= 0) {
         int w = 0, h = 0, comp = 0;
-        unsigned char* data = stbi_load(path.c_str(), &w, &h, &comp, 4);
+        unsigned char* data = StbiLoadUtf8(path, &w, &h, &comp, 4);
         if (!data || w <= 0 || h <= 0) {
             if (data) stbi_image_free(data);
             outImg = slint::Image::load_from_path(slint::SharedString(path));
@@ -4974,8 +5065,8 @@ void SlintApp::ScanMedia(bool backgroundsOnly) {
         };
     }
 
-    const std::vector<std::string> videoExts = { ".mp4", ".mkv", ".mov", ".webm", ".avi", ".wmv" };
-    const std::vector<std::string> imageExts = { ".png", ".jpg", ".jpeg", ".webp", ".bmp" };
+    const auto& videoExts = VideoExtensions();
+    const auto& imageExts = ImageExtensions();
 
     std::vector<std::string> seen;
     for (const auto& dir : dirs) {
@@ -5249,94 +5340,157 @@ void SlintApp::ApplyThemePreset(int idx) {
 void SlintApp::ImportFileAsync(bool forceBackgroundFolder, bool forceOverlayFolder, int explicitTargetTab) {
     int currentTab = (explicitTargetTab >= 0) ? explicitTargetTab : ((forceBackgroundFolder || forceOverlayFolder) ? 3 : m_ActiveTab);
     int currentBgSub = forceOverlayFolder ? 1 : (forceBackgroundFolder ? 0 : m_BgSubtab);
+    std::string bgRelDir = m_BgCurrentRelDir;
 
-    std::thread([this, currentTab, currentBgSub]() {
-        std::string selectedPath;
+    std::thread([this, currentTab, currentBgSub, bgRelDir]() {
+        std::vector<std::string> selectedPaths;
 #ifdef _WIN32
-        wchar_t fileBuf[4096] = {};
+        HRESULT hrCom = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        std::vector<wchar_t> fileBuf(32768, L'\0');
         OPENFILENAMEW ofn = {};
         ofn.lStructSize = sizeof(ofn);
-        ofn.lpstrFilter = L"Todos los soportados\0*.txt;*.song;*.xml;*.pdf;*.mp4;*.mkv;*.mov;*.webm;*.avi;*.wmv;*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.mp3;*.wav;*.flac;*.ogg;*.m4a;*.opus\0Todos\0*.*\0";
-        ofn.lpstrFile = fileBuf;
-        ofn.nMaxFile = 4096;
-        ofn.lpstrTitle = L"Importar archivo a ProyecThor";
-        ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+        ofn.lpstrFilter =
+            L"Todos los soportados\0*.txt;*.song;*.xml;*.pdf;*.mp4;*.mkv;*.mov;*.webm;*.avi;*.wmv;*.m4v;*.flv;*.ts;*.mpg;*.mpeg;*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.mp3;*.wav;*.flac;*.ogg;*.m4a;*.opus\0"
+            L"Videos e Imagenes (Multimedia)\0*.mp4;*.mkv;*.mov;*.webm;*.avi;*.wmv;*.m4v;*.flv;*.ts;*.mpg;*.mpeg;*.png;*.jpg;*.jpeg;*.webp;*.bmp\0"
+            L"Todos\0*.*\0";
+        ofn.nFilterIndex = (currentTab == 2 || currentTab == 3) ? 2 : 1;
+        ofn.lpstrFile    = fileBuf.data();
+        ofn.nMaxFile     = static_cast<DWORD>(fileBuf.size());
+        ofn.lpstrTitle   = L"Importar archivo a ProyecThor";
+        ofn.Flags        = OFN_EXPLORER | OFN_ALLOWMULTISELECT | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
         if (GetOpenFileNameW(&ofn)) {
-            int u8Len = WideCharToMultiByte(CP_UTF8, 0, fileBuf, -1, nullptr, 0, nullptr, nullptr);
-            if (u8Len > 1) {
-                selectedPath.resize(static_cast<size_t>(u8Len - 1));
-                WideCharToMultiByte(CP_UTF8, 0, fileBuf, -1, selectedPath.data(), u8Len, nullptr, nullptr);
+            const wchar_t* p = fileBuf.data();
+            std::wstring first(p);
+            const wchar_t* next = p + first.size() + 1;
+            if (*next == L'\0') {
+                std::string u8 = WinWideToUtf8(first.c_str(), static_cast<int>(first.size()));
+                if (!u8.empty()) selectedPaths.push_back(std::move(u8));
+            } else {
+                fs::path dirPath(first);
+                while (*next != L'\0') {
+                    std::wstring fname(next);
+                    selectedPaths.push_back(PathToUtf8(dirPath / fname));
+                    next += fname.size() + 1;
+                }
             }
         }
+        if (SUCCEEDED(hrCom)) CoUninitialize();
 #elif defined(__APPLE__)
-        selectedPath = RunCommandCapture(
+        std::string one = RunCommandCapture(
             "osascript -e 'POSIX path of (choose file with prompt \"Importar archivo a ProyecThor\")' 2>/dev/null");
+        if (!one.empty()) selectedPaths.push_back(std::move(one));
 #else
         // Try zenity first, fallback to kdialog
-        selectedPath = RunCommandCapture(
+        std::string one = RunCommandCapture(
             "zenity --file-selection --title=\"Importar archivo a ProyecThor\" "
-            "--file-filter=\"Archivos soportados | *.txt *.song *.xml *.pdf *.mp4 *.mkv *.mov *.webm *.avi *.png *.jpg *.jpeg *.webp *.mp3 *.wav *.flac *.ogg *.m4a\" "
+            "--file-filter=\"Archivos soportados | *.txt *.song *.xml *.pdf *.mp4 *.mkv *.mov *.webm *.avi *.wmv *.m4v *.flv *.ts *.mpg *.mpeg *.png *.jpg *.jpeg *.webp *.mp3 *.wav *.flac *.ogg *.m4a\" "
             "--file-filter=\"Todos los archivos | *\" 2>/dev/null");
-        if (selectedPath.empty()) {
-            selectedPath = RunCommandCapture(
+        if (one.empty()) {
+            one = RunCommandCapture(
                 "kdialog --getopenfilename ~ \"*.txt *.song *.xml *.pdf *.mp4 *.mkv *.mov *.webm *.png *.jpg *.jpeg *.webp *.mp3 *.wav *.flac\" 2>/dev/null");
         }
+        if (!one.empty()) selectedPaths.push_back(std::move(one));
 #endif
-        while (!selectedPath.empty() && (selectedPath.back() == '\n' || selectedPath.back() == '\r')) {
-            selectedPath.pop_back();
+        int lastTargetTab = currentTab;
+        int importedCount = 0;
+        std::string lastImportedPath;
+        std::string lastError;
+
+        for (auto& selectedPath : selectedPaths) {
+            while (!selectedPath.empty() && (selectedPath.back() == '\n' || selectedPath.back() == '\r')) {
+                selectedPath.pop_back();
+            }
+            if (selectedPath.empty()) continue;
+
+            fs::path src = Utf8ToFsPath(selectedPath);
+            std::error_code ec;
+            if (!fs::exists(src, ec) || !fs::is_regular_file(src, ec)) continue;
+
+            fs::path destDir;
+            int targetTab = currentTab;
+            if (HasExtension(src, { ".pdf" }) || currentTab == 10) {
+                destDir = Utf8ToFsPath(ProyecThor::DocumentsPath());
+                targetTab = 10;
+            } else if (HasExtension(src, { ".txt", ".song" })) {
+                destDir = Utf8ToFsPath(ProyecThor::SongsPath());
+                targetTab = 0;
+            } else if (HasExtension(src, { ".xml" })) {
+                destDir = Utf8ToFsPath(ProyecThor::BiblesPath());
+                targetTab = 1;
+            } else if (currentTab == 3 && currentBgSub == 1 && HasExtension(src, { ".png", ".webp" })) {
+                destDir = Utf8ToFsPath(ProyecThor::OverlaysPath());
+                targetTab = 3;
+            } else if (HasExtension(src, VideoExtensions())) {
+                destDir = (currentTab == 3)
+                    ? (Utf8ToFsPath(ProyecThor::GetAssetsPath()) / "backgrounds" / Utf8ToFsPath(bgRelDir))
+                    : Utf8ToFsPath(ProyecThor::VideosPath());
+                targetTab = (currentTab == 3) ? 3 : 2;
+            } else if (HasExtension(src, ImageExtensions())) {
+                destDir = (currentTab == 3)
+                    ? (Utf8ToFsPath(ProyecThor::GetAssetsPath()) / "backgrounds" / Utf8ToFsPath(bgRelDir))
+                    : Utf8ToFsPath(ProyecThor::ImagesPath());
+                targetTab = (currentTab == 3) ? 3 : 2;
+            } else if (HasExtension(src, { ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".opus" })) {
+                destDir = Utf8ToFsPath(ProyecThor::GetAssetsPath()) / "audio";
+                targetTab = 9;
+            } else {
+                destDir = Utf8ToFsPath(ProyecThor::DocumentsPath());
+            }
+
+            fs::create_directories(destDir, ec);
+            if (ec) {
+                lastError = "Error creando carpeta destino: " + ec.message();
+                continue;
+            }
+
+            fs::path destFile = destDir / src.filename();
+            std::error_code eqEc;
+            bool sameFile = fs::exists(destFile, eqEc) && fs::equivalent(src, destFile, eqEc);
+            if (!sameFile) {
+                fs::copy_file(src, destFile, fs::copy_options::overwrite_existing, ec);
+                if (ec) {
+                    lastError = "No se pudo copiar " + PathToUtf8(src.filename()) + ": " + ec.message();
+                    continue;
+                }
+            }
+            lastTargetTab    = targetTab;
+            lastImportedPath = PathToUtf8(destFile);
+            ++importedCount;
         }
-        if (selectedPath.empty()) return;
 
-        fs::path src = Utf8ToFsPath(selectedPath);
-        std::error_code ec;
-        if (!fs::exists(src, ec) || !fs::is_regular_file(src, ec)) return;
+        if (importedCount == 0 && lastError.empty()) return;
 
-        fs::path destDir;
-        int targetTab = currentTab;
-        if (HasExtension(src, { ".pdf" }) || currentTab == 10) {
-            destDir = Utf8ToFsPath(ProyecThor::DocumentsPath());
-            targetTab = 10;
-        } else if (HasExtension(src, { ".txt", ".song" })) {
-            destDir = Utf8ToFsPath(ProyecThor::SongsPath());
-            targetTab = 0;
-        } else if (HasExtension(src, { ".xml" })) {
-            destDir = Utf8ToFsPath(ProyecThor::BiblesPath());
-            targetTab = 1;
-        } else if (currentTab == 3 && currentBgSub == 1 && HasExtension(src, { ".png", ".webp" })) {
-            destDir = Utf8ToFsPath(ProyecThor::OverlaysPath());
-            targetTab = 3;
-        } else if (HasExtension(src, { ".mp4", ".mkv", ".mov", ".webm", ".avi", ".wmv" })) {
-            destDir = (currentTab == 3)
-                ? (Utf8ToFsPath(ProyecThor::GetAssetsPath()) / "backgrounds" / Utf8ToFsPath(m_BgCurrentRelDir))
-                : Utf8ToFsPath(ProyecThor::VideosPath());
-            targetTab = (currentTab == 3) ? 3 : 2;
-        } else if (HasExtension(src, { ".png", ".jpg", ".jpeg", ".webp", ".bmp" })) {
-            destDir = (currentTab == 3)
-                ? (Utf8ToFsPath(ProyecThor::GetAssetsPath()) / "backgrounds" / Utf8ToFsPath(m_BgCurrentRelDir))
-                : Utf8ToFsPath(ProyecThor::ImagesPath());
-            targetTab = (currentTab == 3) ? 3 : 2;
-        } else if (HasExtension(src, { ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".opus" })) {
-            destDir = Utf8ToFsPath(ProyecThor::GetAssetsPath()) / "audio";
-            targetTab = 9;
-        } else {
-            destDir = Utf8ToFsPath(ProyecThor::DocumentsPath());
-        }
+        slint::invoke_from_event_loop([this, lastTargetTab, importedCount, lastImportedPath, lastError]() {
+            if (!lastError.empty()) {
+                AppendDebugLog("Importar archivo: " + lastError);
+            }
+            if (importedCount == 0) {
+                if (!lastError.empty()) {
+                    m_Main->set_selected_media_info(slint::SharedString(lastError));
+                }
+                return;
+            }
 
-        fs::create_directories(destDir, ec);
-        fs::path destFile = destDir / src.filename();
-        fs::copy_file(src, destFile, fs::copy_options::overwrite_existing, ec);
-
-        slint::invoke_from_event_loop([this, targetTab]() {
-            m_CachedTabEntries.erase(targetTab);
+            m_CachedTabEntries.erase(lastTargetTab);
+            if (lastTargetTab == 2) m_CachedTabEntries.erase(2);
             RefreshBgDock();
             RefreshOverlayLayers();
-            if (targetTab == 9) {
+            if (lastTargetTab == 9) {
                 ScanMusicTracks();
-            } else if (targetTab == 0 || targetTab == 1 || targetTab == 2 || targetTab == 10) {
-                if (targetTab == 1) m_BiblePaths.clear();
-                m_ActiveTab = targetTab;
-                m_Main->set_active_tab(targetTab);
-                LoadTabData(targetTab);
+            } else if (lastTargetTab == 0 || lastTargetTab == 1 || lastTargetTab == 2 || lastTargetTab == 10) {
+                if (lastTargetTab == 1) m_BiblePaths.clear();
+                m_ActiveTab = lastTargetTab;
+                m_Main->set_active_tab(lastTargetTab);
+                LoadTabData(lastTargetTab);
+                if (!lastImportedPath.empty()) {
+                    for (int i = 0; i < static_cast<int>(m_FilteredIndices.size()); ++i) {
+                        if (m_AllEntries[m_FilteredIndices[i]].path == lastImportedPath) {
+                            m_Main->set_selected_library_index(i);
+                            SelectLibraryItem(i);
+                            break;
+                        }
+                    }
+                }
             }
         });
     }).detach();
@@ -5364,7 +5518,7 @@ bool SlintApp::LoadOrCreateThumbnail(const std::string& path, bool isVideo, slin
         const int maxTw = m_Main->get_performance_mode() ? 240 : 320;
         const int maxTh = m_Main->get_performance_mode() ? 135 : 180;
         int w = 0, h = 0, comp = 0;
-        unsigned char* data = stbi_load(path.c_str(), &w, &h, &comp, 4);
+        unsigned char* data = StbiLoadUtf8(path, &w, &h, &comp, 4);
         if (data && w > 0 && h > 0) {
             if (w > maxTw || h > maxTh) {
                 double sc = std::min(static_cast<double>(maxTw) / w, static_cast<double>(maxTh) / h);
@@ -5394,35 +5548,36 @@ bool SlintApp::LoadOrCreateThumbnail(const std::string& path, bool isVideo, slin
     }
 
     // Cache video thumbnail via ffmpeg (uses CUDA/auto hwaccel when NVENC/GPU mode is active, with safe fallback)
-    fs::path thumbDir = fs::path(ProyecThor::GetAssetsPath()) / "thumbnails";
+    fs::path thumbDir = Utf8ToFsPath(ProyecThor::GetAssetsPath()) / "thumbnails";
     fs::create_directories(thumbDir, ec);
     size_t h = std::hash<std::string>{}(path);
     fs::path thumbPath = thumbDir / ("slint_" + std::to_string(h) + ".jpg");
     const std::string hwArg = m_NvencEnabled ? "-hwaccel auto " : "";
+    const std::string ffmpegBin = ResolveToolCommand("ffmpeg");
 
     if (!fs::exists(thumbPath, ec)) {
 #ifdef _WIN32
-        std::string cmd = "ffmpeg -y " + hwArg + "-ss 00:00:01 -i \"" + path +
+        std::string cmd = ffmpegBin + " -y " + hwArg + "-ss 00:00:01 -i \"" + path +
                           "\" -vframes 1 -vf scale=320:-1 -q:v 5 \"" + PathToUtf8(thumbPath) +
                           "\" >nul 2>&1";
-        int rc = std::system(cmd.c_str());
+        int rc = RunCommandHiddenStatus(cmd);
         if (rc != 0 || !fs::exists(thumbPath, ec)) {
-            cmd = "ffmpeg -y -ss 00:00:00 -i \"" + path +
+            cmd = ffmpegBin + " -y -ss 00:00:00 -i \"" + path +
                   "\" -vframes 1 -vf scale=320:-1 -q:v 5 \"" + PathToUtf8(thumbPath) +
                   "\" >nul 2>&1";
-            std::system(cmd.c_str());
+            RunCommandHiddenStatus(cmd);
         }
 #else
-        std::string cmd = "ffmpeg -y " + hwArg + "-ss 00:00:01 -i \"" + path +
+        std::string cmd = ffmpegBin + " -y " + hwArg + "-ss 00:00:01 -i \"" + path +
                           "\" -vframes 1 -vf scale=320:-1 -q:v 5 \"" + PathToUtf8(thumbPath) +
                           "\" >/dev/null 2>&1";
-        int rc = std::system(cmd.c_str());
+        int rc = RunCommandHiddenStatus(cmd);
         if (rc != 0 || !fs::exists(thumbPath, ec)) {
             // Fallback at 00:00:00 for very short loops
-            cmd = "ffmpeg -y -ss 00:00:00 -i \"" + path +
+            cmd = ffmpegBin + " -y -ss 00:00:00 -i \"" + path +
                   "\" -vframes 1 -vf scale=320:-1 -q:v 5 \"" + PathToUtf8(thumbPath) +
                   "\" >/dev/null 2>&1";
-            std::system(cmd.c_str());
+            RunCommandHiddenStatus(cmd);
         }
 #endif
     }
@@ -5438,10 +5593,10 @@ bool SlintApp::LoadOrCreateThumbnail(const std::string& path, bool isVideo, slin
 void SlintApp::CreateBgSubfolder(const std::string& folderName) {
     std::string safe = SanitizeFilename(folderName);
     if (safe.empty()) return;
-    fs::path rootDir = fs::path(ProyecThor::GetAssetsPath()) / "backgrounds";
-    fs::path curDir  = m_BgCurrentRelDir.empty() ? rootDir : (rootDir / m_BgCurrentRelDir);
+    fs::path rootDir = Utf8ToFsPath(ProyecThor::GetAssetsPath()) / "backgrounds";
+    fs::path curDir  = m_BgCurrentRelDir.empty() ? rootDir : (rootDir / Utf8ToFsPath(m_BgCurrentRelDir));
     std::error_code ec;
-    fs::create_directories(curDir / safe, ec);
+    fs::create_directories(curDir / Utf8ToFsPath(safe), ec);
     RefreshBgDock();
 }
 
@@ -5451,11 +5606,11 @@ void SlintApp::RefreshBgDock() {
     m_BgFoldersModel->clear();
 
     // Carpeta EXCLUSIVA de Fondos con árbol de subcarpetas (como ImGui LayersBgTab)
-    fs::path rootDir = fs::path(ProyecThor::GetAssetsPath()) / "backgrounds";
+    fs::path rootDir = Utf8ToFsPath(ProyecThor::GetAssetsPath()) / "backgrounds";
     std::error_code ec;
     fs::create_directories(rootDir, ec);
 
-    fs::path curDir = m_BgCurrentRelDir.empty() ? rootDir : (rootDir / m_BgCurrentRelDir);
+    fs::path curDir = m_BgCurrentRelDir.empty() ? rootDir : (rootDir / Utf8ToFsPath(m_BgCurrentRelDir));
     if (!fs::exists(curDir, ec) || !fs::is_directory(curDir, ec)) {
         m_BgCurrentRelDir.clear();
         curDir = rootDir;
@@ -5465,8 +5620,8 @@ void SlintApp::RefreshBgDock() {
     m_Main->set_bg_current_folder_label(slint::SharedString(
         m_BgCurrentRelDir.empty() ? "Raíz" : ("Raíz / " + m_BgCurrentRelDir)));
 
-    const std::vector<std::string> videoExts = { ".mp4", ".mkv", ".mov", ".webm", ".avi", ".wmv" };
-    const std::vector<std::string> imageExts = { ".png", ".jpg", ".jpeg", ".webp", ".bmp" };
+    const auto& videoExts = VideoExtensions();
+    const auto& imageExts = ImageExtensions();
 
     std::vector<fs::path> subdirs;
     std::vector<fs::path> files;
@@ -7588,9 +7743,9 @@ void SlintApp::OpenDocumentAsync(const std::string& path, bool autoProjectFirst)
     m_DocPagesModel->clear();
     m_ActiveDocPageIdx = -1;
     m_Main->set_active_doc_page_idx(-1);
-    m_Main->set_doc_title(slint::SharedString(PathToUtf8(fs::path(path).stem())));
+    m_Main->set_doc_title(slint::SharedString(PathToUtf8(Utf8ToFsPath(path).stem())));
 
-    if (!HasExtension(path, { ".pdf" })) {
+    if (!HasExtension(Utf8ToFsPath(path), { ".pdf" })) {
         m_DocPagePaths.push_back(path);
         DocPageItem pg;
         pg.number      = 1;
@@ -7607,7 +7762,7 @@ void SlintApp::OpenDocumentAsync(const std::string& path, bool autoProjectFirst)
 
     m_Main->set_doc_status("Renderizando páginas PDF con pdftoppm...");
     std::thread([this, path, autoProjectFirst]() {
-        fs::path outDir = fs::path(ProyecThor::GetAssetsPath()) / "thumbnails" / "docs" /
+        fs::path outDir = Utf8ToFsPath(ProyecThor::GetAssetsPath()) / "thumbnails" / "docs" /
                           std::to_string(std::hash<std::string>{}(path));
         std::error_code ec;
         fs::create_directories(outDir, ec);
@@ -7620,12 +7775,13 @@ void SlintApp::OpenDocumentAsync(const std::string& path, bool autoProjectFirst)
         }
         if (pages.empty()) {
             std::string prefix = PathToUtf8(outDir / "page");
+            const std::string pdftoppmBin = ResolveToolCommand("pdftoppm");
 #ifdef _WIN32
-            std::string cmd = "pdftoppm -png -r 140 \"" + path + "\" \"" + prefix + "\" 2>nul";
+            std::string cmd = pdftoppmBin + " -png -r 140 \"" + path + "\" \"" + prefix + "\" 2>nul";
 #else
-            std::string cmd = "pdftoppm -png -r 140 \"" + path + "\" \"" + prefix + "\" >/dev/null 2>&1";
+            std::string cmd = pdftoppmBin + " -png -r 140 \"" + path + "\" \"" + prefix + "\" >/dev/null 2>&1";
 #endif
-            std::system(cmd.c_str());
+            RunCommandHiddenStatus(cmd);
             for (const auto& e : fs::directory_iterator(outDir, ec)) {
                 if (e.is_regular_file(ec) && HasExtension(e.path(), { ".png" })) {
                     pages.push_back(PathToUtf8(e.path()));
@@ -7690,8 +7846,8 @@ void SlintApp::ProjectDocPage(int pageIdx) {
 // ── Unified Library File Management (Play/Screen, Queue, Rename, Delete) ────
 void SlintApp::HandleItemPlay(int kind, const std::string& path) {
     if (path.empty()) return;
-    const std::vector<std::string> videoExts = { ".mp4", ".mkv", ".mov", ".webm", ".avi", ".wmv" };
-    const std::vector<std::string> imageExts = { ".png", ".jpg", ".jpeg", ".webp", ".bmp" };
+    const auto& videoExts = VideoExtensions();
+    const auto& imageExts = ImageExtensions();
 
     if (kind == 0) {
         // Canción: abrir y proyectar la primera estrofa inmediatamente
@@ -7711,7 +7867,7 @@ void SlintApp::HandleItemPlay(int kind, const std::string& path) {
         }
     } else if (kind == 1) {
         // Multimedia (Video o Imagen): proyectar directamente en la(s) pantalla(s) destino
-        fs::path fp(path);
+        fs::path fp = Utf8ToFsPath(path);
         MediaEntry entry;
         entry.title    = PathToUtf8(fp.stem());
         entry.path     = path;
@@ -7751,7 +7907,7 @@ void SlintApp::HandleItemPlay(int kind, const std::string& path) {
                 return;
             }
         }
-        fs::path fp(path);
+        fs::path fp = Utf8ToFsPath(path);
         MediaEntry entry;
         entry.title   = PathToUtf8(fp.stem());
         entry.path    = path;
@@ -7773,8 +7929,8 @@ void SlintApp::HandleItemPlay(int kind, const std::string& path) {
 
 void SlintApp::HandleItemQueue(int kind, const std::string& path) {
     if (path.empty()) return;
-    fs::path fp(path);
-    const std::vector<std::string> imageExts = { ".png", ".jpg", ".jpeg", ".webp", ".bmp" };
+    fs::path fp = Utf8ToFsPath(path);
+    const auto& imageExts = ImageExtensions();
 
     if (kind == 0) {
         std::string title, author;
@@ -7833,7 +7989,7 @@ void SlintApp::HandleItemRename(int kind, const std::string& path, const std::st
     while (!displayTitle.empty() && displayTitle.back() == ' ')  displayTitle.pop_back();
     if (displayTitle.empty()) return;
 
-    fs::path oldFs(path);
+    fs::path oldFs = Utf8ToFsPath(path);
     std::error_code ec;
     if (!fs::exists(oldFs, ec)) return;
 
@@ -7844,7 +8000,7 @@ void SlintApp::HandleItemRename(int kind, const std::string& path, const std::st
 
     std::string safeStem = SanitizeFilename(displayTitle);
     std::string ext      = PathToUtf8(oldFs.extension());
-    fs::path newFs       = oldFs.parent_path() / (safeStem + ext);
+    fs::path newFs       = oldFs.parent_path() / Utf8ToFsPath(safeStem + ext);
 
     bool wasPlayingVideo = false;
     bool wasVideoLoop    = m_Main->get_media_loop();
@@ -7979,7 +8135,7 @@ void SlintApp::HandleItemRename(int kind, const std::string& path, const std::st
 
 void SlintApp::HandleItemDelete(int kind, const std::string& path) {
     if (path.empty()) return;
-    fs::path targetFs(path);
+    fs::path targetFs = Utf8ToFsPath(path);
 
     if (m_HoverVideoPath == path) {
         StopHoverVideoPreview();

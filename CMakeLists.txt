@@ -102,13 +102,23 @@ configure_file(
 
 find_package(nlohmann_json QUIET)
 if(NOT nlohmann_json_FOUND)
-    include(FetchContent)
-    FetchContent_Declare(
-        json
-        GIT_REPOSITORY https://github.com/nlohmann/json.git
-        GIT_TAG v3.11.3
-    )
-    FetchContent_MakeAvailable(json)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/nlohmann/include/nlohmann/json.hpp")
+        add_library(nlohmann_json INTERFACE)
+        add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json)
+        target_include_directories(nlohmann_json INTERFACE
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/vendor/nlohmann/include"
+        )
+        message(STATUS "nlohmann_json: usando cabecera incluida en src/vendor/nlohmann/include")
+    else()
+        include(FetchContent)
+        FetchContent_Declare(
+            json
+            GIT_REPOSITORY https://github.com/nlohmann/json.git
+            GIT_TAG v3.11.3
+            GIT_SHALLOW TRUE
+        )
+        FetchContent_MakeAvailable(json)
+    endif()
 endif()
 
 # ── SDKs compartidos / usados por ProyecThorSlint ──────────────────────────────
@@ -352,7 +362,7 @@ if(PROYECTHOR_BUILD_SLINT)
                 WIN32_LEAN_AND_MEAN
             )
             target_include_directories(ProyecThorSlint PRIVATE "${MPV_SDK}/include")
-            target_link_libraries(ProyecThorSlint PRIVATE "${MPV_WIN_LIB}" shell32 ws2_32 iphlpapi)
+            target_link_libraries(ProyecThorSlint PRIVATE "${MPV_WIN_LIB}" shell32 ws2_32 iphlpapi comdlg32 ole32)
             if(MSVC)
                 target_link_options(ProyecThorSlint PRIVATE "/ENTRY:mainCRTStartup")
             endif()
