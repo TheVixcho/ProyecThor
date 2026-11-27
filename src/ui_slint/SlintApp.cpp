@@ -27,8 +27,10 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <commdlg.h>
 #include <shellapi.h>
 #include <psapi.h>
+#pragma comment(lib, "comdlg32.lib")
 #elif defined(__APPLE__)
 #include <mach/mach.h>
 #include <sys/resource.h>
@@ -84,8 +86,35 @@ bool IsLowEndHardware() {
     return ramGb != 0 && ramGb <= 8;
 }
 
+std::string PathToUtf8(const fs::path& p) {
+#ifdef _WIN32
+    const std::wstring w = p.wstring();
+    if (w.empty()) return {};
+    int len = WideCharToMultiByte(CP_UTF8, 0, w.data(), static_cast<int>(w.size()), nullptr, 0, nullptr, nullptr);
+    if (len <= 0) return {};
+    std::string out(static_cast<size_t>(len), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, w.data(), static_cast<int>(w.size()), out.data(), len, nullptr, nullptr);
+    return out;
+#else
+    return PathToUtf8(p);
+#endif
+}
+
+fs::path Utf8ToFsPath(const std::string& u8) {
+    if (u8.empty()) return {};
+#ifdef _WIN32
+    int len = MultiByteToWideChar(CP_UTF8, 0, u8.data(), static_cast<int>(u8.size()), nullptr, 0);
+    if (len <= 0) return fs::path(u8);
+    std::wstring w(static_cast<size_t>(len), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, u8.data(), static_cast<int>(u8.size()), w.data(), len);
+    return fs::path(w);
+#else
+    return fs::path(u8);
+#endif
+}
+
 bool HasExtension(const fs::path& p, const std::vector<std::string>& exts) {
-    std::string ext = p.extension().string();
+    std::string ext = PathToUtf8(p.extension());
     std::transform(ext.begin(), ext.end(), ext.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return std::find(exts.begin(), exts.end(), ext) != exts.end();
@@ -477,7 +506,7 @@ void SlintApp::InitAssetsAndSplash() {
             f,
             "assets/" + f,
             "../assets/" + f,
-            (fs::path(ProyecThor::GetAssetsPath()) / f).string(),
+            PathToUtf8(fs::path(ProyecThor::GetAssetsPath()) / f),
             "bg_splash3.jpg",
             "assets/bg_splash3.jpg"
         });
@@ -961,9 +990,9 @@ void SlintApp::BindCallbacks() {
             out = dir / (safe + "_" + std::to_string(++n) + ".png");
         }
 
-        if (SaveQrPng(text, out.string())) {
+        if (SaveQrPng(text, PathToUtf8(out))) {
             m_Main->set_qr_status(slint::SharedString(
-                "QR guardado como \"" + out.stem().string() + "\" en Documentos."));
+                "QR guardado como \"" + PathToUtf8(out.stem()) + "\" en Documentos."));
             // Refresca la lista de documentos para que aparezca de inmediato.
             m_CachedTabEntries.erase(10);
             m_ActiveTab = 10;
@@ -1572,7 +1601,7 @@ void SlintApp::SelectLibraryItem(int filteredIdx) {
         m_SelectedPreviewEntry    = entry;
         m_HasSelectedPreviewEntry = true;
         m_Main->set_selected_item_title(slint::SharedString(entry.title));
-        m_Main->set_selected_media_info(slint::SharedString(entry.subtitle + " • " + fs::path(entry.path).filename().string()));
+        m_Main->set_selected_media_info(slint::SharedString(entry.subtitle + " • " + PathToUtf8(fs::path(entry.path).filename())));
 
         slint::Image thumb;
         if ((entry.isVideo || entry.isImage) && LoadOrCreateThumbnail(entry.path, entry.isVideo, thumb)) {
@@ -1588,7 +1617,7 @@ void SlintApp::SelectLibraryItem(int filteredIdx) {
         m_SelectedPreviewEntry    = entry;
         m_HasSelectedPreviewEntry = true;
         m_Main->set_selected_item_title(slint::SharedString(entry.title));
-        m_Main->set_selected_media_info(slint::SharedString(entry.subtitle + " • " + fs::path(entry.path).filename().string()));
+        m_Main->set_selected_media_info(slint::SharedString(entry.subtitle + " • " + PathToUtf8(fs::path(entry.path).filename())));
 
         slint::Image thumb;
         if (LoadOrCreateThumbnail(entry.path, entry.isVideo, thumb)) {
@@ -1763,10 +1792,10 @@ void SlintApp::ScanSystemFonts() {
         for (const auto& entry : fs::directory_iterator(dir, ec)) {
             if (!entry.is_regular_file(ec)) continue;
             if (!HasExtension(entry.path(), { ".ttf", ".otf" })) continue;
-            std::string stem = entry.path().stem().string();
+            std::string stem = PathToUtf8(entry.path().stem());
             if (stem.empty() || stem[0] == '.') continue;
             if (m_SystemFontFiles.find(stem) == m_SystemFontFiles.end()) {
-                m_SystemFontFiles[stem] = entry.path().string();
+                m_SystemFontFiles[stem] = PathToUtf8(entry.path());
             }
             if (std::find(m_AllSystemFonts.begin(), m_AllSystemFonts.end(), stem) == m_AllSystemFonts.end()) {
                 m_AllSystemFonts.push_back(stem);
@@ -2394,7 +2423,7 @@ void SlintApp::LoadThemeFilesFromDisk() {
 
     for (const auto& entry : fs::directory_iterator(dir, ec)) {
         if (!entry.is_regular_file(ec) || entry.path().extension() != ".theme") continue;
-        std::string themeName = entry.path().stem().string();
+        std::string themeName = PathToUtf8(entry.path().stem());
         bool alreadyLoaded = false;
         for (const auto& s : m_SavedStyles) {
             if (s.name == themeName) { alreadyLoaded = true; break; }
@@ -3204,11 +3233,11 @@ void SlintApp::RebuildSlideGridRows() {
 // ── Song Editor & Metadata (ImGui songs_meta/*.json compatible) ──────────────
 void SlintApp::ReadSongMeta(const std::string& songPath, std::string& outTitle, std::string& outAuthor) {
     fs::path p(songPath);
-    outTitle  = p.stem().string();
+    outTitle  = PathToUtf8(p.stem());
     outAuthor.clear();
 
     // 1. Check ImGui songs_meta/<filename>.json
-    std::string fname = p.filename().string();
+    std::string fname = PathToUtf8(p.filename());
     for (char& ch : fname) { if (ch == ':') ch = '_'; }
     fs::path metaPath = fs::path(ProyecThor::GetAssetsPath()) / "songs_meta" / (fname + ".json");
     std::ifstream mf(metaPath);
@@ -3270,7 +3299,7 @@ void SlintApp::ReadSongMeta(const std::string& songPath, std::string& outTitle, 
 
 void SlintApp::WriteSongMeta(const std::string& songPath, const std::string& title, const std::string& author) {
     fs::path p(songPath);
-    std::string fname = p.filename().string();
+    std::string fname = PathToUtf8(p.filename());
     for (char& ch : fname) { if (ch == ':') ch = '_'; }
     fs::path metaDir = fs::path(ProyecThor::GetAssetsPath()) / "songs_meta";
     std::error_code ec;
@@ -3330,7 +3359,7 @@ void SlintApp::SaveEditedSong(const std::string& title, const std::string& autho
         out << body;
         out.close();
     }
-    WriteSongMeta(targetPath.string(), title.empty() ? safeName : title, author);
+    WriteSongMeta(PathToUtf8(targetPath), title.empty() ? safeName : title, author);
 
     m_CachedTabEntries.erase(0);
     m_Main->set_song_editor_open(false);
@@ -3338,7 +3367,7 @@ void SlintApp::SaveEditedSong(const std::string& title, const std::string& autho
 
     // Select newly saved song
     for (int i = 0; i < static_cast<int>(m_FilteredIndices.size()); ++i) {
-        if (m_AllEntries[m_FilteredIndices[i]].path == targetPath.string()) {
+        if (m_AllEntries[m_FilteredIndices[i]].path == PathToUtf8(targetPath)) {
             m_Main->set_selected_library_index(i);
             SelectLibraryItem(i);
             break;
@@ -3530,7 +3559,7 @@ void SlintApp::SendActivePlaylistToQueue() {
         q.tab   = 0;
         q.path  = sp;
         q.kind  = "PLAYLIST";
-        q.title = fs::path(sp).stem().string();
+        q.title = PathToUtf8(fs::path(sp).stem());
         m_Queue.push_back(std::move(q));
     }
     m_Main->set_queue_category(0);
@@ -3677,7 +3706,7 @@ void SlintApp::SaveToPad(int index) {
     if (!p.ref.empty()) {
         p.name = "Pad " + std::to_string(index + 1) + " • " + p.ref.substr(0, 14);
     } else if (!p.bgPath.empty()) {
-        p.name = "Pad " + std::to_string(index + 1) + " • " + fs::path(p.bgPath).stem().string().substr(0, 14);
+        p.name = "Pad " + std::to_string(index + 1) + " • " + PathToUtf8(fs::path(p.bgPath).stem()).substr(0, 14);
     } else {
         p.name = "Pad " + std::to_string(index + 1) + " • Escena";
     }
@@ -3712,7 +3741,7 @@ void SlintApp::TriggerPad(int index) {
 
     if (!p.bgPath.empty()) {
         m_CurrentBgPath = p.bgPath;
-        m_Main->set_live_bg_name(slint::SharedString(fs::path(p.bgPath).stem().string()));
+        m_Main->set_live_bg_name(slint::SharedString(PathToUtf8(fs::path(p.bgPath).stem())));
         if (p.bgIsImage) {
             m_Player.Stop();
             m_HasVideoBg = false;
@@ -3743,7 +3772,7 @@ void SlintApp::RefreshPadsModel() {
             if (!m_Pads[i].text.empty()) {
                 sum = m_Pads[i].text.substr(0, 60);
             } else if (!m_Pads[i].bgPath.empty()) {
-                sum = "Fondo: " + fs::path(m_Pads[i].bgPath).filename().string();
+                sum = "Fondo: " + PathToUtf8(fs::path(m_Pads[i].bgPath).filename());
             } else {
                 sum = "Solo estilo guardado";
             }
@@ -4298,19 +4327,19 @@ void SlintApp::ScanSongs() {
         for (const auto& entry : fs::recursive_directory_iterator(dir, ec)) {
             if (!entry.is_regular_file(ec)) continue;
             if (!HasExtension(entry.path(), { ".txt", ".song" })) continue;
-            std::string stem = entry.path().stem().string();
+            std::string stem = PathToUtf8(entry.path().stem());
             if (std::find(seen.begin(), seen.end(), stem) != seen.end()) continue;
             seen.push_back(stem);
 
             std::string title, author;
-            ReadSongMeta(entry.path().string(), title, author);
+            ReadSongMeta(PathToUtf8(entry.path()), title, author);
 
             MediaEntry m;
             m.title    = title;
             m.author   = author;
-            std::string folder = entry.path().parent_path().filename().string();
+            std::string folder = PathToUtf8(entry.path().parent_path().filename());
             m.subtitle = !author.empty() ? author : (folder != "songs" ? folder : "Sin autor");
-            m.path     = entry.path().string();
+            m.path     = PathToUtf8(entry.path());
             m_AllEntries.push_back(std::move(m));
         }
     }
@@ -4335,7 +4364,7 @@ void SlintApp::ScanBibles() {
         for (const auto& entry : fs::directory_iterator(dir, ec)) {
             if (!entry.is_regular_file(ec)) continue;
             if (!HasExtension(entry.path(), { ".xml" })) continue;
-            std::string p = entry.path().string();
+            std::string p = PathToUtf8(entry.path());
             if (std::find(m_BiblePaths.begin(), m_BiblePaths.end(), p) != m_BiblePaths.end()) continue;
             m_BiblePaths.push_back(p);
         }
@@ -4346,7 +4375,7 @@ void SlintApp::ScanBibles() {
     // Populate dropdown menu with all installed Bible versions
     m_BibleVersionNamesModel->clear();
     for (const auto& p : m_BiblePaths) {
-        std::string label = fs::path(p).stem().string();
+        std::string label = PathToUtf8(fs::path(p).stem());
         auto pos = label.find("Bible");
         if (pos != std::string::npos && pos > 0) label = label.substr(0, pos);
         m_BibleVersionNamesModel->push_back(slint::SharedString(label));
@@ -4376,7 +4405,7 @@ void SlintApp::LoadSelectedBible(int versionIdx) {
     m_CurrentBibleVersionIdx = versionIdx;
     m_Main->set_selected_bible_version_idx(versionIdx);
 
-    std::string shortName = fs::path(m_BiblePaths[versionIdx]).stem().string();
+    std::string shortName = PathToUtf8(fs::path(m_BiblePaths[versionIdx]).stem());
     auto pos = shortName.find("Bible");
     if (pos != std::string::npos && pos > 0) shortName = shortName.substr(0, pos);
     m_Main->set_current_bible_name(slint::SharedString(shortName));
@@ -4934,14 +4963,14 @@ void SlintApp::ScanMedia(bool backgroundsOnly) {
     std::error_code dirEc;
     if (backgroundsOnly) {
         // Carpeta EXCLUSIVA de Fondos (igual que LayersBgTab::BgRootDir en ImGui)
-        fs::path bgDir = fs::path(ProyecThor::GetAssetsPath()) / "backgrounds";
+        fs::path bgDir = Utf8ToFsPath(ProyecThor::GetAssetsPath()) / "backgrounds";
         fs::create_directories(bgDir, dirEc);
         dirs = { bgDir };
     } else {
         // Carpetas EXCLUSIVAS de Multimedia (SOLO Videos e Imágenes — Música tiene su propio panel!)
         dirs = {
-            fs::path(ProyecThor::VideosPath()),
-            fs::path(ProyecThor::ImagesPath())
+            Utf8ToFsPath(ProyecThor::VideosPath()),
+            Utf8ToFsPath(ProyecThor::ImagesPath())
         };
     }
 
@@ -4958,12 +4987,12 @@ void SlintApp::ScanMedia(bool backgroundsOnly) {
             bool isImg = HasExtension(entry.path(), imageExts);
             if (!isVid && !isImg) continue;
 
-            std::string fullPath = entry.path().string();
+            std::string fullPath = PathToUtf8(entry.path());
             if (std::find(seen.begin(), seen.end(), fullPath) != seen.end()) continue;
             seen.push_back(fullPath);
 
             MediaEntry m;
-            m.title    = entry.path().stem().string();
+            m.title    = PathToUtf8(entry.path().stem());
             m.subtitle = isVid ? "Video" : "Imagen";
             m.path     = fullPath;
             m.isVideo  = isVid;
@@ -4991,9 +5020,9 @@ void SlintApp::ScanOverlays() {
             if (!HasExtension(entry.path(), { ".png", ".webp" })) continue;
 
             MediaEntry m;
-            m.title     = entry.path().stem().string();
+            m.title     = PathToUtf8(entry.path().stem());
             m.subtitle  = "Overlay PNG";
-            m.path      = entry.path().string();
+            m.path      = PathToUtf8(entry.path());
             m.isOverlay = true;
             m_AllEntries.push_back(std::move(m));
         }
@@ -5224,12 +5253,21 @@ void SlintApp::ImportFileAsync(bool forceBackgroundFolder, bool forceOverlayFold
     std::thread([this, currentTab, currentBgSub]() {
         std::string selectedPath;
 #ifdef _WIN32
-        char cmd[] = "powershell -NoProfile -Command \"Add-Type -AssemblyName System.Windows.Forms; "
-                     "$f = New-Object System.Windows.Forms.OpenFileDialog; "
-                     "$f.Title = 'Importar archivo a ProyecThor'; "
-                     "$f.Filter = 'Todos los soportados|*.txt;*.song;*.xml;*.pdf;*.mp4;*.mkv;*.mov;*.webm;*.avi;*.png;*.jpg;*.jpeg;*.webp;*.mp3;*.wav;*.flac;*.ogg;*.m4a|Todos|*.*'; "
-                     "if($f.ShowDialog() -eq 'OK'){ Write-Output $f.FileName }\"";
-        selectedPath = RunCommandCapture(cmd);
+        wchar_t fileBuf[4096] = {};
+        OPENFILENAMEW ofn = {};
+        ofn.lStructSize = sizeof(ofn);
+        ofn.lpstrFilter = L"Todos los soportados\0*.txt;*.song;*.xml;*.pdf;*.mp4;*.mkv;*.mov;*.webm;*.avi;*.wmv;*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.mp3;*.wav;*.flac;*.ogg;*.m4a;*.opus\0Todos\0*.*\0";
+        ofn.lpstrFile = fileBuf;
+        ofn.nMaxFile = 4096;
+        ofn.lpstrTitle = L"Importar archivo a ProyecThor";
+        ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+        if (GetOpenFileNameW(&ofn)) {
+            int u8Len = WideCharToMultiByte(CP_UTF8, 0, fileBuf, -1, nullptr, 0, nullptr, nullptr);
+            if (u8Len > 1) {
+                selectedPath.resize(static_cast<size_t>(u8Len - 1));
+                WideCharToMultiByte(CP_UTF8, 0, fileBuf, -1, selectedPath.data(), u8Len, nullptr, nullptr);
+            }
+        }
 #elif defined(__APPLE__)
         selectedPath = RunCommandCapture(
             "osascript -e 'POSIX path of (choose file with prompt \"Importar archivo a ProyecThor\")' 2>/dev/null");
@@ -5249,39 +5287,39 @@ void SlintApp::ImportFileAsync(bool forceBackgroundFolder, bool forceOverlayFold
         }
         if (selectedPath.empty()) return;
 
-        fs::path src(selectedPath);
+        fs::path src = Utf8ToFsPath(selectedPath);
         std::error_code ec;
         if (!fs::exists(src, ec) || !fs::is_regular_file(src, ec)) return;
 
         fs::path destDir;
         int targetTab = currentTab;
         if (HasExtension(src, { ".pdf" }) || currentTab == 10) {
-            destDir = ProyecThor::DocumentsPath();
+            destDir = Utf8ToFsPath(ProyecThor::DocumentsPath());
             targetTab = 10;
         } else if (HasExtension(src, { ".txt", ".song" })) {
-            destDir = ProyecThor::SongsPath();
+            destDir = Utf8ToFsPath(ProyecThor::SongsPath());
             targetTab = 0;
         } else if (HasExtension(src, { ".xml" })) {
-            destDir = ProyecThor::BiblesPath();
+            destDir = Utf8ToFsPath(ProyecThor::BiblesPath());
             targetTab = 1;
         } else if (currentTab == 3 && currentBgSub == 1 && HasExtension(src, { ".png", ".webp" })) {
-            destDir = ProyecThor::OverlaysPath();
+            destDir = Utf8ToFsPath(ProyecThor::OverlaysPath());
             targetTab = 3;
         } else if (HasExtension(src, { ".mp4", ".mkv", ".mov", ".webm", ".avi", ".wmv" })) {
             destDir = (currentTab == 3)
-                ? (fs::path(ProyecThor::GetAssetsPath()) / "backgrounds" / m_BgCurrentRelDir)
-                : fs::path(ProyecThor::VideosPath());
+                ? (Utf8ToFsPath(ProyecThor::GetAssetsPath()) / "backgrounds" / Utf8ToFsPath(m_BgCurrentRelDir))
+                : Utf8ToFsPath(ProyecThor::VideosPath());
             targetTab = (currentTab == 3) ? 3 : 2;
         } else if (HasExtension(src, { ".png", ".jpg", ".jpeg", ".webp", ".bmp" })) {
             destDir = (currentTab == 3)
-                ? (fs::path(ProyecThor::GetAssetsPath()) / "backgrounds" / m_BgCurrentRelDir)
-                : fs::path(ProyecThor::ImagesPath());
+                ? (Utf8ToFsPath(ProyecThor::GetAssetsPath()) / "backgrounds" / Utf8ToFsPath(m_BgCurrentRelDir))
+                : Utf8ToFsPath(ProyecThor::ImagesPath());
             targetTab = (currentTab == 3) ? 3 : 2;
         } else if (HasExtension(src, { ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".opus" })) {
-            destDir = fs::path(ProyecThor::GetAssetsPath()) / "audio";
+            destDir = Utf8ToFsPath(ProyecThor::GetAssetsPath()) / "audio";
             targetTab = 9;
         } else {
-            destDir = ProyecThor::DocumentsPath();
+            destDir = Utf8ToFsPath(ProyecThor::DocumentsPath());
         }
 
         fs::create_directories(destDir, ec);
@@ -5313,7 +5351,7 @@ bool SlintApp::LoadOrCreateThumbnail(const std::string& path, bool isVideo, slin
         return true;
     }
     std::error_code ec;
-    if (!fs::exists(path, ec)) return false;
+    if (!fs::exists(Utf8ToFsPath(path), ec)) return false;
 
     // Bounded thumbnail cache so 4GB RAM systems never bloat (while avoiding thrashing on ~130+ video libraries)
     const size_t maxThumbCache = m_Main->get_performance_mode() ? 64 : 256;
@@ -5365,24 +5403,24 @@ bool SlintApp::LoadOrCreateThumbnail(const std::string& path, bool isVideo, slin
     if (!fs::exists(thumbPath, ec)) {
 #ifdef _WIN32
         std::string cmd = "ffmpeg -y " + hwArg + "-ss 00:00:01 -i \"" + path +
-                          "\" -vframes 1 -vf scale=320:-1 -q:v 5 \"" + thumbPath.string() +
+                          "\" -vframes 1 -vf scale=320:-1 -q:v 5 \"" + PathToUtf8(thumbPath) +
                           "\" >nul 2>&1";
         int rc = std::system(cmd.c_str());
         if (rc != 0 || !fs::exists(thumbPath, ec)) {
             cmd = "ffmpeg -y -ss 00:00:00 -i \"" + path +
-                  "\" -vframes 1 -vf scale=320:-1 -q:v 5 \"" + thumbPath.string() +
+                  "\" -vframes 1 -vf scale=320:-1 -q:v 5 \"" + PathToUtf8(thumbPath) +
                   "\" >nul 2>&1";
             std::system(cmd.c_str());
         }
 #else
         std::string cmd = "ffmpeg -y " + hwArg + "-ss 00:00:01 -i \"" + path +
-                          "\" -vframes 1 -vf scale=320:-1 -q:v 5 \"" + thumbPath.string() +
+                          "\" -vframes 1 -vf scale=320:-1 -q:v 5 \"" + PathToUtf8(thumbPath) +
                           "\" >/dev/null 2>&1";
         int rc = std::system(cmd.c_str());
         if (rc != 0 || !fs::exists(thumbPath, ec)) {
             // Fallback at 00:00:00 for very short loops
             cmd = "ffmpeg -y -ss 00:00:00 -i \"" + path +
-                  "\" -vframes 1 -vf scale=320:-1 -q:v 5 \"" + thumbPath.string() +
+                  "\" -vframes 1 -vf scale=320:-1 -q:v 5 \"" + PathToUtf8(thumbPath) +
                   "\" >/dev/null 2>&1";
             std::system(cmd.c_str());
         }
@@ -5390,7 +5428,7 @@ bool SlintApp::LoadOrCreateThumbnail(const std::string& path, bool isVideo, slin
     }
 
     if (fs::exists(thumbPath, ec) && fs::file_size(thumbPath, ec) > 0) {
-        outImg = slint::Image::load_from_path(slint::SharedString(thumbPath.string()));
+        outImg = slint::Image::load_from_path(slint::SharedString(PathToUtf8(thumbPath)));
         m_ThumbCache.emplace(path, outImg);
         return true;
     }
@@ -5453,7 +5491,7 @@ void SlintApp::RefreshBgDock() {
             }
         }
         BgFolderItem fi;
-        fi.name     = slint::SharedString(sd.filename().string());
+        fi.name     = slint::SharedString(PathToUtf8(sd.filename()));
         fi.rel_path = slint::SharedString(fs::relative(sd, rootDir, ec).generic_string());
         fi.count    = count;
         m_BgFoldersModel->push_back(fi);
@@ -5462,8 +5500,8 @@ void SlintApp::RefreshBgDock() {
     for (const auto& fp : files) {
         bool isVid = HasExtension(fp, videoExts);
         bool isImg = HasExtension(fp, imageExts);
-        std::string fullPath = fp.string();
-        std::string stem     = fp.stem().string();
+        std::string fullPath = PathToUtf8(fp);
+        std::string stem     = PathToUtf8(fp.stem());
 
         MediaEntry m;
         m.title    = stem;
@@ -5663,9 +5701,9 @@ void SlintApp::LoadCustomOverlaysFromDisk() {
             if (j.is_discarded() || !j.is_object()) continue;
 
             CustomOverlayConfig ov;
-            ov.path         = fp.string();
-            ov.id           = j.value("id", fp.stem().string());
-            ov.name         = j.value("name", fp.stem().string());
+            ov.path         = PathToUtf8(fp);
+            ov.id           = j.value("id", PathToUtf8(fp.stem()));
+            ov.name         = j.value("name", PathToUtf8(fp.stem()));
             ov.showClock    = j.value("showClock", true);
             ov.clockMode    = std::clamp(j.value("clockMode", 0), 0, 2);
             ov.timeFormat   = std::clamp(j.value("timeFormat", 0), 0, 4);
@@ -5717,8 +5755,8 @@ bool SlintApp::SaveCustomOverlayToDisk(CustomOverlayConfig& cfg) {
                 if (!fs::exists(cand, ec)) { target = cand; break; }
             }
         }
-        cfg.path = target.string();
-        cfg.id   = target.stem().string();
+        cfg.path = PathToUtf8(target);
+        cfg.id   = PathToUtf8(target.stem());
     }
 
     nlohmann::json j;
@@ -6101,12 +6139,12 @@ void SlintApp::RefreshOverlayLayers() {
             if (!entry.is_regular_file(ec)) continue;
             if (!HasExtension(entry.path(), { ".png", ".webp" })) continue;
 
-            std::string fullPath = entry.path().string();
+            std::string fullPath = PathToUtf8(entry.path());
             if (std::find(seen.begin(), seen.end(), fullPath) != seen.end()) continue;
             seen.push_back(fullPath);
 
             MediaEntry m;
-            m.title     = entry.path().stem().string();
+            m.title     = PathToUtf8(entry.path().stem());
             m.subtitle  = (live && activePath == fullPath) ? "● ACTIVO" : "Overlay PNG";
             m.path      = fullPath;
             m.isOverlay = true;
@@ -6304,7 +6342,7 @@ void SlintApp::RefreshCaptureDevices() {
         }
         std::sort(nodes.begin(), nodes.end());
         for (const auto& node : nodes) {
-            std::string devName = node.filename().string(); // e.g. video0
+            std::string devName = PathToUtf8(node.filename()); // e.g. video0
             std::string friendly = devName;
             std::ifstream nf(node / "name");
             if (nf.is_open()) {
@@ -6868,13 +6906,13 @@ void SlintApp::ScanMusicTracks() {
         for (const auto& entry : fs::recursive_directory_iterator(dir, ec)) {
             if (!entry.is_regular_file(ec)) continue;
             if (!HasExtension(entry.path(), audioExts)) continue;
-            std::string p = entry.path().string();
+            std::string p = PathToUtf8(entry.path());
             if (std::find(seen.begin(), seen.end(), p) != seen.end()) continue;
             seen.push_back(p);
 
             MediaEntry m;
-            m.title    = entry.path().stem().string();
-            m.subtitle = entry.path().extension().string() + " • " + entry.path().parent_path().filename().string();
+            m.title    = PathToUtf8(entry.path().stem());
+            m.subtitle = PathToUtf8(entry.path().extension()) + " • " + PathToUtf8(entry.path().parent_path().filename());
             m.path     = p;
             m.isAudio  = true;
             m_MusicEntries.push_back(std::move(m));
@@ -6904,9 +6942,9 @@ bool SlintApp::ExtractMusicCoverArt(const std::string& audioPath, slint::Image& 
 
     if (!fs::exists(coverPath, ec) && !fs::exists(noCoverMarker, ec)) {
 #ifdef _WIN32
-        std::string cmd = "ffmpeg -y -i \"" + audioPath + "\" -an -vcodec mjpeg -vframes 1 -vf scale=240:-1 \"" + coverPath.string() + "\" 2>nul";
+        std::string cmd = "ffmpeg -y -i \"" + audioPath + "\" -an -vcodec mjpeg -vframes 1 -vf scale=240:-1 \"" + PathToUtf8(coverPath) + "\" 2>nul";
 #else
-        std::string cmd = "ffmpeg -y -i \"" + audioPath + "\" -an -vcodec mjpeg -vframes 1 -vf scale=240:-1 \"" + coverPath.string() + "\" >/dev/null 2>&1";
+        std::string cmd = "ffmpeg -y -i \"" + audioPath + "\" -an -vcodec mjpeg -vframes 1 -vf scale=240:-1 \"" + PathToUtf8(coverPath) + "\" >/dev/null 2>&1";
 #endif
         std::system(cmd.c_str());
         if (!fs::exists(coverPath, ec) || fs::file_size(coverPath, ec) == 0) {
@@ -6915,7 +6953,7 @@ bool SlintApp::ExtractMusicCoverArt(const std::string& audioPath, slint::Image& 
             fs::path dir = fs::path(audioPath).parent_path();
             for (const char* name : { "cover.jpg", "cover.png", "folder.jpg", "folder.png" }) {
                 if (fs::exists(dir / name, ec)) {
-                    outImg = slint::Image::load_from_path(slint::SharedString((dir / name).string()));
+                    outImg = slint::Image::load_from_path(slint::SharedString(PathToUtf8(dir / name)));
                     m_ThumbCache.emplace(cacheKey, outImg);
                     return true;
                 }
@@ -6926,7 +6964,7 @@ bool SlintApp::ExtractMusicCoverArt(const std::string& audioPath, slint::Image& 
     }
 
     if (fs::exists(coverPath, ec) && fs::file_size(coverPath, ec) > 0) {
-        outImg = slint::Image::load_from_path(slint::SharedString(coverPath.string()));
+        outImg = slint::Image::load_from_path(slint::SharedString(PathToUtf8(coverPath)));
         m_ThumbCache.emplace(cacheKey, outImg);
         return true;
     }
@@ -7473,7 +7511,7 @@ void SlintApp::RefreshLibraryHub() {
             if (!fs::exists(d, ec) || !fs::is_directory(d, ec)) continue;
             for (const auto& e : fs::directory_iterator(d, ec)) {
                 if (e.is_regular_file(ec) && HasExtension(e.path(), { ".xml" })) {
-                    std::string s = e.path().filename().string();
+                    std::string s = PathToUtf8(e.path().filename());
                     if (std::find(bSeen.begin(), bSeen.end(), s) == bSeen.end()) bSeen.push_back(s);
                 }
             }
@@ -7534,9 +7572,9 @@ void SlintApp::ScanDocuments() {
         if (!entry.is_regular_file(ec)) continue;
         if (!HasExtension(entry.path(), docExts)) continue;
         MediaEntry m;
-        m.title      = entry.path().stem().string();
+        m.title      = PathToUtf8(entry.path().stem());
         m.subtitle   = HasExtension(entry.path(), { ".pdf" }) ? "Documento PDF" : "Diapositiva Imagen";
-        m.path       = entry.path().string();
+        m.path       = PathToUtf8(entry.path());
         m.isDocument = true;
         m.isImage    = !HasExtension(entry.path(), { ".pdf" });
         m_AllEntries.push_back(std::move(m));
@@ -7550,7 +7588,7 @@ void SlintApp::OpenDocumentAsync(const std::string& path, bool autoProjectFirst)
     m_DocPagesModel->clear();
     m_ActiveDocPageIdx = -1;
     m_Main->set_active_doc_page_idx(-1);
-    m_Main->set_doc_title(slint::SharedString(fs::path(path).stem().string()));
+    m_Main->set_doc_title(slint::SharedString(PathToUtf8(fs::path(path).stem())));
 
     if (!HasExtension(path, { ".pdf" })) {
         m_DocPagePaths.push_back(path);
@@ -7577,11 +7615,11 @@ void SlintApp::OpenDocumentAsync(const std::string& path, bool autoProjectFirst)
         std::vector<std::string> pages;
         for (const auto& e : fs::directory_iterator(outDir, ec)) {
             if (e.is_regular_file(ec) && HasExtension(e.path(), { ".png" })) {
-                pages.push_back(e.path().string());
+                pages.push_back(PathToUtf8(e.path()));
             }
         }
         if (pages.empty()) {
-            std::string prefix = (outDir / "page").string();
+            std::string prefix = PathToUtf8(outDir / "page");
 #ifdef _WIN32
             std::string cmd = "pdftoppm -png -r 140 \"" + path + "\" \"" + prefix + "\" 2>nul";
 #else
@@ -7590,7 +7628,7 @@ void SlintApp::OpenDocumentAsync(const std::string& path, bool autoProjectFirst)
             std::system(cmd.c_str());
             for (const auto& e : fs::directory_iterator(outDir, ec)) {
                 if (e.is_regular_file(ec) && HasExtension(e.path(), { ".png" })) {
-                    pages.push_back(e.path().string());
+                    pages.push_back(PathToUtf8(e.path()));
                 }
             }
         }
@@ -7675,7 +7713,7 @@ void SlintApp::HandleItemPlay(int kind, const std::string& path) {
         // Multimedia (Video o Imagen): proyectar directamente en la(s) pantalla(s) destino
         fs::path fp(path);
         MediaEntry entry;
-        entry.title    = fp.stem().string();
+        entry.title    = PathToUtf8(fp.stem());
         entry.path     = path;
         entry.isVideo  = HasExtension(fp, videoExts);
         entry.isImage  = HasExtension(fp, imageExts);
@@ -7715,7 +7753,7 @@ void SlintApp::HandleItemPlay(int kind, const std::string& path) {
         }
         fs::path fp(path);
         MediaEntry entry;
-        entry.title   = fp.stem().string();
+        entry.title   = PathToUtf8(fp.stem());
         entry.path    = path;
         entry.isVideo = HasExtension(fp, videoExts);
         entry.isImage = HasExtension(fp, imageExts);
@@ -7752,7 +7790,7 @@ void SlintApp::HandleItemQueue(int kind, const std::string& path) {
     } else if (kind == 1 || kind == 4) {
         bool isImg = HasExtension(fp, imageExts);
         VideoQueueEntry e;
-        e.title   = fp.stem().string();
+        e.title   = PathToUtf8(fp.stem());
         e.path    = path;
         e.kind    = isImg ? "Imagen" : (kind == 4 ? "Fondo" : "Video");
         e.isImage = isImg;
@@ -7764,7 +7802,7 @@ void SlintApp::HandleItemQueue(int kind, const std::string& path) {
         q.tab   = 10;
         q.path  = path;
         q.kind  = "DOC";
-        q.title = fp.stem().string();
+        q.title = PathToUtf8(fp.stem());
         m_Queue.push_back(std::move(q));
         m_Main->set_queue_category(0);
         RefreshQueueModel();
@@ -7773,13 +7811,13 @@ void SlintApp::HandleItemQueue(int kind, const std::string& path) {
         q.tab   = 9;
         q.path  = path;
         q.kind  = "MÚSICA";
-        q.title = fp.stem().string();
+        q.title = PathToUtf8(fp.stem());
         m_Queue.push_back(std::move(q));
         m_Main->set_queue_category(0);
         RefreshQueueModel();
     } else if (kind == 5) {
         OverlayQueueEntry oq;
-        oq.title    = fp.stem().string();
+        oq.title    = PathToUtf8(fp.stem());
         oq.path     = path;
         oq.isCustom = HasExtension(fp, { ".ptoverlay" });
         m_OverlayQueue.push_back(std::move(oq));
@@ -7805,7 +7843,7 @@ void SlintApp::HandleItemRename(int kind, const std::string& path, const std::st
     }
 
     std::string safeStem = SanitizeFilename(displayTitle);
-    std::string ext      = oldFs.extension().string();
+    std::string ext      = PathToUtf8(oldFs.extension());
     fs::path newFs       = oldFs.parent_path() / (safeStem + ext);
 
     bool wasPlayingVideo = false;
@@ -7844,13 +7882,13 @@ void SlintApp::HandleItemRename(int kind, const std::string& path, const std::st
         }
     }
 
-    std::string newPath  = newFs.string();
-    std::string newTitle = (kind == 0) ? displayTitle : newFs.stem().string();
+    std::string newPath  = PathToUtf8(newFs);
+    std::string newTitle = (kind == 0) ? displayTitle : PathToUtf8(newFs.stem());
 
     // Update song metadata sidecar and playlists
     if (kind == 0) {
         if (newPath != path) {
-            std::string oldMetaName = oldFs.filename().string();
+            std::string oldMetaName = PathToUtf8(oldFs.filename());
             for (char& ch : oldMetaName) { if (ch == ':') ch = '_'; }
             fs::path oldMetaPath = fs::path(ProyecThor::GetAssetsPath()) / "songs_meta" / (oldMetaName + ".json");
             fs::remove(oldMetaPath, ec);
@@ -7912,7 +7950,7 @@ void SlintApp::HandleItemRename(int kind, const std::string& path, const std::st
         m_Main->set_selected_item_title(slint::SharedString(newTitle));
         m_Main->set_selected_library_path(slint::SharedString(newPath));
         m_Main->set_selected_media_info(slint::SharedString(
-            m_SelectedPreviewEntry.subtitle + " • " + newFs.filename().string()));
+            m_SelectedPreviewEntry.subtitle + " • " + PathToUtf8(newFs.filename())));
     }
     auto thIt = m_ThumbCache.find(path);
     if (thIt != m_ThumbCache.end()) {
@@ -7936,7 +7974,7 @@ void SlintApp::HandleItemRename(int kind, const std::string& path, const std::st
     }
 
     RefreshAllLibraryViewsAfterMutation(kind, newPath);
-    AppendDebugLog("Renombrado: " + oldFs.filename().string() + " -> " + newFs.filename().string());
+    AppendDebugLog("Renombrado: " + PathToUtf8(oldFs.filename()) + " -> " + PathToUtf8(newFs.filename()));
 }
 
 void SlintApp::HandleItemDelete(int kind, const std::string& path) {
@@ -7990,12 +8028,12 @@ void SlintApp::HandleItemDelete(int kind, const std::string& path) {
     std::error_code ec;
     fs::remove(targetFs, ec);
     if (ec) {
-        AppendDebugLog("Error al eliminar " + targetFs.filename().string() + ": " + ec.message());
+        AppendDebugLog("Error al eliminar " + PathToUtf8(targetFs.filename()) + ": " + ec.message());
     }
 
     // Remove song metadata & playlist links
     if (kind == 0) {
-        std::string fname = targetFs.filename().string();
+        std::string fname = PathToUtf8(targetFs.filename());
         for (char& ch : fname) { if (ch == ':') ch = '_'; }
         fs::path metaPath = fs::path(ProyecThor::GetAssetsPath()) / "songs_meta" / (fname + ".json");
         fs::remove(metaPath, ec);
@@ -8033,7 +8071,7 @@ void SlintApp::HandleItemDelete(int kind, const std::string& path) {
     m_ThumbCache.erase(path);
 
     RefreshAllLibraryViewsAfterMutation(kind, "");
-    AppendDebugLog("Archivo eliminado: " + targetFs.filename().string());
+    AppendDebugLog("Archivo eliminado: " + PathToUtf8(targetFs.filename()));
 }
 
 void SlintApp::RefreshAllLibraryViewsAfterMutation(int kind, const std::string& selectPathAfter) {
