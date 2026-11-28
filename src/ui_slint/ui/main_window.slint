@@ -8833,10 +8833,10 @@ export component MainWindow inherits Window {
         y: self.has-any-ctx ? (parent.height - self.height) : (parent.height + 12px);
         opacity: self.has-any-ctx ? 1.0 : 0.0;
         visible: self.opacity > 0.01;
-        animate width   { duration: 280ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
-        animate height  { duration: 280ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
-        animate y       { duration: 300ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
-        animate opacity { duration: 210ms; easing: ease-out; }
+        animate width   { duration: 260ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+        animate height  { duration: 260ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+        animate y       { duration: 260ms; easing: cubic-bezier(0.22, 1.0, 0.36, 1.0); }
+        animate opacity { duration: 180ms; easing: ease-out; }
 
         // ── 1. SOLID FILL LAYER (NO borders here -> ZERO cutting lines at the bottom ears!) ──
         // Left concave ear fill
@@ -8979,6 +8979,8 @@ export component MainWindow inherits Window {
             //  CONTEXT A1: COMPACT MUSIC DYNAMIC ISLAND (Real 12-Band FFT Waves!)
             // ══════════════════════════════════════════════════════════════════
             if !root.island-hidden && ctx-island-wrap.show-music-mode && !root.island-expanded : HorizontalLayout {
+                opacity: root.island-expanded ? 0.0 : 1.0;
+                animate opacity { duration: 160ms; easing: ease-out; }
                 padding-left: 10px;
                 padding-right: 10px;
                 padding-top: 6px;
@@ -9154,6 +9156,8 @@ export component MainWindow inherits Window {
             //  CONTEXT A2: EXPANDED DYNAMIC ISLAND AUDIO STUDIO (Real FFT + Waveform + 5-Band EQ + Dynamic EQ)
             // ══════════════════════════════════════════════════════════════════
             if !root.island-hidden && ctx-island-wrap.show-music-mode && root.island-expanded : VerticalLayout {
+                opacity: root.island-expanded ? 1.0 : 0.0;
+                animate opacity { duration: 220ms; easing: ease-out; }
                 padding-left: 16px;
                 padding-right: 16px;
                 padding-top: 14px;
