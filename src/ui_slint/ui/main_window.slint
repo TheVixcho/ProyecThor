@@ -623,6 +623,12 @@ export component MainWindow inherits Window {
     in property <[MusicGridRow]> music-grid-rows: [];
     in property <[string]> music-scan-folders: [];
     in-out property <string> music-folder-input: "";
+    in property <[string]> song-scan-folders: [];
+    in-out property <string> song-folder-input: "";
+    in property <[string]> media-scan-folders: [];
+    in-out property <string> media-folder-input: "";
+    in property <[string]> bg-scan-folders: [];
+    in-out property <string> bg-folder-input: "";
 
     // Tab 13: Biblioteca Principal (Dashboard Unificado — Opción A)
     in property <int> hub-songs-count: 0;
@@ -884,6 +890,15 @@ export component MainWindow inherits Window {
     callback browse-music-folder();
     callback add-music-folder(string);
     callback remove-music-folder(int);
+    callback browse-song-folder();
+    callback add-song-folder(string);
+    callback remove-song-folder(int);
+    callback browse-media-folder();
+    callback add-media-folder(string);
+    callback remove-media-folder(int);
+    callback browse-bg-folder();
+    callback add-bg-folder(string);
+    callback remove-bg-folder(int);
     callback music-eq-changed();
     callback music-eq-preset-selected(int);
     callback music-dynamic-eq-toggled(bool);
@@ -5566,6 +5581,12 @@ export component MainWindow inherits Window {
 
                         music-scan-folders: root.music-scan-folders;
                         music-folder-input <=> root.music-folder-input;
+                        song-scan-folders: root.song-scan-folders;
+                        song-folder-input <=> root.song-folder-input;
+                        media-scan-folders: root.media-scan-folders;
+                        media-folder-input <=> root.media-folder-input;
+                        bg-scan-folders: root.bg-scan-folders;
+                        bg-folder-input <=> root.bg-folder-input;
 
                         debug-fps-text: root.debug-fps-text;
                         debug-video-fps-text: root.debug-video-fps-text;
@@ -5591,6 +5612,15 @@ export component MainWindow inherits Window {
                         browse-music-folder => { root.browse-music-folder(); }
                         add-music-folder(p) => { root.add-music-folder(p); }
                         remove-music-folder(i) => { root.remove-music-folder(i); }
+                        browse-song-folder => { root.browse-song-folder(); }
+                        add-song-folder(p) => { root.add-song-folder(p); }
+                        remove-song-folder(i) => { root.remove-song-folder(i); }
+                        browse-media-folder => { root.browse-media-folder(); }
+                        add-media-folder(p) => { root.add-media-folder(p); }
+                        remove-media-folder(i) => { root.remove-media-folder(i); }
+                        browse-bg-folder => { root.browse-bg-folder(); }
+                        add-bg-folder(p) => { root.add-bg-folder(p); }
+                        remove-bg-folder(i) => { root.remove-bg-folder(i); }
                         scan-libraries => { root.scan-libraries(); }
                         import-file-clicked => { root.import-file-clicked(); }
                         import-background-clicked => { root.import-background-clicked(); }

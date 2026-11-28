@@ -861,6 +861,12 @@ export component AppleSettingsView inherits Rectangle {
 
     in property     <[string]> music-scan-folders: [];
     in-out property <string>   music-folder-input: "";
+    in property     <[string]> song-scan-folders: [];
+    in-out property <string>   song-folder-input: "";
+    in property     <[string]> media-scan-folders: [];
+    in-out property <string>   media-folder-input: "";
+    in property     <[string]> bg-scan-folders: [];
+    in-out property <string>   bg-folder-input: "";
 
     in property <string> debug-fps-text: "0.0";
     in property <string> debug-video-fps-text: "UI";
@@ -892,6 +898,15 @@ export component AppleSettingsView inherits Rectangle {
     callback browse-music-folder();
     callback add-music-folder(string);
     callback remove-music-folder(int);
+    callback browse-song-folder();
+    callback add-song-folder(string);
+    callback remove-song-folder(int);
+    callback browse-media-folder();
+    callback add-media-folder(string);
+    callback remove-media-folder(int);
+    callback browse-bg-folder();
+    callback add-bg-folder(string);
+    callback remove-bg-folder(int);
     callback scan-libraries();
     callback import-file-clicked();
     callback import-background-clicked();
@@ -2179,6 +2194,315 @@ export component AppleSettingsView inherits Rectangle {
                                         compact: true;
                                         danger: true;
                                         clicked => { root.remove-music-folder(mdidx); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    AppleInsetGroup {
+                        header: @tr("CARPETAS DE ESCANEO DE LETRAS");
+                        footer: @tr("Además de las carpetas internas de canciones, las carpetas que agregues aquí se escanearán automáticamente en la pestaña Canciones.");
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 10px;
+
+                            HorizontalLayout {
+                                alignment: space-between;
+                                spacing: 10px;
+                                VerticalLayout {
+                                    spacing: 2px;
+                                    Text { text: "Carpetas Locales Personalizadas"; color: Theme.text-primary; font-size: 13px; font-weight: 600; }
+                                    Text { text: "Elige carpetas de tu PC o pega una ruta directamente."; color: Theme.text-muted; font-size: 11px; }
+                                }
+                                GlassButton {
+                                    label: @tr("+ Elegir Carpeta");
+                                    icon: @image-url("icons/folder.svg");
+                                    has-icon: true;
+                                    primary: true;
+                                    clicked => { root.browse-song-folder(); }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                LineEdit {
+                                    horizontal-stretch: 1;
+                                    placeholder-text: @tr("Pega una ruta (ej. /home/usuario/Letras)...");
+                                    text <=> root.song-folder-input;
+                                    accepted(p) => {
+                                        if (p != "") {
+                                            root.add-song-folder(p);
+                                            root.song-folder-input = "";
+                                        }
+                                    }
+                                }
+                                GlassButton {
+                                    label: @tr("Agregar");
+                                    clicked => {
+                                        if (root.song-folder-input != "") {
+                                            root.add-song-folder(root.song-folder-input);
+                                            root.song-folder-input = "";
+                                        }
+                                    }
+                                }
+                            }
+
+                            if root.song-scan-folders.length == 0 : Rectangle {
+                                height: 42px;
+                                border-radius: 9px;
+                                background: Theme.bg-surface-0;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    Text {
+                                        text: @tr("Solo escaneando carpetas internas de canciones por defecto.");
+                                        color: Theme.text-muted;
+                                        font-size: 11.5px;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+
+                            for sdir[sdidx] in root.song-scan-folders : Rectangle {
+                                height: 40px;
+                                border-radius: 9px;
+                                background: Theme.bg-surface-0;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    padding-right: 8px;
+                                    spacing: 10px;
+                                    Image {
+                                        source: @image-url("icons/folder.svg");
+                                        width: 15px;
+                                        height: 15px;
+                                        y: (parent.height - self.height) / 2;
+                                        colorize: #ff9500;
+                                    }
+                                    Text {
+                                        text: sdir;
+                                        color: Theme.text-primary;
+                                        font-size: 12px;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                        horizontal-stretch: 1;
+                                    }
+                                    GlassButton {
+                                        label: @tr("Quitar");
+                                        compact: true;
+                                        danger: true;
+                                        clicked => { root.remove-song-folder(sdidx); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    AppleInsetGroup {
+                        header: @tr("CARPETAS DE ESCANEO DE MULTIMEDIA");
+                        footer: @tr("Además de las carpetas internas (Videos e Imágenes), las carpetas que agregues aquí se escanearán automáticamente en la pestaña Multimedia.");
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 10px;
+
+                            HorizontalLayout {
+                                alignment: space-between;
+                                spacing: 10px;
+                                VerticalLayout {
+                                    spacing: 2px;
+                                    Text { text: "Carpetas Locales Personalizadas"; color: Theme.text-primary; font-size: 13px; font-weight: 600; }
+                                    Text { text: "Elige carpetas de tu PC o pega una ruta directamente."; color: Theme.text-muted; font-size: 11px; }
+                                }
+                                GlassButton {
+                                    label: @tr("+ Elegir Carpeta");
+                                    icon: @image-url("icons/folder.svg");
+                                    has-icon: true;
+                                    primary: true;
+                                    clicked => { root.browse-media-folder(); }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                LineEdit {
+                                    horizontal-stretch: 1;
+                                    placeholder-text: @tr("Pega una ruta (ej. /home/usuario/Videos)...");
+                                    text <=> root.media-folder-input;
+                                    accepted(p) => {
+                                        if (p != "") {
+                                            root.add-media-folder(p);
+                                            root.media-folder-input = "";
+                                        }
+                                    }
+                                }
+                                GlassButton {
+                                    label: @tr("Agregar");
+                                    clicked => {
+                                        if (root.media-folder-input != "") {
+                                            root.add-media-folder(root.media-folder-input);
+                                            root.media-folder-input = "";
+                                        }
+                                    }
+                                }
+                            }
+
+                            if root.media-scan-folders.length == 0 : Rectangle {
+                                height: 42px;
+                                border-radius: 9px;
+                                background: Theme.bg-surface-0;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    Text {
+                                        text: @tr("Solo escaneando carpetas internas de Videos e Imágenes por defecto.");
+                                        color: Theme.text-muted;
+                                        font-size: 11.5px;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+
+                            for medir[medidx] in root.media-scan-folders : Rectangle {
+                                height: 40px;
+                                border-radius: 9px;
+                                background: Theme.bg-surface-0;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    padding-right: 8px;
+                                    spacing: 10px;
+                                    Image {
+                                        source: @image-url("icons/folder.svg");
+                                        width: 15px;
+                                        height: 15px;
+                                        y: (parent.height - self.height) / 2;
+                                        colorize: #ff9500;
+                                    }
+                                    Text {
+                                        text: medir;
+                                        color: Theme.text-primary;
+                                        font-size: 12px;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                        horizontal-stretch: 1;
+                                    }
+                                    GlassButton {
+                                        label: @tr("Quitar");
+                                        compact: true;
+                                        danger: true;
+                                        clicked => { root.remove-media-folder(medidx); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    AppleInsetGroup {
+                        header: @tr("CARPETAS DE ESCANEO DE BACKGROUNDS");
+                        footer: @tr("Además de la carpeta interna de fondos (assets/backgrounds), las carpetas que agregues aquí se escanearán automáticamente como fondos de video/imagen.");
+
+                        VerticalLayout {
+                            padding: 16px;
+                            spacing: 10px;
+
+                            HorizontalLayout {
+                                alignment: space-between;
+                                spacing: 10px;
+                                VerticalLayout {
+                                    spacing: 2px;
+                                    Text { text: "Carpetas Locales Personalizadas"; color: Theme.text-primary; font-size: 13px; font-weight: 600; }
+                                    Text { text: "Elige carpetas de tu PC o pega una ruta directamente."; color: Theme.text-muted; font-size: 11px; }
+                                }
+                                GlassButton {
+                                    label: @tr("+ Elegir Carpeta");
+                                    icon: @image-url("icons/folder.svg");
+                                    has-icon: true;
+                                    primary: true;
+                                    clicked => { root.browse-bg-folder(); }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                LineEdit {
+                                    horizontal-stretch: 1;
+                                    placeholder-text: @tr("Pega una ruta (ej. /home/usuario/Fondos)...");
+                                    text <=> root.bg-folder-input;
+                                    accepted(p) => {
+                                        if (p != "") {
+                                            root.add-bg-folder(p);
+                                            root.bg-folder-input = "";
+                                        }
+                                    }
+                                }
+                                GlassButton {
+                                    label: @tr("Agregar");
+                                    clicked => {
+                                        if (root.bg-folder-input != "") {
+                                            root.add-bg-folder(root.bg-folder-input);
+                                            root.bg-folder-input = "";
+                                        }
+                                    }
+                                }
+                            }
+
+                            if root.bg-scan-folders.length == 0 : Rectangle {
+                                height: 42px;
+                                border-radius: 9px;
+                                background: Theme.bg-surface-0;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    Text {
+                                        text: @tr("Solo escaneando la carpeta interna de fondos por defecto (assets/backgrounds).");
+                                        color: Theme.text-muted;
+                                        font-size: 11.5px;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+
+                            for bdir[bdidx] in root.bg-scan-folders : Rectangle {
+                                height: 40px;
+                                border-radius: 9px;
+                                background: Theme.bg-surface-0;
+                                border-width: 1px;
+                                border-color: Theme.border-subtle;
+
+                                HorizontalLayout {
+                                    padding-left: 12px;
+                                    padding-right: 8px;
+                                    spacing: 10px;
+                                    Image {
+                                        source: @image-url("icons/folder.svg");
+                                        width: 15px;
+                                        height: 15px;
+                                        y: (parent.height - self.height) / 2;
+                                        colorize: #ff9500;
+                                    }
+                                    Text {
+                                        text: bdir;
+                                        color: Theme.text-primary;
+                                        font-size: 12px;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                        horizontal-stretch: 1;
+                                    }
+                                    GlassButton {
+                                        label: @tr("Quitar");
+                                        compact: true;
+                                        danger: true;
+                                        clicked => { root.remove-bg-folder(bdidx); }
                                     }
                                 }
                             }

@@ -302,6 +302,9 @@ SlintApp::SlintApp()
     , m_MusicTracksModel(std::make_shared<slint::VectorModel<MusicTrackItem>>())
     , m_MusicGridRowsModel(std::make_shared<slint::VectorModel<MusicGridRow>>())
     , m_MusicScanFoldersModel(std::make_shared<slint::VectorModel<slint::SharedString>>())
+    , m_SongScanFoldersModel(std::make_shared<slint::VectorModel<slint::SharedString>>())
+    , m_MediaScanFoldersModel(std::make_shared<slint::VectorModel<slint::SharedString>>())
+    , m_BgScanFoldersModel(std::make_shared<slint::VectorModel<slint::SharedString>>())
     , m_HubSongsModel(std::make_shared<slint::VectorModel<LibraryItem>>())
     , m_HubMediaModel(std::make_shared<slint::VectorModel<LibraryItem>>())
     , m_HubMusicModel(std::make_shared<slint::VectorModel<MusicTrackItem>>())
@@ -362,6 +365,9 @@ SlintApp::SlintApp()
     m_Main->set_music_tracks(m_MusicTracksModel);
     m_Main->set_music_grid_rows(m_MusicGridRowsModel);
     m_Main->set_music_scan_folders(m_MusicScanFoldersModel);
+    m_Main->set_song_scan_folders(m_SongScanFoldersModel);
+    m_Main->set_media_scan_folders(m_MediaScanFoldersModel);
+    m_Main->set_bg_scan_folders(m_BgScanFoldersModel);
     m_Main->set_music_live_wave(m_MusicLiveWaveModel);
     m_Main->set_music_track_waveform(m_MusicTrackWaveModel);
     m_Main->set_hub_recent_songs(m_HubSongsModel);
@@ -479,6 +485,9 @@ SlintApp::SlintApp()
     RefreshPadsModel();
     RefreshSavedStylesModel();
     RefreshMusicScanFoldersModel();
+    RefreshSongScanFoldersModel();
+    RefreshMediaScanFoldersModel();
+    RefreshBgScanFoldersModel();
     RefreshBgDock();
     LoadCustomOverlaysFromDisk();
     RefreshOverlayLayers();
@@ -999,6 +1008,15 @@ void SlintApp::BindCallbacks() {
     m_Main->on_browse_music_folder([this]() { BrowseMusicFolderAsync(); });
     m_Main->on_add_music_folder([this](slint::SharedString p) { AddMusicScanFolder(std::string(p)); });
     m_Main->on_remove_music_folder([this](int idx) { RemoveMusicScanFolder(idx); });
+    m_Main->on_browse_song_folder([this]() { BrowseSongFolderAsync(); });
+    m_Main->on_add_song_folder([this](slint::SharedString p) { AddSongScanFolder(std::string(p)); });
+    m_Main->on_remove_song_folder([this](int idx) { RemoveSongScanFolder(idx); });
+    m_Main->on_browse_media_folder([this]() { BrowseMediaFolderAsync(); });
+    m_Main->on_add_media_folder([this](slint::SharedString p) { AddMediaScanFolder(std::string(p)); });
+    m_Main->on_remove_media_folder([this](int idx) { RemoveMediaScanFolder(idx); });
+    m_Main->on_browse_bg_folder([this]() { BrowseBgFolderAsync(); });
+    m_Main->on_add_bg_folder([this](slint::SharedString p) { AddBgScanFolder(std::string(p)); });
+    m_Main->on_remove_bg_folder([this](int idx) { RemoveBgScanFolder(idx); });
     m_Main->on_music_eq_changed([this]() {
         ApplyMusicEqualizer(true);
         SavePersistedState();
@@ -4343,6 +4361,33 @@ void SlintApp::LoadPersistedState() {
                 }
             }
         }
+        m_SongScanFolders.clear();
+        if (j.contains("songScanFolders") && j["songScanFolders"].is_array()) {
+            for (const auto& dirVal : j["songScanFolders"]) {
+                if (dirVal.is_string()) {
+                    std::string p = dirVal.get<std::string>();
+                    if (!p.empty()) m_SongScanFolders.push_back(p);
+                }
+            }
+        }
+        m_MediaScanFolders.clear();
+        if (j.contains("mediaScanFolders") && j["mediaScanFolders"].is_array()) {
+            for (const auto& dirVal : j["mediaScanFolders"]) {
+                if (dirVal.is_string()) {
+                    std::string p = dirVal.get<std::string>();
+                    if (!p.empty()) m_MediaScanFolders.push_back(p);
+                }
+            }
+        }
+        m_BgScanFolders.clear();
+        if (j.contains("bgScanFolders") && j["bgScanFolders"].is_array()) {
+            for (const auto& dirVal : j["bgScanFolders"]) {
+                if (dirVal.is_string()) {
+                    std::string p = dirVal.get<std::string>();
+                    if (!p.empty()) m_BgScanFolders.push_back(p);
+                }
+            }
+        }
         m_Main->set_music_eq_enabled(j.value("musicEqEnabled", false));
         m_Main->set_music_dynamic_eq(j.value("musicDynamicEq", false));
         m_Main->set_music_eq_preset(j.value("musicEqPreset", 0));
@@ -4445,6 +4490,9 @@ void SlintApp::SavePersistedState() {
     j["enableGlassSheen"]        = m_EnableGlassSheen;
     j["enableAmbientBg"]         = m_EnableAmbientBg;
     j["musicScanFolders"] = m_MusicScanFolders;
+    j["songScanFolders"]  = m_SongScanFolders;
+    j["mediaScanFolders"] = m_MediaScanFolders;
+    j["bgScanFolders"]    = m_BgScanFolders;
     j["musicEqEnabled"]   = m_Main->get_music_eq_enabled();
     j["musicDynamicEq"]   = m_Main->get_music_dynamic_eq();
     j["musicEqPreset"]    = m_Main->get_music_eq_preset();
@@ -4660,6 +4708,9 @@ void SlintApp::ScanSongs() {
         fs::path("bin/assets/songs"),
         fs::path("assets/bin/assets/songs")
     };
+    for (const auto& customDir : m_SongScanFolders) {
+        if (!customDir.empty()) dirs.emplace_back(customDir);
+    }
 
     std::vector<std::string> seen;
     for (const auto& dir : dirs) {
@@ -5309,12 +5360,18 @@ void SlintApp::ScanMedia(bool backgroundsOnly) {
         fs::path bgDir = Utf8ToFsPath(ProyecThor::GetAssetsPath()) / "backgrounds";
         fs::create_directories(bgDir, dirEc);
         dirs = { bgDir };
+        for (const auto& customDir : m_BgScanFolders) {
+            if (!customDir.empty()) dirs.emplace_back(Utf8ToFsPath(customDir));
+        }
     } else {
         // Carpetas EXCLUSIVAS de Multimedia (SOLO Videos e Imágenes — Música tiene su propio panel!)
         dirs = {
             Utf8ToFsPath(ProyecThor::VideosPath()),
             Utf8ToFsPath(ProyecThor::ImagesPath())
         };
+        for (const auto& customDir : m_MediaScanFolders) {
+            if (!customDir.empty()) dirs.emplace_back(Utf8ToFsPath(customDir));
+        }
     }
 
     const auto& videoExts = VideoExtensions();
@@ -7960,6 +8017,122 @@ void SlintApp::BrowseMusicFolderAsync() {
         if (selectedDir.empty()) return;
         slint::invoke_from_event_loop([this, selectedDir]() {
             AddMusicScanFolder(selectedDir);
+        });
+    }).detach();
+}
+
+// ── Generic custom scan folders (Letras / Multimedia / Backgrounds) ──────────
+// One implementation keyed by category replaces four near-identical copies of
+// the music folder logic. Each category points at its own vector + model and
+// knows how to re-scan and refresh the relevant views after a change.
+const char* SlintApp::ScanFolderCategoryLabel(ScanFolderCategory cat) {
+    switch (cat) {
+        case ScanFolderCategory::Song:       return "Letras";
+        case ScanFolderCategory::Media:      return "Multimedia";
+        case ScanFolderCategory::Background: return "Backgrounds";
+    }
+    return "";
+}
+
+void SlintApp::RefreshScanFoldersModel(ScanFolderCategory cat) {
+    std::vector<std::string>* folders = nullptr;
+    std::shared_ptr<slint::VectorModel<slint::SharedString>> model;
+    switch (cat) {
+        case ScanFolderCategory::Song:       folders = &m_SongScanFolders;  model = m_SongScanFoldersModel;  break;
+        case ScanFolderCategory::Media:      folders = &m_MediaScanFolders; model = m_MediaScanFoldersModel; break;
+        case ScanFolderCategory::Background: folders = &m_BgScanFolders;    model = m_BgScanFoldersModel;    break;
+    }
+    if (!folders || !model) return;
+    model->clear();
+    for (const auto& dir : *folders) {
+        model->push_back(slint::SharedString(dir));
+    }
+}
+
+// Re-scan the libraries affected by the given category and refresh the views.
+void SlintApp::ApplyScanFolderChange(ScanFolderCategory cat) {
+    switch (cat) {
+        case ScanFolderCategory::Song:
+            m_CachedTabEntries.erase(0);
+            if (m_ActiveTab == 0) LoadTabData(0);
+            break;
+        case ScanFolderCategory::Media:
+            m_CachedTabEntries.erase(2);
+            if (m_ActiveTab == 2) LoadTabData(2);
+            break;
+        case ScanFolderCategory::Background:
+            RefreshBgDock();
+            break;
+    }
+    if (m_ActiveTab == 13) RefreshLibraryHub();
+}
+
+void SlintApp::AddScanFolder(ScanFolderCategory cat, const std::string& rawPath) {
+    std::vector<std::string>* folders = nullptr;
+    switch (cat) {
+        case ScanFolderCategory::Song:       folders = &m_SongScanFolders;  break;
+        case ScanFolderCategory::Media:      folders = &m_MediaScanFolders; break;
+        case ScanFolderCategory::Background: folders = &m_BgScanFolders;    break;
+    }
+    if (!folders) return;
+
+    std::string p = rawPath;
+    while (!p.empty() && (p.back() == '\n' || p.back() == '\r' || p.back() == ' ')) p.pop_back();
+    while (!p.empty() && p.front() == ' ') p.erase(p.begin());
+    if (p.empty()) return;
+    std::error_code ec;
+    if (!fs::exists(p, ec) || !fs::is_directory(p, ec)) return;
+    if (std::find(folders->begin(), folders->end(), p) == folders->end()) {
+        folders->push_back(p);
+        RefreshScanFoldersModel(cat);
+        SavePersistedState();
+        ApplyScanFolderChange(cat);
+        AppendDebugLog(std::string("Carpeta de ") + ScanFolderCategoryLabel(cat) + " agregada: " + p);
+    }
+}
+
+void SlintApp::RemoveScanFolder(ScanFolderCategory cat, int idx) {
+    std::vector<std::string>* folders = nullptr;
+    switch (cat) {
+        case ScanFolderCategory::Song:       folders = &m_SongScanFolders;  break;
+        case ScanFolderCategory::Media:      folders = &m_MediaScanFolders; break;
+        case ScanFolderCategory::Background: folders = &m_BgScanFolders;    break;
+    }
+    if (!folders) return;
+    if (idx < 0 || idx >= static_cast<int>(folders->size())) return;
+    folders->erase(folders->begin() + idx);
+    RefreshScanFoldersModel(cat);
+    SavePersistedState();
+    ApplyScanFolderChange(cat);
+}
+
+void SlintApp::BrowseScanFolderAsync(ScanFolderCategory cat) {
+    std::string promptTitle = std::string("Seleccionar carpeta de ") + ScanFolderCategoryLabel(cat);
+    std::thread([this, cat, promptTitle]() {
+        std::string selectedDir;
+#ifdef _WIN32
+        std::string psCmd = "powershell -NoProfile -Command \"Add-Type -AssemblyName System.Windows.Forms; "
+                            "$d = New-Object System.Windows.Forms.FolderBrowserDialog; "
+                            "$d.Description = '" + promptTitle + " para ProyecThor'; "
+                            "if($d.ShowDialog() -eq 'OK'){ Write-Output $d.SelectedPath }\"";
+        selectedDir = RunCommandCapture(psCmd.c_str());
+#elif defined(__APPLE__)
+        std::string osaCmd = "osascript -e 'POSIX path of (choose folder with prompt \"" + promptTitle +
+                             " para ProyecThor\")' 2>/dev/null";
+        selectedDir = RunCommandCapture(osaCmd.c_str());
+#else
+        std::string znCmd = "zenity --file-selection --directory --title=\"" + promptTitle + "\" 2>/dev/null";
+        selectedDir = RunCommandCapture(znCmd.c_str());
+        if (selectedDir.empty()) {
+            selectedDir = RunCommandCapture("kdialog --getexistingdirectory ~ 2>/dev/null");
+        }
+#endif
+        while (!selectedDir.empty() && (selectedDir.back() == '\n' || selectedDir.back() == '\r')) {
+            selectedDir.pop_back();
+        }
+        if (selectedDir.empty()) return;
+        slint::invoke_from_event_loop([this, cat, selectedDir]() {
+            AddScanFolder(cat, selectedDir);
         });
     }).detach();
 }

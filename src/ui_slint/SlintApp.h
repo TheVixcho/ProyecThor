@@ -339,6 +339,33 @@ private:
     void AddMusicScanFolder(const std::string& folderPath);
     void RemoveMusicScanFolder(int idx);
     void RefreshMusicScanFoldersModel();
+
+    // Custom scan folders for new categories (Letras/Multimedia/Backgrounds).
+    // A single generic implementation keyed by category avoids duplicating the
+    // music logic four times. The per-category methods below are thin wrappers
+    // used directly by the Slint callbacks.
+    enum class ScanFolderCategory { Song, Media, Background };
+    void AddScanFolder(ScanFolderCategory cat, const std::string& folderPath);
+    void RemoveScanFolder(ScanFolderCategory cat, int idx);
+    void RefreshScanFoldersModel(ScanFolderCategory cat);
+    void BrowseScanFolderAsync(ScanFolderCategory cat);
+    void ApplyScanFolderChange(ScanFolderCategory cat);
+    static const char* ScanFolderCategoryLabel(ScanFolderCategory cat);
+
+    void AddSongScanFolder(const std::string& folderPath)  { AddScanFolder(ScanFolderCategory::Song, folderPath); }
+    void RemoveSongScanFolder(int idx)                     { RemoveScanFolder(ScanFolderCategory::Song, idx); }
+    void RefreshSongScanFoldersModel()                     { RefreshScanFoldersModel(ScanFolderCategory::Song); }
+    void BrowseSongFolderAsync()                           { BrowseScanFolderAsync(ScanFolderCategory::Song); }
+
+    void AddMediaScanFolder(const std::string& folderPath) { AddScanFolder(ScanFolderCategory::Media, folderPath); }
+    void RemoveMediaScanFolder(int idx)                    { RemoveScanFolder(ScanFolderCategory::Media, idx); }
+    void RefreshMediaScanFoldersModel()                    { RefreshScanFoldersModel(ScanFolderCategory::Media); }
+    void BrowseMediaFolderAsync()                          { BrowseScanFolderAsync(ScanFolderCategory::Media); }
+
+    void AddBgScanFolder(const std::string& folderPath)    { AddScanFolder(ScanFolderCategory::Background, folderPath); }
+    void RemoveBgScanFolder(int idx)                       { RemoveScanFolder(ScanFolderCategory::Background, idx); }
+    void RefreshBgScanFoldersModel()                       { RefreshScanFoldersModel(ScanFolderCategory::Background); }
+    void BrowseBgFolderAsync()                             { BrowseScanFolderAsync(ScanFolderCategory::Background); }
     void ExtractMusicWaveformAsync(const std::string& audioPath);
     void UpdateMusicWaveformAndDynamicEq();
     void ApplyMusicEqualizer(bool force = true);
@@ -561,6 +588,9 @@ private:
     std::shared_ptr<slint::VectorModel<MusicTrackItem>> m_MusicTracksModel;
     std::shared_ptr<slint::VectorModel<MusicGridRow>>   m_MusicGridRowsModel;
     std::shared_ptr<slint::VectorModel<slint::SharedString>> m_MusicScanFoldersModel;
+    std::shared_ptr<slint::VectorModel<slint::SharedString>> m_SongScanFoldersModel;
+    std::shared_ptr<slint::VectorModel<slint::SharedString>> m_MediaScanFoldersModel;
+    std::shared_ptr<slint::VectorModel<slint::SharedString>> m_BgScanFoldersModel;
     std::shared_ptr<slint::VectorModel<LibraryItem>>    m_HubSongsModel;
     std::shared_ptr<slint::VectorModel<LibraryItem>>    m_HubMediaModel;
     std::shared_ptr<slint::VectorModel<MusicTrackItem>> m_HubMusicModel;
@@ -677,6 +707,10 @@ private:
     SlintVideoPlayer         m_MusicPlayer;
     std::vector<MediaEntry>  m_MusicEntries;
     std::vector<std::string> m_MusicScanFolders;
+    // Custom scan folders for the new categories (same pattern as m_MusicScanFolders)
+    std::vector<std::string> m_SongScanFolders;   // Letras / canciones
+    std::vector<std::string> m_MediaScanFolders;  // Multimedia (videos + imágenes)
+    std::vector<std::string> m_BgScanFolders;     // Backgrounds (fondos de video/imagen)
     int                      m_CurrentMusicIdx = -1;
     bool                     m_MusicScanned    = false;
 
