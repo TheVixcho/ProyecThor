@@ -577,6 +577,8 @@ export component MainWindow inherits Window {
     in property <bool> smart-tv-scanning: false;
     in property <string> lan-firewall-status: "Comprobando firewall local...";
     in property <bool> lan-firewall-warning: false;
+    // UI-local: expandir opciones avanzadas de red (IP/puerto) en el panel LAN
+    in-out property <bool> lan-advanced-open: false;
 
     // Tab 9: Música (Grid de Audio Independiente + Carpetas de Escaneo)
     in property <[MusicTrackItem]> music-tracks: [];
@@ -749,6 +751,10 @@ export component MainWindow inherits Window {
     in-out property <bool> enable-glass-translucency: true;
     in-out property <bool> enable-glass-sheen: true;
     in-out property <bool> enable-ambient-bg: true;
+    // Christmas festive mode (snow + decorations), activated with theme 14 "Navideño"
+    in-out property <bool> christmas-mode: false;
+    // Set true in modo rendimiento / PCs modestas: pausa animaciones costosas (nieve, etc.)
+    in-out property <bool> perf-reduce-motion: false;
     in property <string> update-status: "Listo para comprobar en GitHub Releases (TheVixcho/ProyecThor)";
 
     // ── Callbacks to C++ Core ──
@@ -1099,6 +1105,68 @@ export component MainWindow inherits Window {
             background: root.enable-ambient-bg
                 ? @linear-gradient(135deg, Theme.accent.transparentize(0.90) 0%, Theme.bg-root 42%, Theme.accent-strong.transparentize(0.93) 100%)
                 : Theme.bg-root;
+        }
+
+        // ── ❄ Capa de Nieve Navideña (solo tema Navideño; pausa en modo rendimiento) ──
+        if root.christmas-mode : Rectangle {
+            width: 100%;
+            height: 100%;
+            // Soft festive vignette behind the snow
+            Rectangle {
+                width: 100%; height: 100%;
+                background: @radial-gradient(circle, #0e3d2400 0%, #06160d55 100%);
+            }
+            property <float> snow-phase: 0;
+            snow-timer := Timer {
+                interval: 33ms;
+                running: root.christmas-mode && !root.perf-reduce-motion;
+                triggered => { parent.snow-phase = Math.mod(parent.snow-phase + 0.0055, 1.0); }
+            }
+            for flake[fi] in [
+                { x: 0.04, sz: 7.0, sp: 1.00, sw: 0.016, o: 0.85 },
+                { x: 0.11, sz: 4.0, sp: 1.45, sw: 0.010, o: 0.55 },
+                { x: 0.18, sz: 9.0, sp: 0.80, sw: 0.022, o: 0.90 },
+                { x: 0.25, sz: 5.0, sp: 1.25, sw: 0.013, o: 0.65 },
+                { x: 0.32, sz: 6.0, sp: 1.05, sw: 0.018, o: 0.78 },
+                { x: 0.39, sz: 3.0, sp: 1.60, sw: 0.009, o: 0.48 },
+                { x: 0.46, sz: 8.0, sp: 0.90, sw: 0.020, o: 0.88 },
+                { x: 0.53, sz: 5.0, sp: 1.30, sw: 0.012, o: 0.62 },
+                { x: 0.60, sz: 7.0, sp: 1.00, sw: 0.016, o: 0.82 },
+                { x: 0.67, sz: 4.0, sp: 1.50, sw: 0.011, o: 0.52 },
+                { x: 0.74, sz: 9.0, sp: 0.75, sw: 0.024, o: 0.92 },
+                { x: 0.81, sz: 5.0, sp: 1.20, sw: 0.014, o: 0.66 },
+                { x: 0.88, sz: 6.0, sp: 1.10, sw: 0.019, o: 0.75 },
+                { x: 0.95, sz: 3.0, sp: 1.55, sw: 0.008, o: 0.46 },
+                { x: 0.08, sz: 6.0, sp: 0.95, sw: 0.017, o: 0.80 },
+                { x: 0.22, sz: 4.0, sp: 1.40, sw: 0.010, o: 0.58 },
+                { x: 0.36, sz: 8.0, sp: 0.85, sw: 0.021, o: 0.86 },
+                { x: 0.50, sz: 5.0, sp: 1.15, sw: 0.015, o: 0.70 },
+                { x: 0.64, sz: 7.0, sp: 1.05, sw: 0.018, o: 0.84 },
+                { x: 0.78, sz: 4.0, sp: 1.35, sw: 0.011, o: 0.56 },
+                { x: 0.92, sz: 9.0, sp: 0.80, sw: 0.023, o: 0.90 },
+                { x: 0.15, sz: 5.0, sp: 1.25, sw: 0.013, o: 0.64 },
+                { x: 0.29, sz: 6.0, sp: 1.00, sw: 0.017, o: 0.76 },
+                { x: 0.43, sz: 3.0, sp: 1.60, sw: 0.009, o: 0.50 },
+                { x: 0.57, sz: 8.0, sp: 0.88, sw: 0.020, o: 0.87 },
+                { x: 0.71, sz: 5.0, sp: 1.28, sw: 0.012, o: 0.60 },
+                { x: 0.85, sz: 7.0, sp: 0.98, sw: 0.016, o: 0.83 },
+                { x: 0.99, sz: 4.0, sp: 1.42, sw: 0.010, o: 0.54 },
+            ] : Rectangle {
+                property <float> prog: Math.mod(parent.snow-phase * flake.sp + fi / 28.0, 1.0);
+                width: flake.sz * 1px;
+                height: flake.sz * 1px;
+                border-radius: self.width / 2;
+                background: #ffffff;
+                opacity: flake.o * (root.perf-reduce-motion ? 0.0 : 1.0);
+                x: (flake.x + flake.sw * Math.sin((prog * 6.2831 * 2 + fi) * 1rad)) * parent.width;
+                y: prog * (parent.height + 20px) - 10px;
+            }
+            // Top garland shimmer
+            Rectangle {
+                y: 0; width: 100%; height: 3px;
+                background: @linear-gradient(90deg, #dc3236 0%, #f3ca63 25%, #2f9e44 50%, #f3ca63 75%, #dc3236 100%);
+                opacity: 0.55;
+            }
         }
 
         VerticalLayout {
@@ -4553,11 +4621,15 @@ export component MainWindow inherits Window {
                                 spacing: 12px;
                                 padding-right: 8px;
 
+                                // ── Hero: estado + un solo botón grande + URL/QR (flujo simple) ──
                                 Rectangle {
                                     border-radius: Theme.radius-md;
-                                    background: Theme.bg-surface-1;
+                                    background: root.lan-running
+                                        ? @linear-gradient(135deg, Theme.live-green.transparentize(0.86) 0%, Theme.bg-surface-1 60%)
+                                        : Theme.bg-surface-1;
                                     border-width: 1px;
-                                    border-color: root.lan-running ? Theme.live-green.transparentize(0.4) : Theme.border-subtle;
+                                    border-color: root.lan-running ? Theme.live-green.transparentize(0.35) : Theme.border-subtle;
+                                    animate background, border-color { duration: 220ms; easing: ease-out; }
 
                                     HorizontalLayout {
                                         padding: 16px;
@@ -4565,56 +4637,112 @@ export component MainWindow inherits Window {
 
                                         VerticalLayout {
                                             horizontal-stretch: 1;
-                                            spacing: 10px;
-                                            Text { text: "Transmisión en Red Local — Motor Completo (OBS / Navegador / Smart TV)"; color: Theme.text-primary; font-size: 14px; font-weight: 700; }
+                                            spacing: 12px;
+
+                                            // Status line
                                             HorizontalLayout {
-                                                spacing: 6px;
-                                                Text { text: root.lan-url; color: root.lan-running ? Theme.live-green : Theme.text-secondary; font-size: 13px; font-weight: 600; wrap: word-wrap; horizontal-stretch: 1; vertical-alignment: center; }
-                                                if root.lan-running : GlassButton {
-                                                    label: root.lan-copy-feedback;
-                                                    compact: true;
-                                                    clicked => { root.copy-lan-url(); }
+                                                spacing: 8px;
+                                                Rectangle {
+                                                    width: 10px; height: 10px; border-radius: 5px; y: (parent.height - self.height)/2;
+                                                    background: root.lan-running ? Theme.live-green : Theme.text-muted;
+                                                    drop-shadow-blur: root.lan-running ? 8px : 0px;
+                                                    drop-shadow-color: Theme.live-green;
+                                                    animate background, drop-shadow-blur { duration: 200ms; }
+                                                }
+                                                VerticalLayout {
+                                                    spacing: 1px; horizontal-stretch: 1;
+                                                    Text { text: root.lan-running ? @tr("Transmisión LAN activa") : @tr("Transmisión LAN apagada");
+                                                        color: Theme.text-primary; font-size: 15px; font-weight: 800; }
+                                                    Text { text: root.lan-running
+                                                            ? @tr("Cualquier dispositivo en tu red ya puede ver la proyección")
+                                                            : @tr("Comparte tu proyección a OBS, otra PC, Smart TV o celular en la misma red");
+                                                        color: Theme.text-muted; font-size: 11.5px; wrap: word-wrap; }
                                                 }
                                             }
 
+                                            // ONE big action button
+                                            GlassButton {
+                                                label: root.lan-running ? @tr("Detener transmisión") : @tr("Iniciar transmisión");
+                                                icon: @image-url("icons/radio.svg");
+                                                has-icon: true;
+                                                primary: !root.lan-running;
+                                                danger: root.lan-running;
+                                                clicked => { root.toggle-lan-stream(); }
+                                            }
+
+                                            // URL (only meaningful once running) with copy
+                                            if root.lan-running : Rectangle {
+                                                height: 38px; border-radius: Theme.radius-sm;
+                                                background: Theme.bg-surface-0; border-width: 1px; border-color: Theme.border-subtle;
+                                                HorizontalLayout {
+                                                    padding-left: 11px; padding-right: 6px; spacing: 8px;
+                                                    Image { source: @image-url("icons/globe.svg"); width: 14px; height: 14px;
+                                                        y: (parent.height - self.height)/2; colorize: Theme.live-green; }
+                                                    Text { text: root.lan-url; color: Theme.text-primary; font-size: 12.5px; font-weight: 600;
+                                                        vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+                                                    GlassButton { label: root.lan-copy-feedback; compact: true;
+                                                        y: (parent.height - self.height)/2; clicked => { root.copy-lan-url(); } }
+                                                }
+                                            }
+
+                                            // Firewall warning only when it matters
+                                            if root.lan-firewall-warning : Rectangle {
+                                                border-radius: Theme.radius-sm;
+                                                background: Theme.stage-amber-soft; border-width: 1px;
+                                                border-color: Theme.stage-amber.transparentize(0.5);
+                                                HorizontalLayout {
+                                                    padding: 9px; spacing: 7px;
+                                                    Text { text: "⚠"; color: Theme.stage-amber; font-size: 14px; vertical-alignment: center; }
+                                                    Text { text: root.lan-firewall-status; color: Theme.text-secondary; font-size: 11px;
+                                                        wrap: word-wrap; horizontal-stretch: 1; vertical-alignment: center; }
+                                                }
+                                            }
+
+                                            // "Cómo conectar" quick guide (static, reassures first-time users)
                                             HorizontalLayout {
+                                                spacing: 7px;
+                                                for step in [
+                                                    { ic: @image-url("icons/monitor.svg"), t: "OBS / PC" },
+                                                    { ic: @image-url("icons/tv.svg"),      t: "Smart TV" },
+                                                    { ic: @image-url("icons/smartphone.svg"), t: "Celular (QR)" },
+                                                ] : Rectangle {
+                                                    horizontal-stretch: 1; height: 30px; border-radius: Theme.radius-sm;
+                                                    background: Theme.bg-surface-0; border-width: 1px; border-color: Theme.border-subtle;
+                                                    HorizontalLayout {
+                                                        alignment: center; spacing: 6px;
+                                                        Image { source: step.ic; width: 13px; height: 13px; y: (parent.height - self.height)/2; colorize: Theme.text-secondary; }
+                                                        Text { text: step.t; color: Theme.text-secondary; font-size: 10.5px; font-weight: 600; vertical-alignment: center; }
+                                                    }
+                                                }
+                                            }
+
+                                            // Advanced (IP / port) folded away so the common path is clean
+                                            Rectangle {
+                                                height: 28px; border-radius: Theme.radius-sm;
+                                                background: adv-ta.has-hover ? Theme.bg-surface-2 : transparent;
+                                                HorizontalLayout {
+                                                    padding-left: 4px; spacing: 5px;
+                                                    Text { text: root.lan-advanced-open ? "▾" : "▸"; color: Theme.text-muted; font-size: 11px; vertical-alignment: center; }
+                                                    Text { text: @tr("Opciones avanzadas de red (IP y puerto)"); color: Theme.text-secondary;
+                                                        font-size: 11px; font-weight: 600; vertical-alignment: center; }
+                                                }
+                                                adv-ta := TouchArea { mouse-cursor: pointer;
+                                                    clicked => { root.lan-advanced-open = !root.lan-advanced-open; } }
+                                            }
+                                            if root.lan-advanced-open : HorizontalLayout {
                                                 spacing: 8px;
                                                 LineEdit { horizontal-stretch: 2; placeholder-text: @tr("IP de red local (auto)"); text <=> root.lan-host-ip; }
                                                 LineEdit { horizontal-stretch: 1; placeholder-text: @tr("Puerto (8080)"); text <=> root.lan-port-input; }
                                             }
-
-                                            Text {
-                                                text: @tr("Abre esta dirección en OBS Studio (Fuente de Navegador), otra PC, celular o navegador de tu Smart TV. Utiliza el mismo servidor HTTP/MJPEG y codificador en segundo plano que la versión clásica.");
-                                                color: Theme.text-muted;
-                                                font-size: 11.5px;
-                                                wrap: word-wrap;
-                                            }
-                                            HorizontalLayout {
-                                                alignment: start;
-                                                GlassButton {
-                                                    label: root.lan-running ? "Detener Transmisión LAN" : "Iniciar Transmisión LAN";
-                                                    icon: @image-url("icons/radio.svg");
-                                                    has-icon: true;
-                                                    primary: !root.lan-running;
-                                                    danger: root.lan-running;
-                                                    clicked => { root.toggle-lan-stream(); }
-                                                }
-                                            }
                                         }
 
-                                        if root.has-lan-qr : Rectangle {
-                                            width: 146px;
-                                            height: 146px;
-                                            border-radius: 6px;
-                                            background: #fafafa;
-                                            Image {
-                                                source: root.lan-qr-image;
-                                                width: 136px;
-                                                height: 136px;
-                                                x: 5px;
-                                                y: 5px;
-                                                image-fit: contain;
+                                        if root.has-lan-qr && root.lan-running : VerticalLayout {
+                                            spacing: 5px;
+                                            Rectangle {
+                                                width: 150px; height: 150px; border-radius: 8px; background: #fafafa;
+                                                Image { source: root.lan-qr-image; width: 140px; height: 140px; x: 5px; y: 5px; image-fit: contain; }
                                             }
+                                            Text { text: @tr("Escanea con el celular"); color: Theme.text-muted; font-size: 10.5px; horizontal-alignment: center; }
                                         }
                                     }
                                 }
@@ -5731,33 +5859,36 @@ export component MainWindow inherits Window {
                             }
 
                             // Quick filter chips (mirror the collections, horizontally)
-                            HorizontalLayout {
-                                spacing: 6px;
-                                for chip in [
-                                    { id: -3, label: "Todo" },
-                                    { id: -1, label: "Recientes" },
-                                    { id: -2, label: "Favoritos" },
-                                    { id: 0,  label: "Canciones" },
-                                    { id: 1,  label: "Multimedia" },
-                                    { id: 3,  label: "Música" },
-                                    { id: 2,  label: "Documentos & Web" },
-                                    { id: 4,  label: "Biblia" },
-                                ] : Rectangle {
-                                    height: 28px;
-                                    border-radius: Theme.radius-pill;
-                                    background: root.hub-filter == chip.id ? Theme.accent : (chip-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-0);
-                                    border-width: 1px;
-                                    border-color: root.hub-filter == chip.id ? Theme.accent-strong : Theme.border-subtle;
-                                    animate background   { duration: 130ms; easing: ease-out; }
-                                    animate border-color { duration: 130ms; easing: ease-out; }
-                                    HorizontalLayout {
-                                        padding-left: 13px; padding-right: 13px;
-                                        Text { text: chip.label; vertical-alignment: center;
+                            ScrollView {
+                                height: 30px;
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    alignment: start;
+                                    for chip in [
+                                        { id: -3, label: "Todo" },
+                                        { id: -1, label: "Recientes" },
+                                        { id: -2, label: "Favoritos" },
+                                        { id: 0,  label: "Canciones" },
+                                        { id: 1,  label: "Multimedia" },
+                                        { id: 3,  label: "Música" },
+                                        { id: 2,  label: "Documentos & Web" },
+                                        { id: 4,  label: "Biblia" },
+                                    ] : Rectangle {
+                                        height: 28px;
+                                        width: chip-lbl.preferred-width + 26px;
+                                        border-radius: Theme.radius-pill;
+                                        background: root.hub-filter == chip.id ? Theme.accent : (chip-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-0);
+                                        border-width: 1px;
+                                        border-color: root.hub-filter == chip.id ? Theme.accent-strong : Theme.border-subtle;
+                                        animate background   { duration: 130ms; easing: ease-out; }
+                                        animate border-color { duration: 130ms; easing: ease-out; }
+                                        chip-lbl := Text { text: chip.label; vertical-alignment: center;
+                                            x: (parent.width - self.width)/2;
                                             color: root.hub-filter == chip.id ? Theme.accent-fg : Theme.text-secondary;
                                             font-size: 11.5px; font-weight: root.hub-filter == chip.id ? 700 : 500; }
+                                        chip-ta := TouchArea { mouse-cursor: pointer;
+                                            clicked => { root.hub-filter = chip.id; root.hub-filter-changed(chip.id); } }
                                     }
-                                    chip-ta := TouchArea { mouse-cursor: pointer;
-                                        clicked => { root.hub-filter = chip.id; root.hub-filter-changed(chip.id); } }
                                 }
                             }
                         }

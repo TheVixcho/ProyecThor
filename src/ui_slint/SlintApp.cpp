@@ -1550,6 +1550,7 @@ void SlintApp::BindCallbacks() {
         m_HoverPlayer.SetRenderSize(perf ? 256 : 320, perf ? 144 : 180);
         UpdatePlayerRenderSize();
         ApplyTargetFps(m_TargetFps);
+        m_Main->set_perf_reduce_motion(perf);
         if (perf) PurgeMemoryCaches();
         SavePersistedState();
     });
@@ -4202,6 +4203,7 @@ void SlintApp::LoadPersistedState() {
         bool defaultPerf = IsLowEndHardware();
         bool perf = j.value("performanceMode", defaultPerf);
         m_Main->set_performance_mode(perf);
+        m_Main->set_perf_reduce_motion(perf);
         m_HoverPlayer.SetRenderSize(perf ? 256 : 320, perf ? 144 : 180);
 
         // Vista previa del operador (ahorro de energía). En hardware de gama
@@ -5382,8 +5384,9 @@ std::string SlintApp::ToLowerUtf8(const std::string& s) {
 
 // ── 14 Themes migrated from ImGui ────────────────────────────────────────────
 void SlintApp::ApplyThemePreset(int idx) {
-    m_ActiveThemeIdx = std::clamp(idx, 0, 13);
+    m_ActiveThemeIdx = std::clamp(idx, 0, 14);
     m_Main->set_active_theme_idx(m_ActiveThemeIdx);
+    m_Main->set_christmas_mode(m_ActiveThemeIdx == 14);
 
     auto col = [](float r, float g, float b, float a = 1.0f) {
         auto cl = [](float v) -> uint8_t {
@@ -5400,7 +5403,7 @@ void SlintApp::ApplyThemePreset(int idx) {
         bool  lightTheme;
     };
 
-    static const Palette kPalettes[14] = {
+    static const Palette kPalettes[15] = {
         // 0: Oscuro (Carbón + Plomo Neutro)
         {{0.031f,0.031f,0.039f},{0.067f,0.067f,0.075f},{0.090f,0.090f,0.102f},{0.129f,0.129f,0.145f},{0.173f,0.173f,0.192f},
          {0.831f,0.831f,0.847f},{0.957f,0.957f,0.961f},{0.957f,0.957f,0.961f},{0.631f,0.631f,0.667f}, false},
@@ -5443,6 +5446,9 @@ void SlintApp::ApplyThemePreset(int idx) {
         // 13: Titanium Silver
         {{0.055f,0.059f,0.071f},{0.078f,0.086f,0.102f},{0.106f,0.118f,0.141f},{0.137f,0.153f,0.184f},{0.176f,0.196f,0.235f},
          {0.620f,0.680f,0.760f},{0.820f,0.860f,0.900f},{0.945f,0.961f,0.976f},{0.500f,0.560f,0.640f}, false},
+        // 14: Navideño (Verde pino profundo + acento rojo/dorado festivo)
+        {{0.020f,0.055f,0.035f},{0.035f,0.082f,0.055f},{0.050f,0.110f,0.075f},{0.070f,0.140f,0.098f},{0.095f,0.175f,0.125f},
+         {0.863f,0.196f,0.212f},{0.953f,0.792f,0.388f},{0.965f,0.969f,0.957f},{0.620f,0.722f,0.655f}, false},
     };
 
     const auto& p = kPalettes[m_ActiveThemeIdx];
@@ -8004,7 +8010,9 @@ void SlintApp::RefreshLibraryHub() {
         item.playing  = r.playing;
         item.favorite = IsHubFavorite(r.kind, r.path);
         item.has_thumbnail = false;
-        if (r.kind == 1 && (r.isVideo || r.isImage)) {
+        // En modo rendimiento no generamos miniaturas de video (ffmpeg) para no cargar la CPU en PCs modestas.
+        bool allowVideoThumb = !m_Main->get_performance_mode();
+        if (r.kind == 1 && (r.isImage || (r.isVideo && allowVideoThumb))) {
             slint::Image thumb;
             if (LoadOrCreateThumbnail(r.path, r.isVideo, thumb)) {
                 item.thumbnail     = thumb;

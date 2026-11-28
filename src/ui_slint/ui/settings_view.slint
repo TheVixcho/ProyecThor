@@ -917,11 +917,12 @@ export component AppleSettingsView inherits Rectangle {
         { idx: 11, name: "Midnight Blue",   tag: "Oscuro • Zafiro",    is-light: false, c-root: #050811, c-s0: #0a0f1f, c-s1: #10172e, c-s2: #18223f, c-acc: #38bdf8, c-acc2: #7dd3fc, c-txt: #e0f2fe, c-muted: #738aa6 },
         { idx: 12, name: "Amethyst Violet", tag: "Oscuro • Amatista",  is-light: false, c-root: #0a0512, c-s0: #11091f, c-s1: #1b0f2e, c-s2: #261640, c-acc: #a855f7, c-acc2: #c084fc, c-txt: #f3e8ff, c-muted: #9376a8 },
         { idx: 13, name: "Titanium Silver", tag: "Oscuro • Titanio",   is-light: false, c-root: #0e0f12, c-s0: #14161a, c-s1: #1b1e24, c-s2: #23272f, c-acc: #9eaec2, c-acc2: #d1dbe6, c-txt: #f1f5f9, c-muted: #808fa3 },
+        { idx: 14, name: "Navideño",        tag: "Festivo • Nieve ❄",  is-light: false, c-root: #051c0f, c-s0: #09210e, c-s1: #0d2c13, c-s2: #12391f, c-acc: #dc3236, c-acc2: #f3ca63, c-txt: #f6f7f4, c-muted: #9eb8a7 },
     ];
 
-    property <int> preview-idx: Math.clamp(root.hovered-theme-idx >= 0 ? root.hovered-theme-idx : root.active-theme-idx, 0, 13);
+    property <int> preview-idx: Math.clamp(root.hovered-theme-idx >= 0 ? root.hovered-theme-idx : root.active-theme-idx, 0, 14);
     property <ThemePresetMeta> preview-theme: root.themes[root.preview-idx];
-    property <ThemePresetMeta> active-theme:  root.themes[Math.clamp(root.active-theme-idx, 0, 13)];
+    property <ThemePresetMeta> active-theme:  root.themes[Math.clamp(root.active-theme-idx, 0, 14)];
 
     property <string> res-label: root.output-res-preset == 0 ? "720p"
                                : root.output-res-preset == 1 ? "1080p"
@@ -1662,7 +1663,7 @@ export component AppleSettingsView inherits Rectangle {
                             spacing: 12px;
                             ThemePreviewCard { meta: root.themes[12]; horizontal-stretch: 1; active: root.active-theme-idx == 12; clicked => { root.theme-selected(12); } hover-changed(h) => { root.hovered-theme-idx = h ? 12 : (root.hovered-theme-idx == 12 ? -1 : root.hovered-theme-idx); } }
                             ThemePreviewCard { meta: root.themes[13]; horizontal-stretch: 1; active: root.active-theme-idx == 13; clicked => { root.theme-selected(13); } hover-changed(h) => { root.hovered-theme-idx = h ? 13 : (root.hovered-theme-idx == 13 ? -1 : root.hovered-theme-idx); } }
-                            Rectangle { horizontal-stretch: 1; }
+                            ThemePreviewCard { meta: root.themes[14]; horizontal-stretch: 1; active: root.active-theme-idx == 14; clicked => { root.theme-selected(14); } hover-changed(h) => { root.hovered-theme-idx = h ? 14 : (root.hovered-theme-idx == 14 ? -1 : root.hovered-theme-idx); } }
                             Rectangle { horizontal-stretch: 1; }
                         }
                     }
@@ -1690,6 +1691,13 @@ export component AppleSettingsView inherits Rectangle {
                             ThemePreviewCard { meta: root.themes[11]; horizontal-stretch: 1; active: root.active-theme-idx == 11; clicked => { root.theme-selected(11); } hover-changed(h) => { root.hovered-theme-idx = h ? 11 : (root.hovered-theme-idx == 11 ? -1 : root.hovered-theme-idx); } }
                             ThemePreviewCard { meta: root.themes[12]; horizontal-stretch: 1; active: root.active-theme-idx == 12; clicked => { root.theme-selected(12); } hover-changed(h) => { root.hovered-theme-idx = h ? 12 : (root.hovered-theme-idx == 12 ? -1 : root.hovered-theme-idx); } }
                             ThemePreviewCard { meta: root.themes[13]; horizontal-stretch: 1; active: root.active-theme-idx == 13; clicked => { root.theme-selected(13); } hover-changed(h) => { root.hovered-theme-idx = h ? 13 : (root.hovered-theme-idx == 13 ? -1 : root.hovered-theme-idx); } }
+                        }
+                        HorizontalLayout {
+                            spacing: 12px;
+                            ThemePreviewCard { meta: root.themes[14]; horizontal-stretch: 1; active: root.active-theme-idx == 14; clicked => { root.theme-selected(14); } hover-changed(h) => { root.hovered-theme-idx = h ? 14 : (root.hovered-theme-idx == 14 ? -1 : root.hovered-theme-idx); } }
+                            Rectangle { horizontal-stretch: 1; }
+                            Rectangle { horizontal-stretch: 1; }
+                            Rectangle { horizontal-stretch: 1; }
                         }
                     }
 
