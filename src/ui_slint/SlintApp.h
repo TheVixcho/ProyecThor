@@ -126,6 +126,29 @@ private:
         std::vector<std::string> songPaths;
     };
 
+    // Un elemento dentro de un overlay (compositor tipo canvas).
+    // type: 0=Texto, 1=Imagen PNG, 2=Reloj/Timer
+    struct OverlayElement {
+        int         type = 0;
+        // Geometría normalizada (0..1) sobre el lienzo 16:9. w/h: ancho/alto de la caja.
+        float       x = 0.5f, y = 0.5f, w = 0.3f, h = 0.12f;
+        // Texto
+        std::string text;
+        float       fontSize = 48.0f;   // px @ 1080p
+        uint8_t     textR = 255, textG = 255, textB = 255;
+        int         align = 1;          // 0=izq,1=centro,2=der
+        bool        bold = true;
+        // Imagen
+        std::string imagePath;
+        float       opacity = 1.0f;
+        // Reloj/Timer (reusa semántica de CustomOverlayConfig)
+        int         clockMode  = 0;
+        int         timeFormat = 0;
+        int         initialSec = 300;
+        int         currentSec = 300;
+        bool        timerRunning = false;
+    };
+
     struct CustomOverlayConfig {
         std::string id;
         std::string path;
@@ -152,6 +175,9 @@ private:
         int         posPreset    = 3;     // 0=Centro, 1=Sup-Izq, 2=Sup-Cen, 3=Sup-Der, 4=Inf-Izq, 5=Inf-Cen, 6=Inf-Der, 7=Custom
         float       posX         = 0.85f;
         float       posY         = 0.10f;
+
+        // Compositor tipo canvas: lista de elementos. Vacío = overlay clásico (reloj/título/sub).
+        std::vector<OverlayElement> elements;
     };
 
     struct OverlayQueueEntry {
@@ -189,6 +215,7 @@ private:
         slint::Image overlayImage;
         slint::Image overlayThumb;
         bool         hasOverlayThumb = false;
+        bool         overlayAboveText = false; // z-order: PNG overlay por encima de las letras
 
         bool                hasCustomOverlay = false;
         CustomOverlayConfig customOverlay;
@@ -338,6 +365,21 @@ private:
     void RefreshActiveLayersModel();
     void RefreshScreenMatrixModel();
     void RemoveActiveLayer(const std::string& layerId);
+    void MoveActiveLayer(const std::string& layerId, int dir);
+
+    // ── Editor de Overlays Canvas (tab 15) ──
+    void OvCanvasNew();
+    void OvCanvasOpen(int overlayIdx);
+    void OvCanvasSave();
+    void OvCanvasAddText();
+    void OvCanvasAddImage();
+    void OvCanvasAddClock();
+    void OvCanvasDeleteElement(int idx);
+    void OvCanvasDuplicateElement(int idx);
+    void OvCanvasMoveElementZ(int idx, int dir);
+    void OvCanvasSetGeometry(int idx, float x, float y, float w, float h);
+    void OvCanvasProject();
+    void RefreshOvCanvasModel();
     void RemoveLayerOnScreen(int screenIdx, const std::string& layerId);
     void ToggleLayerOnScreen(int screenIdx, const std::string& layerId);
     void SendCurrentSelectionToScreen(int screenIdx);
@@ -542,6 +584,7 @@ private:
     std::shared_ptr<slint::VectorModel<slint::SharedString>> m_SystemFontsModel;
     std::shared_ptr<slint::VectorModel<QueueItem>>           m_OverlayQueueModel;
     std::shared_ptr<slint::VectorModel<ActiveLayerItem>>     m_ActiveLayersModel;
+    std::shared_ptr<slint::VectorModel<OverlayElementItem>>  m_OvCanvasModel;
     std::shared_ptr<slint::VectorModel<ScreenMatrixItem>>    m_ScreenMatrixModel;
     std::shared_ptr<slint::VectorModel<float>>               m_MusicLiveWaveModel;
     std::shared_ptr<slint::VectorModel<float>>               m_MusicTrackWaveModel;

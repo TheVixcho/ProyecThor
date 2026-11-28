@@ -1,5 +1,21 @@
 import { Theme } from "theme.slint";
 
+// Un elemento del compositor de overlays (canvas tipo Photoshop).
+// type: 0=Texto, 1=Imagen PNG, 2=Reloj/Timer
+export struct OverlayElementItem {
+    type: int,
+    x: float, y: float, w: float, h: float,  // normalizado 0..1 sobre el lienzo
+    text: string,
+    font-size: float,
+    text-color: color,
+    align: int,          // 0=izq,1=centro,2=der
+    bold: bool,
+    image: image,
+    has-image: bool,
+    opacity: float,
+    clock-text: string,  // texto ya formateado para elementos tipo reloj/timer
+}
+
 export component StyledTextBlock inherits Rectangle {
     in property <string> text-body: "";
     in property <float> text-size: 60.0;
@@ -264,6 +280,62 @@ export component CustomOverlayView inherits Rectangle {
     }
 }
 
+// Compositor de overlays tipo canvas: dibuja una lista de elementos libremente
+// posicionados (texto, imagen PNG, reloj) sobre el lienzo completo 16:9.
+export component OverlayCanvasView inherits Rectangle {
+    in property <[OverlayElementItem]> elements: [];
+    in property <length> container-w: 1920px;
+    in property <length> container-h: 1080px;
+    in property <float> ui-scale: 1.0;
+
+    width: root.container-w;
+    height: root.container-h;
+    background: transparent;
+
+    for el in root.elements : Rectangle {
+        x: el.x * root.container-w - self.width / 2;
+        y: el.y * root.container-h - self.height / 2;
+        width: el.w * root.container-w;
+        height: el.h * root.container-h;
+
+        // Imagen PNG
+        if el.type == 1 && el.has-image : Image {
+            width: 100%;
+            height: 100%;
+            source: el.image;
+            image-fit: contain;
+            opacity: Math.clamp(el.opacity, 0.0, 1.0);
+        }
+
+        // Texto
+        if el.type == 0 : Text {
+            width: 100%;
+            height: 100%;
+            text: el.text;
+            color: el.text-color;
+            font-size: Math.max(6px, el.font-size * root.ui-scale * 1px);
+            font-weight: el.bold ? 800 : 500;
+            horizontal-alignment: el.align == 0 ? left : (el.align == 2 ? right : center);
+            vertical-alignment: center;
+            wrap: word-wrap;
+            overflow: clip;
+        }
+
+        // Reloj / Timer (texto ya formateado en C++)
+        if el.type == 2 : Text {
+            width: 100%;
+            height: 100%;
+            text: el.clock-text;
+            color: el.text-color;
+            font-size: Math.max(8px, el.font-size * root.ui-scale * 1px);
+            font-weight: el.bold ? 800 : 600;
+            horizontal-alignment: el.align == 0 ? left : (el.align == 2 ? right : center);
+            vertical-alignment: center;
+            overflow: clip;
+        }
+    }
+}
+
 export component ProjectorWindow inherits Window {
     title: @tr("ProyecThor — Salida Público");
     preferred-width: 1280px;
@@ -331,6 +403,8 @@ export component ProjectorWindow inherits Window {
     in property <color> bg-solid-color: #000000;
     in property <image> overlay-image;
     in property <bool> has-overlay-image: false;
+    // Z-order: cuando es true el overlay PNG se dibuja ENCIMA de las letras; por defecto va debajo.
+    in property <bool> overlay-above-text: false;
 
     // Typography & Text Effects
     in property <float> text-size: 60.0;
@@ -427,8 +501,8 @@ export component ProjectorWindow inherits Window {
         background: @radial-gradient(circle, #00000000 45%, #000000b8 100%);
     }
 
-    // Layer 1: Optional PNG Overlay
-    if root.has-overlay-image : Image {
+    // Layer 1: Optional PNG Overlay (debajo de las letras — orden por defecto)
+    if root.has-overlay-image && !root.overlay-above-text : Image {
         x: 0px;
         y: 0px;
         width: 100%;
@@ -585,6 +659,16 @@ export component ProjectorWindow inherits Window {
             }
         }
     }
+
+        // Layer 1b: PNG Overlay ENCIMA de las letras (cuando el usuario sube el overlay en Capas Activas)
+        if root.has-overlay-image && root.overlay-above-text : Image {
+            x: 0px;
+            y: 0px;
+            width: 100%;
+            height: 100%;
+            source: root.overlay-image;
+            image-fit: contain;
+        }
 
         // Layer 3: Dynamic Custom Overlay (Clock / Countdown / Count-up / Lower-Third Pleca)
         if root.show-custom-overlay && ((root.ov-show-clock && root.ov-clock-text != "") || root.ov-title != "" || root.ov-sub != "") : CustomOverlayView {

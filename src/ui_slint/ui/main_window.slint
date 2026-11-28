@@ -2,7 +2,7 @@ import { ScrollView, LineEdit, TextEdit, Slider } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { GlassCard, GlassButton, IconButton, IslandIconButton, ItemRowActionBtn, ItemMoreBtn, SlideTile, SwitchRow, PadTile, ThemeSwatchButton, StyleGalleryCard, StyleScreenTarget, ScrubBar, SupportLinkCard } from "components.slint";
 import { TopBar } from "topbar.slint";
-import { StyledTextBlock, CustomOverlayView } from "projector_window.slint";
+import { StyledTextBlock, CustomOverlayView, OverlayCanvasView } from "projector_window.slint";
 import { AppleSettingsView } from "settings_view.slint";
 export { Theme } from "theme.slint";
 export { ProjectorWindow, StageWindow } from "projector_window.slint";
@@ -149,6 +149,8 @@ export struct ActiveLayerItem {
     accent: color,
     thumbnail: image,
     has-thumbnail: bool,
+    can-move-up: bool,
+    can-move-down: bool,
 }
 
 export struct ScreenMatrixItem {
@@ -331,6 +333,25 @@ export component MainWindow inherits Window {
 
     // Custom Overlay & Time Editor (Center Panel)
     in-out property <bool> overlay-editor-open: false;
+
+    // ── Overlays Canvas Panel (tab 15) — compositor tipo Photoshop ──
+    // Lista de elementos del overlay en edición + selección actual.
+    in property <[OverlayElementItem]> ov-canvas-elements: [];
+    in-out property <int> ov-canvas-selected: -1;   // índice del elemento seleccionado
+    in-out property <string> ov-canvas-name: "Nuevo Overlay";
+    in property <bool> ov-canvas-dirty: false;       // hay cambios sin guardar
+    callback ov-canvas-new();                         // crear overlay vacío
+    callback ov-canvas-open(int);                     // abrir overlay guardado (índice en overlay-layer-items)
+    callback ov-canvas-save();
+    callback ov-canvas-add-text();
+    callback ov-canvas-add-image();                   // abre diálogo de PNG
+    callback ov-canvas-add-clock();
+    callback ov-canvas-select-element(int);
+    callback ov-canvas-delete-element(int);
+    callback ov-canvas-duplicate-element(int);
+    callback ov-canvas-move-element-z(int, int);      // (idx, dir) dir -1=frente, +1=atrás
+    callback ov-canvas-element-geometry(int, float, float, float, float); // (idx,x,y,w,h) normalizado
+    callback ov-canvas-project();                     // enviar a pantalla(s)
     in-out property <string> ov-ed-name: "Nuevo Overlay";
     in-out property <bool> ov-ed-show-clock: true;
     in-out property <int> ov-ed-clock-mode: 0; // 0=Hora en Vivo, 1=En Retroceso, 2=Hacia Arriba
@@ -948,6 +969,8 @@ export component MainWindow inherits Window {
 
     // Real Active Layer Stack (Photoshop-style) & Multi-Screen / Multi-Room Routing
     callback remove-active-layer(string);
+    // Reordenar capa en el z-order de la salida. dir: -1 = subir (hacia el frente), +1 = bajar (hacia atrás)
+    callback move-active-layer(string, int);
     callback select-output-target(int);
     callback inspect-screen(int);
     callback screen-toggle-layer(int, string);
@@ -6746,6 +6769,184 @@ export component MainWindow inherits Window {
                         }
                     }
 
+                    // ── Mode 15: OVERLAYS CANVAS (Compositor tipo Photoshop/Canva) ──
+                    if root.active-tab == 15 : VerticalLayout {
+                        spacing: 10px;
+                        vertical-stretch: 1;
+
+                        // Header: nombre editable + acciones principales
+                        HorizontalLayout {
+                            spacing: 8px;
+                            VerticalLayout {
+                                spacing: 1px; horizontal-stretch: 1;
+                                HorizontalLayout {
+                                    spacing: 7px;
+                                    Image { source: @image-url("icons/layers.svg"); width: 17px; height: 17px;
+                                        y: (parent.height - self.height)/2; colorize: #a78bfa; }
+                                    Text { text: @tr("Editor de Overlays"); color: Theme.text-primary; font-size: 15px; font-weight: 800;
+                                        vertical-alignment: center; }
+                                    if root.ov-canvas-dirty : Rectangle {
+                                        width: 8px; height: 8px; border-radius: 4px; y: (parent.height - self.height)/2;
+                                        background: Theme.stage-amber;
+                                    }
+                                }
+                                Text { text: @tr("Capa personalizada: combina texto, imágenes PNG y relojes sobre un lienzo 16:9");
+                                    color: Theme.text-muted; font-size: 11px; }
+                            }
+                            GlassButton { label: @tr("Nuevo"); icon: @image-url("icons/plus.svg"); has-icon: true; compact: true;
+                                clicked => { root.ov-canvas-new(); } }
+                            GlassButton { label: @tr("Guardar"); icon: @image-url("icons/save.svg"); has-icon: true; compact: true;
+                                clicked => { root.ov-canvas-save(); } }
+                            GlassButton { label: @tr("Enviar a Pantalla"); icon: @image-url("icons/play.svg"); has-icon: true; compact: true; primary: true;
+                                clicked => { root.ov-canvas-project(); } }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 10px;
+                            vertical-stretch: 1;
+
+                            // ── Columna izquierda: galería de overlays + lista de elementos ──
+                            Rectangle {
+                                width: 232px;
+                                border-radius: Theme.radius-md;
+                                background: Theme.bg-surface-1;
+                                border-width: 1px; border-color: Theme.border-subtle;
+                                VerticalLayout {
+                                    padding: 10px; spacing: 8px;
+
+                                    Text { text: @tr("Overlays guardados"); color: Theme.text-secondary; font-size: 11px; font-weight: 700; }
+                                    ScrollView {
+                                        height: 128px;
+                                        VerticalLayout {
+                                            spacing: 3px; alignment: start;
+                                            if root.overlay-layer-items.length == 0 : Text {
+                                                text: @tr("Aún no hay overlays. Pulsa 'Nuevo'."); color: Theme.text-muted; font-size: 10.5px; wrap: word-wrap; }
+                                            for ov[oi] in root.overlay-layer-items : Rectangle {
+                                                height: 30px; border-radius: Theme.radius-sm;
+                                                background: gal-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-0;
+                                                border-width: 1px; border-color: Theme.border-subtle;
+                                                HorizontalLayout {
+                                                    padding-left: 8px; padding-right: 6px; spacing: 6px;
+                                                    Image { source: @image-url("icons/layers.svg"); width: 12px; height: 12px;
+                                                        y: (parent.height - self.height)/2; colorize: #a78bfa; }
+                                                    Text { text: ov.title; color: Theme.text-primary; font-size: 11px; vertical-alignment: center;
+                                                        overflow: elide; horizontal-stretch: 1; }
+                                                }
+                                                gal-ta := TouchArea { mouse-cursor: pointer; clicked => { root.ov-canvas-open(oi); } }
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle { height: 1px; background: Theme.border-subtle; }
+
+                                    // Toolbar: agregar elementos
+                                    Text { text: @tr("Agregar elemento"); color: Theme.text-secondary; font-size: 11px; font-weight: 700; }
+                                    HorizontalLayout {
+                                        spacing: 5px;
+                                        GlassButton { label: @tr("Texto"); icon: @image-url("icons/edit.svg"); has-icon: true; compact: true; horizontal-stretch: 1;
+                                            clicked => { root.ov-canvas-add-text(); } }
+                                        GlassButton { label: @tr("PNG"); icon: @image-url("icons/upload.svg"); has-icon: true; compact: true; horizontal-stretch: 1;
+                                            clicked => { root.ov-canvas-add-image(); } }
+                                        GlassButton { label: @tr("Reloj"); icon: @image-url("icons/clock.svg"); has-icon: true; compact: true; horizontal-stretch: 1;
+                                            clicked => { root.ov-canvas-add-clock(); } }
+                                    }
+
+                                    // Lista de capas/elementos del overlay actual
+                                    Text { text: @tr("Capas del overlay"); color: Theme.text-secondary; font-size: 11px; font-weight: 700; }
+                                    ScrollView {
+                                        vertical-stretch: 1;
+                                        VerticalLayout {
+                                            spacing: 3px; alignment: start;
+                                            if root.ov-canvas-elements.length == 0 : Text {
+                                                text: @tr("Lienzo vacío. Agrega texto, una imagen PNG o un reloj."); color: Theme.text-muted; font-size: 10.5px; wrap: word-wrap; }
+                                            for el[ei] in root.ov-canvas-elements : Rectangle {
+                                                height: 32px; border-radius: Theme.radius-sm;
+                                                background: root.ov-canvas-selected == ei ? Theme.accent-soft : (el-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-0);
+                                                border-width: 1px;
+                                                border-color: root.ov-canvas-selected == ei ? Theme.border-accent : Theme.border-subtle;
+                                                HorizontalLayout {
+                                                    padding-left: 8px; padding-right: 5px; spacing: 6px;
+                                                    Image { source: el.type == 1 ? @image-url("icons/film.svg")
+                                                            : el.type == 2 ? @image-url("icons/clock.svg") : @image-url("icons/edit.svg");
+                                                        width: 12px; height: 12px; y: (parent.height - self.height)/2; colorize: Theme.text-secondary; }
+                                                    Text { text: el.type == 1 ? @tr("Imagen") : el.type == 2 ? @tr("Reloj")
+                                                            : (el.text == "" ? @tr("Texto") : el.text);
+                                                        color: Theme.text-primary; font-size: 10.5px; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+                                                    // subir z
+                                                    Rectangle { width: 16px; height: 16px; border-radius: 3px; y: (parent.height - self.height)/2;
+                                                        background: zu-ta.has-hover ? Theme.bg-surface-hover : transparent;
+                                                        Text { text: "▲"; font-size: 7px; color: Theme.text-secondary; horizontal-alignment: center; vertical-alignment: center; }
+                                                        zu-ta := TouchArea { mouse-cursor: pointer; clicked => { root.ov-canvas-move-element-z(ei, -1); } } }
+                                                    Rectangle { width: 16px; height: 16px; border-radius: 3px; y: (parent.height - self.height)/2;
+                                                        background: zd-ta.has-hover ? Theme.bg-surface-hover : transparent;
+                                                        Text { text: "▼"; font-size: 7px; color: Theme.text-secondary; horizontal-alignment: center; vertical-alignment: center; }
+                                                        zd-ta := TouchArea { mouse-cursor: pointer; clicked => { root.ov-canvas-move-element-z(ei, 1); } } }
+                                                    Rectangle { width: 16px; height: 16px; border-radius: 3px; y: (parent.height - self.height)/2;
+                                                        background: xd-ta.has-hover ? #ef444438 : transparent;
+                                                        Text { text: "✕"; font-size: 8px; color: xd-ta.has-hover ? #f87171 : Theme.text-secondary; horizontal-alignment: center; vertical-alignment: center; }
+                                                        xd-ta := TouchArea { mouse-cursor: pointer; clicked => { root.ov-canvas-delete-element(ei); } } }
+                                                }
+                                                el-ta := TouchArea { mouse-cursor: pointer; clicked => { root.ov-canvas-select-element(ei); } }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // ── Centro: lienzo WYSIWYG 16:9 ──
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                border-radius: Theme.radius-md;
+                                background: #060609;
+                                border-width: 1px; border-color: Theme.border-medium;
+                                clip: true;
+                                ov-canvas-stage := Rectangle {
+                                    height: parent.height - 20px;
+                                    width: Math.min(parent.width - 20px, self.height * 16 / 9);
+                                    x: (parent.width - self.width) / 2;
+                                    y: (parent.height - self.height) / 2;
+                                    background: #0b0b10;
+                                    border-width: 1px; border-color: #ffffff22;
+                                    clip: true;
+
+                                    // Checker/empty hint
+                                    if root.ov-canvas-elements.length == 0 : Text {
+                                        text: @tr("Lienzo 16:9 — agrega elementos desde la izquierda");
+                                        color: #ffffff2c; font-size: 13px; font-weight: 800;
+                                        x: (parent.width - self.width)/2; y: (parent.height - self.height)/2; }
+
+                                    // Elementos (selección por clic; arrastre en una capa posterior)
+                                    for el[ci] in root.ov-canvas-elements : Rectangle {
+                                        x: el.x * parent.width - self.width / 2;
+                                        y: el.y * parent.height - self.height / 2;
+                                        width: el.w * parent.width;
+                                        height: el.h * parent.height;
+                                        border-width: root.ov-canvas-selected == ci ? 1.5px : 0px;
+                                        border-color: #38bdf8;
+                                        border-radius: 2px;
+
+                                        if el.type == 1 && el.has-image : Image { width: 100%; height: 100%; source: el.image; image-fit: contain; opacity: el.opacity; }
+                                        if el.type == 0 : Text { width: 100%; height: 100%; text: el.text; color: el.text-color;
+                                            font-size: Math.max(7px, el.font-size * (parent.width / 1920px) * 1px); font-weight: el.bold ? 800 : 500;
+                                            horizontal-alignment: el.align == 0 ? left : (el.align == 2 ? right : center); vertical-alignment: center;
+                                            wrap: word-wrap; overflow: clip; }
+                                        if el.type == 2 : Text { width: 100%; height: 100%; text: el.clock-text; color: el.text-color;
+                                            font-size: Math.max(9px, el.font-size * (parent.width / 1920px) * 1px); font-weight: el.bold ? 800 : 600;
+                                            horizontal-alignment: el.align == 0 ? left : (el.align == 2 ? right : center); vertical-alignment: center; overflow: clip; }
+
+                                        // Selection corner handles (visual; drag en capa siguiente)
+                                        if root.ov-canvas-selected == ci : Rectangle { x: -3px; y: -3px; width: 6px; height: 6px; background: #38bdf8; border-radius: 1px; }
+                                        if root.ov-canvas-selected == ci : Rectangle { x: parent.width - 3px; y: -3px; width: 6px; height: 6px; background: #38bdf8; border-radius: 1px; }
+                                        if root.ov-canvas-selected == ci : Rectangle { x: -3px; y: parent.height - 3px; width: 6px; height: 6px; background: #38bdf8; border-radius: 1px; }
+                                        if root.ov-canvas-selected == ci : Rectangle { x: parent.width - 3px; y: parent.height - 3px; width: 6px; height: 6px; background: #38bdf8; border-radius: 1px; }
+
+                                        canvas-el-ta := TouchArea { mouse-cursor: pointer; clicked => { root.ov-canvas-select-element(ci); } }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // ── Mode 14: MATRIZ MULTI-PANTALLA Y SALAS (Control Independiente tipo ProPresenter) ──
                     if root.active-tab == 14 : VerticalLayout {
                         spacing: 10px;
@@ -8077,6 +8278,33 @@ export component MainWindow inherits Window {
                                                     }
                                                 }
 
+                                                // Reordenar z-order (subir / bajar) — solo visible donde el orden cambia la salida
+                                                if lyr.can-move-up || lyr.can-move-down : VerticalLayout {
+                                                    width: 20px;
+                                                    y: (parent.height - self.height) / 2;
+                                                    spacing: 2px;
+                                                    Rectangle {
+                                                        width: 20px; height: 15px; border-radius: 3px;
+                                                        background: lyr.can-move-up ? (up-ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-2) : transparent;
+                                                        border-width: lyr.can-move-up ? 1px : 0px;
+                                                        border-color: up-ta.has-hover ? Theme.border-medium : Theme.border-subtle;
+                                                        Text { text: "▲"; font-size: 8px; color: lyr.can-move-up ? Theme.text-secondary : Theme.text-muted.transparentize(0.6);
+                                                            horizontal-alignment: center; vertical-alignment: center; }
+                                                        up-ta := TouchArea { mouse-cursor: lyr.can-move-up ? pointer : default;
+                                                            clicked => { if (lyr.can-move-up) { root.move-active-layer(lyr.id, -1); } } }
+                                                    }
+                                                    Rectangle {
+                                                        width: 20px; height: 15px; border-radius: 3px;
+                                                        background: lyr.can-move-down ? (dn-ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-2) : transparent;
+                                                        border-width: lyr.can-move-down ? 1px : 0px;
+                                                        border-color: dn-ta.has-hover ? Theme.border-medium : Theme.border-subtle;
+                                                        Text { text: "▼"; font-size: 8px; color: lyr.can-move-down ? Theme.text-secondary : Theme.text-muted.transparentize(0.6);
+                                                            horizontal-alignment: center; vertical-alignment: center; }
+                                                        dn-ta := TouchArea { mouse-cursor: lyr.can-move-down ? pointer : default;
+                                                            clicked => { if (lyr.can-move-down) { root.move-active-layer(lyr.id, 1); } } }
+                                                    }
+                                                }
+
                                                 // Photoshop-style '✕' Delete Layer Button
                                                 Rectangle {
                                                     width: 24px;
@@ -9297,8 +9525,8 @@ export component MainWindow inherits Window {
         Rectangle {
             x: 106px;
             y: 58px;
-            width: 222px;
-            height: 170px;
+            width: 230px;
+            height: 218px;
             border-radius: Theme.radius-lg;
             background: Theme.bg-surface-0;
             border-width: 1.5px;
@@ -9317,6 +9545,13 @@ export component MainWindow inherits Window {
                     has-icon: true;
                     primary: root.active-tab == 4 && root.design-subtab == 0;
                     clicked => { root.active-tab = 4; root.design-subtab = 0; root.design-menu-open = false; }
+                }
+                GlassButton {
+                    label: @tr("Overlays (Canvas)");
+                    icon: @image-url("icons/layers.svg");
+                    has-icon: true;
+                    primary: root.active-tab == 15;
+                    clicked => { root.active-tab = 15; root.design-menu-open = false; }
                 }
                 GlassButton {
                     label: @tr("Shaders y Filtros");

@@ -327,6 +327,7 @@ SlintApp::SlintApp()
     , m_SystemFontsModel(std::make_shared<slint::VectorModel<slint::SharedString>>())
     , m_OverlayQueueModel(std::make_shared<slint::VectorModel<QueueItem>>())
     , m_ActiveLayersModel(std::make_shared<slint::VectorModel<ActiveLayerItem>>())
+    , m_OvCanvasModel(std::make_shared<slint::VectorModel<OverlayElementItem>>())
     , m_ScreenMatrixModel(std::make_shared<slint::VectorModel<ScreenMatrixItem>>())
     , m_MusicLiveWaveModel(std::make_shared<slint::VectorModel<float>>())
     , m_MusicTrackWaveModel(std::make_shared<slint::VectorModel<float>>())
@@ -372,6 +373,7 @@ SlintApp::SlintApp()
     m_Main->set_queue_items(m_QueueModel);
     m_Main->set_overlay_queue_items(m_OverlayQueueModel);
     m_Main->set_active_layers(m_ActiveLayersModel);
+    m_Main->set_ov_canvas_elements(m_OvCanvasModel);
     m_Main->set_screen_matrix_items(m_ScreenMatrixModel);
     m_Main->set_song_playlist_names(m_SongPlaylistNamesModel);
     m_Main->set_system_font_names(m_SystemFontsModel);
@@ -1434,6 +1436,26 @@ void SlintApp::BindCallbacks() {
     m_Main->on_remove_active_layer([this](slint::SharedString id) {
         RemoveActiveLayer(std::string(id));
     });
+    m_Main->on_move_active_layer([this](slint::SharedString id, int dir) {
+        MoveActiveLayer(std::string(id), dir);
+    });
+    // ── Editor de Overlays Canvas (tab 15) ──
+    m_Main->on_ov_canvas_new([this]() { OvCanvasNew(); });
+    m_Main->on_ov_canvas_open([this](int idx) { OvCanvasOpen(idx); });
+    m_Main->on_ov_canvas_save([this]() { OvCanvasSave(); });
+    m_Main->on_ov_canvas_add_text([this]() { OvCanvasAddText(); });
+    m_Main->on_ov_canvas_add_image([this]() { OvCanvasAddImage(); });
+    m_Main->on_ov_canvas_add_clock([this]() { OvCanvasAddClock(); });
+    m_Main->on_ov_canvas_select_element([this](int idx) {
+        m_Main->set_ov_canvas_selected(idx);
+    });
+    m_Main->on_ov_canvas_delete_element([this](int idx) { OvCanvasDeleteElement(idx); });
+    m_Main->on_ov_canvas_duplicate_element([this](int idx) { OvCanvasDuplicateElement(idx); });
+    m_Main->on_ov_canvas_move_element_z([this](int idx, int dir) { OvCanvasMoveElementZ(idx, dir); });
+    m_Main->on_ov_canvas_element_geometry([this](int idx, float x, float y, float w, float h) {
+        OvCanvasSetGeometry(idx, x, y, w, h);
+    });
+    m_Main->on_ov_canvas_project([this]() { OvCanvasProject(); });
     m_Main->on_select_output_target([this](int mode) {
         m_OutputTargetMode = std::max(0, mode);
         m_Main->set_output_target_mode(m_OutputTargetMode);
@@ -6059,6 +6081,32 @@ void SlintApp::LoadCustomOverlaysFromDisk() {
             ov.posPreset    = std::clamp(j.value("posPreset", 3), 0, 7);
             ov.posX         = std::clamp(j.value("posX", 0.85f), 0.05f, 0.95f);
             ov.posY         = std::clamp(j.value("posY", 0.10f), 0.05f, 0.95f);
+            // Compositor: elementos del canvas (si no existen, overlay clásico)
+            if (j.contains("elements") && j["elements"].is_array()) {
+                for (const auto& je : j["elements"]) {
+                    if (!je.is_object()) continue;
+                    OverlayElement e;
+                    e.type     = std::clamp(je.value("type", 0), 0, 2);
+                    e.x        = std::clamp(je.value("x", 0.5f), 0.0f, 1.0f);
+                    e.y        = std::clamp(je.value("y", 0.5f), 0.0f, 1.0f);
+                    e.w        = std::clamp(je.value("w", 0.3f), 0.02f, 1.0f);
+                    e.h        = std::clamp(je.value("h", 0.12f), 0.02f, 1.0f);
+                    e.text     = je.value("text", std::string());
+                    e.fontSize = std::clamp(je.value("fontSize", 48.0f), 6.0f, 400.0f);
+                    e.textR    = static_cast<uint8_t>(je.value("textR", 255));
+                    e.textG    = static_cast<uint8_t>(je.value("textG", 255));
+                    e.textB    = static_cast<uint8_t>(je.value("textB", 255));
+                    e.align    = std::clamp(je.value("align", 1), 0, 2);
+                    e.bold     = je.value("bold", true);
+                    e.imagePath= je.value("imagePath", std::string());
+                    e.opacity  = std::clamp(je.value("opacity", 1.0f), 0.0f, 1.0f);
+                    e.clockMode  = std::clamp(je.value("clockMode", 0), 0, 2);
+                    e.timeFormat = std::clamp(je.value("timeFormat", 0), 0, 4);
+                    e.initialSec = std::max(0, je.value("initialSec", 300));
+                    e.currentSec = e.initialSec;
+                    ov.elements.push_back(std::move(e));
+                }
+            }
             m_CustomOverlays.push_back(std::move(ov));
         } catch (...) {}
     }
@@ -6115,6 +6163,26 @@ bool SlintApp::SaveCustomOverlayToDisk(CustomOverlayConfig& cfg) {
     j["posPreset"]    = cfg.posPreset;
     j["posX"]         = cfg.posX;
     j["posY"]         = cfg.posY;
+
+    // Compositor: elementos del canvas
+    nlohmann::json elems = nlohmann::json::array();
+    for (const auto& e : cfg.elements) {
+        nlohmann::json je;
+        je["type"]     = e.type;
+        je["x"]        = e.x;  je["y"] = e.y;  je["w"] = e.w;  je["h"] = e.h;
+        je["text"]     = e.text;
+        je["fontSize"] = e.fontSize;
+        je["textR"]    = e.textR; je["textG"] = e.textG; je["textB"] = e.textB;
+        je["align"]    = e.align;
+        je["bold"]     = e.bold;
+        je["imagePath"]= e.imagePath;
+        je["opacity"]  = e.opacity;
+        je["clockMode"]  = e.clockMode;
+        je["timeFormat"] = e.timeFormat;
+        je["initialSec"] = e.initialSec;
+        elems.push_back(std::move(je));
+    }
+    j["elements"] = std::move(elems);
 
     std::ofstream out(cfg.path, std::ios::binary);
     if (!out.is_open()) return false;
@@ -9539,6 +9607,7 @@ void SlintApp::SyncScreenOutputs() {
         if (pub.hasOverlayImage) {
             m_Projector->set_overlay_image(pub.overlayImage);
         }
+        m_Projector->set_overlay_above_text(pub.overlayAboveText);
         const auto& cov = pub.customOverlay;
         m_Projector->set_show_custom_overlay(pub.hasCustomOverlay);
         m_Projector->set_ov_show_clock(cov.showClock);
@@ -9641,10 +9710,14 @@ void SlintApp::RefreshActiveLayersModel() {
         item.id       = "overlay";
         item.kind     = "OVERLAY";
         item.title    = slint::SharedString(sc.overlayName);
-        item.subtitle = slint::SharedString("Gráfico PNG Transparente • " + sc.name);
+        item.subtitle = slint::SharedString(std::string("Gráfico PNG Transparente • ") +
+                            (sc.overlayAboveText ? "encima de letras • " : "debajo de letras • ") + sc.name);
         item.accent   = slint::Color::from_rgb_uint8(45, 212, 191);
         item.has_thumbnail = true;
         item.thumbnail     = sc.hasOverlayThumb ? sc.overlayThumb : sc.overlayImage;
+        // Reordenable solo cuando hay texto con el cual intercambiar orden
+        item.can_move_up   = !sc.displayText.empty() && !sc.overlayAboveText;
+        item.can_move_down = !sc.displayText.empty() && sc.overlayAboveText;
         m_ActiveLayersModel->push_back(item);
     }
 
@@ -9657,6 +9730,9 @@ void SlintApp::RefreshActiveLayersModel() {
         item.subtitle = slint::SharedString(sc.displayRef.empty() ? ("Texto proyectado • " + sc.name) : (sc.displayRef + " • " + sc.name));
         item.accent   = slint::Color::from_rgb_uint8(34, 197, 94);
         item.has_thumbnail = false;
+        // Si hay overlay PNG, el texto puede subir (por encima del PNG) o bajar (por debajo)
+        item.can_move_up   = sc.hasOverlayImage && sc.overlayAboveText;
+        item.can_move_down = sc.hasOverlayImage && !sc.overlayAboveText;
         m_ActiveLayersModel->push_back(item);
     }
 
@@ -9867,6 +9943,39 @@ void SlintApp::RemoveActiveLayer(const std::string& layerId) {
     }
     SyncClockOverlay();
     SyncScreenOutputs();
+}
+
+void SlintApp::MoveActiveLayer(const std::string& layerId, int dir) {
+    // El único reordenamiento que cambia la salida es OVERLAY PNG ↔ LETRAS.
+    // dir: -1 = subir (hacia el frente), +1 = bajar (hacia atrás).
+    // "overlay" subir  -> PNG por encima del texto (overlayAboveText = true)
+    // "overlay" bajar  -> PNG por debajo del texto (false)
+    // "text"    subir  -> texto por encima del PNG  (overlayAboveText = false)
+    // "text"    bajar  -> texto por debajo del PNG  (overlayAboveText = true)
+    bool desiredAbove;
+    if (layerId == "overlay") {
+        desiredAbove = (dir < 0);
+    } else if (layerId == "text") {
+        desiredAbove = (dir > 0);
+    } else {
+        return; // otras capas no tienen reordenamiento con efecto en la salida
+    }
+
+    auto applyTo = [this, desiredAbove](int i) {
+        if (i < 0 || i >= static_cast<int>(m_Screens.size())) return;
+        auto& sc = m_Screens[i];
+        if (sc.hasOverlayImage && !sc.displayText.empty()) {
+            sc.overlayAboveText = desiredAbove;
+        }
+    };
+
+    if (m_OutputTargetMode == 0 && m_InspectedScreenIdx == 0) {
+        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) applyTo(i);
+    } else {
+        applyTo(m_InspectedScreenIdx);
+    }
+    SyncScreenOutputs();
+    RefreshActiveLayersModel();
 }
 
 void SlintApp::ToggleLayerOnScreen(int screenIdx, const std::string& layerId) {
