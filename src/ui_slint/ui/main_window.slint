@@ -17,6 +17,29 @@ export struct LibraryItem {
     has-thumbnail: bool,
 }
 
+// Unified hub result row/card used by the Biblioteca dashboard (tab 13).
+// kind: 0=Canción, 1=Video/Imagen, 2=Documento/Web, 3=Música, 4=Biblia
+export struct HubItem {
+    title: string,
+    subtitle: string,
+    meta: string,        // right-aligned metadata pill (autor / duración / formato)
+    path: string,
+    kind: int,
+    badge: string,       // short badge text: CANCIÓN / VIDEO / IMG / PDF / WEB / AUDIO / BIBLIA
+    thumbnail: image,
+    has-thumbnail: bool,
+    playing: bool,       // for audio: currently sounding
+    favorite: bool,      // pinned / favorite
+}
+
+// Left-column collection entry (Recientes, Favoritos, Canciones, ...)
+export struct HubCollection {
+    id: int,             // matches the hub-filter value
+    label: string,
+    count: int,
+    accent: color,
+}
+
 export struct SlideItem {
     badge: string,
     body: string,
@@ -561,12 +584,28 @@ export component MainWindow inherits Window {
     in property <[string]> music-scan-folders: [];
     in-out property <string> music-folder-input: "";
 
-    // Tab 13: Biblioteca Principal (Hub Unificado)
+    // Tab 13: Biblioteca Principal (Dashboard Unificado — Opción A)
     in property <int> hub-songs-count: 0;
     in property <int> hub-media-count: 0;
     in property <int> hub-music-count: 0;
     in property <int> hub-docs-count: 0;
     in property <int> hub-bibles-count: 0;
+    in property <int> hub-recent-count: 0;
+    in property <int> hub-favorites-count: 0;
+    in property <int> hub-total-count: 0;
+
+    // Unified search + filter state
+    in-out property <string> hub-search: "";
+    // hub-filter: -1=Recientes, -2=Favoritos, -3=Todo, 0=Canciones, 1=Multimedia, 2=Documentos, 3=Música, 4=Biblia
+    in-out property <int> hub-filter: -1;
+    in property <string> hub-scan-status: "";
+    in property <bool> hub-scanning: false;
+
+    // Left column collections (built in C++) and the flat result grid/list
+    in property <[HubCollection]> hub-collections: [];
+    in property <[HubItem]> hub-results: [];
+
+    // Legacy models (kept so other code paths compile; no longer rendered on tab 13)
     in property <[LibraryItem]> hub-recent-songs: [];
     in property <[LibraryItem]> hub-recent-media: [];
     in property <[MusicTrackItem]> hub-recent-music: [];
@@ -600,11 +639,21 @@ export component MainWindow inherits Window {
     in-out property <float> music-eq-3600: 0.0;
     in-out property <float> music-eq-12000: 0.0;
 
-    // Tab 10: Documentos (PDF / Presentaciones)
+    // Tab 10: Documentos (PDF / Presentaciones / Navegador HTML & Web)
+    in-out property <int> doc-subtab: 0; // 0=PDF e Imágenes, 1=Navegador
     in property <[DocPageItem]> doc-pages: [];
     in property <string> doc-title: "Documentos — Selecciona un PDF o documento";
     in property <string> doc-status: "Coloca archivos .pdf o imágenes en assets/documents o pulsa Importar.";
     in-out property <int> active-doc-page-idx: -1;
+
+    // Navegador (Categoría dentro de Documentos para HTML local y sitios HTTPS)
+    in-out property <string> web-url-input: "https://";
+    in property <string> web-status: "Ingresa una URL (https://...) o carga un archivo .html/.htm.";
+    in property <image> web-preview-image;
+    in property <bool> has-web-preview: false;
+    in-out property <bool> web-live-active: false;
+    in-out property <bool> web-live-sync: true;
+    in property <int> web-zoom-percent: 100;
 
     // QR desde texto (enlace o cualquier texto) — modal dentro de Documentos.
     in-out property <bool>   qr-modal-open: false;
@@ -798,11 +847,33 @@ export component MainWindow inherits Window {
     callback hub-play-music(int);
     callback hub-open-doc(string);
 
+    // Dashboard unificado (tab 13)
+    callback hub-search-changed(string);   // live filter text
+    callback hub-filter-changed(int);       // chip / collection selected
+    callback hub-item-open(int, string);    // (kind, path) → open in its tab
+    callback hub-item-project(int, string); // (kind, path) → Proyectar / Enviar a Pantalla
+    callback hub-item-queue(int, string);   // (kind, path) → + Cola
+    callback hub-item-toggle-favorite(int, string); // (kind, path)
+
     // Documents (Tab 10)
+    callback doc-subtab-changed(int);
     callback doc-page-clicked(int);
     callback doc-prev-page();
     callback doc-next-page();
     callback import-document-clicked();
+    // Navegador (HTML local y Webs HTTPS dentro de Documentos)
+    callback web-navigate(string);
+    callback web-reload();
+    callback web-back();
+    callback web-forward();
+    callback web-scroll(int);
+    callback web-click-at(float, float);
+    callback web-nav-key(string);
+    callback web-zoom-delta(int);
+    callback web-project-live();
+    callback web-stop-live();
+    callback web-save-bookmark(string);
+    callback web-import-html();
     // QR desde texto: previsualizar (actualiza qr-preview-image) y guardar en Documentos.
     callback qr-text-changed(string);
     callback qr-save-clicked(string, string);
@@ -988,6 +1059,11 @@ export component MainWindow inherits Window {
             }
             if (!root.song-editor-open && !root.is-style-editor-active) {
                 if (event.text == Key.RightArrow || event.text == Key.DownArrow || event.text == Key.PageDown) {
+                    if (root.active-tab == 10 && root.doc-subtab == 1) {
+                        if (event.text == Key.DownArrow) { root.web-scroll(280); }
+                        else { root.web-nav-key("ArrowRight"); }
+                        return accept;
+                    }
                     if (root.active-tab == 10) {
                         root.doc-next-page();
                         return accept;
@@ -998,6 +1074,11 @@ export component MainWindow inherits Window {
                     }
                 }
                 if (event.text == Key.LeftArrow || event.text == Key.UpArrow || event.text == Key.PageUp) {
+                    if (root.active-tab == 10 && root.doc-subtab == 1) {
+                        if (event.text == Key.UpArrow) { root.web-scroll(-280); }
+                        else { root.web-nav-key("ArrowLeft"); }
+                        return accept;
+                    }
                     if (root.active-tab == 10) {
                         root.doc-prev-page();
                         return accept;
@@ -1058,6 +1139,128 @@ export component MainWindow inherits Window {
                 width: 306px;
                 spacing: 10px;
 
+                // ── Tab 13: Panel de COLECCIONES (Dashboard Opción A) ──
+                if root.active-tab == 13 : GlassCard {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        padding: 12px;
+                        spacing: 10px;
+
+                        // Brand header
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Rectangle {
+                                width: 34px; height: 34px; border-radius: 9px;
+                                background: @linear-gradient(135deg, #38bdf8 0%, #a78bfa 100%);
+                                Image { source: @image-url("icons/folder.svg"); width: 17px; height: 17px;
+                                    x: (parent.width - self.width)/2; y: (parent.height - self.height)/2; colorize: #0b0b0e; }
+                            }
+                            VerticalLayout {
+                                alignment: center; spacing: 0px;
+                                Text { text: @tr("Biblioteca"); color: Theme.text-primary; font-size: 15px; font-weight: 800; }
+                                Text { text: root.hub-total-count + " elementos en vivo"; color: Theme.text-muted; font-size: 10.5px; }
+                            }
+                        }
+
+                        // Scan status strip
+                        Rectangle {
+                            height: 30px;
+                            border-radius: Theme.radius-sm;
+                            background: root.hub-scanning ? #38bdf81f : Theme.bg-surface-0;
+                            border-width: 1px;
+                            border-color: root.hub-scanning ? #38bdf855 : Theme.border-subtle;
+                            animate background { duration: 200ms; }
+                            HorizontalLayout {
+                                padding-left: 9px; padding-right: 7px; spacing: 6px;
+                                Image { source: @image-url("icons/refresh.svg"); width: 12px; height: 12px;
+                                    y: (parent.height - self.height)/2;
+                                    colorize: root.hub-scanning ? #38bdf8 : Theme.text-muted;
+                                    rotation-angle: root.hub-scanning ? 180deg : 0deg;
+                                    animate rotation-angle { duration: 700ms; easing: ease-in-out; }
+                                }
+                                Text { text: root.hub-scan-status != "" ? root.hub-scan-status : @tr("Biblioteca sincronizada");
+                                    color: Theme.text-secondary; font-size: 10.5px; vertical-alignment: center;
+                                    overflow: elide; horizontal-stretch: 1; }
+                                scan-ta := TouchArea {
+                                    width: 22px; mouse-cursor: pointer;
+                                    clicked => { root.scan-libraries(); }
+                                    Image { source: @image-url("icons/refresh.svg"); width: 13px; height: 13px;
+                                        x: (parent.width - self.width)/2; y: (parent.height - self.height)/2;
+                                        colorize: scan-ta.has-hover ? Theme.text-primary : Theme.text-muted; }
+                                }
+                            }
+                        }
+
+                        // Collections list
+                        ScrollView {
+                            vertical-stretch: 1;
+                            VerticalLayout {
+                                alignment: start;
+                                spacing: 3px;
+                                for col in root.hub-collections : Rectangle {
+                                    height: 38px;
+                                    border-radius: Theme.radius-sm;
+                                    background: root.hub-filter == col.id
+                                        ? col.accent.transparentize(0.82)
+                                        : (col-ta.has-hover ? Theme.bg-surface-2 : transparent);
+                                    border-width: 1px;
+                                    border-color: root.hub-filter == col.id ? col.accent.transparentize(0.55) : transparent;
+                                    animate background   { duration: 130ms; easing: ease-out; }
+                                    animate border-color { duration: 130ms; easing: ease-out; }
+                                    // Active accent bar
+                                    Rectangle { x: 0; width: root.hub-filter == col.id ? 3px : 0px; height: 60%;
+                                        y: (parent.height - self.height)/2; border-radius: 2px; background: col.accent;
+                                        animate width { duration: 150ms; easing: ease-out; } }
+                                    HorizontalLayout {
+                                        padding-left: 11px; padding-right: 10px; spacing: 9px;
+                                        Image { source:
+                                            col.id == -1 ? @image-url("icons/refresh.svg")
+                                            : col.id == -2 ? @image-url("icons/star.svg")
+                                            : col.id == -3 ? @image-url("icons/layers.svg")
+                                            : col.id == 0 ? @image-url("icons/music.svg")
+                                            : col.id == 1 ? @image-url("icons/film.svg")
+                                            : col.id == 3 ? @image-url("icons/headphones.svg")
+                                            : col.id == 2 ? @image-url("icons/file_text.svg")
+                                            : @image-url("icons/book.svg");
+                                            width: 15px; height: 15px; y: (parent.height - self.height)/2;
+                                            colorize: root.hub-filter == col.id ? col.accent : Theme.text-secondary; }
+                                        Text { text: col.label; vertical-alignment: center; horizontal-stretch: 1;
+                                            color: root.hub-filter == col.id ? Theme.text-primary : Theme.text-secondary;
+                                            font-size: 12.5px; font-weight: root.hub-filter == col.id ? 700 : 500; overflow: elide; }
+                                        Rectangle {
+                                            height: 18px; min-width: 24px; border-radius: 9px;
+                                            background: root.hub-filter == col.id ? col.accent.transparentize(0.7) : Theme.bg-surface-0;
+                                            y: (parent.height - self.height)/2;
+                                            HorizontalLayout { padding-left: 7px; padding-right: 7px;
+                                                Text { text: col.count; vertical-alignment: center; horizontal-alignment: center;
+                                                    color: root.hub-filter == col.id ? col.accent : Theme.text-muted;
+                                                    font-size: 10px; font-weight: 700; }
+                                            }
+                                        }
+                                    }
+                                    col-ta := TouchArea { mouse-cursor: pointer;
+                                        clicked => { root.hub-filter = col.id; root.hub-filter-changed(col.id); } }
+                                }
+                            }
+                        }
+
+                        // Quick create actions pinned to the bottom
+                        VerticalLayout {
+                            spacing: 6px;
+                            GlassButton {
+                                label: @tr("Nueva Canción"); icon: @image-url("icons/plus.svg");
+                                has-icon: true; primary: true;
+                                clicked => { root.active-tab = 0; root.new-song-clicked(); }
+                            }
+                            GlassButton {
+                                label: @tr("Importar Archivo"); icon: @image-url("icons/upload.svg");
+                                has-icon: true;
+                                clicked => { root.import-file-clicked(); }
+                            }
+                        }
+                    }
+                }
+
                 if root.active-tab == 0 || root.active-tab == 2 || root.active-tab == 10 : GlassCard {
                     vertical-stretch: 1;
 
@@ -1083,7 +1286,10 @@ export component MainWindow inherits Window {
                                 IconButton {
                                     icon: @image-url("icons/upload.svg");
                                     clicked => {
-                                        if (root.active-tab == 10) { root.import-document-clicked(); }
+                                        if (root.active-tab == 10) {
+                                            if (root.doc-subtab == 1) { root.web-import-html(); }
+                                            else { root.import-document-clicked(); }
+                                        }
                                         else { root.import-file-clicked(); }
                                     }
                                 }
@@ -1118,6 +1324,27 @@ export component MainWindow inherits Window {
                                 primary: root.bg-subtab == 1;
                                 horizontal-stretch: 1;
                                 clicked => { root.bg-subtab = 1; root.bg-subtab-changed(1); }
+                            }
+                        }
+
+                        // Categorías de Documentos: PDF/Imágenes vs Navegador (HTML/HTTPS)
+                        if root.active-tab == 10 : HorizontalLayout {
+                            spacing: 6px;
+                            GlassButton {
+                                label: @tr("PDF / Imágenes");
+                                icon: @image-url("icons/file_text.svg");
+                                has-icon: true;
+                                primary: root.doc-subtab == 0;
+                                horizontal-stretch: 1;
+                                clicked => { root.doc-subtab = 0; root.doc-subtab-changed(0); }
+                            }
+                            GlassButton {
+                                label: @tr("Navegador");
+                                icon: @image-url("icons/globe.svg");
+                                has-icon: true;
+                                primary: root.doc-subtab == 1;
+                                horizontal-stretch: 1;
+                                clicked => { root.doc-subtab = 1; root.doc-subtab-changed(1); }
                             }
                         }
 
@@ -1423,7 +1650,7 @@ export component MainWindow inherits Window {
                 }
 
                 // ── Left Bottom Card: CONTENIDO (Fondos en Bucle | Overlays PNG | Estilos Rápidos) ──
-                GlassCard {
+                if root.active-tab != 13 : GlassCard {
                     vertical-stretch: 1;
 
                     VerticalLayout {
@@ -5442,385 +5669,317 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // ── Mode 13: BIBLIOTECA PRINCIPAL (Hub Dinámico y Limpio) ──
-                    if root.active-tab == 13 : ScrollView {
+                    // ── Mode 13: BIBLIOTECA — Dashboard Unificado (Opción A) ──
+                    if root.active-tab == 13 : VerticalLayout {
                         vertical-stretch: 1;
+                        spacing: 11px;
+
+                        // ── Unified global search bar + quick filter chips ──
                         VerticalLayout {
-                            alignment: start;
-                            spacing: 12px;
-                            padding-right: 8px;
+                            spacing: 9px;
 
-                            // Quick Studio Action Strip
-                            HorizontalLayout {
-                                alignment: space-between;
-                                spacing: 8px;
-                                VerticalLayout {
-                                    spacing: 1px;
-                                    Text { text: @tr("Biblioteca"); color: Theme.text-primary; font-size: 15px; font-weight: 700; }
-                                    Text { text: "Acceso directo a todo tu contenido en vivo"; color: Theme.text-muted; font-size: 11px; }
-                                }
-                                HorizontalLayout {
-                                    spacing: 6px;
-                                    GlassButton {
-                                        label: @tr("Nueva Canción");
-                                        icon: @image-url("icons/plus.svg");
-                                        has-icon: true;
-                                        compact: true;
-                                        primary: true;
-                                        clicked => { root.active-tab = 0; root.new-song-clicked(); }
-                                    }
-                                    GlassButton {
-                                        label: @tr("Importar");
-                                        icon: @image-url("icons/upload.svg");
-                                        has-icon: true;
-                                        compact: true;
-                                        clicked => { root.import-file-clicked(); }
-                                    }
-                                    GlassButton {
-                                        label: @tr("Escanear");
-                                        icon: @image-url("icons/refresh.svg");
-                                        has-icon: true;
-                                        compact: true;
-                                        clicked => { root.scan-libraries(); }
-                                    }
-                                }
-                            }
-
-                            // 5 Quick Category Cards with SVG icons & smooth transitions
-                            HorizontalLayout {
-                                spacing: 8px;
-                                height: 86px;
-
-                                Rectangle {
-                                    horizontal-stretch: 1;
-                                    border-radius: Theme.radius-md;
-                                    background: hc0.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1;
-                                    border-width: 1px;
-                                    border-color: hc0.has-hover ? #38bdf8 : Theme.border-subtle;
-                                    clip: true;
-                                    animate background   { duration: 150ms; easing: ease-out; }
-                                    animate border-color { duration: 150ms; easing: ease-out; }
-                                    Rectangle { y: 0; width: 100%; height: hc0.has-hover ? 3px : 2px; background: #38bdf8; animate height { duration: 140ms; } }
-                                    VerticalLayout {
-                                        padding: 11px;
-                                        alignment: center;
-                                        spacing: 5px;
-                                        HorizontalLayout {
-                                            spacing: 6px;
-                                            Image { source: @image-url("icons/music.svg"); width: 15px; height: 15px; y: (parent.height - self.height) / 2; colorize: #38bdf8; }
-                                            Text { text: "Canciones"; color: Theme.text-primary; font-size: 12.5px; font-weight: 700; vertical-alignment: center; }
-                                        }
-                                        Text { text: root.hub-songs-count + " elementos"; color: Theme.text-muted; font-size: 11px; }
-                                    }
-                                    hc0 := TouchArea { mouse-cursor: pointer; clicked => { root.active-tab = 0; } }
-                                }
-                                Rectangle {
-                                    horizontal-stretch: 1;
-                                    border-radius: Theme.radius-md;
-                                    background: hc1.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1;
-                                    border-width: 1px;
-                                    border-color: hc1.has-hover ? #fbbf24 : Theme.border-subtle;
-                                    clip: true;
-                                    animate background   { duration: 150ms; easing: ease-out; }
-                                    animate border-color { duration: 150ms; easing: ease-out; }
-                                    Rectangle { y: 0; width: 100%; height: hc1.has-hover ? 3px : 2px; background: #fbbf24; animate height { duration: 140ms; } }
-                                    VerticalLayout {
-                                        padding: 11px;
-                                        alignment: center;
-                                        spacing: 5px;
-                                        HorizontalLayout {
-                                            spacing: 6px;
-                                            Image { source: @image-url("icons/book.svg"); width: 15px; height: 15px; y: (parent.height - self.height) / 2; colorize: #fbbf24; }
-                                            Text { text: "Biblia"; color: Theme.text-primary; font-size: 12.5px; font-weight: 700; vertical-alignment: center; }
-                                        }
-                                        Text { text: root.hub-bibles-count + " versiones"; color: Theme.text-muted; font-size: 11px; }
-                                    }
-                                    hc1 := TouchArea { mouse-cursor: pointer; clicked => { root.active-tab = 1; } }
-                                }
-                                Rectangle {
-                                    horizontal-stretch: 1;
-                                    border-radius: Theme.radius-md;
-                                    background: hc2.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1;
-                                    border-width: 1px;
-                                    border-color: hc2.has-hover ? #ec4899 : Theme.border-subtle;
-                                    clip: true;
-                                    animate background   { duration: 150ms; easing: ease-out; }
-                                    animate border-color { duration: 150ms; easing: ease-out; }
-                                    Rectangle { y: 0; width: 100%; height: hc2.has-hover ? 3px : 2px; background: #ec4899; animate height { duration: 140ms; } }
-                                    VerticalLayout {
-                                        padding: 11px;
-                                        alignment: center;
-                                        spacing: 5px;
-                                        HorizontalLayout {
-                                            spacing: 6px;
-                                            Image { source: @image-url("icons/film.svg"); width: 15px; height: 15px; y: (parent.height - self.height) / 2; colorize: #ec4899; }
-                                            Text { text: "Multimedia"; color: Theme.text-primary; font-size: 12.5px; font-weight: 700; vertical-alignment: center; }
-                                        }
-                                        Text { text: root.hub-media-count + " videos/img"; color: Theme.text-muted; font-size: 11px; }
-                                    }
-                                    hc2 := TouchArea { mouse-cursor: pointer; clicked => { root.active-tab = 2; } }
-                                }
-                                Rectangle {
-                                    horizontal-stretch: 1;
-                                    border-radius: Theme.radius-md;
-                                    background: hc3.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1;
-                                    border-width: 1px;
-                                    border-color: hc3.has-hover ? #22c55e : Theme.border-subtle;
-                                    clip: true;
-                                    animate background   { duration: 150ms; easing: ease-out; }
-                                    animate border-color { duration: 150ms; easing: ease-out; }
-                                    Rectangle { y: 0; width: 100%; height: hc3.has-hover ? 3px : 2px; background: #22c55e; animate height { duration: 140ms; } }
-                                    VerticalLayout {
-                                        padding: 11px;
-                                        alignment: center;
-                                        spacing: 5px;
-                                        HorizontalLayout {
-                                            spacing: 6px;
-                                            Image { source: @image-url("icons/headphones.svg"); width: 15px; height: 15px; y: (parent.height - self.height) / 2; colorize: #22c55e; }
-                                            Text { text: @tr("Música"); color: Theme.text-primary; font-size: 12.5px; font-weight: 700; vertical-alignment: center; }
-                                        }
-                                        Text { text: root.hub-music-count + " pistas"; color: Theme.text-muted; font-size: 11px; }
-                                    }
-                                    hc3 := TouchArea { mouse-cursor: pointer; clicked => { root.active-tab = 9; } }
-                                }
-                                Rectangle {
-                                    horizontal-stretch: 1;
-                                    border-radius: Theme.radius-md;
-                                    background: hc4.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1;
-                                    border-width: 1px;
-                                    border-color: hc4.has-hover ? #a78bfa : Theme.border-subtle;
-                                    clip: true;
-                                    animate background   { duration: 150ms; easing: ease-out; }
-                                    animate border-color { duration: 150ms; easing: ease-out; }
-                                    Rectangle { y: 0; width: 100%; height: hc4.has-hover ? 3px : 2px; background: #a78bfa; animate height { duration: 140ms; } }
-                                    VerticalLayout {
-                                        padding: 11px;
-                                        alignment: center;
-                                        spacing: 5px;
-                                        HorizontalLayout {
-                                            spacing: 6px;
-                                            Image { source: @image-url("icons/file_text.svg"); width: 15px; height: 15px; y: (parent.height - self.height) / 2; colorize: #a78bfa; }
-                                            Text { text: "Documentos"; color: Theme.text-primary; font-size: 12.5px; font-weight: 700; vertical-alignment: center; }
-                                        }
-                                        Text { text: root.hub-docs-count + " archivos"; color: Theme.text-muted; font-size: 11px; }
-                                    }
-                                    hc4 := TouchArea { mouse-cursor: pointer; clicked => { root.active-tab = 10; } }
-                                }
-                            }
-
-                            // Unified Section 1: Canciones / Letras
                             Rectangle {
+                                height: 44px;
                                 border-radius: Theme.radius-md;
-                                background: Theme.bg-surface-1;
-                                border-width: 1px;
-                                border-color: Theme.border-subtle;
-                                VerticalLayout {
-                                    padding: 12px;
-                                    spacing: 7px;
-                                    HorizontalLayout {
-                                        alignment: space-between;
-                                        Text { text: "Canciones y Letras"; color: Theme.text-primary; font-size: 13px; font-weight: 700; vertical-alignment: center; }
-                                        GlassButton { label: @tr("Abrir Canciones ›"); compact: true; clicked => { root.active-tab = 0; } }
-                                    }
-                                    if root.hub-recent-songs.length == 0 : Text { text: "Sin canciones todavía."; color: Theme.text-muted; font-size: 11.5px; }
-                                    for s in root.hub-recent-songs : Rectangle {
-                                        height: 36px;
-                                        border-radius: Theme.radius-sm;
-                                        background: hs-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-0;
-                                        border-width: 1px;
-                                        border-color: hs-ta.has-hover ? Theme.border-medium : Theme.border-subtle;
-                                        animate background   { duration: 130ms; easing: ease-out; }
-                                        animate border-color { duration: 130ms; easing: ease-out; }
-                                        hs-ta := TouchArea {
-                                            mouse-cursor: pointer;
-                                            clicked => { root.hub-open-song(s.path); }
-                                            pointer-event(ev) => {
-                                                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
-                                                    root.open-item-modal(0, 0, s.title, s.subtitle, s.path);
-                                                }
-                                            }
-                                        }
-                                        HorizontalLayout {
-                                            padding-left: 10px;
-                                            padding-right: 6px;
-                                            spacing: 6px;
-                                            Text { text: s.title; color: Theme.text-primary; font-size: 12px; font-weight: 600; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
-                                            Text { text: s.subtitle; color: Theme.text-muted; font-size: 10.5px; vertical-alignment: center; }
-                                            ItemMoreBtn {
-                                                y: (parent.height - self.height) / 2;
-                                                clicked => { root.open-item-modal(0, 0, s.title, s.subtitle, s.path); }
-                                            }
-                                            ItemRowActionBtn {
-                                                icon: @image-url("icons/trash.svg");
-                                                danger: true;
-                                                y: (parent.height - self.height) / 2;
-                                                clicked => { root.open-item-modal(2, 0, s.title, s.subtitle, s.path); }
-                                            }
-                                        }
-                                    }
+                                background: Theme.bg-input;
+                                border-width: 1.5px;
+                                border-color: hub-search-fs.has-focus ? #38bdf8 : Theme.border-subtle;
+                                drop-shadow-blur: hub-search-fs.has-focus ? 14px : 0px;
+                                drop-shadow-color: #38bdf855;
+                                animate border-color     { duration: 150ms; easing: ease-out; }
+                                animate drop-shadow-blur { duration: 180ms; easing: ease-out; }
+
+                                Image { source: @image-url("icons/search.svg"); width: 17px; height: 17px;
+                                    x: 13px; y: (parent.height - self.height)/2;
+                                    colorize: hub-search-fs.has-focus ? #38bdf8 : Theme.text-muted; }
+
+                                // Placeholder shown behind the input when empty
+                                if root.hub-search == "" : Text {
+                                    text: @tr("Buscar en toda la biblioteca — canciones, biblia, videos, música, PDF, web");
+                                    x: 39px; width: parent.width - 120px;
+                                    color: Theme.text-muted; font-size: 13px; vertical-alignment: center;
+                                    y: (parent.height - self.height)/2; overflow: elide;
+                                }
+
+                                hub-search-fs := TextInput {
+                                    x: 39px; width: parent.width - 120px;
+                                    y: (parent.height - self.height)/2; height: 20px;
+                                    vertical-alignment: center;
+                                    color: Theme.text-primary;
+                                    font-size: 13.5px;
+                                    single-line: true;
+                                    text <=> root.hub-search;
+                                    edited => { root.hub-search-changed(self.text); }
+                                }
+
+                                if root.hub-search != "" : Rectangle {
+                                    width: 22px; height: 22px; border-radius: 11px;
+                                    x: parent.width - 74px; y: (parent.height - self.height)/2;
+                                    background: clr-ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-1;
+                                    Text { text: "✕"; font-size: 11px; color: Theme.text-secondary;
+                                        x: (parent.width - self.width)/2; y: (parent.height - self.height)/2; }
+                                    clr-ta := TouchArea { mouse-cursor: pointer;
+                                        clicked => { root.hub-search = ""; root.hub-search-changed(""); } }
+                                }
+                                Rectangle {
+                                    width: 46px; height: 21px; border-radius: 6px;
+                                    x: parent.width - 56px; y: (parent.height - self.height)/2;
+                                    background: Theme.bg-surface-1; border-width: 1px; border-color: Theme.border-subtle;
+                                    Text { text: "⌘K"; font-size: 10px; font-weight: 700; color: Theme.text-muted;
+                                        x: (parent.width - self.width)/2; y: (parent.height - self.height)/2; }
                                 }
                             }
 
-                            // Unified Section 2: Música (Audio)
-                            Rectangle {
-                                border-radius: Theme.radius-md;
-                                background: Theme.bg-surface-1;
-                                border-width: 1px;
-                                border-color: Theme.border-subtle;
-                                VerticalLayout {
-                                    padding: 12px;
-                                    spacing: 7px;
+                            // Quick filter chips (mirror the collections, horizontally)
+                            HorizontalLayout {
+                                spacing: 6px;
+                                for chip in [
+                                    { id: -3, label: "Todo" },
+                                    { id: -1, label: "Recientes" },
+                                    { id: -2, label: "Favoritos" },
+                                    { id: 0,  label: "Canciones" },
+                                    { id: 1,  label: "Multimedia" },
+                                    { id: 3,  label: "Música" },
+                                    { id: 2,  label: "Documentos & Web" },
+                                    { id: 4,  label: "Biblia" },
+                                ] : Rectangle {
+                                    height: 28px;
+                                    border-radius: Theme.radius-pill;
+                                    background: root.hub-filter == chip.id ? Theme.accent : (chip-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-0);
+                                    border-width: 1px;
+                                    border-color: root.hub-filter == chip.id ? Theme.accent-strong : Theme.border-subtle;
+                                    animate background   { duration: 130ms; easing: ease-out; }
+                                    animate border-color { duration: 130ms; easing: ease-out; }
                                     HorizontalLayout {
-                                        alignment: space-between;
-                                        Text { text: "Música y Pistas de Audio"; color: Theme.text-primary; font-size: 13px; font-weight: 700; vertical-alignment: center; }
-                                        GlassButton { label: @tr("Abrir Música ›"); compact: true; clicked => { root.active-tab = 9; } }
+                                        padding-left: 13px; padding-right: 13px;
+                                        Text { text: chip.label; vertical-alignment: center;
+                                            color: root.hub-filter == chip.id ? Theme.accent-fg : Theme.text-secondary;
+                                            font-size: 11.5px; font-weight: root.hub-filter == chip.id ? 700 : 500; }
                                     }
-                                    if root.hub-recent-music.length == 0 : Text { text: "Sin pistas de audio. Puedes agregar carpetas de música en Ajustes."; color: Theme.text-muted; font-size: 11.5px; }
-                                    for mt[midx] in root.hub-recent-music : Rectangle {
-                                        height: 40px;
-                                        border-radius: Theme.radius-sm;
-                                        background: hm-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-0;
+                                    chip-ta := TouchArea { mouse-cursor: pointer;
+                                        clicked => { root.hub-filter = chip.id; root.hub-filter-changed(chip.id); } }
+                                }
+                            }
+                        }
+
+                        // ── Results region: media grid (filter 1) or rich list (everything else) ──
+                        if root.hub-results.length == 0 : Rectangle {
+                            vertical-stretch: 1;
+                            VerticalLayout {
+                                alignment: center; spacing: 9px;
+                                Rectangle {
+                                    width: 58px; height: 58px; border-radius: 16px;
+                                    x: (parent.width - self.width)/2;
+                                    background: Theme.bg-surface-1; border-width: 1px; border-color: Theme.border-subtle;
+                                    Image { source: @image-url("icons/search.svg"); width: 26px; height: 26px;
+                                        x: (parent.width - self.width)/2; y: (parent.height - self.height)/2; colorize: Theme.text-muted; }
+                                }
+                                Text { text: root.hub-search != "" ? @tr("Sin resultados para esa búsqueda")
+                                        : @tr("Esta colección está vacía");
+                                    color: Theme.text-secondary; font-size: 13.5px; font-weight: 600;
+                                    horizontal-alignment: center; }
+                                Text { text: root.hub-search != "" ? @tr("Prueba con otro término o cambia el filtro.")
+                                        : @tr("Importa archivos o crea una canción para empezar.");
+                                    color: Theme.text-muted; font-size: 11.5px; horizontal-alignment: center; }
+                            }
+                        }
+
+                        // MEDIA GRID (16:9 cards) when the Multimedia filter is active
+                        if root.hub-results.length > 0 && root.hub-filter == 1 : ScrollView {
+                            vertical-stretch: 1;
+                            VerticalLayout {
+                                alignment: start;
+                                Rectangle {
+                                    // flow grid via wrapping is not native; use a responsive 4-col layout
+                                    HorizontalLayout { } // spacer anchor
+                                }
+                                // Grid rows of 4 cards each are produced in C++ as a flat list; here we lay out a wrapping grid.
+                                Rectangle {
+                                    height: Math.ceil(root.hub-results.length / 4) * 150px;
+                                    for md[i] in root.hub-results : Rectangle {
+                                        x: Math.mod(i, 4) * (parent.width / 4);
+                                        y: Math.floor(i / 4) * 150px;
+                                        width: parent.width / 4 - 9px;
+                                        height: 142px;
+                                        border-radius: Theme.radius-md;
+                                        background: Theme.bg-surface-1;
                                         border-width: 1px;
-                                        border-color: hm-ta.has-hover ? Theme.border-medium : Theme.border-subtle;
-                                        animate background   { duration: 130ms; easing: ease-out; }
-                                        animate border-color { duration: 130ms; easing: ease-out; }
-                                        hm-ta := TouchArea {
-                                            mouse-cursor: pointer;
-                                            clicked => { root.hub-play-music(midx); }
-                                            pointer-event(ev) => {
-                                                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
-                                                    root.open-item-modal(0, 3, mt.title, mt.subtitle, mt.path);
-                                                }
-                                            }
-                                        }
-                                        HorizontalLayout {
-                                            padding-left: 6px;
-                                            padding-right: 6px;
-                                            spacing: 7px;
+                                        border-color: mdc-ta.has-hover ? #38bdf8 : Theme.border-subtle;
+                                        clip: true;
+                                        animate border-color { duration: 140ms; easing: ease-out; }
+                                        // 16:9 thumbnail
+                                        Rectangle {
+                                            y: 0; width: 100%; height: 100px; clip: true;
+                                            background: #0b0b0e;
+                                            if md.has-thumbnail : Image { x: 0; y: 0; width: 100%; height: 100%;
+                                                source: md.thumbnail; image-fit: cover; }
+                                            if !md.has-thumbnail : Image { source: @image-url("icons/film.svg");
+                                                width: 30px; height: 30px; x: (parent.width - self.width)/2; y: (parent.height - self.height)/2;
+                                                colorize: Theme.text-muted; }
+                                            // Kind badge
                                             Rectangle {
-                                                width: 30px; height: 30px; y: (parent.height - self.height) / 2;
-                                                border-radius: 3px; background: Theme.bg-surface-1; clip: true;
-                                                if mt.has-cover : Image { x: 0; y: 0; width: 100%; height: 100%; source: mt.cover; image-fit: cover; }
-                                                if !mt.has-cover : Text { text: "♫"; color: Theme.text-muted; font-size: 12px; horizontal-alignment: center; vertical-alignment: center; }
+                                                x: 7px; y: 7px; height: 18px; min-width: 40px; border-radius: 5px;
+                                                background: #000000aa;
+                                                HorizontalLayout { padding-left: 6px; padding-right: 6px;
+                                                    Text { text: md.badge; color: #ffffff; font-size: 9px; font-weight: 800;
+                                                        vertical-alignment: center; } }
                                             }
-                                            Text { text: mt.title; color: Theme.text-primary; font-size: 12px; font-weight: 600; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
-                                            Text { text: mt.subtitle; color: Theme.text-muted; font-size: 10px; vertical-alignment: center; }
-                                            ItemMoreBtn {
-                                                y: (parent.height - self.height) / 2;
-                                                clicked => { root.open-item-modal(0, 3, mt.title, mt.subtitle, mt.path); }
+                                            // Favorite star
+                                            Rectangle {
+                                                x: parent.width - 26px; y: 7px; width: 18px; height: 18px; border-radius: 9px;
+                                                background: #000000aa;
+                                                Text { text: md.favorite ? "★" : "☆"; font-size: 11px;
+                                                    color: md.favorite ? #fbbf24 : #ffffffcc;
+                                                    x: (parent.width - self.width)/2; y: (parent.height - self.height)/2; }
+                                                fav-ta := TouchArea { mouse-cursor: pointer;
+                                                    clicked => { root.hub-item-toggle-favorite(md.kind, md.path); } }
                                             }
-                                            ItemRowActionBtn {
-                                                icon: @image-url("icons/trash.svg");
-                                                danger: true;
-                                                y: (parent.height - self.height) / 2;
-                                                clicked => { root.open-item-modal(2, 3, mt.title, mt.subtitle, mt.path); }
+                                            // Hover action overlay
+                                            Rectangle {
+                                                width: 100%; height: 100%;
+                                                background: mdc-ta.has-hover ? #000000b4 : transparent;
+                                                opacity: mdc-ta.has-hover ? 1.0 : 0.0;
+                                                animate opacity { duration: 150ms; easing: ease-out; }
+                                                HorizontalLayout {
+                                                    alignment: center; spacing: 8px;
+                                                    Rectangle {
+                                                        width: 40px; height: 40px; border-radius: 20px;
+                                                        y: (parent.height - self.height)/2;
+                                                        background: proj-ta.has-hover ? Theme.accent-strong : Theme.accent;
+                                                        Image { source: @image-url("icons/play.svg"); width: 17px; height: 17px;
+                                                            x: (parent.width - self.width)/2 + 1px; y: (parent.height - self.height)/2; colorize: Theme.accent-fg; }
+                                                        proj-ta := TouchArea { mouse-cursor: pointer;
+                                                            clicked => { root.hub-item-project(md.kind, md.path); } }
+                                                    }
+                                                    Rectangle {
+                                                        width: 40px; height: 40px; border-radius: 20px;
+                                                        y: (parent.height - self.height)/2;
+                                                        background: hub-mq-ta.has-hover ? Theme.bg-surface-hover : Theme.bg-surface-2;
+                                                        border-width: 1px; border-color: Theme.border-medium;
+                                                        Image { source: @image-url("icons/plus.svg"); width: 16px; height: 16px;
+                                                            x: (parent.width - self.width)/2; y: (parent.height - self.height)/2; colorize: Theme.text-primary; }
+                                                        hub-mq-ta := TouchArea { mouse-cursor: pointer;
+                                                            clicked => { root.hub-item-queue(md.kind, md.path); } }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        // Caption
+                                        HorizontalLayout {
+                                            y: 104px; height: 38px; padding-left: 9px; padding-right: 6px; spacing: 4px;
+                                            VerticalLayout {
+                                                alignment: center; spacing: 1px; horizontal-stretch: 1;
+                                                Text { text: md.title; color: Theme.text-primary; font-size: 11.5px; font-weight: 600; overflow: elide; }
+                                                Text { text: md.subtitle; color: Theme.text-muted; font-size: 9.5px; overflow: elide; }
+                                            }
+                                            ItemMoreBtn { y: (parent.height - self.height)/2;
+                                                clicked => { root.open-item-modal(0, md.kind, md.title, md.subtitle, md.path); } }
+                                        }
+                                        mdc-ta := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => { root.hub-item-open(md.kind, md.path); }
+                                            pointer-event(ev) => {
+                                                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
+                                                    root.open-item-modal(0, md.kind, md.title, md.subtitle, md.path);
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
+                        }
 
-                            // Unified Section 3: Multimedia & Documentos (2 columns)
-                            HorizontalLayout {
-                                spacing: 10px;
-
-                                Rectangle {
-                                    horizontal-stretch: 1;
+                        // RICH LIST for all other filters (clean rows, hover-only stage actions)
+                        if root.hub-results.length > 0 && root.hub-filter != 1 : ScrollView {
+                            vertical-stretch: 1;
+                            VerticalLayout {
+                                alignment: start;
+                                spacing: 4px;
+                                for it in root.hub-results : Rectangle {
+                                    height: 52px;
                                     border-radius: Theme.radius-md;
-                                    background: Theme.bg-surface-1;
+                                    background: row-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-1;
                                     border-width: 1px;
-                                    border-color: Theme.border-subtle;
-                                    VerticalLayout {
-                                        padding: 12px;
-                                        spacing: 7px;
-                                        HorizontalLayout {
-                                            alignment: space-between;
-                                            Text { text: "Multimedia"; color: Theme.text-primary; font-size: 13px; font-weight: 700; vertical-alignment: center; }
-                                            GlassButton { label: @tr("Abrir ›"); compact: true; clicked => { root.active-tab = 2; } }
-                                        }
-                                        if root.hub-recent-media.length == 0 : Text { text: "Sin videos ni imágenes."; color: Theme.text-muted; font-size: 11px; }
-                                        for md in root.hub-recent-media : Rectangle {
-                                            height: 36px;
-                                            border-radius: Theme.radius-sm;
-                                            background: hmd-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-0;
-                                            border-width: 1px;
-                                            border-color: hmd-ta.has-hover ? Theme.border-medium : Theme.border-subtle;
-                                            animate background   { duration: 130ms; easing: ease-out; }
-                                            animate border-color { duration: 130ms; easing: ease-out; }
-                                            hmd-ta := TouchArea {
-                                                mouse-cursor: pointer;
-                                                clicked => { root.hub-open-media(md.path); }
-                                                pointer-event(ev) => {
-                                                    if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
-                                                        root.open-item-modal(0, 1, md.title, md.subtitle, md.path);
-                                                    }
+                                    border-color: row-ta.has-hover ? Theme.border-medium : Theme.border-subtle;
+                                    animate background   { duration: 120ms; easing: ease-out; }
+                                    animate border-color { duration: 120ms; easing: ease-out; }
+                                    HorizontalLayout {
+                                        padding-left: 9px; padding-right: 9px; spacing: 10px;
+                                        // Leading: thumbnail or kind glyph
+                                        Rectangle {
+                                            width: 54px; height: 34px; y: (parent.height - self.height)/2;
+                                            border-radius: 6px; clip: true; background: #0b0b0e;
+                                            border-width: 1px; border-color: Theme.border-subtle;
+                                            if it.has-thumbnail : Image { x:0; y:0; width: 100%; height: 100%; source: it.thumbnail; image-fit: cover; }
+                                            if !it.has-thumbnail : Rectangle {
+                                                background: it.kind == 0 ? #38bdf822 : it.kind == 2 ? #a78bfa22 : it.kind == 3 ? #22c55e22 : it.kind == 4 ? #fbbf2422 : #ec489922;
+                                                Image {
+                                                    source: it.kind == 0 ? @image-url("icons/music.svg")
+                                                        : it.kind == 2 ? @image-url("icons/file_text.svg")
+                                                        : it.kind == 3 ? @image-url("icons/headphones.svg")
+                                                        : it.kind == 4 ? @image-url("icons/book.svg")
+                                                        : @image-url("icons/film.svg");
+                                                    width: 15px; height: 15px; x: (parent.width - self.width)/2; y: (parent.height - self.height)/2;
+                                                    colorize: it.kind == 0 ? #38bdf8 : it.kind == 2 ? #a78bfa : it.kind == 3 ? #22c55e : it.kind == 4 ? #fbbf24 : #ec4899;
                                                 }
                                             }
+                                            // Audio "now playing" pulse
+                                            if it.playing : Rectangle { width: 100%; height: 100%; background: #22c55e33;
+                                                Text { text: "♫"; color: #22c55e; font-size: 14px; x: (parent.width - self.width)/2; y: (parent.height - self.height)/2; } }
+                                        }
+                                        // Title + subtitle
+                                        VerticalLayout {
+                                            alignment: center; spacing: 2px; horizontal-stretch: 1;
                                             HorizontalLayout {
-                                                padding-left: 10px; padding-right: 6px; spacing: 5px;
-                                                Text { text: md.title; color: Theme.text-primary; font-size: 11.5px; font-weight: 600; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
-                                                Text { text: md.subtitle; color: Theme.text-muted; font-size: 10px; vertical-alignment: center; }
-                                                ItemMoreBtn {
-                                                    y: (parent.height - self.height) / 2;
-                                                    clicked => { root.open-item-modal(0, 1, md.title, md.subtitle, md.path); }
-                                                }
-                                                ItemRowActionBtn {
-                                                    icon: @image-url("icons/trash.svg");
-                                                    danger: true;
-                                                    y: (parent.height - self.height) / 2;
-                                                    clicked => { root.open-item-modal(2, 1, md.title, md.subtitle, md.path); }
+                                                spacing: 6px;
+                                                Text { text: it.title; color: Theme.text-primary; font-size: 12.5px; font-weight: 600;
+                                                    vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+                                                if it.badge != "" : Rectangle {
+                                                    height: 15px; border-radius: 4px; y: (parent.height - self.height)/2;
+                                                    horizontal-stretch: 0;
+                                                    width: badge-lbl.preferred-width + 10px;
+                                                    background: it.kind == 0 ? #38bdf81e : it.kind == 2 ? #a78bfa1e : it.kind == 3 ? #22c55e1e : it.kind == 4 ? #fbbf241e : #ec48991e;
+                                                    badge-lbl := Text { text: it.badge; font-size: 8.5px; font-weight: 800;
+                                                        x: (parent.width - self.width)/2; y: (parent.height - self.height)/2;
+                                                        color: it.kind == 0 ? #7dd3fc : it.kind == 2 ? #c4b5fd : it.kind == 3 ? #86efac : it.kind == 4 ? #fcd34d : #f9a8d4; }
                                                 }
                                             }
+                                            Text { text: it.subtitle; color: Theme.text-muted; font-size: 10.5px; overflow: elide; }
                                         }
+                                        // Trailing meta pill (author / duración / formato)
+                                        if it.meta != "" : Text { text: it.meta; color: Theme.text-secondary; font-size: 10.5px;
+                                            vertical-alignment: center; }
+                                        // Hover stage actions
+                                        if row-ta.has-hover : GlassButton {
+                                            label: it.kind == 3 ? @tr("Reproducir") : @tr("Proyectar");
+                                            icon: @image-url("icons/play.svg"); has-icon: true; compact: true; primary: true;
+                                            y: (parent.height - self.height)/2;
+                                            clicked => { root.hub-item-project(it.kind, it.path); }
+                                        }
+                                        if row-ta.has-hover && it.kind != 4 : GlassButton {
+                                            label: @tr("Cola"); icon: @image-url("icons/plus.svg"); has-icon: true; compact: true;
+                                            y: (parent.height - self.height)/2;
+                                            clicked => { root.hub-item-queue(it.kind, it.path); }
+                                        }
+                                        // Favorite toggle (always visible, subtle)
+                                        Rectangle {
+                                            width: 26px; height: 26px; border-radius: 13px; y: (parent.height - self.height)/2;
+                                            background: star-ta.has-hover ? Theme.bg-surface-hover : transparent;
+                                            Text { text: it.favorite ? "★" : "☆"; font-size: 13px;
+                                                color: it.favorite ? #fbbf24 : Theme.text-muted;
+                                                x: (parent.width - self.width)/2; y: (parent.height - self.height)/2; }
+                                            star-ta := TouchArea { mouse-cursor: pointer;
+                                                clicked => { root.hub-item-toggle-favorite(it.kind, it.path); } }
+                                        }
+                                        ItemMoreBtn { y: (parent.height - self.height)/2;
+                                            clicked => { root.open-item-modal(0, it.kind, it.title, it.subtitle, it.path); } }
                                     }
-                                }
-
-                                Rectangle {
-                                    horizontal-stretch: 1;
-                                    border-radius: Theme.radius-md;
-                                    background: Theme.bg-surface-1;
-                                    border-width: 1px;
-                                    border-color: Theme.border-subtle;
-                                    VerticalLayout {
-                                        padding: 12px;
-                                        spacing: 7px;
-                                        HorizontalLayout {
-                                            alignment: space-between;
-                                            Text { text: "Documentos"; color: Theme.text-primary; font-size: 13px; font-weight: 700; vertical-alignment: center; }
-                                            GlassButton { label: @tr("Abrir ›"); compact: true; clicked => { root.active-tab = 10; } }
-                                        }
-                                        if root.hub-recent-docs.length == 0 : Text { text: "Sin documentos PDF."; color: Theme.text-muted; font-size: 11px; }
-                                        for dc in root.hub-recent-docs : Rectangle {
-                                            height: 36px;
-                                            border-radius: Theme.radius-sm;
-                                            background: hdc-ta.has-hover ? Theme.bg-surface-2 : Theme.bg-surface-0;
-                                            border-width: 1px;
-                                            border-color: hdc-ta.has-hover ? Theme.border-medium : Theme.border-subtle;
-                                            animate background   { duration: 130ms; easing: ease-out; }
-                                            animate border-color { duration: 130ms; easing: ease-out; }
-                                            hdc-ta := TouchArea {
-                                                mouse-cursor: pointer;
-                                                clicked => { root.hub-open-doc(dc.path); }
-                                                pointer-event(ev) => {
-                                                    if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
-                                                        root.open-item-modal(0, 2, dc.title, dc.subtitle, dc.path);
-                                                    }
-                                                }
-                                            }
-                                            HorizontalLayout {
-                                                padding-left: 10px; padding-right: 6px; spacing: 5px;
-                                                Text { text: dc.title; color: Theme.text-primary; font-size: 11.5px; font-weight: 600; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
-                                                Text { text: dc.subtitle; color: Theme.text-muted; font-size: 10px; vertical-alignment: center; }
-                                                ItemMoreBtn {
-                                                    y: (parent.height - self.height) / 2;
-                                                    clicked => { root.open-item-modal(0, 2, dc.title, dc.subtitle, dc.path); }
-                                                }
-                                                ItemRowActionBtn {
-                                                    icon: @image-url("icons/trash.svg");
-                                                    danger: true;
-                                                    y: (parent.height - self.height) / 2;
-                                                    clicked => { root.open-item-modal(2, 2, dc.title, dc.subtitle, dc.path); }
-                                                }
+                                    row-ta := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => { root.hub-item-open(it.kind, it.path); }
+                                        pointer-event(ev) => {
+                                            if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
+                                                root.open-item-modal(0, it.kind, it.title, it.subtitle, it.path);
                                             }
                                         }
                                     }
@@ -5829,122 +5988,328 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // ── Mode 10: Documentos (PDF / Presentaciones en Páginas) ──
+                    // ── Mode 10: Documentos (PDF / Presentaciones en Páginas + Navegador HTML/HTTPS) ──
                     if root.active-tab == 10 : VerticalLayout {
                         spacing: 8px;
                         vertical-stretch: 1;
 
+                        // Encabezado con selector rápido de categoría (PDF/Imágenes vs Navegador)
                         HorizontalLayout {
-                            alignment: space-between;
                             spacing: 6px;
-                            Text { text: root.doc-title; color: Theme.text-primary; font-size: 13.5px; font-weight: 700; overflow: elide; horizontal-stretch: 1; vertical-alignment: center; }
-                            HorizontalLayout {
-                                spacing: 5px;
-                                if root.selected-library-index >= 0 && root.selected-library-path != "" : GlassButton {
-                                    label: @tr("A Cola");
-                                    icon: @image-url("icons/list.svg");
-                                    has-icon: true;
-                                    compact: true;
-                                    clicked => { root.item-action-queue(2, root.selected-library-path); }
-                                }
-                                if root.selected-library-index >= 0 && root.selected-library-path != "" : GlassButton {
-                                    label: @tr("Renombrar");
-                                    icon: @image-url("icons/edit.svg");
-                                    has-icon: true;
-                                    compact: true;
-                                    clicked => { root.open-item-modal(1, 2, root.doc-title, "Documento", root.selected-library-path); }
-                                }
-                                if root.selected-library-index >= 0 && root.selected-library-path != "" : IconButton {
-                                    icon: @image-url("icons/trash.svg");
-                                    danger: true;
-                                    clicked => { root.open-item-modal(2, 2, root.doc-title, "Documento", root.selected-library-path); }
-                                }
-                                IconButton { icon: @image-url("icons/prev.svg"); clicked => { root.doc-prev-page(); } }
-                                IconButton { icon: @image-url("icons/next.svg"); clicked => { root.doc-next-page(); } }
-                                GlassButton {
-                                    label: @tr("Texto a QR");
-                                    icon: @image-url("icons/qr.svg");
-                                    has-icon: true;
-                                    compact: true;
-                                    clicked => {
-                                        root.qr-text-input = "";
-                                        root.qr-name-input = "";
-                                        root.qr-text-changed("");
-                                        root.qr-modal-open = true;
-                                    }
-                                }
-                                GlassButton {
-                                    label: @tr("Importar PDF");
-                                    icon: @image-url("icons/upload.svg");
-                                    has-icon: true;
-                                    compact: true;
-                                    primary: true;
-                                    clicked => { root.import-document-clicked(); }
+                            GlassButton {
+                                label: @tr("PDF / Imágenes");
+                                icon: @image-url("icons/file_text.svg");
+                                has-icon: true;
+                                compact: true;
+                                primary: root.doc-subtab == 0;
+                                clicked => { root.doc-subtab = 0; root.doc-subtab-changed(0); }
+                            }
+                            GlassButton {
+                                label: @tr("Navegador");
+                                icon: @image-url("icons/globe.svg");
+                                has-icon: true;
+                                compact: true;
+                                primary: root.doc-subtab == 1;
+                                clicked => { root.doc-subtab = 1; root.doc-subtab-changed(1); }
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                            if root.doc-subtab == 1 && root.web-live-active : Rectangle {
+                                width: wlive-lbl.preferred-width + 18px;
+                                height: 28px;
+                                border-radius: Theme.radius-sm;
+                                background: Theme.live-green.transparentize(0.82);
+                                border-width: 1px;
+                                border-color: Theme.live-green;
+                                wlive-lbl := Text {
+                                    text: @tr("● WEB EN VIVO");
+                                    color: Theme.live-green;
+                                    font-size: 10.5px;
+                                    font-weight: 700;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
                                 }
                             }
                         }
 
-                        ScrollView {
+                        if root.doc-subtab == 0 : VerticalLayout {
+                            spacing: 8px;
                             vertical-stretch: 1;
-                            VerticalLayout {
-                                spacing: 10px;
-                                padding-right: 6px;
 
-                                if root.doc-pages.length == 0 : Rectangle {
-                                    height: 200px;
-                                    border-radius: Theme.radius-md;
-                                    background: Theme.bg-surface-1;
-                                    border-width: 1px;
-                                    border-color: Theme.border-subtle;
+                            HorizontalLayout {
+                                alignment: space-between;
+                                spacing: 6px;
+                                Text { text: root.doc-title; color: Theme.text-primary; font-size: 13.5px; font-weight: 700; overflow: elide; horizontal-stretch: 1; vertical-alignment: center; }
+                                HorizontalLayout {
+                                    spacing: 5px;
+                                    if root.selected-library-index >= 0 && root.selected-library-path != "" : GlassButton {
+                                        label: @tr("A Cola");
+                                        icon: @image-url("icons/list.svg");
+                                        has-icon: true;
+                                        compact: true;
+                                        clicked => { root.item-action-queue(2, root.selected-library-path); }
+                                    }
+                                    if root.selected-library-index >= 0 && root.selected-library-path != "" : GlassButton {
+                                        label: @tr("Renombrar");
+                                        icon: @image-url("icons/edit.svg");
+                                        has-icon: true;
+                                        compact: true;
+                                        clicked => { root.open-item-modal(1, 2, root.doc-title, "Documento", root.selected-library-path); }
+                                    }
+                                    if root.selected-library-index >= 0 && root.selected-library-path != "" : IconButton {
+                                        icon: @image-url("icons/trash.svg");
+                                        danger: true;
+                                        clicked => { root.open-item-modal(2, 2, root.doc-title, "Documento", root.selected-library-path); }
+                                    }
+                                    IconButton { icon: @image-url("icons/prev.svg"); clicked => { root.doc-prev-page(); } }
+                                    IconButton { icon: @image-url("icons/next.svg"); clicked => { root.doc-next-page(); } }
+                                    GlassButton {
+                                        label: @tr("Texto a QR");
+                                        icon: @image-url("icons/qr.svg");
+                                        has-icon: true;
+                                        compact: true;
+                                        clicked => {
+                                            root.qr-text-input = "";
+                                            root.qr-name-input = "";
+                                            root.qr-text-changed("");
+                                            root.qr-modal-open = true;
+                                        }
+                                    }
+                                    GlassButton {
+                                        label: @tr("Importar PDF");
+                                        icon: @image-url("icons/upload.svg");
+                                        has-icon: true;
+                                        compact: true;
+                                        primary: true;
+                                        clicked => { root.import-document-clicked(); }
+                                    }
+                                }
+                            }
+
+                            ScrollView {
+                                vertical-stretch: 1;
+                                VerticalLayout {
+                                    spacing: 10px;
+                                    padding-right: 6px;
+
+                                    if root.doc-pages.length == 0 : Rectangle {
+                                        height: 200px;
+                                        border-radius: Theme.radius-md;
+                                        background: Theme.bg-surface-1;
+                                        border-width: 1px;
+                                        border-color: Theme.border-subtle;
+                                        Text {
+                                            text: @tr("Selecciona un documento PDF o imagen a la izquierda.\nCada página aparecerá aquí lista para proyectar con un clic.");
+                                            color: Theme.text-muted;
+                                            font-size: 12.5px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+
+                                    for pg[pidx] in root.doc-pages : Rectangle {
+                                        height: 196px;
+                                        border-radius: Theme.radius-md;
+                                        background: pidx == root.active-doc-page-idx ? Theme.bg-surface-hover : Theme.bg-surface-1;
+                                        border-width: pidx == root.active-doc-page-idx ? 2px : 1px;
+                                        border-color: pidx == root.active-doc-page-idx ? Theme.live-green : (dp-ta.has-hover ? Theme.border-medium : Theme.border-subtle);
+                                        clip: true;
+
+                                        if pg.has-preview : Image {
+                                            source: pg.preview;
+                                            image-fit: contain;
+                                        }
+
+                                        Rectangle {
+                                            x: 8px;
+                                            y: 8px;
+                                            height: 22px;
+                                            width: pg-lbl.preferred-width + 16px;
+                                            border-radius: 5px;
+                                            background: pidx == root.active-doc-page-idx ? Theme.live-green : #08080ad8;
+                                            pg-lbl := Text {
+                                                x: 8px;
+                                                height: parent.height;
+                                                text: pidx == root.active-doc-page-idx ? ("● EN VIVO — Página " + pg.number) : ("Página " + pg.number);
+                                                color: pidx == root.active-doc-page-idx ? #04130b : #ffffff;
+                                                font-size: 10.5px;
+                                                font-weight: 700;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+
+                                        dp-ta := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => {
+                                                root.active-doc-page-idx = pidx;
+                                                root.doc-page-clicked(pidx);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Categoría Navegador (HTML locales y sitios HTTPS)
+                        if root.doc-subtab == 1 : VerticalLayout {
+                            spacing: 8px;
+                            vertical-stretch: 1;
+
+                            // Barra de dirección y carga HTML
+                            HorizontalLayout {
+                                spacing: 5px;
+                                IconButton { icon: @image-url("icons/prev.svg"); clicked => { root.web-back(); } }
+                                IconButton { icon: @image-url("icons/next.svg"); clicked => { root.web-forward(); } }
+                                IconButton { icon: @image-url("icons/refresh.svg"); clicked => { root.web-reload(); } }
+                                LineEdit {
+                                    horizontal-stretch: 1;
+                                    placeholder-text: @tr("https://... o archivo .html/.htm");
+                                    text <=> root.web-url-input;
+                                    accepted(txt) => { root.web-navigate(txt); }
+                                }
+                                GlassButton {
+                                    label: @tr("Ir");
+                                    compact: true;
+                                    primary: true;
+                                    clicked => { root.web-navigate(root.web-url-input); }
+                                }
+                                GlassButton {
+                                    label: @tr("Cargar HTML");
+                                    icon: @image-url("icons/upload.svg");
+                                    has-icon: true;
+                                    compact: true;
+                                    clicked => { root.web-import-html(); }
+                                }
+                                IconButton {
+                                    icon: @image-url("icons/save.svg");
+                                    clicked => { root.web-save-bookmark(root.web-url-input); }
+                                }
+                            }
+
+                            // Barra de scroll, zoom y proyección a pantalla
+                            HorizontalLayout {
+                                spacing: 5px;
+                                GlassButton { label: "↑"; compact: true; clicked => { root.web-scroll(-320); } }
+                                GlassButton { label: "↓"; compact: true; clicked => { root.web-scroll(320); } }
+                                GlassButton { label: "← Diap."; compact: true; clicked => { root.web-nav-key("ArrowLeft"); } }
+                                GlassButton { label: "Diap. →"; compact: true; clicked => { root.web-nav-key("ArrowRight"); } }
+                                GlassButton { label: "-"; compact: true; clicked => { root.web-zoom-delta(-15); } }
+                                Text {
+                                    text: root.web-zoom-percent + "%";
+                                    color: Theme.text-secondary;
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                    vertical-alignment: center;
+                                }
+                                GlassButton { label: "+"; compact: true; clicked => { root.web-zoom-delta(15); } }
+                                Rectangle { horizontal-stretch: 1; }
+                                GlassButton {
+                                    label: root.web-live-sync ? @tr("Sync Vivo: ON") : @tr("Sync Vivo: OFF");
+                                    compact: true;
+                                    primary: root.web-live-sync;
+                                    clicked => { root.web-live-sync = !root.web-live-sync; }
+                                }
+                                GlassButton {
+                                    label: root.web-live-active ? @tr("Actualizar Pantalla") : @tr("Proyectar Web");
+                                    icon: @image-url("icons/tv.svg");
+                                    has-icon: true;
+                                    compact: true;
+                                    primary: true;
+                                    clicked => { root.web-project-live(); }
+                                }
+                                if root.web-live-active : IconButton {
+                                    icon: @image-url("icons/stop.svg");
+                                    danger: true;
+                                    clicked => { root.web-stop-live(); }
+                                }
+                            }
+
+                            // Visor interactivo 16:9 (clic y rueda pasan al navegador)
+                            Rectangle {
+                                vertical-stretch: 1;
+                                border-radius: Theme.radius-md;
+                                background: #07080d;
+                                border-width: 1px;
+                                border-color: root.web-live-active ? Theme.live-green : Theme.border-subtle;
+                                clip: true;
+
+                                if !root.has-web-preview : VerticalLayout {
+                                    alignment: center;
+                                    spacing: 10px;
+                                    padding: 20px;
+
                                     Text {
-                                        text: @tr("Selecciona un documento PDF o imagen a la izquierda.\nCada página aparecerá aquí lista para proyectar con un clic.");
-                                        color: Theme.text-muted;
-                                        font-size: 12.5px;
+                                        text: @tr("Navegador de ProyecThor (HTML y Sitios HTTPS)");
+                                        color: Theme.text-primary;
+                                        font-size: 14px;
+                                        font-weight: 700;
                                         horizontal-alignment: center;
-                                        vertical-alignment: center;
+                                    }
+                                    Text {
+                                        text: @tr("Escribe una dirección https:// arriba, selecciona un HTML o marcador a la izquierda,\no pulsa 'Cargar HTML' para abrir presentaciones web interactivas y mostrarlas en pantalla.");
+                                        color: Theme.text-muted;
+                                        font-size: 11.5px;
+                                        horizontal-alignment: center;
                                         wrap: word-wrap;
                                     }
-                                }
-
-                                for pg[pidx] in root.doc-pages : Rectangle {
-                                    height: 196px;
-                                    border-radius: Theme.radius-md;
-                                    background: pidx == root.active-doc-page-idx ? Theme.bg-surface-hover : Theme.bg-surface-1;
-                                    border-width: pidx == root.active-doc-page-idx ? 2px : 1px;
-                                    border-color: pidx == root.active-doc-page-idx ? Theme.live-green : (dp-ta.has-hover ? Theme.border-medium : Theme.border-subtle);
-                                    clip: true;
-
-                                    if pg.has-preview : Image {
-                                        source: pg.preview;
-                                        image-fit: contain;
-                                    }
-
-                                    Rectangle {
-                                        x: 8px;
-                                        y: 8px;
-                                        height: 22px;
-                                        width: pg-lbl.preferred-width + 16px;
-                                        border-radius: 5px;
-                                        background: pidx == root.active-doc-page-idx ? Theme.live-green : #08080ad8;
-                                        pg-lbl := Text {
-                                            x: 8px;
-                                            height: parent.height;
-                                            text: pidx == root.active-doc-page-idx ? ("● EN VIVO — Página " + pg.number) : ("Página " + pg.number);
-                                            color: pidx == root.active-doc-page-idx ? #04130b : #ffffff;
-                                            font-size: 10.5px;
-                                            font-weight: 700;
-                                            vertical-alignment: center;
+                                    HorizontalLayout {
+                                        alignment: center;
+                                        spacing: 8px;
+                                        GlassButton {
+                                            label: "Cargar archivo .HTML";
+                                            icon: @image-url("icons/upload.svg");
+                                            has-icon: true;
+                                            primary: true;
+                                            clicked => { root.web-import-html(); }
+                                        }
+                                        GlassButton {
+                                            label: "jw.org";
+                                            compact: true;
+                                            clicked => { root.web-url-input = "https://www.jw.org"; root.web-navigate("https://www.jw.org"); }
+                                        }
+                                        GlassButton {
+                                            label: "bible.com";
+                                            compact: true;
+                                            clicked => { root.web-url-input = "https://www.bible.com"; root.web-navigate("https://www.bible.com"); }
                                         }
                                     }
+                                }
 
-                                    dp-ta := TouchArea {
+                                if root.has-web-preview : Rectangle {
+                                    width: min(parent.width, parent.height * 16 / 9);
+                                    height: self.width * 9 / 16;
+                                    x: (parent.width - self.width) / 2;
+                                    y: (parent.height - self.height) / 2;
+                                    background: #000000;
+
+                                    Image {
+                                        width: 100%;
+                                        height: 100%;
+                                        source: root.web-preview-image;
+                                        image-fit: fill;
+                                    }
+
+                                    TouchArea {
                                         mouse-cursor: pointer;
                                         clicked => {
-                                            root.active-doc-page-idx = pidx;
-                                            root.doc-page-clicked(pidx);
+                                            root.web-click-at(
+                                                self.pressed-x / max(1px, self.width),
+                                                self.pressed-y / max(1px, self.height)
+                                            );
+                                        }
+                                        scroll-event(ev) => {
+                                            root.web-scroll(round(-ev.delta-y / 1px));
+                                            accept
                                         }
                                     }
                                 }
+                            }
+
+                            Text {
+                                text: root.web-status;
+                                color: Theme.text-muted;
+                                font-size: 10.5px;
+                                overflow: elide;
                             }
                         }
                     }
@@ -7894,13 +8259,13 @@ export component MainWindow inherits Window {
             || root.music-playing
             || root.island-expanded
             || ((root.active-tab == 0 || root.active-tab == 1) && root.slides.length > 0)
-            || (root.active-tab == 10 && root.doc-pages.length > 0)
+            || (root.active-tab == 10 && root.doc-subtab == 0 && root.doc-pages.length > 0)
             || root.video-queue-playing
         );
         property <bool> show-music-mode: root.island-expanded || root.active-tab == 9
-            || (root.music-playing && (root.island-prefer-music || (!((root.active-tab == 0 || root.active-tab == 1) && root.slides.length > 0) && !(root.active-tab == 10 && root.doc-pages.length > 0))));
+            || (root.music-playing && (root.island-prefer-music || (!((root.active-tab == 0 || root.active-tab == 1) && root.slides.length > 0) && !(root.active-tab == 10 && root.doc-subtab == 0 && root.doc-pages.length > 0))));
         property <bool> has-other-ctx: ((root.active-tab == 0 || root.active-tab == 1) && root.slides.length > 0)
-            || (root.active-tab == 10 && root.doc-pages.length > 0)
+            || (root.active-tab == 10 && root.doc-subtab == 0 && root.doc-pages.length > 0)
             || root.video-queue-playing;
 
         property <color> island-border-col: (self.show-music-mode && root.music-dynamic-eq)
@@ -8019,7 +8384,7 @@ export component MainWindow inherits Window {
                     Text {
                         text: root.music-playing ? "Música"
                             : ((root.active-tab == 0 || root.active-tab == 1) && root.slides.length > 0) ? "Estrofas"
-                            : (root.active-tab == 10 && root.doc-pages.length > 0) ? "Páginas"
+                            : (root.active-tab == 10 && root.doc-subtab == 0 && root.doc-pages.length > 0) ? "Páginas"
                             : "Controles";
                         color: peek-ta.has-hover ? Theme.text-primary : Theme.text-secondary;
                         font-size: 10.5px;
@@ -8606,7 +8971,7 @@ export component MainWindow inherits Window {
             // ══════════════════════════════════════════════════════════════════
             //  CONTEXT C: DOCUMENT PAGES ISLAND (Documentos) — Uniform Aligned Buttons
             // ══════════════════════════════════════════════════════════════════
-            if !root.island-hidden && !ctx-island-wrap.show-music-mode && root.active-tab == 10 && root.doc-pages.length > 0 : HorizontalLayout {
+            if !root.island-hidden && !ctx-island-wrap.show-music-mode && root.active-tab == 10 && root.doc-subtab == 0 && root.doc-pages.length > 0 : HorizontalLayout {
                 padding-left: 12px;
                 padding-right: 12px;
                 padding-top: 5px;
@@ -8639,7 +9004,7 @@ export component MainWindow inherits Window {
             // ══════════════════════════════════════════════════════════════════
             //  CONTEXT D: VIDEO QUEUE ISLAND — Uniform Aligned Buttons
             // ══════════════════════════════════════════════════════════════════
-            if !root.island-hidden && !ctx-island-wrap.show-music-mode && root.video-queue-playing && !((root.active-tab == 0 || root.active-tab == 1) && root.slides.length > 0) && !(root.active-tab == 10 && root.doc-pages.length > 0) : HorizontalLayout {
+            if !root.island-hidden && !ctx-island-wrap.show-music-mode && root.video-queue-playing && !((root.active-tab == 0 || root.active-tab == 1) && root.slides.length > 0) && !(root.active-tab == 10 && root.doc-subtab == 0 && root.doc-pages.length > 0) : HorizontalLayout {
                 padding-left: 12px;
                 padding-right: 10px;
                 padding-top: 5px;

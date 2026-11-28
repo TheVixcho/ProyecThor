@@ -289,7 +289,7 @@ jobs:
             -DPROYECTHOR_BUILD_NUMBER=${{ github.run_number }}
           if ($LASTEXITCODE -ne 0) { throw "CMake configure fallo con codigo $LASTEXITCODE" }
 
-      - name: Compilar ProyecThorSlint y ProyecThor
+      - name: Compilar ProyecThor
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -519,7 +519,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "lib.exe fallo generando mpv.lib ARM64 ($LASTEXITCODE)" }
           Write-Host "[OK] mpv.lib nativo MSVC ARM64 generado correctamente."
 
-      - name: Configurar y Compilar ProyecThorSlint (Windows ARM64 Release)
+      - name: Configurar y Compilar ProyecThor (Windows ARM64 Release)
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -537,7 +537,7 @@ jobs:
               -DPROYECTHOR_VERSION_SUFFIX="${{ needs.resolve-meta.outputs.suffix }}" `
               -DPROYECTHOR_BUILD_NUMBER=${{ github.run_number }}
             if ($LASTEXITCODE -ne 0) { throw "CMake configure ARM64 fallo ($LASTEXITCODE)" }
-            cmake --build build-win-arm64 --target ProyecThorSlint --parallel
+            cmake --build build-win-arm64 --target ProyecThor --parallel
             if ($LASTEXITCODE -ne 0) { throw "CMake build ARM64 fallo ($LASTEXITCODE)" }
           } else {
             cmake -B build-win-arm64 -G "Visual Studio 17 2022" -A ARM64 `
@@ -551,7 +551,7 @@ jobs:
               -DPROYECTHOR_VERSION_SUFFIX="${{ needs.resolve-meta.outputs.suffix }}" `
               -DPROYECTHOR_BUILD_NUMBER=${{ github.run_number }}
             if ($LASTEXITCODE -ne 0) { throw "CMake configure ARM64 fallo ($LASTEXITCODE)" }
-            cmake --build build-win-arm64 --config Release --target ProyecThorSlint --parallel
+            cmake --build build-win-arm64 --config Release --target ProyecThor --parallel
             if ($LASTEXITCODE -ne 0) { throw "CMake build ARM64 fallo ($LASTEXITCODE)" }
             Copy-Item -Recurse -Force "build-win-arm64\Release\*" "build-win-arm64\"
           }
@@ -676,7 +676,7 @@ jobs:
             rm -f /tmp/slint-macos-arm64.tar.gz
           fi
 
-      - name: Configurar y Compilar ProyecThorSlint (macOS arm64 Release)
+      - name: Configurar y Compilar ProyecThor (macOS arm64 Release)
         run: |
           set -euo pipefail
           export PKG_CONFIG_PATH="/opt/homebrew/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
@@ -691,7 +691,7 @@ jobs:
             -DPROYECTHOR_VERSION_OVERRIDE="${{ needs.resolve-meta.outputs.version }}" \
             -DPROYECTHOR_VERSION_SUFFIX="${{ needs.resolve-meta.outputs.suffix }}" \
             -DPROYECTHOR_BUILD_NUMBER=${{ github.run_number }}
-          cmake --build build-macos-arm64 --target ProyecThorSlint --parallel
+          cmake --build build-macos-arm64 --target ProyecThor --parallel
 
       - name: Empaquetar ProyecThor.app, verificar Metal y ejecutar Smoke Test (Apple Silicon)
         run: |
@@ -849,10 +849,7 @@ jobs:
               cd "${HERE}/usr/lib64/proyecthor"
           fi
 
-          if [ -x ./ProyecThor ]; then
-              exec ./ProyecThor "$@"
-          fi
-          exec ./ProyecThorSlint "$@"
+          exec ./ProyecThor "$@"
           EOF
           chmod +x build-appimage/AppDir/AppRun
 

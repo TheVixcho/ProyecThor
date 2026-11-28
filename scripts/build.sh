@@ -140,10 +140,7 @@ elif [ -d "${HERE}/usr/lib64/proyecthor" ]; then
     cd "${HERE}/usr/lib64/proyecthor"
 fi
 
-if [ -x ./ProyecThor ]; then
-    exec ./ProyecThor "$@"
-fi
-exec ./ProyecThorSlint "$@"
+exec ./ProyecThor "$@"
 EOF
         chmod +x "$PROJECT_ROOT/build-appimage/AppDir/AppRun"
 

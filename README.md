@@ -86,7 +86,7 @@ ProyecThor was created as a free, open-source alternative to expensive closed-so
 ProyecThor is built for native performance, low frame latency, and cross-platform reliability:
 
 - **Languages:** C++17 (Core) & C++20 (Slint UI layer)
-- **UI Framework:** [Slint](https://slint.dev/) C++ SDK (`ProyecThorSlint`)
+- **UI Framework:** [Slint](https://slint.dev/) C++ SDK (`ProyecThor`)
 - **Media & Video Engine:** `libmpv` (Async hardware-accelerated playback)
 - **Graphics & Windowing:** OpenGL, X11 / Wayland (PipeWire & D-Bus)
 - **Documents & Metadata:** PDFium, TagLib, `nlohmann/json`, OpenSSL

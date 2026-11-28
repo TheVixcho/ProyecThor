@@ -37,7 +37,7 @@ cmake -B build-win -G "Visual Studio 17 2022" -A x64
 cmake --build build-win --config Release
 ```
 
-For the Slint UI target (`ProyecThorSlint`), ensure `PROYECTHOR_BUILD_SLINT=ON` (enabled by default) and the Slint C++ SDK is present in `src/vendor/sdk/`.
+For the `ProyecThor` UI target, ensure `PROYECTHOR_BUILD_SLINT=ON` (enabled by default) and the Slint C++ SDK is present in `src/vendor/sdk/`.
 
 ---
 

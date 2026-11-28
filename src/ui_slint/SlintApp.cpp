@@ -306,6 +306,8 @@ SlintApp::SlintApp()
     , m_HubMediaModel(std::make_shared<slint::VectorModel<LibraryItem>>())
     , m_HubMusicModel(std::make_shared<slint::VectorModel<MusicTrackItem>>())
     , m_HubDocsModel(std::make_shared<slint::VectorModel<LibraryItem>>())
+    , m_HubCollectionsModel(std::make_shared<slint::VectorModel<HubCollection>>())
+    , m_HubResultsModel(std::make_shared<slint::VectorModel<HubItem>>())
     , m_DocPagesModel(std::make_shared<slint::VectorModel<DocPageItem>>())
     , m_QueueModel(std::make_shared<slint::VectorModel<QueueItem>>())
     , m_PadsModel(std::make_shared<slint::VectorModel<PadItem>>())
@@ -364,6 +366,8 @@ SlintApp::SlintApp()
     m_Main->set_hub_recent_media(m_HubMediaModel);
     m_Main->set_hub_recent_music(m_HubMusicModel);
     m_Main->set_hub_recent_docs(m_HubDocsModel);
+    m_Main->set_hub_collections(m_HubCollectionsModel);
+    m_Main->set_hub_results(m_HubResultsModel);
     m_Main->set_doc_pages(m_DocPagesModel);
     m_Main->set_queue_items(m_QueueModel);
     m_Main->set_overlay_queue_items(m_OverlayQueueModel);
@@ -438,6 +442,33 @@ SlintApp::SlintApp()
         });
     });
 
+    // Navegador (HTML locales / sitios HTTPS): motor headless Chromium/Edge vía CDP
+    m_WebEngine.SetProfileDir(PathToUtf8(Utf8ToFsPath(ProyecThor::GetAppDataRoot()) / "web_profile"));
+    m_WebEngine.SetFrameCallback([this, aliveFlag](std::vector<uint8_t>&& rgba, int w, int h) {
+        if (w <= 0 || h <= 0 || rgba.size() < static_cast<size_t>(w) * static_cast<size_t>(h) * 4) return;
+        slint::invoke_from_event_loop([this, aliveFlag, rgba = std::move(rgba), w, h]() mutable {
+            if (!aliveFlag || !aliveFlag->load(std::memory_order_acquire)) return;
+            slint::SharedPixelBuffer<slint::Rgba8Pixel> pb(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+            std::memcpy(pb.begin(), rgba.data(), static_cast<size_t>(w) * static_cast<size_t>(h) * 4);
+            slint::Image img(pb);
+            m_WebLatestFrame = img;
+            m_HasWebFrame    = true;
+            m_Main->set_web_preview_image(img);
+            m_Main->set_has_web_preview(true);
+            if (m_WebLiveActive && m_Main->get_web_live_sync()) {
+                ProjectWebFrameToScreens(img, m_WebCurrentTitle);
+            }
+        });
+    });
+    m_WebEngine.SetStatusCallback([this, aliveFlag](const std::string& url, const std::string& title, const std::string& statusMsg, bool /*loading*/) {
+        slint::invoke_from_event_loop([this, aliveFlag, url, title, statusMsg]() {
+            if (!aliveFlag || !aliveFlag->load(std::memory_order_acquire)) return;
+            if (!title.empty()) m_WebCurrentTitle = title;
+            if (!url.empty())   m_Main->set_web_url_input(slint::SharedString(url));
+            if (!statusMsg.empty()) m_Main->set_web_status(slint::SharedString(statusMsg));
+        });
+    });
+
     DetectGpuCapabilitiesAsync();
     LoadThemeFilesFromDisk();
     LoadSongPlaylists();
@@ -455,7 +486,7 @@ SlintApp::SlintApp()
     ApplyShaders();
     SyncClockOverlay();
     SyncScreenOutputs();
-    AppendDebugLog("ProyecThor Slint v" + std::string(PROYECTHOR_VERSION_STRING) + " inicializado.");
+    AppendDebugLog("ProyecThor v" + std::string(PROYECTHOR_VERSION_STRING) + " inicializado.");
 
     // Configure Mobile Server defaults
     m_MobileServer.SetRootDir(ProyecThor::GetAppDataRoot());
@@ -536,6 +567,9 @@ SlintApp::~SlintApp() {
     if (m_AppAliveFlag) {
         m_AppAliveFlag->store(false, std::memory_order_release);
     }
+    m_WebEngine.SetFrameCallback(nullptr);
+    m_WebEngine.SetStatusCallback(nullptr);
+    m_WebEngine.Stop();
     m_Player.SetFrameReadyCallback(nullptr);
     SavePersistedState();
     if (m_LanServer) {
@@ -1026,7 +1060,34 @@ void SlintApp::BindCallbacks() {
         }
     });
 
+    // Dashboard unificado (tab 13)
+    m_Main->on_hub_search_changed([this](slint::SharedString q) {
+        HubSetSearch(std::string(q));
+    });
+    m_Main->on_hub_filter_changed([this](int filter) {
+        HubApplyFilter(filter);
+    });
+    m_Main->on_hub_item_open([this](int kind, slint::SharedString path) {
+        HandleItemOpenFromHub(kind, std::string(path));
+    });
+    m_Main->on_hub_item_project([this](int kind, slint::SharedString path) {
+        HandleItemPlay(kind, std::string(path));
+    });
+    m_Main->on_hub_item_queue([this](int kind, slint::SharedString path) {
+        HandleItemQueue(kind, std::string(path));
+    });
+    m_Main->on_hub_item_toggle_favorite([this](int kind, slint::SharedString path) {
+        ToggleHubFavorite(kind, std::string(path));
+    });
+
     // Documents (Tab 10)
+    m_Main->on_doc_subtab_changed([this](int sub) {
+        m_DocSubtab = std::clamp(sub, 0, 1);
+        m_Main->set_doc_subtab(m_DocSubtab);
+        if (m_ActiveTab == 10) {
+            LoadTabData(10);
+        }
+    });
     m_Main->on_doc_page_clicked([this](int idx) { ProjectDocPage(idx); });
     m_Main->on_doc_prev_page([this]() {
         if (m_DocPagePaths.empty()) return;
@@ -1041,6 +1102,78 @@ void SlintApp::BindCallbacks() {
         ProjectDocPage(next);
     });
     m_Main->on_import_document_clicked([this]() { ImportFileAsync(false, false, 10); });
+
+    // Navegador (HTML local y Webs HTTPS dentro de Documentos)
+    m_Main->on_web_import_html([this]() { ImportFileAsync(false, false, 10); });
+    m_Main->on_web_navigate([this](slint::SharedString raw) {
+        NavigateWebAsync(std::string(raw), false);
+    });
+    m_Main->on_web_reload([this]() {
+        std::thread([this]() {
+            std::lock_guard<std::mutex> lk(m_WebNavMutex);
+            m_WebEngine.Reload();
+        }).detach();
+    });
+    m_Main->on_web_back([this]() {
+        std::thread([this]() {
+            std::lock_guard<std::mutex> lk(m_WebNavMutex);
+            m_WebEngine.GoBack();
+        }).detach();
+    });
+    m_Main->on_web_forward([this]() {
+        std::thread([this]() {
+            std::lock_guard<std::mutex> lk(m_WebNavMutex);
+            m_WebEngine.GoForward();
+        }).detach();
+    });
+    m_Main->on_web_scroll([this](int dy) {
+        std::thread([this, dy]() {
+            m_WebEngine.ScrollBy(0, dy);
+        }).detach();
+    });
+    m_Main->on_web_click_at([this](float nx, float ny) {
+        std::thread([this, nx, ny]() {
+            m_WebEngine.ClickNormalized(nx, ny);
+        }).detach();
+    });
+    m_Main->on_web_nav_key([this](slint::SharedString k) {
+        std::string ks(k);
+        std::thread([this, ks]() {
+            m_WebEngine.SendNavKey(ks);
+        }).detach();
+    });
+    m_Main->on_web_zoom_delta([this](int delta) {
+        m_WebZoomPercent = std::clamp(m_WebZoomPercent + delta, 50, 250);
+        m_Main->set_web_zoom_percent(m_WebZoomPercent);
+        double factor = static_cast<double>(m_WebZoomPercent) / 100.0;
+        std::thread([this, factor]() {
+            m_WebEngine.SetZoomFactor(factor);
+        }).detach();
+    });
+    m_Main->on_web_project_live([this]() {
+        if (!m_HasWebFrame) {
+            std::string curUrl(m_Main->get_web_url_input());
+            if (!curUrl.empty() && curUrl != "https://") {
+                NavigateWebAsync(curUrl, true);
+            }
+            return;
+        }
+        m_WebLiveActive = true;
+        m_Main->set_web_live_active(true);
+        ProjectWebFrameToScreens(m_WebLatestFrame, m_WebCurrentTitle);
+    });
+    m_Main->on_web_stop_live([this]() {
+        m_WebLiveActive = false;
+        m_Main->set_web_live_active(false);
+        for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+            if (!IsScreenTargeted(i)) continue;
+            RemoveLayerOnScreen(i, "bg");
+        }
+        SyncScreenOutputs();
+    });
+    m_Main->on_web_save_bookmark([this](slint::SharedString raw) {
+        SaveWebBookmark(std::string(raw));
+    });
 
     // QR desde texto — previsualización en vivo y guardado como PNG en Documentos.
     m_Main->on_qr_text_changed([this](slint::SharedString txt) {
@@ -1578,7 +1711,9 @@ void SlintApp::LoadTabData(int tab) {
     } else if (tab == 2) {
         m_Main->set_selected_item_title("Multimedia — Videos e Imágenes");
     } else if (tab == 10) {
-        m_Main->set_doc_title("Documentos — Selecciona un PDF o imagen");
+        m_Main->set_doc_title(m_DocSubtab == 1
+            ? "Navegador — Selecciona un HTML/URL o ingresa https://"
+            : "Documentos — Selecciona un PDF o imagen");
     }
 
     RefreshLibraryModel();
@@ -1599,6 +1734,10 @@ void SlintApp::RefreshLibraryModel() {
     std::string needle = ToLowerUtf8(m_SearchQuery);
     for (int i = 0; i < static_cast<int>(m_AllEntries.size()); ++i) {
         const auto& e = m_AllEntries[i];
+        if (m_ActiveTab == 10) {
+            if (m_DocSubtab == 0 && e.isWeb) continue;
+            if (m_DocSubtab == 1 && !e.isWeb) continue;
+        }
         if (activePlPaths) {
             if (std::find(activePlPaths->begin(), activePlPaths->end(), e.path) == activePlPaths->end()) {
                 continue;
@@ -1686,7 +1825,17 @@ void SlintApp::SelectLibraryItem(int filteredIdx) {
             (matchedStanza >= 0 && matchedStanza < static_cast<int>(stanzas.size())) ? matchedStanza : -1);
         RebuildSlideGridRows();
     } else if (m_ActiveTab == 10) {
-        OpenDocumentAsync(entry.path);
+        if (entry.isWeb) {
+            m_DocSubtab = 1;
+            m_Main->set_doc_subtab(1);
+            std::string targetUrl = entry.webUrl.empty() ? entry.path : entry.webUrl;
+            m_Main->set_web_url_input(slint::SharedString(targetUrl));
+            NavigateWebAsync(targetUrl, false);
+        } else {
+            m_DocSubtab = 0;
+            m_Main->set_doc_subtab(0);
+            OpenDocumentAsync(entry.path);
+        }
     } else if (m_ActiveTab == 2) {
         // Multimedia: Load into Preview ONLY (does NOT interrupt Live output until user clicks "Enviar a Pantalla" or "+ Cola Videos")
         m_SelectedPreviewEntry    = entry;
@@ -4748,6 +4897,8 @@ void SlintApp::AddCurrentVerseToFavorites() {
 // ── Media Preview & Video Queue (MonitorQueueEngine parity) ──────────────────
 void SlintApp::ProjectSelectedMedia() {
     if (!m_HasSelectedPreviewEntry) return;
+    m_WebLiveActive = false;
+    m_Main->set_web_live_active(false);
     const auto& entry = m_SelectedPreviewEntry;
 
     if (entry.isOverlay) {
@@ -5340,9 +5491,10 @@ void SlintApp::ApplyThemePreset(int idx) {
 void SlintApp::ImportFileAsync(bool forceBackgroundFolder, bool forceOverlayFolder, int explicitTargetTab) {
     int currentTab = (explicitTargetTab >= 0) ? explicitTargetTab : ((forceBackgroundFolder || forceOverlayFolder) ? 3 : m_ActiveTab);
     int currentBgSub = forceOverlayFolder ? 1 : (forceBackgroundFolder ? 0 : m_BgSubtab);
+    int currentDocSub = m_DocSubtab;
     std::string bgRelDir = m_BgCurrentRelDir;
 
-    std::thread([this, currentTab, currentBgSub, bgRelDir]() {
+    std::thread([this, currentTab, currentBgSub, currentDocSub, bgRelDir]() {
         std::vector<std::string> selectedPaths;
 #ifdef _WIN32
         HRESULT hrCom = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
@@ -5350,10 +5502,12 @@ void SlintApp::ImportFileAsync(bool forceBackgroundFolder, bool forceOverlayFold
         OPENFILENAMEW ofn = {};
         ofn.lStructSize = sizeof(ofn);
         ofn.lpstrFilter =
-            L"Todos los soportados\0*.txt;*.song;*.xml;*.pdf;*.mp4;*.mkv;*.mov;*.webm;*.avi;*.wmv;*.m4v;*.flv;*.ts;*.mpg;*.mpeg;*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.mp3;*.wav;*.flac;*.ogg;*.m4a;*.opus\0"
+            L"Todos los soportados\0*.txt;*.song;*.xml;*.pdf;*.html;*.htm;*.mp4;*.mkv;*.mov;*.webm;*.avi;*.wmv;*.m4v;*.flv;*.ts;*.mpg;*.mpeg;*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.mp3;*.wav;*.flac;*.ogg;*.m4a;*.opus\0"
             L"Videos e Imagenes (Multimedia)\0*.mp4;*.mkv;*.mov;*.webm;*.avi;*.wmv;*.m4v;*.flv;*.ts;*.mpg;*.mpeg;*.png;*.jpg;*.jpeg;*.webp;*.bmp\0"
+            L"Paginas HTML / Web (*.html;*.htm)\0*.html;*.htm\0"
             L"Todos\0*.*\0";
-        ofn.nFilterIndex = (currentTab == 2 || currentTab == 3) ? 2 : 1;
+        ofn.nFilterIndex = (currentTab == 10 && currentDocSub == 1) ? 3
+                         : ((currentTab == 2 || currentTab == 3) ? 2 : 1);
         ofn.lpstrFile    = fileBuf.data();
         ofn.nMaxFile     = static_cast<DWORD>(fileBuf.size());
         ofn.lpstrTitle   = L"Importar archivo a ProyecThor";
@@ -5383,15 +5537,17 @@ void SlintApp::ImportFileAsync(bool forceBackgroundFolder, bool forceOverlayFold
         // Try zenity first, fallback to kdialog
         std::string one = RunCommandCapture(
             "zenity --file-selection --title=\"Importar archivo a ProyecThor\" "
-            "--file-filter=\"Archivos soportados | *.txt *.song *.xml *.pdf *.mp4 *.mkv *.mov *.webm *.avi *.wmv *.m4v *.flv *.ts *.mpg *.mpeg *.png *.jpg *.jpeg *.webp *.mp3 *.wav *.flac *.ogg *.m4a\" "
+            "--file-filter=\"Archivos soportados | *.txt *.song *.xml *.pdf *.html *.htm *.mp4 *.mkv *.mov *.webm *.avi *.wmv *.m4v *.flv *.ts *.mpg *.mpeg *.png *.jpg *.jpeg *.webp *.mp3 *.wav *.flac *.ogg *.m4a\" "
+            "--file-filter=\"Páginas HTML / Web | *.html *.htm\" "
             "--file-filter=\"Todos los archivos | *\" 2>/dev/null");
         if (one.empty()) {
             one = RunCommandCapture(
-                "kdialog --getopenfilename ~ \"*.txt *.song *.xml *.pdf *.mp4 *.mkv *.mov *.webm *.png *.jpg *.jpeg *.webp *.mp3 *.wav *.flac\" 2>/dev/null");
+                "kdialog --getopenfilename ~ \"*.txt *.song *.xml *.pdf *.html *.htm *.mp4 *.mkv *.mov *.webm *.png *.jpg *.jpeg *.webp *.mp3 *.wav *.flac\" 2>/dev/null");
         }
         if (!one.empty()) selectedPaths.push_back(std::move(one));
 #endif
         int lastTargetTab = currentTab;
+        bool lastIsWeb    = false;
         int importedCount = 0;
         std::string lastImportedPath;
         std::string lastError;
@@ -5408,7 +5564,12 @@ void SlintApp::ImportFileAsync(bool forceBackgroundFolder, bool forceOverlayFold
 
             fs::path destDir;
             int targetTab = currentTab;
-            if (HasExtension(src, { ".pdf" }) || currentTab == 10) {
+            bool isWebFile = false;
+            if (HasExtension(src, { ".html", ".htm" })) {
+                destDir = Utf8ToFsPath(ProyecThor::WebPath());
+                targetTab = 10;
+                isWebFile = true;
+            } else if (HasExtension(src, { ".pdf" }) || currentTab == 10) {
                 destDir = Utf8ToFsPath(ProyecThor::DocumentsPath());
                 targetTab = 10;
             } else if (HasExtension(src, { ".txt", ".song" })) {
@@ -5454,13 +5615,14 @@ void SlintApp::ImportFileAsync(bool forceBackgroundFolder, bool forceOverlayFold
                 }
             }
             lastTargetTab    = targetTab;
+            lastIsWeb        = isWebFile;
             lastImportedPath = PathToUtf8(destFile);
             ++importedCount;
         }
 
         if (importedCount == 0 && lastError.empty()) return;
 
-        slint::invoke_from_event_loop([this, lastTargetTab, importedCount, lastImportedPath, lastError]() {
+        slint::invoke_from_event_loop([this, lastTargetTab, lastIsWeb, importedCount, lastImportedPath, lastError]() {
             if (!lastError.empty()) {
                 AppendDebugLog("Importar archivo: " + lastError);
             }
@@ -5479,6 +5641,10 @@ void SlintApp::ImportFileAsync(bool forceBackgroundFolder, bool forceOverlayFold
                 ScanMusicTracks();
             } else if (lastTargetTab == 0 || lastTargetTab == 1 || lastTargetTab == 2 || lastTargetTab == 10) {
                 if (lastTargetTab == 1) m_BiblePaths.clear();
+                if (lastTargetTab == 10) {
+                    m_DocSubtab = lastIsWeb ? 1 : 0;
+                    m_Main->set_doc_subtab(m_DocSubtab);
+                }
                 m_ActiveTab = lastTargetTab;
                 m_Main->set_active_tab(lastTargetTab);
                 LoadTabData(lastTargetTab);
@@ -5679,6 +5845,8 @@ void SlintApp::RefreshBgDock() {
 
 void SlintApp::SelectDockBackground(int index) {
     if (index < 0 || index >= static_cast<int>(m_BgDockEntries.size())) return;
+    m_WebLiveActive = false;
+    m_Main->set_web_live_active(false);
     const auto& entry = m_BgDockEntries[index];
 
     m_CurrentBgPath = entry.path;
@@ -7635,6 +7803,8 @@ void SlintApp::BrowseMusicFolderAsync() {
 }
 
 void SlintApp::RefreshLibraryHub() {
+    LoadHubFavorites();
+
     // Ensure lightweight caches exist for Songs (0), Media (2), Documents (10), Music (9), Bibles (1)
     auto ensureTab = [this](int tab) -> const std::vector<MediaEntry>& {
         auto it = m_CachedTabEntries.find(tab);
@@ -7674,68 +7844,459 @@ void SlintApp::RefreshLibraryHub() {
         bibleCount = static_cast<int>(bSeen.size());
     }
 
+    // ── Unified record list across every content source ──
+    // kind: 0=Canción, 1=Video/Imagen, 2=Documento/Web, 3=Música, 4=Biblia
+    struct HubRecord {
+        int         kind = 0;
+        std::string title;
+        std::string subtitle;
+        std::string meta;
+        std::string path;
+        std::string badge;
+        bool        isVideo = false;
+        bool        isImage = false;
+        int64_t     mtime = 0;   // última modificación (para "Recientes")
+        bool        playing = false;
+    };
+
+    auto fileMtime = [](const std::string& p) -> int64_t {
+        std::error_code ec;
+        fs::path fp = Utf8ToFsPath(p);
+        auto t = fs::last_write_time(fp, ec);
+        if (ec) return 0;
+        return static_cast<int64_t>(t.time_since_epoch().count());
+    };
+
+    std::vector<HubRecord> all;
+    all.reserve(songs.size() + media.size() + docs.size() + m_MusicEntries.size());
+
+    for (const auto& e : songs) {
+        HubRecord r;
+        r.kind = 0;
+        r.title = e.title;
+        r.subtitle = e.subtitle.empty() ? "Letra" : e.subtitle;
+        r.meta = e.author;
+        r.path = e.path;
+        r.badge = "CANCIÓN";
+        r.mtime = fileMtime(e.path);
+        all.push_back(std::move(r));
+    }
+    for (const auto& e : media) {
+        HubRecord r;
+        r.kind = 1;
+        r.title = e.title;
+        r.isVideo = e.isVideo;
+        r.isImage = e.isImage;
+        r.subtitle = e.isVideo ? "Video" : (e.isImage ? "Imagen" : e.subtitle);
+        r.path = e.path;
+        r.badge = e.isVideo ? "VIDEO" : "IMG";
+        r.mtime = fileMtime(e.path);
+        all.push_back(std::move(r));
+    }
+    for (const auto& e : docs) {
+        HubRecord r;
+        r.kind = 2;
+        r.title = e.title;
+        r.subtitle = e.subtitle;
+        r.path = e.path;
+        bool isPdf = HasExtension(Utf8ToFsPath(e.path), { ".pdf" });
+        r.badge = e.isWeb ? "WEB" : (isPdf ? "PDF" : "IMG");
+        r.mtime = (e.path.rfind("bookmark://", 0) == 0) ? 0 : fileMtime(e.path);
+        all.push_back(std::move(r));
+    }
+    for (int i = 0; i < static_cast<int>(m_MusicEntries.size()); ++i) {
+        const auto& e = m_MusicEntries[i];
+        HubRecord r;
+        r.kind = 3;
+        r.title = e.title;
+        r.subtitle = e.subtitle;
+        std::string ext = PathToUtf8(Utf8ToFsPath(e.path).extension());
+        if (!ext.empty() && ext[0] == '.') ext = ext.substr(1);
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::toupper);
+        r.meta = ext;
+        r.path = e.path;
+        r.badge = "AUDIO";
+        r.mtime = fileMtime(e.path);
+        r.playing = (m_CurrentMusicIdx == i && m_MusicPlayer.IsPlaying());
+        all.push_back(std::move(r));
+    }
+
+    int favCount = 0;
+    for (const auto& r : all) if (IsHubFavorite(r.kind, r.path)) favCount++;
+
+    // ── Counters + collections ──
     m_Main->set_hub_songs_count(static_cast<int>(songs.size()));
     m_Main->set_hub_media_count(static_cast<int>(media.size()));
     m_Main->set_hub_music_count(static_cast<int>(m_MusicEntries.size()));
     m_Main->set_hub_docs_count(static_cast<int>(docs.size()));
     m_Main->set_hub_bibles_count(bibleCount);
+    m_Main->set_hub_total_count(static_cast<int>(all.size()));
+    m_Main->set_hub_favorites_count(favCount);
+    m_Main->set_hub_recent_count(std::min<int>(30, static_cast<int>(all.size())));
 
+    m_HubCollectionsModel->clear();
+    auto pushCol = [this](int id, const char* label, int count, slint::Color accent) {
+        HubCollection c;
+        c.id = id;
+        c.label = slint::SharedString(label);
+        c.count = count;
+        c.accent = accent;
+        m_HubCollectionsModel->push_back(c);
+    };
+    pushCol(-1, "Recientes",        std::min<int>(30, static_cast<int>(all.size())), slint::Color::from_rgb_uint8(0x38, 0xbd, 0xf8));
+    pushCol(-2, "Favoritos",        favCount,                                        slint::Color::from_rgb_uint8(0xfb, 0xbf, 0x24));
+    pushCol(-3, "Todo",             static_cast<int>(all.size()),                    slint::Color::from_rgb_uint8(0xa1, 0xa1, 0xaa));
+    pushCol(0,  "Canciones",        static_cast<int>(songs.size()),                  slint::Color::from_rgb_uint8(0x38, 0xbd, 0xf8));
+    pushCol(1,  "Multimedia",       static_cast<int>(media.size()),                  slint::Color::from_rgb_uint8(0xec, 0x48, 0x99));
+    pushCol(3,  "Música",           static_cast<int>(m_MusicEntries.size()),         slint::Color::from_rgb_uint8(0x22, 0xc5, 0x5e));
+    pushCol(2,  "Documentos & Web", static_cast<int>(docs.size()),                   slint::Color::from_rgb_uint8(0xa7, 0x8b, 0xfa));
+    pushCol(4,  "Biblia",           bibleCount,                                      slint::Color::from_rgb_uint8(0xfb, 0xbf, 0x24));
+
+    // ── Filter + search → ordered result set ──
+    std::string needle = ToLowerUtf8(m_HubSearch);
+    std::vector<const HubRecord*> filtered;
+    filtered.reserve(all.size());
+    for (const auto& r : all) {
+        // Category filter
+        if (m_HubFilter == -2) { if (!IsHubFavorite(r.kind, r.path)) continue; }
+        else if (m_HubFilter >= 0) { if (r.kind != m_HubFilter) continue; }
+        // -1 (Recientes), -3 (Todo): no category restriction
+
+        if (!needle.empty()) {
+            bool match = ToLowerUtf8(r.title).find(needle) != std::string::npos ||
+                         ToLowerUtf8(r.subtitle).find(needle) != std::string::npos ||
+                         ToLowerUtf8(r.meta).find(needle) != std::string::npos;
+            // Deep search inside song lyrics
+            if (!match && r.kind == 0) {
+                for (const auto& st : ParseSongStanzas(r.path)) {
+                    if (ToLowerUtf8(st).find(needle) != std::string::npos) { match = true; break; }
+                }
+            }
+            if (!match) continue;
+        }
+        filtered.push_back(&r);
+    }
+
+    // Ordering: Recientes/Todo/Favoritos by mtime desc; per-category alphabetical.
+    bool byRecent = (m_HubFilter == -1 || m_HubFilter == -3 || m_HubFilter == -2);
+    if (!needle.empty()) byRecent = true; // most relevant-recent first during search
+    if (byRecent) {
+        std::sort(filtered.begin(), filtered.end(),
+                  [](const HubRecord* a, const HubRecord* b) { return a->mtime > b->mtime; });
+    } else {
+        std::sort(filtered.begin(), filtered.end(),
+                  [](const HubRecord* a, const HubRecord* b) { return ToLowerUtf8(a->title) < ToLowerUtf8(b->title); });
+    }
+
+    // Recientes caps the list so the landing view stays "what did we use recently".
+    size_t limit = (m_HubFilter == -1 && needle.empty()) ? 30 : filtered.size();
+
+    m_HubResultsModel->clear();
+    for (size_t i = 0; i < filtered.size() && i < limit; ++i) {
+        const HubRecord& r = *filtered[i];
+        HubItem item;
+        item.kind     = r.kind;
+        item.title    = slint::SharedString(r.title);
+        item.subtitle = slint::SharedString(r.subtitle);
+        item.meta     = slint::SharedString(r.meta);
+        item.path     = slint::SharedString(r.path);
+        item.badge    = slint::SharedString(r.badge);
+        item.playing  = r.playing;
+        item.favorite = IsHubFavorite(r.kind, r.path);
+        item.has_thumbnail = false;
+        if (r.kind == 1 && (r.isVideo || r.isImage)) {
+            slint::Image thumb;
+            if (LoadOrCreateThumbnail(r.path, r.isVideo, thumb)) {
+                item.thumbnail     = thumb;
+                item.has_thumbnail = true;
+            }
+        }
+        m_HubResultsModel->push_back(item);
+    }
+
+    // Keep legacy models empty (no longer rendered) to avoid stale duplicate rows.
     m_HubSongsModel->clear();
-    for (size_t i = 0; i < std::min<size_t>(6, songs.size()); ++i) {
-        LibraryItem item;
-        item.title    = slint::SharedString(songs[i].title);
-        item.subtitle = slint::SharedString(songs[i].subtitle);
-        item.path     = slint::SharedString(songs[i].path);
-        m_HubSongsModel->push_back(item);
-    }
-
     m_HubMediaModel->clear();
-    for (size_t i = 0; i < std::min<size_t>(5, media.size()); ++i) {
-        LibraryItem item;
-        item.title    = slint::SharedString(media[i].title);
-        item.subtitle = slint::SharedString(media[i].subtitle);
-        item.path     = slint::SharedString(media[i].path);
-        m_HubMediaModel->push_back(item);
-    }
-
     m_HubDocsModel->clear();
-    for (size_t i = 0; i < std::min<size_t>(5, docs.size()); ++i) {
-        LibraryItem item;
-        item.title    = slint::SharedString(docs[i].title);
-        item.subtitle = slint::SharedString(docs[i].subtitle);
-        item.path     = slint::SharedString(docs[i].path);
-        m_HubDocsModel->push_back(item);
-    }
-
     m_HubMusicModel->clear();
-    size_t mCount = std::min<size_t>(5, m_MusicTracksModel->row_count());
-    for (size_t i = 0; i < mCount; ++i) {
-        if (auto trk = m_MusicTracksModel->row_data(i)) {
-            m_HubMusicModel->push_back(*trk);
+
+    m_Main->set_hub_scanning(false);
+    m_Main->set_hub_scan_status(slint::SharedString(
+        "Biblioteca sincronizada — " + std::to_string(static_cast<int>(all.size())) + " elementos"));
+}
+
+void SlintApp::HubApplyFilter(int filter) {
+    // Biblia no vive en la lista unificada: abre su módulo dedicado directamente.
+    if (filter == 4) {
+        m_Main->set_hub_filter(m_HubFilter); // keep previous highlight
+        m_ActiveTab = 1;
+        m_Main->set_active_tab(1);
+        LoadTabData(1);
+        return;
+    }
+    m_HubFilter = filter;
+    m_Main->set_hub_filter(filter);
+    RefreshLibraryHub();
+}
+
+void SlintApp::HubSetSearch(const std::string& q) {
+    m_HubSearch = q;
+    RefreshLibraryHub();
+}
+
+// ── Favoritos / Fijados del Dashboard (persistidos en assets/hub_favorites.json) ──
+void SlintApp::LoadHubFavorites() {
+    if (m_HubFavoritesLoaded) return;
+    m_HubFavoritesLoaded = true;
+    std::error_code ec;
+    fs::path f = fs::path(ProyecThor::GetAssetsPath()) / "hub_favorites.json";
+    if (!fs::exists(f, ec)) return;
+    std::ifstream in(f);
+    auto arr = nlohmann::json::parse(in, nullptr, false);
+    if (arr.is_array()) {
+        for (const auto& v : arr) {
+            if (v.is_string()) m_HubFavorites.insert(v.get<std::string>());
         }
     }
 }
 
-// ── Documents (Tab 10 - PDF & Images) ────────────────────────────────────────
-void SlintApp::ScanDocuments() {
-    fs::path dir = ProyecThor::DocumentsPath();
+void SlintApp::SaveHubFavorites() {
     std::error_code ec;
+    fs::path dir = fs::path(ProyecThor::GetAssetsPath());
     fs::create_directories(dir, ec);
-    const std::vector<std::string> docExts = { ".pdf", ".png", ".jpg", ".jpeg", ".webp" };
+    fs::path f = dir / "hub_favorites.json";
+    nlohmann::json arr = nlohmann::json::array();
+    for (const auto& k : m_HubFavorites) arr.push_back(k);
+    std::ofstream out(f);
+    if (out.is_open()) out << arr.dump(2);
+}
 
-    for (const auto& entry : fs::recursive_directory_iterator(dir, ec)) {
-        if (!entry.is_regular_file(ec)) continue;
-        if (!HasExtension(entry.path(), docExts)) continue;
-        MediaEntry m;
-        m.title      = PathToUtf8(entry.path().stem());
-        m.subtitle   = HasExtension(entry.path(), { ".pdf" }) ? "Documento PDF" : "Diapositiva Imagen";
-        m.path       = PathToUtf8(entry.path());
-        m.isDocument = true;
-        m.isImage    = !HasExtension(entry.path(), { ".pdf" });
-        m_AllEntries.push_back(std::move(m));
+bool SlintApp::IsHubFavorite(int kind, const std::string& path) const {
+    return m_HubFavorites.count(std::to_string(kind) + "|" + path) > 0;
+}
+
+void SlintApp::ToggleHubFavorite(int kind, const std::string& path) {
+    LoadHubFavorites();
+    std::string key = std::to_string(kind) + "|" + path;
+    if (m_HubFavorites.count(key)) m_HubFavorites.erase(key);
+    else m_HubFavorites.insert(key);
+    SaveHubFavorites();
+    RefreshLibraryHub();
+}
+
+// Clic simple en el dashboard: navega al módulo del elemento (preview), sin proyectar en vivo.
+void SlintApp::HandleItemOpenFromHub(int kind, const std::string& path) {
+    if (path.empty()) return;
+    auto selectInTab = [this, &path](int tab) {
+        m_ActiveTab = tab;
+        m_Main->set_active_tab(tab);
+        LoadTabData(tab);
+        for (int i = 0; i < static_cast<int>(m_FilteredIndices.size()); ++i) {
+            if (m_AllEntries[m_FilteredIndices[i]].path == path) {
+                m_Main->set_selected_library_index(i);
+                SelectLibraryItem(i);
+                break;
+            }
+        }
+    };
+    if (kind == 0) {
+        selectInTab(0);
+    } else if (kind == 1) {
+        selectInTab(2);
+    } else if (kind == 2) {
+        bool isWebTarget = (path.rfind("bookmark://", 0) == 0) ||
+                           HasExtension(Utf8ToFsPath(path), { ".html", ".htm" });
+        m_DocSubtab = isWebTarget ? 1 : 0;
+        m_Main->set_doc_subtab(m_DocSubtab);
+        selectInTab(10);
+    } else if (kind == 3) {
+        if (!m_MusicScanned) ScanMusicTracks();
+        m_ActiveTab = 9;
+        m_Main->set_active_tab(9);
+        for (int i = 0; i < static_cast<int>(m_MusicEntries.size()); ++i) {
+            if (m_MusicEntries[i].path == path) { PlayMusicTrack(i); break; }
+        }
     }
+}
+
+// ── Documents (Tab 10 - PDF & Images + Navegador HTML/HTTPS) ─────────────────
+void SlintApp::ScanDocuments() {
+    std::error_code ec;
+    fs::path docDir = Utf8ToFsPath(ProyecThor::DocumentsPath());
+    fs::path webDir = Utf8ToFsPath(ProyecThor::WebPath());
+    fs::create_directories(docDir, ec);
+    fs::create_directories(webDir, ec);
+
+    const std::vector<std::string> docExts = { ".pdf", ".png", ".jpg", ".jpeg", ".webp", ".html", ".htm" };
+    const std::vector<std::string> htmlExts = { ".html", ".htm" };
+
+    std::vector<std::string> seen;
+    for (const auto& dir : { docDir, webDir }) {
+        for (const auto& entry : fs::recursive_directory_iterator(dir, ec)) {
+            if (!entry.is_regular_file(ec)) continue;
+            if (!HasExtension(entry.path(), docExts)) continue;
+            std::string fullPath = PathToUtf8(entry.path());
+            if (std::find(seen.begin(), seen.end(), fullPath) != seen.end()) continue;
+            seen.push_back(fullPath);
+
+            bool isHtml = HasExtension(entry.path(), htmlExts);
+            MediaEntry m;
+            m.title      = PathToUtf8(entry.path().stem());
+            m.subtitle   = isHtml ? "HTML Local" : (HasExtension(entry.path(), { ".pdf" }) ? "Documento PDF" : "Diapositiva Imagen");
+            m.path       = fullPath;
+            m.isDocument = true;
+            m.isWeb      = isHtml;
+            m.isImage    = !isHtml && !HasExtension(entry.path(), { ".pdf" });
+            if (isHtml) {
+                m.webUrl = SlintWebEngine::LocalFileToFileUrl(fullPath);
+            }
+            m_AllEntries.push_back(std::move(m));
+        }
+    }
+
+    // Marcadores Web HTTPS guardados en assets/web/bookmarks.json
+    fs::path bmFile = webDir / "bookmarks.json";
+    if (fs::exists(bmFile, ec)) {
+        std::ifstream in(bmFile);
+        auto arr = nlohmann::json::parse(in, nullptr, false);
+        if (arr.is_array()) {
+            for (const auto& item : arr) {
+                if (!item.is_object()) continue;
+                std::string url   = item.value("url", "");
+                std::string title = item.value("title", "");
+                if (url.empty()) continue;
+                MediaEntry m;
+                m.title      = title.empty() ? url : title;
+                m.subtitle   = "Web HTTPS";
+                m.path       = "bookmark://" + url;
+                m.webUrl     = url;
+                m.isDocument = true;
+                m.isWeb      = true;
+                m_AllEntries.push_back(std::move(m));
+            }
+        }
+    }
+
     std::sort(m_AllEntries.begin(), m_AllEntries.end(),
               [](const MediaEntry& a, const MediaEntry& b) { return a.title < b.title; });
+}
+
+void SlintApp::NavigateWebAsync(const std::string& urlOrPath, bool alsoProject) {
+    if (urlOrPath.empty()) return;
+    int outW = 1920, outH = 1080;
+    GetOutputResolution(outW, outH);
+
+    m_Main->set_web_status("Iniciando Navegador y cargando página...");
+    if (alsoProject) {
+        m_WebLiveActive = true;
+        m_Main->set_web_live_active(true);
+    }
+
+    auto aliveFlag = m_AppAliveFlag;
+    std::thread([this, aliveFlag, urlOrPath, outW, outH]() {
+        if (!aliveFlag || !aliveFlag->load(std::memory_order_acquire)) return;
+        std::lock_guard<std::mutex> lk(m_WebNavMutex);
+        m_WebEngine.SetViewportSize(outW, outH);
+        m_WebEngine.Navigate(urlOrPath);
+    }).detach();
+}
+
+void SlintApp::ProjectWebFrameToScreens(const slint::Image& frameImg, const std::string& title) {
+    if (!m_HasWebFrame) return;
+    m_CurrentBgPath.clear();
+    m_HasStaticImage = true;
+    const std::string label = title.empty() ? "Navegador Web" : title;
+
+    for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) {
+        if (!IsScreenTargeted(i)) continue;
+        m_Screens[i].bgName     = label;
+        m_Screens[i].bgPath     = "web://live";
+        m_Screens[i].hasBgImage = true;
+        m_Screens[i].bgIsStatic = true;
+        m_Screens[i].bgIsVideo  = false;
+        m_Screens[i].bgImage    = frameImg;
+        m_Screens[i].hasBgThumb = true;
+        m_Screens[i].bgThumb    = frameImg;
+    }
+    bool anyVid = false;
+    for (const auto& sc : m_Screens) if (sc.bgIsVideo) { anyVid = true; break; }
+    if (!anyVid) { m_Player.Stop(); m_HasVideoBg = false; }
+    if (IsScreenTargeted(1) && IsLanRunning()) UpdateLanStaticFrame(frameImg);
+    SyncScreenOutputs();
+}
+
+void SlintApp::SaveWebBookmark(const std::string& rawUrl) {
+    std::string url = SlintWebEngine::NormalizeInputToUrl(rawUrl);
+    if (url.empty() || url == "https://") return;
+
+    std::error_code ec;
+    fs::path webDir = Utf8ToFsPath(ProyecThor::WebPath());
+    fs::create_directories(webDir, ec);
+    fs::path bmFile = webDir / "bookmarks.json";
+
+    nlohmann::json arr = nlohmann::json::array();
+    if (fs::exists(bmFile, ec)) {
+        std::ifstream in(bmFile);
+        auto parsed = nlohmann::json::parse(in, nullptr, false);
+        if (parsed.is_array()) arr = std::move(parsed);
+    }
+
+    std::string title = m_WebCurrentTitle;
+    if (title.empty()) {
+        // Extraer dominio legible como título por defecto
+        title = url;
+        size_t pos = title.find("://");
+        if (pos != std::string::npos) title = title.substr(pos + 3);
+        size_t slash = title.find('/');
+        if (slash != std::string::npos && slash > 0) title = title.substr(0, slash);
+    }
+
+    bool updated = false;
+    for (auto& item : arr) {
+        if (item.is_object() && item.value("url", "") == url) {
+            item["title"] = title;
+            updated = true;
+            break;
+        }
+    }
+    if (!updated) {
+        arr.push_back({ {"title", title}, {"url", url} });
+    }
+
+    std::ofstream out(bmFile);
+    if (out.is_open()) {
+        out << arr.dump(2);
+    }
+
+    m_CachedTabEntries.erase(10);
+    if (m_ActiveTab == 10 && m_DocSubtab == 1) {
+        LoadTabData(10);
+    }
+    m_Main->set_web_status(slint::SharedString("Marcador guardado: " + title));
+}
+
+void SlintApp::RemoveWebBookmark(const std::string& urlOrPath) {
+    std::string url = urlOrPath;
+    const std::string prefix = "bookmark://";
+    if (url.rfind(prefix, 0) == 0) {
+        url = url.substr(prefix.size());
+    }
+    std::error_code ec;
+    fs::path bmFile = Utf8ToFsPath(ProyecThor::WebPath()) / "bookmarks.json";
+    if (!fs::exists(bmFile, ec)) return;
+
+    nlohmann::json arr = nlohmann::json::array();
+    {
+        std::ifstream in(bmFile);
+        auto parsed = nlohmann::json::parse(in, nullptr, false);
+        if (!parsed.is_array()) return;
+        for (const auto& item : parsed) {
+            if (item.is_object() && item.value("url", "") == url) continue;
+            arr.push_back(item);
+        }
+    }
+    std::ofstream out(bmFile);
+    if (out.is_open()) out << arr.dump(2);
 }
 
 void SlintApp::OpenDocumentAsync(const std::string& path, bool autoProjectFirst) {
@@ -7816,6 +8377,8 @@ void SlintApp::OpenDocumentAsync(const std::string& path, bool autoProjectFirst)
 
 void SlintApp::ProjectDocPage(int pageIdx) {
     if (pageIdx < 0 || pageIdx >= static_cast<int>(m_DocPagePaths.size())) return;
+    m_WebLiveActive = false;
+    m_Main->set_web_live_active(false);
     m_ActiveDocPageIdx = pageIdx;
     const std::string& p = m_DocPagePaths[pageIdx];
 
@@ -7878,18 +8441,31 @@ void SlintApp::HandleItemPlay(int kind, const std::string& path) {
         m_HasSelectedPreviewEntry = true;
         ProjectSelectedMedia();
     } else if (kind == 2) {
-        // Documento (PDF o Imagen): abrir y proyectar página 1 automáticamente
+        // Documento (PDF, Imagen o HTML/Web de Navegador)
+        bool isWebTarget = (path.rfind("bookmark://", 0) == 0) ||
+                           HasExtension(Utf8ToFsPath(path), { ".html", ".htm" });
         m_ActiveTab = 10;
         m_Main->set_active_tab(10);
+        m_DocSubtab = isWebTarget ? 1 : 0;
+        m_Main->set_doc_subtab(m_DocSubtab);
         LoadTabData(10);
+        std::string targetUrl = path;
         for (int i = 0; i < static_cast<int>(m_FilteredIndices.size()); ++i) {
-            if (m_AllEntries[m_FilteredIndices[i]].path == path) {
+            const auto& ent = m_AllEntries[m_FilteredIndices[i]];
+            if (ent.path == path) {
                 m_Main->set_selected_library_index(i);
                 m_Main->set_selected_library_path(slint::SharedString(path));
+                if (!ent.webUrl.empty()) targetUrl = ent.webUrl;
                 break;
             }
         }
-        OpenDocumentAsync(path, true);
+        if (isWebTarget) {
+            if (targetUrl.rfind("bookmark://", 0) == 0) targetUrl = targetUrl.substr(11);
+            m_Main->set_web_url_input(slint::SharedString(targetUrl));
+            NavigateWebAsync(targetUrl, true);
+        } else {
+            OpenDocumentAsync(path, true);
+        }
     } else if (kind == 3) {
         // Música (Audio independiente)
         if (!m_MusicScanned) ScanMusicTracks();
@@ -8180,11 +8756,15 @@ void SlintApp::HandleItemDelete(int kind, const std::string& path) {
         m_Main->set_doc_status("");
     }
 
-    // Delete file on disk
+    // Delete bookmark or file on disk
     std::error_code ec;
-    fs::remove(targetFs, ec);
-    if (ec) {
-        AppendDebugLog("Error al eliminar " + PathToUtf8(targetFs.filename()) + ": " + ec.message());
+    if (path.rfind("bookmark://", 0) == 0) {
+        RemoveWebBookmark(path);
+    } else {
+        fs::remove(targetFs, ec);
+        if (ec) {
+            AppendDebugLog("Error al eliminar " + PathToUtf8(targetFs.filename()) + ": " + ec.message());
+        }
     }
 
     // Remove song metadata & playlist links
@@ -9243,6 +9823,10 @@ void SlintApp::RemoveLayerOnScreen(int screenIdx, const std::string& layerId) {
         sc.bgSolidRgb[1] = 0.0f;
         sc.bgSolidRgb[2] = 0.0f;
         if (screenIdx == 1) ClearLanFrame();
+        if (screenIdx == 0 && m_WebLiveActive) {
+            m_WebLiveActive = false;
+            m_Main->set_web_live_active(false);
+        }
     }
 
     bool anyVideoStillUsed = false;

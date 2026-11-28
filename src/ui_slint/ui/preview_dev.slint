@@ -5,14 +5,38 @@ import { MainWindow } from "main_window.slint";
 export component PreviewDev inherits MainWindow {
     title: "ProyecThor — Live UI Preview (Hot Reload)";
     app-version: "DEV-HOT";
-    active-tab: 0;
+    active-tab: 13;
+    tutorial-modal-open: false;
 
-    // Biblioteca de ejemplo
+    // Dashboard de Biblioteca (Opción A) — datos de ejemplo
     hub-songs-count: 42;
     hub-media-count: 18;
     hub-music-count: 24;
     hub-docs-count: 6;
     hub-bibles-count: 3;
+    hub-total-count: 93;
+    hub-recent-count: 30;
+    hub-favorites-count: 4;
+    hub-filter: -1;
+    hub-scan-status: "Biblioteca sincronizada — 93 elementos";
+    hub-collections: [
+        { id: -1, label: "Recientes",        count: 30, accent: #38bdf8 },
+        { id: -2, label: "Favoritos",        count: 4,  accent: #fbbf24 },
+        { id: -3, label: "Todo",             count: 93, accent: #a1a1aa },
+        { id: 0,  label: "Canciones",        count: 42, accent: #38bdf8 },
+        { id: 1,  label: "Multimedia",       count: 18, accent: #ec4899 },
+        { id: 3,  label: "Música",           count: 24, accent: #22c55e },
+        { id: 2,  label: "Documentos & Web", count: 6,  accent: #a78bfa },
+        { id: 4,  label: "Biblia",           count: 3,  accent: #fbbf24 },
+    ];
+    hub-results: [
+        { title: "Intro Culto Domingo.mp4", subtitle: "Video", meta: "", path: "/dev/intro.mp4", kind: 1, badge: "VIDEO", favorite: true },
+        { title: "Way Maker (Aqui Estas)", subtitle: "Sinach", meta: "Sinach", path: "/dev/way_maker.txt", kind: 0, badge: "CANCIÓN", favorite: false },
+        { title: "Fondo Montañas Loop", subtitle: "Video", meta: "", path: "/dev/montanas.mp4", kind: 1, badge: "VIDEO", favorite: false },
+        { title: "Hermoso Nombre", subtitle: "Hillsong Worship", meta: "Hillsong", path: "/dev/hermoso.txt", kind: 0, badge: "CANCIÓN", favorite: true },
+        { title: "Anuncios Noviembre.pdf", subtitle: "Documento PDF", meta: "", path: "/dev/anuncios.pdf", kind: 2, badge: "PDF", favorite: false },
+        { title: "Oceans (Spontaneous)", subtitle: "mp3 • audio", meta: "MP3", path: "/dev/oceans.mp3", kind: 3, badge: "AUDIO", playing: true, favorite: false },
+    ];
 
     library-items: [
         { title: "Cuan Grande Es El", subtitle: "Hymn / Tradicional", path: "/dev/cuan_grande.txt", has-thumbnail: false },

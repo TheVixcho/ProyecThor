@@ -2,7 +2,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "ProyecThor (Slint) - Linux Nativo",
+            "name": "ProyecThor - Linux Nativo",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build-linux/ProyecThor",
@@ -21,10 +21,10 @@
                     "ignoreFailures": true
                 }
             ],
-            "preLaunchTask": "Compilar Slint (Linux)"
+            "preLaunchTask": "Compilar (Linux)"
         },
         {
-            "name": "ProyecThor (Slint) - Windows con Wine (Linux)",
+            "name": "ProyecThor - Windows con Wine (Linux)",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build-win/ProyecThor.exe",
@@ -62,7 +62,7 @@
             "preLaunchTask": "Compilar Windows"
         },
         {
-            "name": "ProyecThor (Slint) - Windows Nativo (MSVC)",
+            "name": "ProyecThor - Windows Nativo (MSVC)",
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build-win/ProyecThor.exe",

@@ -58,7 +58,7 @@ int main(int argc, char* argv[]) {
     }
 
 #ifdef __APPLE__
-    // Al iniciar desde ProyecThor.app/Contents/MacOS/ProyecThorSlint:
+    // Al iniciar desde ProyecThor.app/Contents/MacOS/ProyecThor:
     // 1) Añadir Contents/MacOS (ffmpeg empaquetado) y rutas Homebrew al PATH.
     // 2) Cambiar directorio de trabajo a Contents/Resources si contiene assets/.
     uint32_t exeSize = 0;

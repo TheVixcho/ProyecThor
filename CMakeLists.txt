@@ -121,8 +121,8 @@ if(NOT nlohmann_json_FOUND)
     endif()
 endif()
 
-# ── SDKs compartidos / usados por ProyecThorSlint ──────────────────────────────
-# libmpv (MPV_SDK) y cpp-httplib (HTTPLIB_DIR) los usa el target Slint.
+# ── SDKs compartidos / usados por ProyecThor ──────────────────────────────────
+# libmpv (MPV_SDK) y cpp-httplib (HTTPLIB_DIR) los usa el target ProyecThor.
 # Las rutas de IMGUI/GLFW/GLEW de la antigua interfaz ImGui fueron eliminadas.
 if(MPV_SDK_DIR)
     set(MPV_SDK "${MPV_SDK_DIR}")
@@ -142,7 +142,7 @@ else()
     set(RESOURCE_FILE "")
 endif()
 
-# ── Detección compartida de libmpv (usada por ProyecThorSlint y ProyecThor) ──
+# ── Detección compartida de libmpv (usada por ProyecThor) ─────────────────────
 if(WIN32)
     if(MSVC)
         set(MPV_WIN_LIB "${MPV_SDK}/lib/mpv.lib")
@@ -201,10 +201,10 @@ else()
 endif()
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  Interfaz clásica ImGui (target ProyecThor) — ELIMINADA PERMANENTEMENTE
+#  Interfaz clásica ImGui — ELIMINADA PERMANENTEMENTE
 #  Toda la lógica de compilación legacy (globs de fuentes, ImGui, GLFW/GLEW,
-#  PDFium/WebView2, add_executable(ProyecThor ...), instalación y empaquetado)
-#  fue retirada. Solo queda el target moderno ProyecThorSlint, más abajo.
+#  PDFium/WebView2), instalación y empaquetado antiguo fue retirada.
+#  Solo queda el target principal ProyecThor, más abajo.
 # ══════════════════════════════════════════════════════════════════════════════
 
 if(UNIX AND NOT APPLE AND NOT DEFINED PROYECTHOR_INSTALL_DIR)
@@ -213,7 +213,7 @@ if(UNIX AND NOT APPLE AND NOT DEFINED PROYECTHOR_INSTALL_DIR)
 endif()
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  ProyecThorSlint — Nueva Interfaz Moderna (Slint + libmpv, Dark Glass)
+#  ProyecThor — Interfaz Moderna (Slint + libmpv, Dark Glass)
 #  Soporte nativo: Linux x86_64, Windows x64 / ARM64, macOS Apple Silicon & Intel
 # ══════════════════════════════════════════════════════════════════════════════
 if(PROYECTHOR_BUILD_SLINT)
@@ -257,15 +257,15 @@ if(PROYECTHOR_BUILD_SLINT)
     endif()
 
     if(Slint_FOUND)
-        message(STATUS "Slint C++ SDK encontrado (${Slint_VERSION}): habilitando target ProyecThorSlint")
+        message(STATUS "Slint C++ SDK encontrado (${Slint_VERSION}): habilitando target ProyecThor")
 
         # Biblioteca estática dedicada para el código C++ autogenerado por Slint:
         # - Divide main_window.slint (~228k líneas / 22 MB) en 12 unidades paralelas (evita cuelgues de 15+ min en MSVC).
         # - Embebe los recursos SVG (@image-url) dentro del ejecutable para que funcionen en cualquier PC.
         # - Usa /Od /Ob0 /bigobj en MSVC y -O1 en GCC/Clang solo para el pegamento generado por Slint
         #   (el motor gráfico/layout ya corre en Release dentro de slint_cpp.dll / libslint_cpp.so / libslint_cpp.dylib).
-        add_library(ProyecThorSlintUI STATIC)
-        set_target_properties(ProyecThorSlintUI PROPERTIES
+        add_library(ProyecThorUI STATIC)
+        set_target_properties(ProyecThorUI PROPERTIES
             CXX_STANDARD 20
             CXX_STANDARD_REQUIRED ON
             SLINT_EMBED_RESOURCES "embed-files"
@@ -283,19 +283,20 @@ if(PROYECTHOR_BUILD_SLINT)
             # traducción (todas quedarían sin traducir).
             SLINT_NO_DEFAULT_TRANSLATION_CONTEXT ON
         )
-        slint_target_sources(ProyecThorSlintUI src/ui_slint/ui/main_window.slint COMPILATION_UNITS 12)
-        target_link_libraries(ProyecThorSlintUI PUBLIC Slint::Slint)
+        slint_target_sources(ProyecThorUI src/ui_slint/ui/main_window.slint COMPILATION_UNITS 12)
+        target_link_libraries(ProyecThorUI PUBLIC Slint::Slint)
         if(MSVC)
-            target_compile_options(ProyecThorSlintUI PRIVATE /Od /Ob0 /bigobj /wd4244 /wd4267 /wd4305)
+            target_compile_options(ProyecThorUI PRIVATE /Od /Ob0 /bigobj /wd4244 /wd4267 /wd4305)
         else()
-            target_compile_options(ProyecThorSlintUI PRIVATE -O1)
+            target_compile_options(ProyecThorUI PRIVATE -O1)
         endif()
 
         if(WIN32)
-            add_executable(ProyecThorSlint WIN32
+            add_executable(ProyecThor WIN32
                 src/ui_slint/main_slint.cpp
                 src/ui_slint/SlintApp.cpp
                 src/ui_slint/SlintVideoPlayer.cpp
+                src/ui_slint/SlintWebEngine.cpp
                 src/ui_slint/SlintMobileServer.cpp
                 src/ui_slint/MonitorInfo.cpp
                 src/core/io/BibleXmlIO.cpp
@@ -310,10 +311,11 @@ if(PROYECTHOR_BUILD_SLINT)
                 ${RESOURCE_FILE}
             )
         else()
-            add_executable(ProyecThorSlint
+            add_executable(ProyecThor
                 src/ui_slint/main_slint.cpp
                 src/ui_slint/SlintApp.cpp
                 src/ui_slint/SlintVideoPlayer.cpp
+                src/ui_slint/SlintWebEngine.cpp
                 src/ui_slint/SlintMobileServer.cpp
                 src/ui_slint/MonitorInfo.cpp
                 src/core/io/BibleXmlIO.cpp
@@ -328,17 +330,16 @@ if(PROYECTHOR_BUILD_SLINT)
             )
         endif()
 
-        set_target_properties(ProyecThorSlint PROPERTIES
+        set_target_properties(ProyecThor PROPERTIES
             CXX_STANDARD 20
             CXX_STANDARD_REQUIRED ON
-            OUTPUT_NAME ProyecThor
         )
-        target_compile_definitions(ProyecThorSlint PRIVATE CPPHTTPLIB_NO_EXCEPTIONS)
+        target_compile_definitions(ProyecThor PRIVATE CPPHTTPLIB_NO_EXCEPTIONS)
         if(MSVC)
-            target_compile_options(ProyecThorSlint PRIVATE /bigobj)
+            target_compile_options(ProyecThor PRIVATE /bigobj)
         endif()
 
-        target_include_directories(ProyecThorSlint PRIVATE
+        target_include_directories(ProyecThor PRIVATE
             "${CMAKE_BINARY_DIR}/generated"
             "${CMAKE_CURRENT_SOURCE_DIR}/src"
             "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
@@ -350,21 +351,21 @@ if(PROYECTHOR_BUILD_SLINT)
             "${HTTPLIB_DIR}"
         )
 
-        target_link_libraries(ProyecThorSlint PRIVATE
-            ProyecThorSlintUI
+        target_link_libraries(ProyecThor PRIVATE
+            ProyecThorUI
             Slint::Slint
             nlohmann_json::nlohmann_json
         )
 
         if(WIN32)
-            target_compile_definitions(ProyecThorSlint PRIVATE
+            target_compile_definitions(ProyecThor PRIVATE
                 NOMINMAX
                 WIN32_LEAN_AND_MEAN
             )
-            target_include_directories(ProyecThorSlint PRIVATE "${MPV_SDK}/include")
-            target_link_libraries(ProyecThorSlint PRIVATE "${MPV_WIN_LIB}" shell32 ws2_32 iphlpapi comdlg32 ole32)
+            target_include_directories(ProyecThor PRIVATE "${MPV_SDK}/include")
+            target_link_libraries(ProyecThor PRIVATE "${MPV_WIN_LIB}" shell32 ws2_32 iphlpapi comdlg32 ole32)
             if(MSVC)
-                target_link_options(ProyecThorSlint PRIVATE "/ENTRY:mainCRTStartup")
+                target_link_options(ProyecThor PRIVATE "/ENTRY:mainCRTStartup")
             endif()
             set(SLINT_WIN_DLL "")
             foreach(_d "${SLINT_SDK_DIR}" "${SLINT_SDK_WIN}")
@@ -377,39 +378,39 @@ if(PROYECTHOR_BUILD_SLINT)
                 endif()
             endforeach()
             if(SLINT_WIN_DLL)
-                add_custom_command(TARGET ProyecThorSlint POST_BUILD
+                add_custom_command(TARGET ProyecThor POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
                         "${SLINT_WIN_DLL}"
-                        "$<TARGET_FILE_DIR:ProyecThorSlint>"
+                        "$<TARGET_FILE_DIR:ProyecThor>"
                     COMMENT "Copiando slint_cpp.dll al directorio de salida"
                 )
             endif()
             if(EXISTS "${MPV_SDK}/libmpv-2.dll")
-                add_custom_command(TARGET ProyecThorSlint POST_BUILD
+                add_custom_command(TARGET ProyecThor POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
                         "${MPV_SDK}/libmpv-2.dll"
-                        "$<TARGET_FILE_DIR:ProyecThorSlint>"
+                        "$<TARGET_FILE_DIR:ProyecThor>"
                     COMMENT "Copiando libmpv-2.dll al directorio de salida"
                 )
             endif()
             if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild")
-                add_custom_command(TARGET ProyecThorSlint POST_BUILD
+                add_custom_command(TARGET ProyecThor POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E copy_directory
                         "${CMAKE_CURRENT_SOURCE_DIR}/extrabuild"
-                        "$<TARGET_FILE_DIR:ProyecThorSlint>"
-                    COMMENT "Copiando extrabuild/ al directorio de salida de ProyecThorSlint"
+                        "$<TARGET_FILE_DIR:ProyecThor>"
+                    COMMENT "Copiando extrabuild/ al directorio de salida de ProyecThor"
                 )
             endif()
         elseif(APPLE)
             if(MPV_INCLUDE_DIRS)
-                target_include_directories(ProyecThorSlint PRIVATE ${MPV_INCLUDE_DIRS})
+                target_include_directories(ProyecThor PRIVATE ${MPV_INCLUDE_DIRS})
             endif()
-            target_link_libraries(ProyecThorSlint PRIVATE
+            target_link_libraries(ProyecThor PRIVATE
                 ${MPV_LINK_TARGET}
                 pthread
                 dl
             )
-            set_target_properties(ProyecThorSlint PROPERTIES
+            set_target_properties(ProyecThor PROPERTIES
                 INSTALL_RPATH "@executable_path;@executable_path/../Frameworks"
                 BUILD_RPATH "@executable_path;@executable_path/../Frameworks"
                 BUILD_WITH_INSTALL_RPATH TRUE
@@ -422,52 +423,52 @@ if(PROYECTHOR_BUILD_SLINT)
                 endif()
             endforeach()
             if(SLINT_MACOS_DYLIB)
-                add_custom_command(TARGET ProyecThorSlint POST_BUILD
+                add_custom_command(TARGET ProyecThor POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
                         "${SLINT_MACOS_DYLIB}"
-                        "$<TARGET_FILE_DIR:ProyecThorSlint>"
+                        "$<TARGET_FILE_DIR:ProyecThor>"
                     COMMENT "Copiando libslint_cpp.dylib al directorio de salida"
                 )
             endif()
         else()
             if(MPV_INCLUDE_DIRS)
-                target_include_directories(ProyecThorSlint PRIVATE ${MPV_INCLUDE_DIRS})
+                target_include_directories(ProyecThor PRIVATE ${MPV_INCLUDE_DIRS})
             endif()
-            target_link_libraries(ProyecThorSlint PRIVATE
+            target_link_libraries(ProyecThor PRIVATE
                 ${MPV_LINK_TARGET}
                 pthread
                 dl
             )
-            set_target_properties(ProyecThorSlint PROPERTIES
+            set_target_properties(ProyecThor PROPERTIES
                 INSTALL_RPATH "$ORIGIN"
                 BUILD_WITH_INSTALL_RPATH TRUE
                 SKIP_BUILD_RPATH FALSE
             )
             if(EXISTS "${SLINT_SDK_LINUX}/lib/libslint_cpp.so")
-                add_custom_command(TARGET ProyecThorSlint POST_BUILD
+                add_custom_command(TARGET ProyecThor POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
                         "${SLINT_SDK_LINUX}/lib/libslint_cpp.so"
-                        "$<TARGET_FILE_DIR:ProyecThorSlint>"
+                        "$<TARGET_FILE_DIR:ProyecThor>"
                     COMMENT "Copiando libslint_cpp.so al directorio de salida"
                 )
                 install(FILES "${SLINT_SDK_LINUX}/lib/libslint_cpp.so"
                     DESTINATION ${PROYECTHOR_INSTALL_DIR}
                 )
             endif()
-            install(TARGETS ProyecThorSlint
+            install(TARGETS ProyecThor
                 RUNTIME DESTINATION ${PROYECTHOR_INSTALL_DIR}
             )
         endif()
 
         if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets")
-            add_custom_command(TARGET ProyecThorSlint POST_BUILD
+            add_custom_command(TARGET ProyecThor POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_directory
                     "${CMAKE_CURRENT_SOURCE_DIR}/assets"
-                    "$<TARGET_FILE_DIR:ProyecThorSlint>"
-                COMMENT "Copiando assets/ al directorio de salida de ProyecThorSlint"
+                    "$<TARGET_FILE_DIR:ProyecThor>"
+                COMMENT "Copiando assets/ al directorio de salida de ProyecThor"
             )
         endif()
     else()
-        message(STATUS "Slint C++ SDK no encontrado — omitiendo target ProyecThorSlint (usa -DPROYECTHOR_FETCH_SLINT=ON para compilar desde fuente)")
+        message(STATUS "Slint C++ SDK no encontrado — omitiendo target ProyecThor (usa -DPROYECTHOR_FETCH_SLINT=ON para compilar desde fuente)")
     endif()
 endif()

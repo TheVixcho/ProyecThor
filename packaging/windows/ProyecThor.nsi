@@ -63,7 +63,7 @@ RequestExecutionLevel user
 !insertmacro MUI_PAGE_INSTFILES
 
 ; Página final con opción de ejecutar la aplicación
-!define MUI_FINISHPAGE_RUN "$INSTDIR\ProyecThorSlint.exe"
+!define MUI_FINISHPAGE_RUN "$INSTDIR\ProyecThor.exe"
 !define MUI_FINISHPAGE_RUN_TEXT "Ejecutar ProyecThor ahora"
 !insertmacro MUI_PAGE_FINISH
 
@@ -82,7 +82,6 @@ RequestExecutionLevel user
 ; -----------------------------------------------------------------------------
 Function .onInit
     ; 0. Cerrar instancias en ejecución de ProyecThor antes de cualquier acción
-    nsExec::Exec 'cmd.exe /c taskkill /f /im ProyecThorSlint.exe >nul 2>&1'
     nsExec::Exec 'cmd.exe /c taskkill /f /im ProyecThor.exe >nul 2>&1'
 
     ; 1. Detectar y desinstalar versión previa de NSIS si existía
@@ -140,14 +139,12 @@ Section "ProyecThor" SEC01
 
     ; Asegurar que no hay procesos corriendo
     DetailPrint "Verificando procesos..."
-    nsExec::Exec 'cmd.exe /c taskkill /f /im ProyecThorSlint.exe >nul 2>&1'
     nsExec::Exec 'cmd.exe /c taskkill /f /im ProyecThor.exe >nul 2>&1'
     Sleep 500
 
     ; Limpiar residuos de versiones anteriores antes de copiar archivos nuevos
     Delete "$INSTDIR\unins000.*"
     Delete "$INSTDIR\ProyecThor.old.*"
-    Delete "$INSTDIR\ProyecThorSlint.exe"
     Delete "$INSTDIR\ProyecThor.exe"
     Delete "$INSTDIR\Uninstall.exe"
     Delete "$INSTDIR\*.dll"
@@ -155,7 +152,6 @@ Section "ProyecThor" SEC01
     ; Copiar ejecutables y dependencias binarias runtime
     SetOverwrite on
     File "${BUILD_DIR}\ProyecThor.exe"
-    File /nonfatal "${BUILD_DIR}\ProyecThorSlint.exe"
     File "${BUILD_DIR}\*.dll"
     File /nonfatal "${BUILD_DIR}\ffmpeg.exe"
     File /nonfatal "${BUILD_DIR}\yt-dlp.exe"
@@ -239,7 +235,6 @@ SectionEnd
 ; -----------------------------------------------------------------------------
 Section "Uninstall"
     ; Cerrar aplicación si estuviera en ejecución
-    nsExec::Exec 'cmd.exe /c taskkill /f /im ProyecThorSlint.exe >nul 2>&1'
     nsExec::Exec 'cmd.exe /c taskkill /f /im ProyecThor.exe >nul 2>&1'
     Sleep 500
 
@@ -267,7 +262,6 @@ Section "Uninstall"
     RMDir /r "$INSTDIR\shaders"
 
     ; Eliminar archivos de la carpeta raíz
-    Delete "$INSTDIR\ProyecThorSlint.exe"
     Delete "$INSTDIR\ProyecThor.exe"
     Delete "$INSTDIR\Uninstall.exe"
     Delete "$INSTDIR\unins000.*"

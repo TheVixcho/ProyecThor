@@ -5,10 +5,12 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <set>
 #include <vector>
 
 #include "main_window.h"
 #include "SlintVideoPlayer.h"
+#include "SlintWebEngine.h"
 #include "SlintMobileServer.h"
 #include "MonitorInfo.h"
 #include "NetworkStreamServer.h"
@@ -40,6 +42,8 @@ private:
         bool        isCustomOverlay = false;
         int         customOverlayIdx = -1;
         bool        isDocument = false;
+        bool        isWeb      = false;
+        std::string webUrl;
     };
 
     struct ServiceQueueEntry {
@@ -313,8 +317,15 @@ private:
     void ApplyMusicEqualizer(bool force = true);
     void ApplyMusicEqPreset(int presetIdx);
 
-    // Library Hub (Tab 13 - main unified landing view)
+    // Library Hub (Tab 13 - main unified landing view / Dashboard Opción A)
     void RefreshLibraryHub();
+    void HubApplyFilter(int filter);
+    void HubSetSearch(const std::string& q);
+    void LoadHubFavorites();
+    void SaveHubFavorites();
+    bool IsHubFavorite(int kind, const std::string& path) const;
+    void ToggleHubFavorite(int kind, const std::string& path);
+    void HandleItemOpenFromHub(int kind, const std::string& path);
 
     // Multi-Screen / Multi-Room Matrix & Photoshop-Style Real Active Layers
     void InitMultiScreens();
@@ -335,10 +346,14 @@ private:
     void CreateExtraScreen(const std::string& name);
     void DeleteExtraScreen(int screenIdx);
 
-    // Documents (Tab 10 - PDF/Image pages)
+    // Documents (Tab 10 - PDF/Image pages + Navegador HTML/HTTPS)
     void ScanDocuments();
     void OpenDocumentAsync(const std::string& path, bool autoProjectFirst = false);
     void ProjectDocPage(int pageIdx);
+    void NavigateWebAsync(const std::string& urlOrPath, bool alsoProject = false);
+    void ProjectWebFrameToScreens(const slint::Image& frameImg, const std::string& title);
+    void SaveWebBookmark(const std::string& rawUrl);
+    void RemoveWebBookmark(const std::string& urlOrPath);
 
     // Unified File / Library Item Management (Play, Queue, Rename, Delete)
     void HandleItemPlay(int kind, const std::string& path);
@@ -506,6 +521,8 @@ private:
     std::shared_ptr<slint::VectorModel<LibraryItem>>    m_HubMediaModel;
     std::shared_ptr<slint::VectorModel<MusicTrackItem>> m_HubMusicModel;
     std::shared_ptr<slint::VectorModel<LibraryItem>>    m_HubDocsModel;
+    std::shared_ptr<slint::VectorModel<HubCollection>>  m_HubCollectionsModel;
+    std::shared_ptr<slint::VectorModel<HubItem>>        m_HubResultsModel;
     std::shared_ptr<slint::VectorModel<DocPageItem>>   m_DocPagesModel;
     std::shared_ptr<slint::VectorModel<QueueItem>>         m_QueueModel;
     std::shared_ptr<slint::VectorModel<PadItem>>           m_PadsModel;
@@ -604,6 +621,12 @@ private:
     std::vector<ServiceQueueEntry> m_Queue;
     SavedPad                       m_Pads[8];
 
+    // Dashboard de Biblioteca (Tab 13 - Opción A)
+    int                               m_HubFilter = -1;   // -3=Todo, -1=Recientes, -2=Favoritos, 0..4 por categoría
+    std::string                       m_HubSearch;
+    std::set<std::string>             m_HubFavorites;     // claves "kind|path"
+    bool                              m_HubFavoritesLoaded = false;
+
     // Independent Music player (Tab 9)
     SlintVideoPlayer         m_MusicPlayer;
     std::vector<MediaEntry>  m_MusicEntries;
@@ -612,8 +635,16 @@ private:
     bool                     m_MusicScanned    = false;
 
     // Documents (Tab 10)
+    int                      m_DocSubtab = 0; // 0=PDF/Imágenes, 1=Navegador
     std::vector<std::string> m_DocPagePaths;
     int                      m_ActiveDocPageIdx = -1;
+    SlintWebEngine           m_WebEngine;
+    slint::Image             m_WebLatestFrame;
+    bool                     m_HasWebFrame = false;
+    bool                     m_WebLiveActive = false;
+    int                      m_WebZoomPercent = 100;
+    std::string              m_WebCurrentTitle;
+    std::mutex               m_WebNavMutex;
 
     // Debug log
     std::vector<std::string> m_DebugLogLines;
