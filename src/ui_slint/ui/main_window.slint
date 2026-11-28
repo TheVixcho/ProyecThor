@@ -793,6 +793,9 @@ export component MainWindow inherits Window {
     in-out property <bool> christmas-mode: false;
     // Set true in modo rendimiento / PCs modestas: pausa animaciones costosas (nieve, etc.)
     in-out property <bool> perf-reduce-motion: false;
+    // Temas con fondo animado tipo "shift" (gradiente que respira). variant: 0=DarkShift, 1=AuroraShift
+    in-out property <bool> theme-animated: false;
+    in-out property <int> theme-anim-variant: 0;
     in property <string> update-status: "Listo para comprobar en GitHub Releases (TheVixcho/ProyecThor)";
 
     // ── Callbacks to C++ Core ──
@@ -1145,6 +1148,38 @@ export component MainWindow inherits Window {
             background: root.enable-ambient-bg
                 ? @linear-gradient(135deg, Theme.accent.transparentize(0.90) 0%, Theme.bg-root 42%, Theme.accent-strong.transparentize(0.93) 100%)
                 : Theme.bg-root;
+        }
+
+        // ── Fondo animado "shift" (temas DarkShift / AuroraShift) — gradiente que respira ──
+        if root.theme-animated && !root.perf-reduce-motion : Rectangle {
+            width: 100%; height: 100%; clip: true;
+            property <float> shift: 0;
+            shift-timer := Timer {
+                interval: 40ms;
+                running: root.theme-animated && !root.perf-reduce-motion;
+                triggered => { parent.shift = Math.mod(parent.shift + 0.004, 1.0); }
+            }
+            // Blob 1: acento del tema, se desplaza en diagonal
+            Rectangle {
+                width: parent.width * 0.9; height: parent.width * 0.9; border-radius: self.width / 2;
+                x: parent.width * (0.1 + 0.25 * Math.sin(parent.shift * 6.2831 * 1rad));
+                y: parent.height * (0.0 + 0.3 * Math.cos(parent.shift * 6.2831 * 1rad)) - parent.height * 0.25;
+                background: @radial-gradient(circle, Theme.accent.transparentize(0.80) 0%, transparent 70%);
+            }
+            // Blob 2: acento fuerte, contrafase
+            Rectangle {
+                width: parent.width * 0.8; height: parent.width * 0.8; border-radius: self.width / 2;
+                x: parent.width * (0.55 - 0.25 * Math.sin(parent.shift * 6.2831 * 1rad + 2rad));
+                y: parent.height * (0.5 + 0.25 * Math.sin(parent.shift * 6.2831 * 1rad));
+                background: @radial-gradient(circle, Theme.accent-strong.transparentize(0.84) 0%, transparent 70%);
+            }
+            // Blob 3 solo en AuroraShift para dar la mezcla de colores
+            if root.theme-anim-variant == 1 : Rectangle {
+                width: parent.width * 0.7; height: parent.width * 0.7; border-radius: self.width / 2;
+                x: parent.width * (0.3 + 0.2 * Math.cos(parent.shift * 6.2831 * 1rad + 3rad));
+                y: parent.height * (0.2 + 0.3 * Math.sin(parent.shift * 6.2831 * 1rad * 1.3));
+                background: @radial-gradient(circle, #22d3ee22 0%, transparent 70%);
+            }
         }
 
         // ── ❄ Capa de Nieve Navideña (solo tema Navideño; pausa en modo rendimiento) ──

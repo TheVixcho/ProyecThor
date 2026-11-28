@@ -5483,9 +5483,12 @@ std::string SlintApp::ToLowerUtf8(const std::string& s) {
 
 // ── 14 Themes migrated from ImGui ────────────────────────────────────────────
 void SlintApp::ApplyThemePreset(int idx) {
-    m_ActiveThemeIdx = std::clamp(idx, 0, 14);
+    m_ActiveThemeIdx = std::clamp(idx, 0, 16);
     m_Main->set_active_theme_idx(m_ActiveThemeIdx);
     m_Main->set_christmas_mode(m_ActiveThemeIdx == 14);
+    // Temas con fondo animado "shift" (gradiente que respira estilo Spotify/Aurora)
+    m_Main->set_theme_animated(m_ActiveThemeIdx == 15 || m_ActiveThemeIdx == 16);
+    m_Main->set_theme_anim_variant(m_ActiveThemeIdx == 16 ? 1 : 0);
 
     auto col = [](float r, float g, float b, float a = 1.0f) {
         auto cl = [](float v) -> uint8_t {
@@ -5502,7 +5505,7 @@ void SlintApp::ApplyThemePreset(int idx) {
         bool  lightTheme;
     };
 
-    static const Palette kPalettes[15] = {
+    static const Palette kPalettes[17] = {
         // 0: Oscuro (Carbón + Plomo Neutro)
         {{0.031f,0.031f,0.039f},{0.067f,0.067f,0.075f},{0.090f,0.090f,0.102f},{0.129f,0.129f,0.145f},{0.173f,0.173f,0.192f},
          {0.831f,0.831f,0.847f},{0.957f,0.957f,0.961f},{0.957f,0.957f,0.961f},{0.631f,0.631f,0.667f}, false},
@@ -5548,6 +5551,12 @@ void SlintApp::ApplyThemePreset(int idx) {
         // 14: Navideño (Verde pino profundo + acento rojo/dorado festivo)
         {{0.020f,0.055f,0.035f},{0.035f,0.082f,0.055f},{0.050f,0.110f,0.075f},{0.070f,0.140f,0.098f},{0.095f,0.175f,0.125f},
          {0.863f,0.196f,0.212f},{0.953f,0.792f,0.388f},{0.965f,0.969f,0.957f},{0.620f,0.722f,0.655f}, false},
+        // 15: DarkShift (Negro profundo + verde Spotify, fondo animado)
+        {{0.027f,0.031f,0.027f},{0.055f,0.063f,0.055f},{0.082f,0.094f,0.082f},{0.110f,0.125f,0.110f},{0.145f,0.165f,0.145f},
+         {0.114f,0.843f,0.376f},{0.306f,0.906f,0.506f},{0.945f,0.969f,0.949f},{0.584f,0.651f,0.600f}, false},
+        // 16: AuroraShift (Azul noche + violeta/cian aurora, fondo animado)
+        {{0.027f,0.031f,0.067f},{0.051f,0.055f,0.110f},{0.075f,0.082f,0.157f},{0.106f,0.114f,0.212f},{0.145f,0.157f,0.278f},
+         {0.400f,0.431f,0.961f},{0.545f,0.792f,0.980f},{0.933f,0.945f,0.996f},{0.584f,0.616f,0.737f}, false},
     };
 
     const auto& p = kPalettes[m_ActiveThemeIdx];

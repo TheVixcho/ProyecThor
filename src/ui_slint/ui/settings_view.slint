@@ -918,11 +918,13 @@ export component AppleSettingsView inherits Rectangle {
         { idx: 12, name: "Amethyst Violet", tag: "Oscuro • Amatista",  is-light: false, c-root: #0a0512, c-s0: #11091f, c-s1: #1b0f2e, c-s2: #261640, c-acc: #a855f7, c-acc2: #c084fc, c-txt: #f3e8ff, c-muted: #9376a8 },
         { idx: 13, name: "Titanium Silver", tag: "Oscuro • Titanio",   is-light: false, c-root: #0e0f12, c-s0: #14161a, c-s1: #1b1e24, c-s2: #23272f, c-acc: #9eaec2, c-acc2: #d1dbe6, c-txt: #f1f5f9, c-muted: #808fa3 },
         { idx: 14, name: "Navideño",        tag: "Festivo • Nieve ❄",  is-light: false, c-root: #051c0f, c-s0: #09210e, c-s1: #0d2c13, c-s2: #12391f, c-acc: #dc3236, c-acc2: #f3ca63, c-txt: #f6f7f4, c-muted: #9eb8a7 },
+        { idx: 15, name: "DarkShift",        tag: "Animado • Verde",    is-light: false, c-root: #070807, c-s0: #0e100e, c-s1: #151815, c-s2: #1d201d, c-acc: #1db954, c-acc2: #4ee781, c-txt: #f1f7f2, c-muted: #95a699 },
+        { idx: 16, name: "AuroraShift",      tag: "Animado • Aurora",   is-light: false, c-root: #070811, c-s0: #0d0e1c, c-s1: #131528, c-s2: #1b1d36, c-acc: #666ef5, c-acc2: #8bcafa, c-txt: #eef1fe, c-muted: #959dbc },
     ];
 
-    property <int> preview-idx: Math.clamp(root.hovered-theme-idx >= 0 ? root.hovered-theme-idx : root.active-theme-idx, 0, 14);
+    property <int> preview-idx: Math.clamp(root.hovered-theme-idx >= 0 ? root.hovered-theme-idx : root.active-theme-idx, 0, 16);
     property <ThemePresetMeta> preview-theme: root.themes[root.preview-idx];
-    property <ThemePresetMeta> active-theme:  root.themes[Math.clamp(root.active-theme-idx, 0, 14)];
+    property <ThemePresetMeta> active-theme:  root.themes[Math.clamp(root.active-theme-idx, 0, 16)];
 
     property <string> res-label: root.output-res-preset == 0 ? "720p"
                                : root.output-res-preset == 1 ? "1080p"
@@ -1664,7 +1666,8 @@ export component AppleSettingsView inherits Rectangle {
                             ThemePreviewCard { meta: root.themes[12]; horizontal-stretch: 1; active: root.active-theme-idx == 12; clicked => { root.theme-selected(12); } hover-changed(h) => { root.hovered-theme-idx = h ? 12 : (root.hovered-theme-idx == 12 ? -1 : root.hovered-theme-idx); } }
                             ThemePreviewCard { meta: root.themes[13]; horizontal-stretch: 1; active: root.active-theme-idx == 13; clicked => { root.theme-selected(13); } hover-changed(h) => { root.hovered-theme-idx = h ? 13 : (root.hovered-theme-idx == 13 ? -1 : root.hovered-theme-idx); } }
                             ThemePreviewCard { meta: root.themes[14]; horizontal-stretch: 1; active: root.active-theme-idx == 14; clicked => { root.theme-selected(14); } hover-changed(h) => { root.hovered-theme-idx = h ? 14 : (root.hovered-theme-idx == 14 ? -1 : root.hovered-theme-idx); } }
-                            Rectangle { horizontal-stretch: 1; }
+                            ThemePreviewCard { meta: root.themes[15]; horizontal-stretch: 1; active: root.active-theme-idx == 15; clicked => { root.theme-selected(15); } hover-changed(h) => { root.hovered-theme-idx = h ? 15 : (root.hovered-theme-idx == 15 ? -1 : root.hovered-theme-idx); } }
+                            ThemePreviewCard { meta: root.themes[16]; horizontal-stretch: 1; active: root.active-theme-idx == 16; clicked => { root.theme-selected(16); } hover-changed(h) => { root.hovered-theme-idx = h ? 16 : (root.hovered-theme-idx == 16 ? -1 : root.hovered-theme-idx); } }
                         }
                     }
 
@@ -1695,7 +1698,8 @@ export component AppleSettingsView inherits Rectangle {
                         HorizontalLayout {
                             spacing: 12px;
                             ThemePreviewCard { meta: root.themes[14]; horizontal-stretch: 1; active: root.active-theme-idx == 14; clicked => { root.theme-selected(14); } hover-changed(h) => { root.hovered-theme-idx = h ? 14 : (root.hovered-theme-idx == 14 ? -1 : root.hovered-theme-idx); } }
-                            Rectangle { horizontal-stretch: 1; }
+                            ThemePreviewCard { meta: root.themes[15]; horizontal-stretch: 1; active: root.active-theme-idx == 15; clicked => { root.theme-selected(15); } hover-changed(h) => { root.hovered-theme-idx = h ? 15 : (root.hovered-theme-idx == 15 ? -1 : root.hovered-theme-idx); } }
+                            ThemePreviewCard { meta: root.themes[16]; horizontal-stretch: 1; active: root.active-theme-idx == 16; clicked => { root.theme-selected(16); } hover-changed(h) => { root.hovered-theme-idx = h ? 16 : (root.hovered-theme-idx == 16 ? -1 : root.hovered-theme-idx); } }
                             Rectangle { horizontal-stretch: 1; }
                             Rectangle { horizontal-stretch: 1; }
                         }
