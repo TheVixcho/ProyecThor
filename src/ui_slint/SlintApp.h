@@ -380,6 +380,8 @@ private:
     void OvCanvasSetGeometry(int idx, float x, float y, float w, float h);
     void OvCanvasProject();
     void RefreshOvCanvasModel();
+    void PushOvSelectedToUi();
+    void FillOvElementModel(std::shared_ptr<slint::VectorModel<OverlayElementItem>>& model, const CustomOverlayConfig& cfg);
     void RemoveLayerOnScreen(int screenIdx, const std::string& layerId);
     void ToggleLayerOnScreen(int screenIdx, const std::string& layerId);
     void SendCurrentSelectionToScreen(int screenIdx);
@@ -585,6 +587,7 @@ private:
     std::shared_ptr<slint::VectorModel<QueueItem>>           m_OverlayQueueModel;
     std::shared_ptr<slint::VectorModel<ActiveLayerItem>>     m_ActiveLayersModel;
     std::shared_ptr<slint::VectorModel<OverlayElementItem>>  m_OvCanvasModel;
+    std::shared_ptr<slint::VectorModel<OverlayElementItem>>  m_ProjOvCanvasModel;
     std::shared_ptr<slint::VectorModel<ScreenMatrixItem>>    m_ScreenMatrixModel;
     std::shared_ptr<slint::VectorModel<float>>               m_MusicLiveWaveModel;
     std::shared_ptr<slint::VectorModel<float>>               m_MusicTrackWaveModel;

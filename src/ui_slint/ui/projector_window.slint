@@ -381,6 +381,8 @@ export component ProjectorWindow inherits Window {
     in property <float> alert-pulse-alpha: 1.0;
     in property <bool> alert-visible: true;
     in property <bool> show-custom-overlay: false;
+    // Overlay compositor (canvas): si tiene elementos, se dibuja en vez del overlay clásico.
+    in property <[OverlayElementItem]> overlay-canvas-elements: [];
     in property <bool> ov-show-clock: false;
     in property <string> ov-clock-text: "";
     in property <string> ov-title: "";
@@ -670,8 +672,16 @@ export component ProjectorWindow inherits Window {
             image-fit: contain;
         }
 
+        // Layer 3a: Overlay compositor (canvas multi-elemento) — tiene prioridad si hay elementos.
+        if root.overlay-canvas-elements.length > 0 : OverlayCanvasView {
+            elements: root.overlay-canvas-elements;
+            container-w: parent.width;
+            container-h: parent.height;
+            ui-scale: parent.width / 1920px;
+        }
+
         // Layer 3: Dynamic Custom Overlay (Clock / Countdown / Count-up / Lower-Third Pleca)
-        if root.show-custom-overlay && ((root.ov-show-clock && root.ov-clock-text != "") || root.ov-title != "" || root.ov-sub != "") : CustomOverlayView {
+        if root.overlay-canvas-elements.length == 0 && root.show-custom-overlay && ((root.ov-show-clock && root.ov-clock-text != "") || root.ov-title != "" || root.ov-sub != "") : CustomOverlayView {
             container-w: parent.width;
             container-h: parent.height;
             ui-scale: parent.width / 1920px;

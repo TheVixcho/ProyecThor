@@ -328,6 +328,7 @@ SlintApp::SlintApp()
     , m_OverlayQueueModel(std::make_shared<slint::VectorModel<QueueItem>>())
     , m_ActiveLayersModel(std::make_shared<slint::VectorModel<ActiveLayerItem>>())
     , m_OvCanvasModel(std::make_shared<slint::VectorModel<OverlayElementItem>>())
+    , m_ProjOvCanvasModel(std::make_shared<slint::VectorModel<OverlayElementItem>>())
     , m_ScreenMatrixModel(std::make_shared<slint::VectorModel<ScreenMatrixItem>>())
     , m_MusicLiveWaveModel(std::make_shared<slint::VectorModel<float>>())
     , m_MusicTrackWaveModel(std::make_shared<slint::VectorModel<float>>())
@@ -1448,6 +1449,7 @@ void SlintApp::BindCallbacks() {
     m_Main->on_ov_canvas_add_clock([this]() { OvCanvasAddClock(); });
     m_Main->on_ov_canvas_select_element([this](int idx) {
         m_Main->set_ov_canvas_selected(idx);
+        PushOvSelectedToUi();
     });
     m_Main->on_ov_canvas_delete_element([this](int idx) { OvCanvasDeleteElement(idx); });
     m_Main->on_ov_canvas_duplicate_element([this](int idx) { OvCanvasDuplicateElement(idx); });
@@ -1456,6 +1458,65 @@ void SlintApp::BindCallbacks() {
         OvCanvasSetGeometry(idx, x, y, w, h);
     });
     m_Main->on_ov_canvas_project([this]() { OvCanvasProject(); });
+    // Inspector del elemento seleccionado
+    m_Main->on_ov_canvas_name_changed([this](slint::SharedString s) {
+        m_EditingOverlay.name = std::string(s);
+        m_Main->set_ov_canvas_dirty(true);
+    });
+    m_Main->on_ov_sel_text_changed([this](slint::SharedString s) {
+        int i = m_Main->get_ov_canvas_selected();
+        if (i >= 0 && i < static_cast<int>(m_EditingOverlay.elements.size())) {
+            m_EditingOverlay.elements[i].text = std::string(s);
+            RefreshOvCanvasModel();
+        }
+    });
+    m_Main->on_ov_sel_font_size_changed([this](float v) {
+        int i = m_Main->get_ov_canvas_selected();
+        if (i >= 0 && i < static_cast<int>(m_EditingOverlay.elements.size())) {
+            m_EditingOverlay.elements[i].fontSize = v;
+            RefreshOvCanvasModel();
+        }
+    });
+    m_Main->on_ov_sel_align_changed([this](int a) {
+        int i = m_Main->get_ov_canvas_selected();
+        if (i >= 0 && i < static_cast<int>(m_EditingOverlay.elements.size())) {
+            m_EditingOverlay.elements[i].align = std::clamp(a, 0, 2);
+            m_Main->set_ov_sel_align(a);
+            RefreshOvCanvasModel();
+        }
+    });
+    m_Main->on_ov_sel_bold_toggled([this](bool b) {
+        int i = m_Main->get_ov_canvas_selected();
+        if (i >= 0 && i < static_cast<int>(m_EditingOverlay.elements.size())) {
+            m_EditingOverlay.elements[i].bold = b;
+            m_Main->set_ov_sel_bold(b);
+            RefreshOvCanvasModel();
+        }
+    });
+    m_Main->on_ov_sel_opacity_changed([this](float v) {
+        int i = m_Main->get_ov_canvas_selected();
+        if (i >= 0 && i < static_cast<int>(m_EditingOverlay.elements.size())) {
+            m_EditingOverlay.elements[i].opacity = v;
+            RefreshOvCanvasModel();
+        }
+    });
+    m_Main->on_ov_sel_clock_mode_changed([this](int m) {
+        int i = m_Main->get_ov_canvas_selected();
+        if (i >= 0 && i < static_cast<int>(m_EditingOverlay.elements.size())) {
+            m_EditingOverlay.elements[i].clockMode = std::clamp(m, 0, 2);
+            m_Main->set_ov_sel_clock_mode(m);
+            RefreshOvCanvasModel();
+        }
+    });
+    m_Main->on_ov_sel_color_changed([this](int r, int g, int b) {
+        int i = m_Main->get_ov_canvas_selected();
+        if (i >= 0 && i < static_cast<int>(m_EditingOverlay.elements.size())) {
+            auto& e = m_EditingOverlay.elements[i];
+            e.textR = static_cast<uint8_t>(r); e.textG = static_cast<uint8_t>(g); e.textB = static_cast<uint8_t>(b);
+            m_Main->set_ov_sel_color(slint::Color::from_rgb_uint8(e.textR, e.textG, e.textB));
+            RefreshOvCanvasModel();
+        }
+    });
     m_Main->on_select_output_target([this](int mode) {
         m_OutputTargetMode = std::max(0, mode);
         m_Main->set_output_target_mode(m_OutputTargetMode);
@@ -4544,12 +4605,19 @@ void SlintApp::OnTick() {
         m_TickCounter = 0;
 
         auto tickConfig = [](CustomOverlayConfig& ov) {
-            if (!ov.showClock || !ov.timerRunning) return;
-            if (ov.clockMode == 1) {
-                if (ov.currentSec > 0) --ov.currentSec;
-                if (ov.currentSec == 0) ov.timerRunning = false;
-            } else if (ov.clockMode == 2) {
-                ++ov.currentSec;
+            auto tickClock = [](int clockMode, int& currentSec, bool& running) {
+                if (!running) return;
+                if (clockMode == 1) {
+                    if (currentSec > 0) --currentSec;
+                    if (currentSec == 0) running = false;
+                } else if (clockMode == 2) {
+                    ++currentSec;
+                }
+            };
+            if (ov.showClock) tickClock(ov.clockMode, ov.currentSec, ov.timerRunning);
+            // Avanzar también los elementos de reloj/timer del compositor canvas.
+            for (auto& e : ov.elements) {
+                if (e.type == 2) tickClock(e.clockMode, e.currentSec, e.timerRunning);
             }
         };
 
@@ -4560,6 +4628,15 @@ void SlintApp::OnTick() {
         }
 
         SyncClockOverlay();
+        // Re-empujar el modelo del compositor canvas al proyector para que los relojes/timers avancen en vivo.
+        if (!m_Screens.empty() && !m_Screens[0].customOverlay.elements.empty()) {
+            FillOvElementModel(m_ProjOvCanvasModel, m_Screens[0].customOverlay);
+            m_Projector->set_overlay_canvas_elements(m_ProjOvCanvasModel);
+        }
+        // Refrescar el lienzo del editor si está abierto, para ver el conteo en vivo.
+        if (m_ActiveTab == 15 && !m_EditingOverlay.elements.empty()) {
+            FillOvElementModel(m_OvCanvasModel, m_EditingOverlay);
+        }
         if (m_InspectedScreenIdx >= 0 && m_InspectedScreenIdx < static_cast<int>(m_Screens.size()) &&
             m_Screens[m_InspectedScreenIdx].hasCustomOverlay) {
             RefreshActiveLayersModel();
@@ -6104,6 +6181,7 @@ void SlintApp::LoadCustomOverlaysFromDisk() {
                     e.timeFormat = std::clamp(je.value("timeFormat", 0), 0, 4);
                     e.initialSec = std::max(0, je.value("initialSec", 300));
                     e.currentSec = e.initialSec;
+                    e.timerRunning = je.value("timerRunning", false);
                     ov.elements.push_back(std::move(e));
                 }
             }
@@ -6180,6 +6258,7 @@ bool SlintApp::SaveCustomOverlayToDisk(CustomOverlayConfig& cfg) {
         je["clockMode"]  = e.clockMode;
         je["timeFormat"] = e.timeFormat;
         je["initialSec"] = e.initialSec;
+        je["timerRunning"] = e.timerRunning;
         elems.push_back(std::move(je));
     }
     j["elements"] = std::move(elems);
@@ -9609,6 +9688,9 @@ void SlintApp::SyncScreenOutputs() {
         }
         m_Projector->set_overlay_above_text(pub.overlayAboveText);
         const auto& cov = pub.customOverlay;
+        // Overlay compositor (canvas): si el overlay público tiene elementos, se proyectan.
+        FillOvElementModel(m_ProjOvCanvasModel, cov);
+        m_Projector->set_overlay_canvas_elements(m_ProjOvCanvasModel);
         m_Projector->set_show_custom_overlay(pub.hasCustomOverlay);
         m_Projector->set_ov_show_clock(cov.showClock);
         m_Projector->set_ov_clock_text(slint::SharedString(FormatOverlayClockText(cov)));
@@ -9976,6 +10058,231 @@ void SlintApp::MoveActiveLayer(const std::string& layerId, int dir) {
     }
     SyncScreenOutputs();
     RefreshActiveLayersModel();
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  Editor de Overlays Canvas (tab 15) — compositor tipo Photoshop/Canva
+// ══════════════════════════════════════════════════════════════════════════
+void SlintApp::FillOvElementModel(std::shared_ptr<slint::VectorModel<OverlayElementItem>>& model, const CustomOverlayConfig& cfg) {
+    model->clear();
+    for (const auto& e : cfg.elements) {
+        OverlayElementItem it;
+        it.type       = e.type;
+        it.x = e.x; it.y = e.y; it.w = e.w; it.h = e.h;
+        it.text       = slint::SharedString(e.text);
+        it.font_size  = e.fontSize;
+        it.text_color = slint::Color::from_rgb_uint8(e.textR, e.textG, e.textB);
+        it.align      = e.align;
+        it.bold       = e.bold;
+        it.opacity    = e.opacity;
+        it.has_image  = false;
+        if (e.type == 1 && !e.imagePath.empty()) {
+            it.image = slint::Image::load_from_path(slint::SharedString(e.imagePath));
+            it.has_image = true;
+        }
+        if (e.type == 2) {
+            CustomOverlayConfig tmp;
+            tmp.showClock  = true;
+            tmp.clockMode  = e.clockMode;
+            tmp.timeFormat = e.timeFormat;
+            tmp.initialSec = e.initialSec;
+            tmp.currentSec = e.currentSec;
+            it.clock_text  = slint::SharedString(FormatOverlayClockText(tmp));
+        }
+        model->push_back(it);
+    }
+}
+
+void SlintApp::RefreshOvCanvasModel() {
+    FillOvElementModel(m_OvCanvasModel, m_EditingOverlay);
+    m_Main->set_ov_canvas_name(slint::SharedString(m_EditingOverlay.name));
+    m_Main->set_ov_canvas_dirty(true);
+    PushOvSelectedToUi();
+}
+
+void SlintApp::PushOvSelectedToUi() {
+    int i = m_Main->get_ov_canvas_selected();
+    if (i < 0 || i >= static_cast<int>(m_EditingOverlay.elements.size())) {
+        m_Main->set_ov_sel_type(-1);
+        return;
+    }
+    const auto& e = m_EditingOverlay.elements[i];
+    m_Main->set_ov_sel_type(e.type);
+    m_Main->set_ov_sel_text(slint::SharedString(e.text));
+    m_Main->set_ov_sel_font_size(e.fontSize);
+    m_Main->set_ov_sel_align(e.align);
+    m_Main->set_ov_sel_bold(e.bold);
+    m_Main->set_ov_sel_opacity(e.opacity);
+    m_Main->set_ov_sel_clock_mode(e.clockMode);
+    m_Main->set_ov_sel_color(slint::Color::from_rgb_uint8(e.textR, e.textG, e.textB));
+}
+
+void SlintApp::OvCanvasNew() {
+    m_EditingOverlay = CustomOverlayConfig{};
+    m_EditingOverlay.name = "Nuevo Overlay " + std::to_string(m_CustomOverlays.size() + 1);
+    m_EditingOverlay.path.clear();
+    m_EditingOverlay.id.clear();
+    m_EditingOverlay.elements.clear();
+    m_EditingOverlayIdx = -1;
+    m_Main->set_ov_canvas_selected(-1);
+    RefreshOvCanvasModel();
+}
+
+void SlintApp::OvCanvasOpen(int overlayIdx) {
+    if (overlayIdx < 0 || overlayIdx >= static_cast<int>(m_CustomOverlays.size())) return;
+    m_EditingOverlay = m_CustomOverlays[overlayIdx];
+    m_EditingOverlayIdx = overlayIdx;
+    if (m_EditingOverlay.elements.empty()) {
+        if (m_EditingOverlay.showClock) {
+            OverlayElement e;
+            e.type = 2;
+            e.x = m_EditingOverlay.posX; e.y = m_EditingOverlay.posY; e.w = 0.3f; e.h = 0.12f;
+            e.clockMode = m_EditingOverlay.clockMode;
+            e.timeFormat = m_EditingOverlay.timeFormat;
+            e.initialSec = m_EditingOverlay.initialSec;
+            e.currentSec = m_EditingOverlay.initialSec;
+            e.timerRunning = m_EditingOverlay.timerRunning;
+            e.fontSize = m_EditingOverlay.fontSize;
+            e.textR = m_EditingOverlay.textR; e.textG = m_EditingOverlay.textG; e.textB = m_EditingOverlay.textB;
+            m_EditingOverlay.elements.push_back(e);
+        }
+        if (!m_EditingOverlay.titleText.empty()) {
+            OverlayElement e; e.type = 0; e.text = m_EditingOverlay.titleText;
+            e.x = 0.5f; e.y = 0.2f; e.w = 0.6f; e.h = 0.12f; e.fontSize = m_EditingOverlay.fontSize * 0.5f;
+            m_EditingOverlay.elements.push_back(e);
+        }
+    }
+    m_Main->set_ov_canvas_selected(-1);
+    RefreshOvCanvasModel();
+}
+
+void SlintApp::OvCanvasSave() {
+    if (m_EditingOverlay.name.empty()) m_EditingOverlay.name = "Overlay Sin Título";
+    SaveCustomOverlayToDisk(m_EditingOverlay);
+    if (m_EditingOverlayIdx >= 0 && m_EditingOverlayIdx < static_cast<int>(m_CustomOverlays.size())) {
+        m_CustomOverlays[m_EditingOverlayIdx] = m_EditingOverlay;
+    } else {
+        m_CustomOverlays.push_back(m_EditingOverlay);
+        m_EditingOverlayIdx = static_cast<int>(m_CustomOverlays.size()) - 1;
+    }
+    RefreshOverlayLayers();
+    m_Main->set_ov_canvas_dirty(false);
+}
+
+void SlintApp::OvCanvasAddText() {
+    OverlayElement e;
+    e.type = 0;
+    e.text = "Texto";
+    e.x = 0.5f; e.y = 0.5f; e.w = 0.4f; e.h = 0.14f;
+    e.fontSize = 64.0f;
+    m_EditingOverlay.elements.push_back(e);
+    m_Main->set_ov_canvas_selected(static_cast<int>(m_EditingOverlay.elements.size()) - 1);
+    RefreshOvCanvasModel();
+}
+
+void SlintApp::OvCanvasAddClock() {
+    OverlayElement e;
+    e.type = 2;
+    e.x = 0.85f; e.y = 0.1f; e.w = 0.22f; e.h = 0.1f;
+    e.fontSize = 48.0f;
+    e.timerRunning = true;   // los modos cuenta regresiva/ascendente avanzan; hora en vivo lo ignora
+    m_EditingOverlay.elements.push_back(e);
+    m_Main->set_ov_canvas_selected(static_cast<int>(m_EditingOverlay.elements.size()) - 1);
+    RefreshOvCanvasModel();
+}
+
+void SlintApp::OvCanvasAddImage() {
+    auto aliveFlag = m_AppAliveFlag;
+    std::thread([this, aliveFlag]() {
+        std::string sel;
+#if defined(__APPLE__)
+        sel = RunCommandCapture(
+            "osascript -e 'POSIX path of (choose file with prompt \"Elegir imagen PNG\")' 2>/dev/null");
+#elif !defined(_WIN32)
+        sel = RunCommandCapture(
+            "zenity --file-selection --title=\"Elegir imagen (PNG / JPG / WebP)\" "
+            "--file-filter=\"Imagenes | *.png *.webp *.jpg *.jpeg\" 2>/dev/null");
+        if (sel.empty()) {
+            sel = RunCommandCapture("kdialog --getopenfilename ~ \"*.png *.webp *.jpg *.jpeg\" 2>/dev/null");
+        }
+#endif
+        while (!sel.empty() && (sel.back() == '\n' || sel.back() == '\r')) sel.pop_back();
+        if (sel.empty()) return;
+        if (!aliveFlag || !aliveFlag->load(std::memory_order_acquire)) return;
+        std::string path = sel;
+        slint::invoke_from_event_loop([this, aliveFlag, path]() {
+            if (!aliveFlag || !aliveFlag->load(std::memory_order_acquire)) return;
+            OverlayElement e;
+            e.type = 1;
+            e.imagePath = path;
+            e.x = 0.5f; e.y = 0.5f; e.w = 0.4f; e.h = 0.4f;
+            m_EditingOverlay.elements.push_back(e);
+            m_Main->set_ov_canvas_selected(static_cast<int>(m_EditingOverlay.elements.size()) - 1);
+            RefreshOvCanvasModel();
+        });
+    }).detach();
+}
+
+void SlintApp::OvCanvasDeleteElement(int idx) {
+    if (idx < 0 || idx >= static_cast<int>(m_EditingOverlay.elements.size())) return;
+    m_EditingOverlay.elements.erase(m_EditingOverlay.elements.begin() + idx);
+    m_Main->set_ov_canvas_selected(-1);
+    RefreshOvCanvasModel();
+}
+
+void SlintApp::OvCanvasDuplicateElement(int idx) {
+    if (idx < 0 || idx >= static_cast<int>(m_EditingOverlay.elements.size())) return;
+    OverlayElement e = m_EditingOverlay.elements[idx];
+    e.x = std::clamp(e.x + 0.03f, 0.0f, 1.0f);
+    e.y = std::clamp(e.y + 0.03f, 0.0f, 1.0f);
+    m_EditingOverlay.elements.insert(m_EditingOverlay.elements.begin() + idx + 1, e);
+    m_Main->set_ov_canvas_selected(idx + 1);
+    RefreshOvCanvasModel();
+}
+
+void SlintApp::OvCanvasMoveElementZ(int idx, int dir) {
+    int n = static_cast<int>(m_EditingOverlay.elements.size());
+    if (idx < 0 || idx >= n) return;
+    int target = (dir < 0) ? idx + 1 : idx - 1;
+    if (target < 0 || target >= n) return;
+    std::swap(m_EditingOverlay.elements[idx], m_EditingOverlay.elements[target]);
+    m_Main->set_ov_canvas_selected(target);
+    RefreshOvCanvasModel();
+}
+
+void SlintApp::OvCanvasSetGeometry(int idx, float x, float y, float w, float h) {
+    if (idx < 0 || idx >= static_cast<int>(m_EditingOverlay.elements.size())) return;
+    auto& e = m_EditingOverlay.elements[idx];
+    e.x = std::clamp(x, 0.0f, 1.0f);
+    e.y = std::clamp(y, 0.0f, 1.0f);
+    e.w = std::clamp(w, 0.02f, 1.0f);
+    e.h = std::clamp(h, 0.02f, 1.0f);
+    // Actualiza SOLO la fila afectada (sin rebuild completo) para no romper el arrastre en curso.
+    if (idx < static_cast<int>(m_OvCanvasModel->row_count())) {
+        if (auto it = m_OvCanvasModel->row_data(idx)) {
+            it->x = e.x; it->y = e.y; it->w = e.w; it->h = e.h;
+            m_OvCanvasModel->set_row_data(idx, *it);
+        }
+    }
+    m_Main->set_ov_canvas_dirty(true);
+}
+
+void SlintApp::OvCanvasProject() {
+    OvCanvasSave();
+    if (!m_Screens.empty()) {
+        auto applyTo = [this](int i) {
+            if (i < 0 || i >= static_cast<int>(m_Screens.size())) return;
+            m_Screens[i].customOverlay    = m_EditingOverlay;
+            m_Screens[i].hasCustomOverlay = !m_EditingOverlay.elements.empty();
+        };
+        if (m_OutputTargetMode == 0) {
+            for (int i = 0; i < static_cast<int>(m_Screens.size()); ++i) applyTo(i);
+        } else {
+            applyTo(m_OutputTargetMode - 1);
+        }
+        SyncScreenOutputs();
+        RefreshActiveLayersModel();
+    }
 }
 
 void SlintApp::ToggleLayerOnScreen(int screenIdx, const std::string& layerId) {
